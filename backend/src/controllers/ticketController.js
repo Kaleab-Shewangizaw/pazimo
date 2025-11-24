@@ -1,9 +1,12 @@
-const Ticket = require('../models/Ticket');
-const Event = require('../models/Event');
-const { StatusCodes } = require('http-status-codes');
-const { BadRequestError, NotFoundError, UnauthorizedError } = require('../errors');
-
-
+const Ticket = require("../models/Ticket");
+const Event = require("../models/Event");
+const { StatusCodes } = require("http-status-codes");
+const {
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+} = require("../errors");
+const mongoose = require("mongoose");
 
 // Admin: Get all tickets with totals
 // const getAllTicketsAdmin = async (req, res) => {
@@ -28,84 +31,96 @@ const { BadRequestError, NotFoundError, UnauthorizedError } = require('../errors
 const getAllTicketsAdmin = async (req, res) => {
   try {
     // ✅ Optional: Enforce admin-only access
-    if (req.user?.role !== 'admin') {
-      return res.status(StatusCodes.FORBIDDEN).json({ message: 'Access denied: Admins only' })
+    if (req.user?.role !== "admin") {
+      return res
+        .status(StatusCodes.FORBIDDEN)
+        .json({ message: "Access denied: Admins only" });
     }
 
     // ✅ Fetch tickets with event & user data
     const tickets = await Ticket.find()
       .populate({
-        path: 'event',
-        select: 'title startDate endDate location organizer',
+        path: "event",
+        select: "title startDate endDate location organizer",
         populate: {
-          path: 'organizer',
-          select: 'name email',
+          path: "organizer",
+          select: "name email",
         },
       })
-      .populate('user', 'firstName lastName email')
-      .lean()
+      .populate("user", "firstName lastName email")
+      .lean();
 
     // Format the tickets data
-    const formattedTickets = tickets.map(ticket => ({
+    const formattedTickets = tickets.map((ticket) => ({
       ...ticket,
-      event: ticket.event ? {
-        title: ticket.event.title,
-        organizer: ticket.event.organizer ? {
-          name: ticket.event.organizer.name
-        } : null
-      } : null,
-      user: ticket.user ? {
-        name: `${ticket.user.firstName} ${ticket.user.lastName}`
-      } : null
-    }))
+      event: ticket.event
+        ? {
+            title: ticket.event.title,
+            organizer: ticket.event.organizer
+              ? {
+                  name: ticket.event.organizer.name,
+                }
+              : null,
+          }
+        : null,
+      user: ticket.user
+        ? {
+            name: `${ticket.user.firstName} ${ticket.user.lastName}`,
+          }
+        : null,
+    }));
 
     // ✅ Calculate total sold and revenue
-    const totalSold = tickets.length
-    const totalRevenue = tickets.reduce((sum, t) => sum + (t.price || 0), 0)
+    const totalSold = tickets.length;
+    const totalRevenue = tickets.reduce((sum, t) => sum + (t.price || 0), 0);
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: formattedTickets,
       totalSold,
       totalRevenue,
-    })
+    });
   } catch (error) {
-    console.error('Admin ticket fetch error:', error)
+    console.error("Admin ticket fetch error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to fetch tickets',
+      message: "Failed to fetch tickets",
       error: error.message,
-    })
+    });
   }
-}
+};
 
 // Create a new ticket
 const createTicket = async (req, res) => {
-  const { eventId, ticketType, seatNumber, userId } = req.body;
-  
+  const { eventId, ticketType, seatNumber, userId, ticketCount, ticketId } =
+    req.body;
 
   // Find the event and verify ticket type
   const event = await Event.findById(eventId);
   if (!event) {
-    throw new NotFoundError('Event not found');
+    throw new NotFoundError("Event not found");
   }
 
   // Find the ticket type in the event
-  const ticketTypeInfo = event.ticketTypes.find(type => type.name === ticketType);
+  const ticketTypeInfo = event.ticketTypes.find(
+    (type) => type.name === ticketType
+  );
   if (!ticketTypeInfo) {
-    throw new BadRequestError('Invalid ticket type');
+    throw new BadRequestError("Invalid ticket type");
   }
 
   // Check if ticket is available
   if (!ticketTypeInfo.available || ticketTypeInfo.quantity <= 0) {
-    throw new BadRequestError('Ticket type is not available');
+    throw new BadRequestError("Ticket type is not available");
   }
 
   // Create the ticket
   const ticket = await Ticket.create({
-    event: eventId,
-    user: userId,
+    ticketId,
+    event: eventId.populate("Event"),
+    user: userId.populate("User"),
     ticketType,
+    ticketCount,
     price: ticketTypeInfo.price,
     seatNumber,
   });
@@ -120,8 +135,8 @@ const createTicket = async (req, res) => {
 // Get user's tickets
 const getUserTickets = async (req, res) => {
   const tickets = await Ticket.find({ user: req.user.userId })
-    .populate('event', 'title startDate endDate location')
-    .sort('-createdAt');
+    .populate("event", "title startDate endDate location")
+    .sort("-createdAt");
 
   res.status(StatusCodes.OK).json({ tickets, count: tickets.length });
 };
@@ -132,27 +147,30 @@ const getEventTickets = async (req, res) => {
     const { eventId } = req.params;
 
     // If authentication is present, verify organizer access
-    if (req.user && req.user.userId && req.user.userId !== 'bypass') {
-      const event = await Event.findOne({ _id: eventId, organizer: req.user.userId });
+    if (req.user && req.user.userId && req.user.userId !== "bypass") {
+      const event = await Event.findOne({
+        _id: eventId,
+        organizer: req.user.userId,
+      });
       if (!event) {
         return res.status(StatusCodes.UNAUTHORIZED).json({
           success: false,
-          message: 'Not authorized to view these tickets'
+          message: "Not authorized to view these tickets",
         });
       }
     }
 
     const tickets = await Ticket.find({ event: eventId })
-      .populate('user', 'firstName lastName email')
-      .sort('-createdAt');
+      .populate("user", "firstName lastName email")
+      .sort("-createdAt");
 
     res.status(StatusCodes.OK).json({ tickets, count: tickets.length });
   } catch (error) {
-    console.error('Get event tickets error:', error);
+    console.error("Get event tickets error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to fetch event tickets',
-      error: error.message
+      message: "Failed to fetch event tickets",
+      error: error.message,
     });
   }
 };
@@ -166,16 +184,19 @@ const checkInTicket = async (req, res) => {
     if (!ticket) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
-        message: 'Ticket not found'
+        message: "Ticket not found",
       });
     }
 
     // Verify the user is the event organizer
-    const event = await Event.findOne({ _id: ticket.event, organizer: req.user.userId });
+    const event = await Event.findOne({
+      _id: ticket.event,
+      organizer: req.user.userId,
+    });
     if (!event) {
       return res.status(StatusCodes.UNAUTHORIZED).json({
         success: false,
-        message: 'Not authorized to check in this ticket'
+        message: "Not authorized to check in this ticket",
       });
     }
 
@@ -183,30 +204,30 @@ const checkInTicket = async (req, res) => {
       return res.status(StatusCodes.OK).json({
         success: true,
         alreadyCheckedIn: true,
-        message: 'Ticket already checked in',
+        message: "Ticket already checked in",
         data: {
           ticket,
-          checkedInAt: ticket.checkedInAt
-        }
+          checkedInAt: ticket.checkedInAt,
+        },
       });
     }
 
     ticket.checkedIn = true;
     ticket.checkedInAt = new Date();
-    ticket.status = 'used';
+    ticket.status = "used";
     await ticket.save();
 
-    res.status(StatusCodes.OK).json({ 
+    res.status(StatusCodes.OK).json({
       success: true,
-      message: 'Ticket checked in successfully',
-      ticket 
+      message: "Ticket checked in successfully",
+      ticket,
     });
   } catch (error) {
-    console.error('Check-in error:', error);
+    console.error("Check-in error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to check in ticket',
-      error: error.message
+      message: "Failed to check in ticket",
+      error: error.message,
     });
   }
 };
@@ -217,24 +238,26 @@ const cancelTicket = async (req, res) => {
 
   const ticket = await Ticket.findById(ticketId);
   if (!ticket) {
-    throw new NotFoundError('Ticket not found');
+    throw new NotFoundError("Ticket not found");
   }
 
   // Verify the user owns the ticket
   if (ticket.user.toString() !== req.user.userId) {
-    throw new UnauthorizedError('Not authorized to cancel this ticket');
+    throw new UnauthorizedError("Not authorized to cancel this ticket");
   }
 
-  if (ticket.status !== 'active') {
-    throw new BadRequestError('Ticket cannot be cancelled');
+  if (ticket.status !== "active") {
+    throw new BadRequestError("Ticket cannot be cancelled");
   }
 
-  ticket.status = 'cancelled';
+  ticket.status = "cancelled";
   await ticket.save();
 
   // Update event ticket quantity
   const event = await Event.findById(ticket.event);
-  const ticketType = event.ticketTypes.find(type => type.name === ticket.ticketType);
+  const ticketType = event.ticketTypes.find(
+    (type) => type.name === ticket.ticketType
+  );
   if (ticketType) {
     ticketType.quantity += 1;
     await event.save();
@@ -248,17 +271,17 @@ const getTicket = async (req, res) => {
   const { ticketId } = req.params;
 
   const ticket = await Ticket.findById(ticketId)
-    .populate('event', 'title startDate endDate location organizer')
-    .populate('user', 'firstName lastName email');
+    .populate("event", "title startDate endDate location organizer")
+    .populate("user", "firstName lastName email");
 
   if (!ticket) {
-    throw new NotFoundError('Ticket not found');
+    throw new NotFoundError("Ticket not found");
   }
 
   // Verify the user owns the ticket or is the event organizer
   const event = await Event.findById(ticket.event);
   if (!event) {
-    throw new NotFoundError('Event not found');
+    throw new NotFoundError("Event not found");
   }
 
   // Check if user and organizer IDs exist before comparing
@@ -267,11 +290,11 @@ const getTicket = async (req, res) => {
   const requestUserId = req.user?.userId;
 
   if (!userId || !organizerId || !requestUserId) {
-    throw new UnauthorizedError('Invalid ticket or user data');
+    throw new UnauthorizedError("Invalid ticket or user data");
   }
 
   if (userId !== requestUserId && organizerId !== requestUserId) {
-    throw new UnauthorizedError('Not authorized to view this ticket');
+    throw new UnauthorizedError("Not authorized to view this ticket");
   }
 
   res.status(StatusCodes.OK).json({ ticket });
@@ -281,9 +304,9 @@ const getTicket = async (req, res) => {
 const validateQRCode = async (req, res) => {
   try {
     const { qrData } = req.body;
-    
+
     if (!qrData) {
-      throw new BadRequestError('QR code data is required');
+      throw new BadRequestError("QR code data is required");
     }
 
     // Parse the QR code data
@@ -291,27 +314,29 @@ const validateQRCode = async (req, res) => {
     try {
       ticketData = JSON.parse(qrData);
     } catch (error) {
-      throw new BadRequestError('Invalid QR code format');
+      throw new BadRequestError("Invalid QR code format");
     }
 
     // Find the ticket using ticketId
     const ticket = await Ticket.findOne({ ticketId: ticketData.ticketId })
-      .populate('event', 'title startDate endDate location organizer')
-      .populate('user', 'firstName lastName email');
+      .populate("event", "title startDate endDate location organizer")
+      .populate("user", "firstName lastName email");
 
     if (!ticket) {
-      throw new NotFoundError('Ticket not found');
+      throw new NotFoundError("Ticket not found");
     }
 
     // Verify the ticket data matches
-    if (ticket.event._id.toString() !== ticketData.eventId ||
-        ticket.user._id.toString() !== ticketData.userId ||
-        ticket.ticketType !== ticketData.ticketType) {
-      throw new BadRequestError('Invalid ticket data');
+    if (
+      ticket.event._id.toString() !== ticketData.eventId ||
+      ticket.user._id.toString() !== ticketData.userId ||
+      ticket.ticketType !== ticketData.ticketType
+    ) {
+      throw new BadRequestError("Invalid ticket data");
     }
 
     // Check if ticket is still valid
-    if (ticket.status !== 'active') {
+    if (ticket.status !== "active") {
       throw new BadRequestError(`Ticket is ${ticket.status}`);
     }
 
@@ -320,7 +345,7 @@ const validateQRCode = async (req, res) => {
       return res.status(StatusCodes.OK).json({
         success: true,
         alreadyCheckedIn: true,
-        message: 'Ticket already checked in',
+        message: "Ticket already checked in",
         data: {
           ticketId: ticket.ticketId,
           eventTitle: ticket.event.title,
@@ -333,8 +358,9 @@ const validateQRCode = async (req, res) => {
           purchaseDate: ticket.purchaseDate,
           status: ticket.status,
           checkedIn: ticket.checkedIn,
-          checkedInAt: ticket.checkedInAt
-        }
+          checkedInAt: ticket.checkedInAt,
+          ticketCount: ticket.ticketCount, // Include ticket count
+        },
       });
     }
 
@@ -352,17 +378,81 @@ const validateQRCode = async (req, res) => {
         userEmail: ticket.user.email,
         purchaseDate: ticket.purchaseDate,
         status: ticket.status,
-        checkedIn: ticket.checkedIn
-      }
+        checkedIn: ticket.checkedIn,
+        ticketCount: ticket.ticketCount, // Include ticket count
+      },
     });
-
   } catch (error) {
-    console.error('QR code validation error:', error);
+    console.error("QR code validation error:", error);
     res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
-      message: error.message || 'Failed to validate QR code'
+      message: error.message || "Failed to validate QR code",
     });
   }
+};
+
+// Get ticket details by ID or Transaction Reference
+const getTicketDetails = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.userId;
+
+  let tickets = [];
+
+  // 1. Try finding by ticketId (string)
+  const ticketById = await Ticket.findOne({ ticketId: id })
+    .populate("event", "title startDate endDate location organizer")
+    .populate("user", "firstName lastName email");
+
+  if (ticketById) {
+    tickets.push(ticketById);
+  }
+
+  // 2. If not found, check if id is a valid ObjectId (for _id lookup)
+  if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
+    const ticket = await Ticket.findById(id)
+      .populate("event", "title startDate endDate location organizer")
+      .populate("user", "firstName lastName email");
+
+    if (ticket) {
+      tickets.push(ticket);
+    }
+  }
+
+  // 3. If still not found, try finding by paymentReference
+  if (tickets.length === 0) {
+    const txTickets = await Ticket.find({ paymentReference: id })
+      .populate("event", "title startDate endDate location organizer")
+      .populate("user", "firstName lastName email");
+
+    if (txTickets && txTickets.length > 0) {
+      tickets = txTickets;
+    }
+  }
+
+  // Filter tickets to ensure they belong to the requesting user
+  // We allow checking if the user is the owner OR the organizer of the event
+  // For simplicity in this specific endpoint which is for "my-account", we enforce user ownership strictly
+  // unless we want to allow organizers to view via this endpoint too.
+  // The user requirement says: "if the current user is not the same as the user on the ticket then don't show the ticket."
+
+  const authorizedTickets = tickets.filter((ticket) => {
+    const ticketOwnerId =
+      ticket.user?._id?.toString() || ticket.user?.toString();
+    return ticketOwnerId === userId;
+  });
+
+  if (authorizedTickets.length === 0) {
+    // If we found tickets but none belong to the user, it's a 403/404
+    // If we found no tickets at all, it's a 404
+    if (tickets.length > 0) {
+      throw new UnauthorizedError("Not authorized to view these tickets");
+    }
+    throw new NotFoundError("Ticket not found");
+  }
+
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, tickets: authorizedTickets });
 };
 
 module.exports = {
@@ -374,4 +464,5 @@ module.exports = {
   getTicket,
   getAllTicketsAdmin,
   validateQRCode,
-}; 
+  getTicketDetails,
+};

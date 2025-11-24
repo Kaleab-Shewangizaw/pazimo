@@ -7,6 +7,7 @@ const {
   verifyInvitation,
   processPaidInvitationsEndpoint,
   getInvitationById,
+  updateInvitationStatus,
 } = require("../controllers/invitationController");
 
 // Bulk create invitations (Step 1: Create pending)
@@ -25,6 +26,9 @@ router.post("/invitations/verify", verifyInvitation);
 
 // Get Invitation by ID (Public)
 router.get("/invitations/:id", getInvitationById);
+
+// Update Invitation Status (Public - for guest confirmation)
+router.patch("/invitations/:id/status", updateInvitationStatus);
 
 // Create invitation (Legacy/Single) - Updated to match new schema if possible, or keep as is but might need frontend update
 router.post("/invitations", protect, async (req, res) => {

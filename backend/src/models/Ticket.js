@@ -1,10 +1,11 @@
-const mongoose = require('mongoose');
-const { v4: uuidv4 } = require('uuid');
-const QRCode = require('qrcode');
+const mongoose = require("mongoose");
+const { v4: uuidv4 } = require("uuid");
+const QRCode = require("qrcode");
 
 function generateShortId() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
   for (let i = 0; i < 8; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -18,16 +19,16 @@ const TicketSchema = new mongoose.Schema(
       default: generateShortId,
       unique: true,
       required: true,
-      index: true
+      index: true,
     },
     event: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Event',
+      ref: "Event",
       required: true,
     },
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
     },
     ticketType: {
@@ -45,19 +46,23 @@ const TicketSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'used', 'cancelled', 'expired', 'pending'],
-      default: 'active',
+      enum: ["active", "used", "cancelled", "expired", "pending"],
+      default: "active",
     },
     paymentStatus: {
       type: String,
-      enum: ['pending', 'completed', 'failed'],
-      default: 'completed',
+      enum: ["pending", "completed", "failed"],
+      default: "completed",
     },
     paymentDate: {
       type: Date,
     },
     qrCode: {
       type: String,
+    },
+    ticketCount: {
+      type: Number,
+      default: 1,
     },
     checkedIn: {
       type: Boolean,
@@ -81,7 +86,7 @@ const TicketSchema = new mongoose.Schema(
 );
 
 // 🔐 Generate QR code before saving
-TicketSchema.pre('save', async function (next) {
+TicketSchema.pre("save", async function (next) {
   if (!this.qrCode) {
     try {
       const qrPayload = {
@@ -94,23 +99,24 @@ TicketSchema.pre('save', async function (next) {
         purchaseDate: this.purchaseDate.toISOString(),
         status: this.status,
         paymentReference: this.paymentReference || null,
+        ticketCount: this.ticketCount, // Include ticket count in QR code
       };
-      
+
       // Generate QR code with better error correction and size
       this.qrCode = await QRCode.toDataURL(JSON.stringify(qrPayload), {
-        errorCorrectionLevel: 'H',
-        type: 'image/png',
+        errorCorrectionLevel: "H",
+        type: "image/png",
         quality: 0.92,
         margin: 1,
         width: 256,
         color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        }
+          dark: "#000000",
+          light: "#FFFFFF",
+        },
       });
       next();
     } catch (error) {
-      console.error('Error generating QR code:', error);
+      console.error("Error generating QR code:", error);
       next(error);
     }
   } else {
@@ -118,6 +124,6 @@ TicketSchema.pre('save', async function (next) {
   }
 });
 
-const Ticket = mongoose.model('Ticket', TicketSchema);
+const Ticket = mongoose.model("Ticket", TicketSchema);
 
 module.exports = Ticket;

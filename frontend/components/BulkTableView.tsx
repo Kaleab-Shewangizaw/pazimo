@@ -1,19 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import QrModal from "./qrModel";
 import base64id from "base64id";
-import { PlusIcon, X } from "lucide-react";
+import { PlusIcon, X, Loader2 } from "lucide-react";
 import { PaymentInit, Row } from "@/types/bulk-invite";
 import { toast } from "sonner";
-import { Event } from "@/types/event";
+import { Event } from "@/types/invitation";
 import {
   generatePaymentConfig,
   validateAndCorrectRows,
 } from "@/utils/bulkInviteValidation";
 import { useAuthStore } from "@/store/authStore";
-import ChapaInlineWidget from "./ChapaInlineWidget";
+import { useSearchParams } from "next/navigation";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
 interface EditableTableProps {
   event: Event;
@@ -30,19 +33,23 @@ export default function EditableTable({
   setSelectedFile,
   setShowBulkModal,
 }: EditableTableProps) {
+  const searchParams = useSearchParams();
   const [showDataTrimmed, setShowDataTrimmed] = useState(false);
   const [qrRow, setQrRow] = useState<Row | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [canSend, setCanSend] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
+  const [isSantimLoading, setIsSantimLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("telebirr");
+  const [paymentPhoneNumber, setPaymentPhoneNumber] = useState("");
   const { user } = useAuthStore();
   const [paymentConfig, setPaymentConfig] = useState<PaymentInit | null>(null);
   const [pendingInvitationIds, setPendingInvitationIds] = useState<string[]>(
     []
   );
   const [successResult, setSuccessResult] = useState<{
-    success: any[];
-    failed: any[];
+    success: unknown[];
+    failed: unknown[];
   } | null>(null);
 
   const displayData = data.length > 1000 ? data.slice(0, 1000) : data;
@@ -85,7 +92,7 @@ export default function EditableTable({
     return ethiopianRegex.test(trimmed);
   };
 
-  const isRowValid = (row: Row): boolean => {
+  const isRowValid = useCallback((row: Row): boolean => {
     const hasName = row.Name?.trim().length > 0;
     const emailOk =
       (row.Type === "Email" || row.Type === "Both") && isEmailValid(row.Email);
@@ -94,14 +101,14 @@ export default function EditableTable({
 
     if (row.Type === "Both") return hasName && emailOk && phoneOk;
     return hasName && (emailOk || phoneOk);
-  };
+  }, []);
 
   // Set "canSend"
   useEffect(() => {
     const allValid =
       data.length > 0 && data.every((row: Row) => isRowValid(row));
     setCanSend(allValid);
-  }, [data]);
+  }, [data, isRowValid]);
 
   // Handle row changes
   const handleChange = (
@@ -254,55 +261,130 @@ export default function EditableTable({
       );
 
       setPaymentConfig(config);
+      setPaymentPhoneNumber(user.phoneNumber || "");
       setShowPayment(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Send error:", error);
-      toast.error(error.message || "Error creating invitations.");
+      const message =
+        error instanceof Error ? error.message : "Error creating invitations.";
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const processSending = async (invitationIds: string[]) => {
-    toast.success("Processing invitations...");
-    try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/process-paid`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${useAuthStore.getState().token}`,
-          },
-          body: JSON.stringify({ invitationIds }),
+  const processSending = useCallback(
+    async (invitationIds: string[]) => {
+      toast.success("Processing invitations...");
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/process-paid`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${useAuthStore.getState().token}`,
+            },
+            body: JSON.stringify({ invitationIds }),
+          }
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          toast.success(
+            `Successfully sent ${result.data.success.length} invitations!`
+          );
+          setSuccessResult(result.data);
+          setSelectedFile(null);
+        } else {
+          toast.error(result.message || "Failed to send invitations.");
         }
+      } catch (error) {
+        console.error("Process sending error:", error);
+        toast.error("Error sending invitations.");
+      }
+    },
+    [setSelectedFile]
+  );
+
+  const handleMobilePayment = async () => {
+    if (!paymentConfig || !user) return;
+    setIsSantimLoading(true);
+
+    try {
+      const txnId = crypto.randomUUID();
+
+      // Save pending invitation IDs to localStorage
+      localStorage.setItem(
+        `bulk_invitations_${txnId}`,
+        JSON.stringify(pendingInvitationIds)
       );
 
-      const result = await response.json();
+      const response = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: paymentConfig.amount,
+          paymentReason: `Bulk Invitation Fee`,
+          phoneNumber: paymentPhoneNumber,
+          invitationData: {
+            eventId: event._id,
+            userId: user._id || user.id,
+            txnId,
+            pendingInvitationIds,
+            type: "bulk_invitation_fee",
+          },
+          orderId: txnId,
+          successUrl: `${window.location.origin}/organizer/invitations?action=process_bulk_payment&orderId=${txnId}`,
+        }),
+      });
 
-      if (response.ok && result.success) {
-        toast.success(
-          `Successfully sent ${result.data.success.length} invitations!`
-        );
-        setSuccessResult(result.data);
-        setSelectedFile(null);
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.message || "Payment initiation failed");
+
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl;
       } else {
-        toast.error(result.message || "Failed to send invitations.");
+        throw new Error("No payment URL returned");
       }
-    } catch (error) {
-      console.error("Process sending error:", error);
-      toast.error("Error sending invitations.");
+    } catch (error: unknown) {
+      console.error("Payment error:", error);
+      const message =
+        error instanceof Error ? error.message : "Failed to initiate payment";
+      toast.error(message);
+      setIsSantimLoading(false);
     }
   };
 
-  const handlePaymentSuccess = async () => {
-    setShowPayment(false);
-    if (pendingInvitationIds.length > 0) {
-      await processSending(pendingInvitationIds);
-    } else {
-      toast.error("No pending invitations found to process.");
+  useEffect(() => {
+    const txRef = searchParams.get("tx_ref");
+    const status = searchParams.get("status");
+
+    if (txRef && status === "success") {
+      let foundKey = null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("bulk_invitations_")) {
+          foundKey = key;
+          break;
+        }
+      }
+
+      if (foundKey) {
+        const storedIds = localStorage.getItem(foundKey);
+        if (storedIds) {
+          const ids = JSON.parse(storedIds);
+          setPendingInvitationIds(ids);
+          localStorage.removeItem(foundKey);
+
+          // Process sending
+          processSending(ids);
+        }
+      }
     }
-  };
+  }, [searchParams, processSending]);
 
   const headers = [
     "No",
@@ -348,12 +430,10 @@ export default function EditableTable({
     <>
       <div className="w-full border border-gray-300 rounded-lg overflow-auto">
         {showPayment && paymentConfig && (
-          <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-xl p-8">
-            <div className="w-full max-w-md bg-white shadow-2xl rounded-xl p-6 border border-gray-200">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-gray-900">
-                  Complete Payment
-                </h3>
+          <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-start pt-4 md:justify-center md:pt-0 rounded-xl p-4 md:p-8">
+            <div className="w-full max-w-md bg-white shadow-2xl rounded-xl p-6 border border-gray-200 max-h-[85vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-gray-900">Checkout</h3>
                 <button
                   onClick={() => setShowPayment(false)}
                   className="text-gray-500 hover:text-gray-700"
@@ -362,35 +442,60 @@ export default function EditableTable({
                 </button>
               </div>
 
-              <div className="mb-6 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Amount:</span>
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 mb-6">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-600">Total Amount</span>
                   <span className="font-bold text-gray-900">
                     {paymentConfig.amount} ETB
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Transaction Ref:</span>
+                  <span className="text-gray-600">Transaction Ref</span>
                   <span className="font-mono text-xs text-gray-500">
                     {paymentConfig.tx_ref}
                   </span>
                 </div>
               </div>
 
-              <ChapaInlineWidget
-                amount={paymentConfig.amount}
-                publicKey={
-                  process.env.NEXT_PUBLIC_CHAPA_PUBLIC_KEY || "CHAPUBK_TEST-..."
+              <div className="mb-6">
+                <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+                  Phone Number
+                </Label>
+                <Input
+                  value={paymentPhoneNumber}
+                  onChange={(e) => setPaymentPhoneNumber(e.target.value)}
+                  placeholder="09|07..."
+                  className="mt-1"
+                />
+              </div>
+
+              <div className="mb-6">
+                <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+                  Payment Method
+                </Label>
+                <PaymentMethodSelector
+                  phoneNumber={paymentPhoneNumber}
+                  selectedMethod={paymentMethod}
+                  onSelect={setPaymentMethod}
+                />
+              </div>
+
+              <Button
+                onClick={handleMobilePayment}
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
+                disabled={
+                  isSantimLoading || !paymentPhoneNumber || !paymentMethod
                 }
-                tx_ref={paymentConfig.tx_ref}
-                email={paymentConfig.customer.email}
-                first_name={paymentConfig.customer.first_name}
-                last_name={paymentConfig.customer.last_name}
-                return_url={paymentConfig.return_url}
-                callback_url={paymentConfig.callback_url}
-                onSuccess={handlePaymentSuccess}
-                onFail={(msg) => toast.error(msg || "Payment failed")}
-              />
+              >
+                {isSantimLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
+                    Processing...
+                  </>
+                ) : (
+                  `Pay ${paymentConfig.amount} ETB`
+                )}
+              </Button>
             </div>
           </div>
         )}

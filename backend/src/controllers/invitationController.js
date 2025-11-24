@@ -392,6 +392,47 @@ const getInvitationById = async (req, res) => {
   }
 };
 
+// Update Invitation Status (Confirm/Decline)
+const updateInvitationStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["confirmed", "declined"].includes(status)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid status. Must be 'confirmed' or 'declined'",
+      });
+    }
+
+    const invitation = await Invitation.findOne({ invitationId: id });
+
+    if (!invitation) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Invitation not found",
+      });
+    }
+
+    invitation.status = status;
+    await invitation.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: `Invitation ${status}`,
+      data: {
+        status: invitation.status,
+      },
+    });
+  } catch (error) {
+    console.error("Update invitation status error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to update status",
+    });
+  }
+};
+
 module.exports = {
   createBulkInvitations,
   processPaidInvitations,
@@ -399,4 +440,5 @@ module.exports = {
   processPaidInvitationsEndpoint,
   sendInvitations: processPaidInvitationsEndpoint, // Alias for backward compatibility
   getInvitationById,
+  updateInvitationStatus,
 };

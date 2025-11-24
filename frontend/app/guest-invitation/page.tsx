@@ -11,6 +11,7 @@ import {
   QrCode,
   Download,
 } from "lucide-react";
+import Image from "next/image";
 
 interface EventData {
   title: string;
@@ -36,7 +37,9 @@ function GuestInvitationContent() {
   const searchParams = useSearchParams();
   const [invitation, setInvitation] = useState<InvitationData | null>(null);
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [isDeclined, setIsDeclined] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -59,13 +62,11 @@ function GuestInvitationContent() {
       if (response.ok && result.success) {
         setInvitation(result.data);
         if (
-          ["confirmed", "accepted", "sent", "delivered"].includes(
-            result.data.status
-          )
+          ["confirmed", "accepted", "delivered"].includes(result.data.status)
         ) {
-          if (result.data.qrCodeData) {
-            setIsConfirmed(true);
-          }
+          setIsConfirmed(true);
+        } else if (result.data.status === "declined") {
+          setIsDeclined(true);
         }
       } else {
         setError(result.message || "Failed to load invitation");
@@ -75,6 +76,41 @@ function GuestInvitationContent() {
       setError("An error occurred while loading the invitation");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleStatusUpdate = async (status: "confirmed" | "declined") => {
+    if (!invitation) return;
+    setIsUpdating(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/${invitation.invitationId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        if (status === "confirmed") {
+          setIsConfirmed(true);
+        } else {
+          setIsDeclined(true);
+        }
+        // Update local invitation status
+        setInvitation({ ...invitation, status });
+      } else {
+        alert(result.message || "Failed to update status");
+      }
+    } catch (err) {
+      console.error("Update error:", err);
+      alert("An error occurred while updating status");
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -153,12 +189,18 @@ function GuestInvitationContent() {
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-8 text-white text-center">
             <h1 className="text-3xl font-bold mb-2">
-              {isConfirmed ? "🎉 You're Going!" : "🎉 You're Invited!"}
+              {isConfirmed
+                ? "🎉 You're Going!"
+                : isDeclined
+                ? "Maybe Next Time"
+                : "🎉 You're Invited!"}
             </h1>
             <p className="text-blue-100">
               {isConfirmed
                 ? "Here is your ticket for the event"
-                : "Please check your event details"}
+                : isDeclined
+                ? "You have declined this invitation"
+                : "Please confirm your attendance"}
             </p>
           </div>
 
@@ -228,7 +270,26 @@ function GuestInvitationContent() {
               </div>
             </div>
 
-            {invitation.qrCodeData && (
+            {!isConfirmed && !isDeclined && (
+              <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+                <button
+                  onClick={() => handleStatusUpdate("confirmed")}
+                  disabled={isUpdating}
+                  className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold shadow-md transition-colors disabled:opacity-50"
+                >
+                  {isUpdating ? "Processing..." : "Confirm Attendance"}
+                </button>
+                <button
+                  onClick={() => handleStatusUpdate("declined")}
+                  disabled={isUpdating}
+                  className="bg-red-100 hover:bg-red-200 text-red-700 px-8 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
+                >
+                  Decline
+                </button>
+              </div>
+            )}
+
+            {isConfirmed && invitation.qrCodeData && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6 text-center">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center justify-center gap-2">
                   <QrCode className="w-5 h-5 text-blue-600" />
@@ -236,9 +297,11 @@ function GuestInvitationContent() {
                 </h3>
 
                 <div className="flex flex-col items-center">
-                  <img
+                  <Image
                     src={invitation.qrCodeData}
                     alt="Event Ticket QR Code"
+                    width={192}
+                    height={192}
                     className="w-48 h-48 mb-4 bg-white p-2 rounded shadow-sm"
                   />
                   <button
@@ -252,6 +315,15 @@ function GuestInvitationContent() {
                     Please present this QR code at the entrance.
                   </p>
                 </div>
+              </div>
+            )}
+
+            {isDeclined && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6 text-center">
+                <p className="text-gray-600">
+                  You have declined this invitation. If this was a mistake,
+                  please contact the organizer.
+                </p>
               </div>
             )}
 

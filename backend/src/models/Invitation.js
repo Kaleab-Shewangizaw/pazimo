@@ -40,7 +40,15 @@ const invitationSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending_payment", "paid", "sent", "delivered", "failed"],
+      enum: [
+        "pending_payment",
+        "paid",
+        "sent",
+        "delivered",
+        "failed",
+        "confirmed",
+        "declined",
+      ],
       default: "pending_payment",
     },
     paymentStatus: {

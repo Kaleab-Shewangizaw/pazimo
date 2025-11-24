@@ -1,63 +1,63 @@
-"use client"
-import { useState, useEffect } from "react"
-import { QrCode, Download, X } from "lucide-react"
-import QRCode from "qrcode"
+"use client";
+import { useState, useEffect } from "react";
+import { QrCode, Download, X } from "lucide-react";
+import QRCode from "qrcode";
+import { Invitation } from "@/types/invitation";
 
 interface QRModalProps {
-  invitation: {
-    id: number
-    eventTitle: string
-    customerName: string
-    contact: string
-    qrCode: string
-    qrCodeCount: number
-  }
-  onClose: () => void
+  invitation: Invitation;
+  onClose: () => void;
 }
 
 export default function QRModal({ invitation, onClose }: QRModalProps) {
-  const [qrCodeImage, setQrCodeImage] = useState<string>('')
+  const [qrCodeImage, setQrCodeImage] = useState<string>("");
 
   useEffect(() => {
     const generateQRCode = async () => {
       try {
         if (invitation.qrCode) {
-          let qrUrl = invitation.qrCode
-          
+          // If it's already a data URL (base64 image), use it directly
+          if (invitation.qrCode.startsWith("data:image")) {
+            setQrCodeImage(invitation.qrCode);
+            return;
+          }
+
+          let qrUrl = invitation.qrCode;
+
           // Handle JSON array format from old invitations
-          if (qrUrl.startsWith('[')) {
+          if (qrUrl.startsWith("[")) {
             try {
-              const urls = JSON.parse(qrUrl)
-              qrUrl = urls[0] // Take first URL
+              const urls = JSON.parse(qrUrl);
+              qrUrl = urls[0]; // Take first URL
             } catch {
               // If parsing fails, use as is
             }
           }
-          
+
           const qrImage = await QRCode.toDataURL(qrUrl, {
             width: 300,
             margin: 2,
             color: {
-              dark: '#0D47A1',
-              light: '#FFFFFF'
-            }
-          })
-          setQrCodeImage(qrImage)
+              dark: "#0D47A1",
+              light: "#FFFFFF",
+            },
+          });
+          setQrCodeImage(qrImage);
         }
       } catch (error) {
-        console.error('Error generating QR code:', error)
+        console.error("Error generating QR code:", error);
       }
-    }
+    };
 
-    generateQRCode()
-  }, [invitation.qrCode])
+    generateQRCode();
+  }, [invitation.qrCode]);
 
   const downloadQR = () => {
-    const link = document.createElement('a')
-    link.href = qrCodeImage
-    link.download = `${invitation.customerName}-QR.png`
-    link.click()
-  }
+    const link = document.createElement("a");
+    link.href = qrCodeImage;
+    link.download = `${invitation.customerName}-QR.png`;
+    link.click();
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -97,7 +97,7 @@ export default function QRModal({ invitation, onClose }: QRModalProps) {
                 Download
               </button>
             </div>
-            
+
             <div className="grid md:grid-cols-2 gap-6">
               <div className="flex justify-center">
                 <img
@@ -106,10 +106,12 @@ export default function QRModal({ invitation, onClose }: QRModalProps) {
                   className="border border-gray-200 rounded-lg"
                 />
               </div>
-              
+
               <div className="space-y-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <h5 className="font-medium text-gray-900 mb-3">Invitation Details</h5>
+                  <h5 className="font-medium text-gray-900 mb-3">
+                    Invitation Details
+                  </h5>
                   <div className="space-y-2 text-sm">
                     <div>
                       <span className="font-medium text-gray-600">Event:</span>
@@ -120,10 +122,11 @@ export default function QRModal({ invitation, onClose }: QRModalProps) {
                       <p className="text-gray-900">{invitation.customerName}</p>
                     </div>
                     <div>
-                      <span className="font-medium text-gray-600">Contact:</span>
+                      <span className="font-medium text-gray-600">
+                        Contact:
+                      </span>
                       <p className="text-gray-900">{invitation.contact}</p>
                     </div>
-
                   </div>
                 </div>
               </div>
@@ -141,5 +144,5 @@ export default function QRModal({ invitation, onClose }: QRModalProps) {
         </div>
       </div>
     </div>
-  )
+  );
 }

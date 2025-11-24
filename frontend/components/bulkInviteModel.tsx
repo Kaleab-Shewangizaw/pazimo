@@ -12,7 +12,7 @@ import EditableTable from "./BulkTableView";
 import { validateAndCorrectRows } from "@/utils/bulkInviteValidation";
 import { toast } from "sonner";
 import { Row } from "@/types/bulk-invite";
-import { Event } from "@/types/event";
+import { Event } from "@/types/invitation";
 
 export default function BulkInvite({
   event,
@@ -82,7 +82,7 @@ export default function BulkInvite({
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i]) continue;
       const values = lines[i].split(",");
-      const obj = {};
+      const obj: Record<string, string> = {};
       headers.forEach((header, index) => {
         obj[header.trim()] = values[index].trim();
       });
@@ -102,7 +102,7 @@ export default function BulkInvite({
     processData(json_data);
   };
 
-  const selectedEvent = event || { title: "Unnamed Event", id: "0" };
+  const selectedEvent = event || { title: "Unnamed Event", id: 0 };
   const pricing = { email: 2, sms: 5 };
 
   const downloadTemplate = (type: string) => {

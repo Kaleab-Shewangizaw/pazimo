@@ -1,11 +1,19 @@
 export interface TicketType {
   name: string;
   price: number;
+  ticketId: string;
+  _id: string;
+  eventId: string;
+  qrCode: string;
+  ticketType?: string;
   quantity: number;
   description: string;
   available: boolean;
   startDate?: string;
   endDate?: string;
+  ticketCount?: number;
+  status?: string;
+  eventTitle?: string;
 }
 
 export interface Location {
@@ -31,6 +39,8 @@ export interface Event {
   endTime: string;
   eventType: "public" | "private";
   isPublic: boolean;
+  coverImages: string[];
+
   ageRestriction: string;
   eventImages: Array<{ url: string; caption: string }>;
   ticketTypes: TicketType[];

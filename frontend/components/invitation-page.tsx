@@ -19,6 +19,8 @@ import {
   Download,
   Search,
   Info,
+  CreditCard,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -27,10 +29,7 @@ import QRModal from "@/components/QRModal";
 import { Button } from "./ui/button";
 import FileUploadComponent from "./DocumentPreview";
 import BulkInvite from "./bulkInviteModel";
-const ChapaInlineWidget = dynamic(
-  () => import("@/components/ChapaInlineWidget"),
-  { ssr: false }
-);
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Event {
   id: number;
@@ -46,6 +45,8 @@ interface Event {
 }
 
 export default function InvitationPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [pricing, setPricing] = useState({
     email: 2.5,
     sms: 7.5,
@@ -256,10 +257,9 @@ export default function InvitationPage() {
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
 
-  // Chapa payment states
+  // Payment states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [chapaKey, setChapaKey] = useState(0);
+  const [isSantimLoading, setIsSantimLoading] = useState(false);
   const [pendingInvitation, setPendingInvitation] = useState<any>(null);
 
   useEffect(() => {
@@ -525,7 +525,6 @@ export default function InvitationPage() {
       await processPendingInvitation();
     } else {
       // Show payment modal
-      setChapaKey((k) => k + 1);
       setShowPaymentModal(true);
     }
   };
@@ -1062,6 +1061,49 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
   const emailCost = emailInvitations * pricing.email;
   const smsCost = smsInvitations * pricing.sms;
   const totalCost = emailCost + smsCost;
+
+  const handleSantimPayment = async () => {
+    if (!pendingInvitation) return;
+
+    setIsSantimLoading(true);
+    try {
+      const { contact, customerName, qrCodeCount, contactType, selectedEvent } =
+        pendingInvitation;
+
+      const pricePerInvite =
+        contactType === "email" ? pricing.email : pricing.sms;
+      const amount = pricePerInvite * (qrCodeCount || 1);
+
+      const response = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          paymentReason: `Invitation for ${selectedEvent?.title}`,
+          phoneNumber: contactType === "phone" ? contact : undefined,
+          invitationData: {
+            ...pendingInvitation,
+            eventId: selectedEvent?.id,
+            organizerId: localStorage.getItem("userId"),
+          },
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.message || "Payment initiation failed");
+
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl;
+      } else {
+        throw new Error("No payment URL returned");
+      }
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      toast.error(error.message || "Failed to initiate payment");
+      setIsSantimLoading(false);
+    }
+  };
 
   if (!mounted) {
     return (
@@ -2443,44 +2485,24 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                 </div>
               </div>
 
-              {(() => {
-                const totalAmount =
-                  (pendingInvitation?.contactType === "email"
-                    ? pricing.email
-                    : pricing.sms) * (pendingInvitation?.qrCodeCount || 1);
-                const publicKey =
-                  process.env.NEXT_PUBLIC_CHAPA_PUBLIC_KEY ||
-                  "CHAPUBK-jR5TkfXzDargB9DqmJesrqOP2WbWNkPy";
-                const txRef = `INV-${Date.now()}-${Math.random()
-                  .toString(36)
-                  .slice(2, 8)}`;
+              <Button
+                onClick={handleSantimPayment}
+                className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
+                disabled={isSantimLoading}
+              >
+                {isSantimLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <CreditCard className="mr-2 h-5 w-5" /> Pay with SantimPay
+                  </>
+                )}
+              </Button>
 
-                return (
-                  <ChapaInlineWidget
-                    key={chapaKey}
-                    amount={totalAmount}
-                    publicKey={publicKey}
-                    tx_ref={txRef}
-                    onSuccess={async () => {
-                      try {
-                        setShowPaymentModal(false);
-                        toast.success(
-                          "Payment successful! Sending invitation..."
-                        );
-                        await processPendingInvitation();
-                      } catch (error) {
-                        toast.error("Failed to send invitation after payment");
-                      }
-                    }}
-                    onFail={(msg) => {
-                      toast.error(msg || "Payment failed");
-                      setShowPaymentModal(false);
-                    }}
-                  />
-                );
-              })()}
-
-              <div className="mt-4">
+              <div className="mt-2">
                 <button
                   onClick={() => {
                     setShowPaymentModal(false);
@@ -2491,6 +2513,45 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SantimPay Payment Handling */}
+        {mounted && isSantimLoading && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Processing Payment...
+                </h3>
+                <button
+                  onClick={() => setIsSantimLoading(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4"></div>
+                <p className="text-sm text-gray-600 text-center">
+                  Please do not close this window. We are processing your
+                  payment securely.
+                </p>
               </div>
             </div>
           </div>
