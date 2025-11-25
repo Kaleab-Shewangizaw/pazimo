@@ -61,6 +61,9 @@ const invitationSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed", "free"],
       default: "pending",
     },
+    paymentReference: {
+      type: String,
+    },
     qrCodeData: {
       type: String,
     },

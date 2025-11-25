@@ -1,5 +1,6 @@
 const Invitation = require("../models/Invitation");
 const Event = require("../models/Event");
+const Ticket = require("../models/Ticket");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { StatusCodes } = require("http-status-codes");
@@ -140,7 +141,7 @@ const createBulkInvitations = async (req, res) => {
 };
 
 // Process paid invitations (Generate QR, Send Email/SMS)
-const processPaidInvitations = async (invitationIds) => {
+const processPaidInvitations = async (invitationIds, paymentReference) => {
   const results = {
     success: [],
     failed: [],
@@ -157,27 +158,37 @@ const processPaidInvitations = async (invitationIds) => {
       const event = await Event.findById(invitation.eventId);
       if (!event) throw new Error("Event not found");
 
-      // Generate QR Data (Server-side)
-      // We embed the invitationId. The scanner will verify this ID against the DB.
-      const qrPayload = {
-        invitationId: invitation.invitationId,
-        eventId: invitation.eventId,
-        type: "guest_ticket",
-      };
+      // Create a Free Ticket for this invitation
+      const ticket = await Ticket.create({
+        event: invitation.eventId,
+        isInvitation: true,
+        guestName: invitation.guestName,
+        guestEmail: invitation.guestEmail,
+        guestPhone: invitation.guestPhone,
+        ticketType: "Guest Ticket",
+        ticketCount: invitation.amount, // Use amount from bulk data
+        price: 0, // Free ticket
+        status: "active",
+        paymentStatus: "completed",
+        paymentReference: paymentReference || invitation.paymentReference,
+      });
 
-      const qrDataString = JSON.stringify(qrPayload);
-      const qrCodeBase64 = await QRCode.toDataURL(qrDataString);
+      // The Ticket pre-save hook generates the QR code.
+      // We use the ticket's QR code and ID for the invitation.
 
-      // Generate RSVP/Guest Link
+      // Generate RSVP/Guest Link using Ticket ID
       const frontendUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
-      const rsvpLink = `${frontendUrl}/guest-invitation?inv=${invitation.invitationId}`;
+      const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
       // Update Invitation
-      invitation.qrCodeData = qrCodeBase64;
+      invitation.qrCodeData = ticket.qrCode; // Sync QR code
       invitation.rsvpLink = rsvpLink;
       invitation.paymentStatus = "paid";
       invitation.status = "sent";
+      if (paymentReference) {
+        invitation.paymentReference = paymentReference;
+      }
       await invitation.save();
 
       // Send Email
@@ -185,18 +196,29 @@ const processPaidInvitations = async (invitationIds) => {
         ["email", "both"].includes(invitation.type) &&
         invitation.guestEmail
       ) {
-        const emailHtml = createEmailTemplate({
-          guestName: invitation.guestName,
-          eventName: event.title,
-          eventDate: new Date(event.startDate).toLocaleDateString(),
-          eventTime: event.startTime || "TBD",
+        const eventData = {
+          title: event.title,
+          date: event.startDate,
           location:
             typeof event.location === "string"
               ? event.location
               : event.location?.address || "See map",
-          rsvpLink,
-          amount: invitation.amount,
-        });
+        };
+
+        const invitationData = {
+          guestName: invitation.guestName,
+          ticketType: "Guest Ticket",
+          uniqueId: ticket.ticketId, // Use Ticket ID
+        };
+
+        // Use Ticket's QR Code
+        const qrCodeBase64 = ticket.qrCode;
+
+        const emailHtml = createEmailTemplate(
+          eventData,
+          invitationData,
+          qrCodeBase64
+        );
 
         await sendInvitationEmail({
           to: invitation.guestEmail,
@@ -217,8 +239,13 @@ const processPaidInvitations = async (invitationIds) => {
         const message = `Hi ${invitation.guestName}, you are invited to ${event.title}. Click here for your ticket: ${rsvpLink}`;
 
         // Call SMS API (GeezSMS)
-        // Ensure phone number is formatted correctly (e.g., 251...)
         let phone = invitation.guestPhone.replace("+", "");
+        // Ensure phone starts with 251
+        if (phone.startsWith("0")) {
+          phone = "251" + phone.substring(1);
+        } else if (!phone.startsWith("251")) {
+          phone = "251" + phone;
+        }
 
         await axios
           .post("https://api.geezsms.com/api/v1/sms/send", {
@@ -234,6 +261,7 @@ const processPaidInvitations = async (invitationIds) => {
 
       results.success.push({
         invitationId: invitation.invitationId,
+        ticketId: ticket.ticketId,
         status: "sent",
       });
     } catch (error) {
@@ -490,19 +518,26 @@ const createAndSendProfessionalInvitation = async (data) => {
 
     // Send Email
     if (["email", "both"].includes(contactType) && guestEmail) {
-      const emailHtml = createEmailTemplate({
-        guestName,
-        eventName: event.title,
-        eventDate: new Date(event.startDate).toLocaleDateString(),
-        eventTime: event.startTime || "TBD",
+      const eventData = {
+        title: event.title,
+        date: event.startDate,
         location:
           typeof event.location === "string"
             ? event.location
             : event.location?.address || "See map",
-        rsvpLink,
-        amount: invitation.amount,
-        message,
-      });
+      };
+
+      const invitationData = {
+        guestName,
+        ticketType: "Guest Ticket",
+        uniqueId: invitationId,
+      };
+
+      const emailHtml = createEmailTemplate(
+        eventData,
+        invitationData,
+        qrCodeBase64
+      );
 
       await sendInvitationEmail({
         to: guestEmail,
@@ -525,6 +560,13 @@ const createAndSendProfessionalInvitation = async (data) => {
       }Click here for your ticket: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
+      // Ensure phone starts with 251
+      if (phone.startsWith("0")) {
+        phone = "251" + phone.substring(1);
+      } else if (!phone.startsWith("251")) {
+        phone = "251" + phone;
+      }
+
       await axios
         .post("https://api.geezsms.com/api/v1/sms/send", {
           phone: phone,

@@ -256,27 +256,47 @@ const processGuestInvitation = async (ticketId) => {
 
   // Send Email
   if (ticket.guestEmail) {
-    const emailHtml = createEmailTemplate({
-      guestName: ticket.guestName,
-      eventName: event.title,
-      eventDate: new Date(event.startDate).toLocaleDateString(),
-      eventTime: event.startTime || "TBD",
+    // Prepare data for the new template signature: createEmailTemplate(event, invitation, qrCodeUrl)
+    const eventData = {
+      title: event.title,
+      date: event.startDate,
       location:
         typeof event.location === "string"
           ? event.location
           : event.location?.address || "See map",
-      rsvpLink,
-      amount: ticket.ticketCount,
-      message,
-      isRsvp: true, // Flag to indicate RSVP template
-    });
+    };
+
+    const invitationData = {
+      guestName: ticket.guestName,
+      ticketType: ticket.ticketType || "General",
+      uniqueId: ticket.ticketId,
+    };
+
+    // Use the QR code from the ticket (Data URL)
+    // If qrCode is missing, we might want to generate it or handle it, but it should be there from pre-save.
+    const qrCodeUrl = ticket.qrCode;
+
+    const emailHtml = createEmailTemplate(eventData, invitationData, qrCodeUrl);
+
+    // Extract base64 for attachment (remove "data:image/png;base64,")
+    const qrCodeBase64 = ticket.qrCode
+      ? ticket.qrCode.split(";base64,").pop()
+      : "";
 
     try {
       await sendInvitationEmail({
         to: ticket.guestEmail,
         subject: `You're invited to ${event.title}!`,
         body: emailHtml,
-        // No attachments for RSVP invite
+        attachments: qrCodeBase64
+          ? [
+              {
+                filename: "ticket-qr.png",
+                content: qrCodeBase64,
+                encoding: "base64",
+              },
+            ]
+          : [],
       });
       console.log(`Invitation email sent to ${ticket.guestEmail}`);
     } catch (emailError) {
@@ -454,19 +474,27 @@ const createInvitationTicket = async (req, res) => {
 
     // Send Email
     if (guestEmail) {
-      const emailHtml = createEmailTemplate({
-        guestName,
-        eventName: event.title,
-        eventDate: new Date(event.startDate).toLocaleDateString(),
-        eventTime: event.startTime || "TBD",
+      const eventData = {
+        title: event.title,
+        date: event.startDate,
         location:
           typeof event.location === "string"
             ? event.location
             : event.location?.address || "See map",
-        rsvpLink,
-        amount: ticket.ticketCount,
-        message,
-      });
+      };
+
+      const invitationData = {
+        guestName,
+        ticketType: ticket.ticketType || "General",
+        uniqueId: ticket.ticketId,
+      };
+
+      const qrCodeUrl = ticket.qrCode;
+      const emailHtml = createEmailTemplate(
+        eventData,
+        invitationData,
+        qrCodeUrl
+      );
 
       // We need the QR code from the ticket.
       // The pre-save hook generates it, but it's a data URL.
@@ -494,6 +522,13 @@ const createInvitationTicket = async (req, res) => {
       }Click here to confirm: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
+      // Ensure phone starts with 251
+      if (phone.startsWith("0")) {
+        phone = "251" + phone.substring(1);
+      } else if (!phone.startsWith("251")) {
+        phone = "251" + phone;
+      }
+
       await axios
         .post("https://api.geezsms.com/api/v1/sms/send", {
           phone: phone,

@@ -14,18 +14,20 @@ const createTransporter = () => {
   });
 };
 
-const createEmailTemplate = ({
-  guestName,
-  eventName,
-  eventDate,
-  eventTime,
-  location,
-  rsvpLink,
-  amount,
-  message,
-  isRsvp,
-}) => {
-  if (isRsvp) {
+const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
+  // Handle the case where the first argument is an object with named properties (legacy/RSVP call)
+  if (eventOrData.isRsvp || (eventOrData.eventName && !eventOrData.title)) {
+    const {
+      guestName,
+      eventName,
+      eventDate,
+      eventTime,
+      location,
+      rsvpLink,
+      amount,
+      message,
+    } = eventOrData;
+
     return `
 <!DOCTYPE html>
 <html>
@@ -89,43 +91,209 @@ const createEmailTemplate = ({
 </html>`;
   }
 
+  // Handle the new signature: (event, invitation, qrCodeUrl)
+  const event = eventOrData;
+  const invitation = invitationData;
+
+  const eventDate = new Date(event.date).toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const eventTime = new Date(event.date).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   return `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
-      <h2 style="color: #333;">Invitation to ${eventName}</h2>
-      <p>Hi ${guestName},</p>
-      <p>You are invited to attend <strong>${eventName}</strong>.</p>
-      
-      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 4px; margin: 20px 0;">
-        <p style="margin: 5px 0;"><strong>Date:</strong> ${eventDate}</p>
-        <p style="margin: 5px 0;"><strong>Time:</strong> ${eventTime}</p>
-        <p style="margin: 5px 0;"><strong>Location:</strong> ${location}</p>
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>You're Invited!</title>
+      <style>
+        body {
+          font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          margin: 0;
+          padding: 0;
+          background-color: #f4f4f4;
+        }
+        .container {
+          max-width: 600px;
+          margin: 20px auto;
+          background: #ffffff;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+          color: white;
+          padding: 40px 20px;
+          text-align: center;
+        }
+        .header h1 {
+          margin: 0;
+          font-size: 28px;
+          font-weight: 700;
+          letter-spacing: -0.5px;
+        }
+        .header p {
+          margin: 10px 0 0;
+          font-size: 16px;
+          opacity: 0.9;
+        }
+        .content {
+          padding: 40px 30px;
+        }
+        .greeting {
+          font-size: 18px;
+          margin-bottom: 25px;
+          color: #1f2937;
+        }
+        .event-card {
+          background-color: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          padding: 20px;
+          margin: 25px 0;
+        }
+        .event-title {
+          font-size: 20px;
+          font-weight: bold;
+          color: #111827;
+          margin-bottom: 15px;
+          border-bottom: 2px solid #e5e7eb;
+          padding-bottom: 10px;
+        }
+        .event-detail {
+          display: flex;
+          margin-bottom: 10px;
+          align-items: flex-start;
+        }
+        .detail-label {
+          font-weight: 600;
+          width: 80px;
+          color: #6b7280;
+          flex-shrink: 0;
+        }
+        .detail-value {
+          color: #374151;
+        }
+        .qr-section {
+          text-align: center;
+          margin: 35px 0;
+          padding: 20px;
+          background-color: #ffffff;
+          border: 2px dashed #cbd5e1;
+          border-radius: 8px;
+        }
+        .qr-code {
+          width: 200px;
+          height: 200px;
+          margin-bottom: 15px;
+        }
+        .ticket-id {
+          font-family: monospace;
+          background-color: #f3f4f6;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 14px;
+          color: #4b5563;
+        }
+        .footer {
+          background-color: #f9fafb;
+          padding: 20px;
+          text-align: center;
+          font-size: 12px;
+          color: #9ca3af;
+          border-top: 1px solid #e5e7eb;
+        }
+        .button {
+          display: inline-block;
+          background-color: #4f46e5;
+          color: white;
+          padding: 12px 24px;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: 600;
+          margin-top: 20px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>You're Invited!</h1>
+          <p>You have received a special invitation</p>
+        </div>
+        
+        <div class="content">
+          <div class="greeting">
+            Hello <strong>${invitation.guestName}</strong>,
+          </div>
+          
+          <p>We are delighted to invite you to an upcoming event. Your presence would mean a lot to us!</p>
+          
+          <div class="event-card">
+            <div class="event-title">${event.title}</div>
+            
+            <div class="event-detail">
+              <span class="detail-label">When:</span>
+              <span class="detail-value">${eventDate} at ${eventTime}</span>
+            </div>
+            
+            <div class="event-detail">
+              <span class="detail-label">Where:</span>
+              <span class="detail-value">${event.location}</span>
+            </div>
+            
+            <div class="event-detail">
+              <span class="detail-label">Type:</span>
+              <span class="detail-value">${invitation.ticketType} Ticket</span>
+            </div>
+          </div>
+
+          <div class="qr-section">
+            <p style="margin-top: 0; margin-bottom: 15px; font-weight: 600; color: #4b5563;">Your Entry Ticket confirm using the following link</p>
+            
+            <div>
+              <span class="ticket-id">${
+                process.env.BASE_URL
+              }/guest-invitation?inv=${invitation.uniqueId}</span>
+            </div>
+            <p style="font-size: 13px; color: #6b7280; margin-top: 10px;">Please present this QR code at the entrance.</p>
+          </div>
+
+          <p>We look forward to seeing you there!</p>
+        </div>
+        
+        <div class="footer">
+          <p>&copy; ${new Date().getFullYear()} PAZ Events. All rights reserved.</p>
+          <p>This is an automated message, please do not reply directly to this email.</p>
+        </div>
       </div>
-
-      ${
-        message
-          ? `<div style="background-color: #f0f7ff; padding: 15px; border-left: 4px solid #007bff; margin: 20px 0; font-style: italic;">
-          "${message}"
-         </div>`
-          : ""
-      }
-
-      <p>Your invitation QR code is attached.</p>
-
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${rsvpLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">View Invitation & QR Code</a>
-      </div>
-
-      <p style="font-size: 12px; color: #666; margin-top: 30px; border-top: 1px solid #eee; padding-top: 10px;">
-        Please present this invitation at the event. If you are bringing family, your QR includes an allowed amount of ${amount}.
-      </p>
-    </div>
+    </body>
+    </html>
   `;
 };
 
 const sendInvitationEmail = async (req, res) => {
   try {
     // Support both direct call and internal call
-    const { to, subject, body, attachments } = req.body || req;
+    let data = req;
+
+    // Check if it's an Express request object (has headers, method, etc.)
+    if (req.headers && req.method && req.body) {
+      data = req.body;
+    }
+
+    const { to, subject, body, attachments } = data;
 
     if (!to || !subject || !body) {
       if (res) {

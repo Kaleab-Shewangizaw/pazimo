@@ -40,7 +40,13 @@ const processTransactionFulfillment = async (transaction, paymentId) => {
     // 2. Professional Invitation
     else if (meta.type === "professional_invitation") {
       console.log("Processing professional invitation fulfillment...");
-      if (meta.ticketId) {
+      if (meta.pendingInvitationIds && meta.pendingInvitationIds.length > 0) {
+        // Bulk Invitation Flow
+        console.log(
+          `Processing bulk invitations: ${meta.pendingInvitationIds.length} items`
+        );
+        await processPaidInvitations(meta.pendingInvitationIds, paymentId);
+      } else if (meta.ticketId) {
         // New flow: Process guest ticket invitation
         console.log(
           `Processing guest invitation for ticketId: ${meta.ticketId}`
@@ -61,11 +67,11 @@ const processTransactionFulfillment = async (transaction, paymentId) => {
         console.log(
           `Processing paid invitation for invitationId: ${meta.invitationId}`
         );
-        await processPaidInvitations([meta.invitationId]);
+        await processPaidInvitations([meta.invitationId], paymentId);
       } else {
         // Legacy/Fallback: Create new if no ID provided
         console.log("Creating new professional invitation (legacy flow)...");
-        await createAndSendProfessionalInvitation({
+        const invitation = await createAndSendProfessionalInvitation({
           eventId: meta.eventId,
           organizerId: meta.userId,
           guestName: meta.fullName,
@@ -76,6 +82,11 @@ const processTransactionFulfillment = async (transaction, paymentId) => {
           message: meta.message,
           guestType: meta.guestType,
         });
+        // Update payment reference for legacy flow if possible
+        if (invitation && paymentId) {
+          invitation.paymentReference = paymentId;
+          await invitation.save();
+        }
       }
     } else {
       console.warn(
