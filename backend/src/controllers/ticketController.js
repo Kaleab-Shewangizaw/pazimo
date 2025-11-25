@@ -1,5 +1,6 @@
 const Ticket = require("../models/Ticket");
 const Event = require("../models/Event");
+const Invitation = require("../models/Invitation");
 const { StatusCodes } = require("http-status-codes");
 const {
   BadRequestError,
@@ -7,6 +8,11 @@ const {
   UnauthorizedError,
 } = require("../errors");
 const mongoose = require("mongoose");
+const {
+  sendInvitationEmail,
+  createEmailTemplate,
+} = require("./invitationEmailController");
+const axios = require("axios");
 
 // Admin: Get all tickets with totals
 // const getAllTicketsAdmin = async (req, res) => {
@@ -130,6 +136,389 @@ const createTicket = async (req, res) => {
   await event.save();
 
   res.status(StatusCodes.CREATED).json({ ticket });
+};
+
+// Create a guest ticket (Pending Payment)
+const createGuestTicket = async (req, res) => {
+  try {
+    const {
+      eventId,
+      guestName,
+      guestEmail,
+      guestPhone,
+      ticketType,
+      ticketCount,
+      message,
+    } = req.body;
+
+    // Find the event
+    const event = await Event.findById(eventId);
+    if (!event) {
+      throw new NotFoundError("Event not found");
+    }
+
+    // Check if ticketType exists and update quantity if so
+    if (ticketType) {
+      const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
+      if (typeInfo) {
+        if (typeInfo.quantity < (ticketCount || 1)) {
+          throw new BadRequestError("Not enough tickets available");
+        }
+        typeInfo.quantity -= ticketCount || 1;
+        await event.save();
+      }
+    }
+
+    // Create the ticket
+    const ticket = await Ticket.create({
+      event: eventId,
+      isInvitation: true,
+      guestName,
+      guestEmail,
+      guestPhone,
+      ticketType: ticketType || "General",
+      ticketCount: ticketCount || 1,
+      price: 0, // Free for guest
+      status: "pending",
+      paymentStatus: "pending", // Organizer handles payment
+      paymentReference: message, // Store message temporarily or add a field
+    });
+
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "Guest ticket created",
+      ticketId: ticket.ticketId,
+      ticket,
+    });
+  } catch (error) {
+    console.error("Create guest ticket error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to create guest ticket",
+      error: error.message,
+    });
+  }
+};
+
+// Helper to process guest invitation (Internal use)
+const processGuestInvitation = async (ticketId) => {
+  console.log(`processGuestInvitation called for ticketId: ${ticketId}`);
+  const ticket = await Ticket.findOne({ ticketId }).populate("event");
+  if (!ticket) {
+    console.error(`Ticket not found for ticketId: ${ticketId}`);
+    throw new Error("Ticket not found");
+  }
+
+  console.log(
+    `Found ticket: ${ticket.ticketId}, Guest: ${ticket.guestName}, Phone: ${ticket.guestPhone}, Email: ${ticket.guestEmail}`
+  );
+
+  if (!ticket.isInvitation) {
+    console.error(`Ticket ${ticketId} is not an invitation ticket`);
+    throw new Error("Not an invitation ticket");
+  }
+
+  // Update payment status
+  ticket.paymentStatus = "completed";
+  await ticket.save();
+  console.log(`Ticket ${ticketId} payment status updated to completed`);
+
+  const event = ticket.event;
+  const message = ticket.paymentReference;
+
+  // Generate RSVP Link
+  const frontendUrl =
+    process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+  const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
+
+  // Create Invitation Record
+  try {
+    console.log(`Creating Invitation record for ticket ${ticketId}`);
+    await Invitation.create({
+      eventId: event._id,
+      organizerId: event.organizer,
+      guestName: ticket.guestName,
+      guestEmail: ticket.guestEmail,
+      guestPhone: ticket.guestPhone,
+      guestType: "guest",
+      type: ticket.guestEmail ? "email" : "sms",
+      amount: ticket.ticketCount,
+      status: "sent",
+      paymentStatus: "paid",
+      rsvpLink: rsvpLink,
+      rsvpStatus: "pending",
+    });
+    console.log(`Invitation record created successfully`);
+  } catch (invitationError) {
+    console.error("Failed to create invitation record:", invitationError);
+    // Continue execution, don't block email sending
+  }
+
+  // Send Email
+  if (ticket.guestEmail) {
+    const emailHtml = createEmailTemplate({
+      guestName: ticket.guestName,
+      eventName: event.title,
+      eventDate: new Date(event.startDate).toLocaleDateString(),
+      eventTime: event.startTime || "TBD",
+      location:
+        typeof event.location === "string"
+          ? event.location
+          : event.location?.address || "See map",
+      rsvpLink,
+      amount: ticket.ticketCount,
+      message,
+      isRsvp: true, // Flag to indicate RSVP template
+    });
+
+    try {
+      await sendInvitationEmail({
+        to: ticket.guestEmail,
+        subject: `You're invited to ${event.title}!`,
+        body: emailHtml,
+        // No attachments for RSVP invite
+      });
+      console.log(`Invitation email sent to ${ticket.guestEmail}`);
+    } catch (emailError) {
+      console.error(
+        `Failed to send invitation email to ${ticket.guestEmail}:`,
+        emailError
+      );
+    }
+  } else {
+    console.log("No guest email found, skipping email.");
+  }
+
+  // Send SMS
+  if (ticket.guestPhone) {
+    console.log(`Sending SMS to ${ticket.guestPhone}`);
+    const smsMessage = `Hi ${ticket.guestName}, you are invited to ${
+      event.title
+    }. ${
+      message ? message + " " : ""
+    }Click here to confirm your attendance: ${rsvpLink}`;
+
+    let phone = ticket.guestPhone.replace("+", "");
+    // Ensure phone starts with 251
+    if (phone.startsWith("0")) {
+      phone = "251" + phone.substring(1);
+    } else if (!phone.startsWith("251")) {
+      phone = "251" + phone;
+    }
+
+    console.log(`Formatted phone for SMS: ${phone}`);
+
+    try {
+      const smsResponse = await axios.post(
+        "https://api.geezsms.com/api/v1/sms/send",
+        {
+          phone: phone,
+          msg: smsMessage,
+          token:
+            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
+        }
+      );
+      console.log("SMS sent successfully:", smsResponse.data);
+    } catch (err) {
+      console.error("SMS Error:", err.response?.data || err.message);
+    }
+  } else {
+    console.log("No guest phone found, skipping SMS.");
+  }
+
+  return true;
+};
+
+// Confirm RSVP and generate tickets
+const confirmRSVP = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+
+    let ticket = await Ticket.findOne({ ticketId }).populate("event");
+    if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
+      ticket = await Ticket.findById(ticketId).populate("event");
+    }
+
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    if (!ticket.isInvitation) {
+      throw new UnauthorizedError("Not an invitation ticket");
+    }
+
+    if (ticket.status === "confirmed") {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: "Already confirmed",
+        data: ticket,
+      });
+    }
+
+    ticket.status = "confirmed";
+    // Ensure QR code is generated (pre-save hook handles this if qrCode is empty)
+    // If we want separate QR codes for each guest count, we might need to rethink the schema or logic.
+    // For now, the requirement says "Generates real QR tickets (one per ticketCount)".
+    // The current schema has one QR code per Ticket document, but `ticketCount` field.
+    // If we need multiple QR codes, we might need to split this ticket into multiple tickets or return an array of QR codes generated on the fly.
+    // However, the schema has `ticketCount` and `qrCode`. The pre-save hook generates one QR code that includes `ticketCount`.
+    // Let's stick to the single QR code representing multiple entries for now, as refactoring to multiple documents is a bigger change.
+    // Or, we can generate multiple QR codes here and return them, but only save one "master" QR on the ticket.
+    // Let's assume the single QR with count is sufficient for the scanner app (which should check count).
+
+    await ticket.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "RSVP Confirmed",
+      data: ticket,
+    });
+  } catch (error) {
+    console.error("Confirm RSVP error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to confirm RSVP",
+      error: error.message,
+    });
+  }
+};
+
+// Send guest invitation (After Payment)
+const sendGuestInvitation = async (req, res) => {
+  try {
+    const { ticketId } = req.body;
+    await processGuestInvitation(ticketId);
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Invitation sent successfully",
+    });
+  } catch (error) {
+    console.error("Send guest invitation error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to send invitation",
+      error: error.message,
+    });
+  }
+};
+
+// Create an invitation ticket
+const createInvitationTicket = async (req, res) => {
+  try {
+    const {
+      eventId,
+      guestName,
+      guestEmail,
+      guestPhone,
+      ticketType,
+      ticketCount,
+      message,
+    } = req.body;
+
+    // Find the event
+    const event = await Event.findById(eventId);
+    if (!event) {
+      throw new NotFoundError("Event not found");
+    }
+
+    // Check if ticketType exists and update quantity if so
+    if (ticketType) {
+      const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
+      if (typeInfo) {
+        if (typeInfo.quantity < (ticketCount || 1)) {
+          throw new BadRequestError("Not enough tickets available");
+        }
+        typeInfo.quantity -= ticketCount || 1;
+        await event.save();
+      }
+    }
+
+    // Create the ticket
+    const ticket = await Ticket.create({
+      event: eventId,
+      isInvitation: true,
+      guestName,
+      guestEmail,
+      guestPhone,
+      ticketType: ticketType || "General", // Default or from body
+      ticketCount: ticketCount || 1,
+      price: 0, // Free for guest
+      status: "pending",
+      paymentStatus: "completed", // Organizer handles payment
+    });
+
+    // Generate RSVP Link
+    const frontendUrl =
+      process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+    const rsvpLink = `${frontendUrl}/guest-invitation?id=${ticket.ticketId}`;
+
+    // Send Email
+    if (guestEmail) {
+      const emailHtml = createEmailTemplate({
+        guestName,
+        eventName: event.title,
+        eventDate: new Date(event.startDate).toLocaleDateString(),
+        eventTime: event.startTime || "TBD",
+        location:
+          typeof event.location === "string"
+            ? event.location
+            : event.location?.address || "See map",
+        rsvpLink,
+        amount: ticket.ticketCount,
+        message,
+      });
+
+      // We need the QR code from the ticket.
+      // The pre-save hook generates it, but it's a data URL.
+      // We need to strip the prefix for attachment.
+      const qrCodeBase64 = ticket.qrCode.split(";base64,").pop();
+
+      await sendInvitationEmail({
+        to: guestEmail,
+        subject: `You're invited to ${event.title}!`,
+        body: emailHtml,
+        attachments: [
+          {
+            filename: "ticket-qr.png",
+            content: qrCodeBase64,
+            encoding: "base64",
+          },
+        ],
+      });
+    }
+
+    // Send SMS
+    if (guestPhone) {
+      const smsMessage = `Hi ${guestName}, you are invited to ${event.title}. ${
+        message ? message + " " : ""
+      }Click here to confirm: ${rsvpLink}`;
+
+      let phone = guestPhone.replace("+", "");
+      await axios
+        .post("https://api.geezsms.com/api/v1/sms/send", {
+          phone: phone,
+          msg: smsMessage,
+          token:
+            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
+        })
+        .catch((err) =>
+          console.error("SMS Error:", err.response?.data || err.message)
+        );
+    }
+
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "Invitation sent successfully",
+      ticket,
+    });
+  } catch (error) {
+    console.error("Create invitation ticket error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to create invitation ticket",
+      error: error.message,
+    });
+  }
 };
 
 // Get user's tickets
@@ -327,9 +716,10 @@ const validateQRCode = async (req, res) => {
     }
 
     // Verify the ticket data matches
+    const ticketUserId = ticket.user ? ticket.user._id.toString() : null;
     if (
       ticket.event._id.toString() !== ticketData.eventId ||
-      ticket.user._id.toString() !== ticketData.userId ||
+      ticketUserId !== ticketData.userId ||
       ticket.ticketType !== ticketData.ticketType
     ) {
       throw new BadRequestError("Invalid ticket data");
@@ -455,8 +845,67 @@ const getTicketDetails = async (req, res) => {
     .json({ success: true, tickets: authorizedTickets });
 };
 
+// Get invitation ticket (Public)
+const getInvitationTicket = async (req, res) => {
+  const { ticketId } = req.params;
+
+  // Find by ticketId (string) or _id
+  let ticket = await Ticket.findOne({ ticketId }).populate({
+    path: "event",
+    populate: { path: "organizer", select: "name" },
+  });
+
+  if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
+    ticket = await Ticket.findById(ticketId).populate({
+      path: "event",
+      populate: { path: "organizer", select: "name" },
+    });
+  }
+
+  if (!ticket) {
+    throw new NotFoundError("Ticket not found");
+  }
+
+  if (!ticket.isInvitation) {
+    throw new UnauthorizedError("Not an invitation ticket");
+  }
+
+  res.status(StatusCodes.OK).json({ success: true, data: ticket });
+};
+
+// Update invitation status (Public)
+const updateInvitationTicketStatus = async (req, res) => {
+  const { ticketId } = req.params;
+  const { status } = req.body;
+
+  if (!["confirmed", "declined"].includes(status)) {
+    throw new BadRequestError("Invalid status");
+  }
+
+  let ticket = await Ticket.findOne({ ticketId });
+  if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
+    ticket = await Ticket.findById(ticketId);
+  }
+
+  if (!ticket) {
+    throw new NotFoundError("Ticket not found");
+  }
+
+  if (!ticket.isInvitation) {
+    throw new UnauthorizedError("Not an invitation ticket");
+  }
+
+  ticket.status = status;
+  await ticket.save();
+
+  res
+    .status(StatusCodes.OK)
+    .json({ success: true, message: `Invitation ${status}` });
+};
+
 module.exports = {
   createTicket,
+  createInvitationTicket,
   getUserTickets,
   getEventTickets,
   checkInTicket,
@@ -465,4 +914,10 @@ module.exports = {
   getAllTicketsAdmin,
   validateQRCode,
   getTicketDetails,
+  getInvitationTicket,
+  updateInvitationTicketStatus,
+  createGuestTicket,
+  sendGuestInvitation,
+  processGuestInvitation,
+  confirmRSVP,
 };

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
 import { Event, Invitation, Attendee, Pricing } from "@/types/invitation";
+import { createGuestTicket } from "@/lib/invitationUtils";
 
 interface PendingInvitation {
   contact: string;
@@ -18,6 +19,7 @@ export function useInvitationPage() {
   const [mounted, setMounted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
+  const [payingPhoneNumber, setPayingPhoneNumber] = useState<string>("");
 
   // Data States
   const [events, setEvents] = useState<Event[]>([]);
@@ -50,7 +52,9 @@ export function useInvitationPage() {
 
   // Form States
   const [contact, setContact] = useState("");
-  const [contactType, setContactType] = useState<"email" | "phone">("email");
+  const [contactType, setContactType] = useState<"email" | "phone" | "both">(
+    "email"
+  );
   const [customerName, setCustomerName] = useState("");
   const [message, setMessage] = useState("");
   const [qrCodeCount, setQrCodeCount] = useState(1);
@@ -303,6 +307,7 @@ export function useInvitationPage() {
           eventId,
           customerName,
           contact,
+          contactType,
           guestType: "guest",
           eventTitle: selectedEvent?.title || "Event",
           eventDate: selectedEvent?.date || "",
@@ -549,7 +554,10 @@ export function useInvitationPage() {
     }
   };
 
-  const processPendingInvitation = async (data?: typeof pendingInvitation) => {
+  const processPendingInvitation = async (
+    data?: typeof pendingInvitation,
+    overrideQrLink?: string
+  ) => {
     const invitationData = data || pendingInvitation;
     if (!invitationData) return;
 
@@ -566,13 +574,20 @@ export function useInvitationPage() {
         selectedEvent,
       } = invitationData;
 
-      const qrCodeData = await generateQRCode(
-        selectedEvent?.id || 0,
-        customerName,
-        contact,
-        guestType
-      );
-      const qrCodeLink = qrCodeData.url;
+      let qrCodeLink: string;
+
+      if (overrideQrLink) {
+        qrCodeLink = overrideQrLink;
+      } else {
+        const qrCodeData = await generateQRCode(
+          selectedEvent?.id || 0,
+          customerName,
+          contact,
+          guestType
+        );
+        qrCodeLink = qrCodeData.url;
+      }
+
       const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
       const inviteMessage = message
         ? `${message}\n\n${eventDetails}`
@@ -614,6 +629,7 @@ export function useInvitationPage() {
         status: success ? "delivered" : "failed",
         qrCode: qrCodeLink,
         eventId: selectedEvent?.id,
+        rsvpLink: qrCodeLink,
       };
 
       try {
@@ -638,6 +654,8 @@ export function useInvitationPage() {
               status: newInvitation.status,
               qrCode: qrCodeLink,
               organizerId: userId,
+              rsvpLink: qrCodeLink,
+              paymentStatus: overrideQrLink ? "paid" : "free",
             }),
           });
         }
@@ -699,14 +717,24 @@ export function useInvitationPage() {
       toast.error("Please enter a valid Ethiopian phone number");
       return;
     }
-
-    const shouldSkipPayment =
-      (selectedEvent?.eventType === "private" ||
-        selectedEvent?.eventType === "public") &&
-      guestType === "paid" &&
-      selectedEvent?.ticketTypes?.some(
-        (ticket: { price: number }) => ticket.price > 0
+    if (
+      contactType === "both" &&
+      !validateEmail(contact) &&
+      !validatePhoneNumber(contact)
+    ) {
+      toast.error(
+        "Please enter a valid email address or Ethiopian phone number"
       );
+      return;
+    }
+
+    // Calculate cost to determine if payment is needed
+    let cost = 0;
+    if (contactType === "email") cost = pricing.email;
+    if (contactType === "phone") cost = pricing.sms;
+
+    // Only skip payment if the cost is 0 OR if it's a "Paid Attendee" invitation (Organizer doesn't pay for these)
+    const shouldSkipPayment = cost <= 0 || guestType === "paid";
 
     const invitationData = {
       contact,
@@ -716,6 +744,7 @@ export function useInvitationPage() {
       guestType,
       contactType,
       selectedEvent,
+      event: selectedEvent,
     };
 
     setPendingInvitation(invitationData);
@@ -729,14 +758,99 @@ export function useInvitationPage() {
   };
 
   // Helper to handle the async nature of state setting
-  const handleSantimPayment = async () => {
+  const handleSantimPayment = async (paymentDetails: {
+    phoneNumber: string;
+    paymentMethod: string;
+  }) => {
     setIsSantimLoading(true);
-    // Simulate payment processing
-    setTimeout(async () => {
+    try {
+      const { phoneNumber, paymentMethod } = paymentDetails;
+      const invitationData = pendingInvitation;
+
+      if (!invitationData) {
+        toast.error("No invitation data found");
+        return;
+      }
+
+      // 1. Create Guest Ticket
+      const createResult = await createGuestTicket({
+        eventId: invitationData.selectedEvent?.id,
+        guestName: invitationData.customerName,
+        guestEmail:
+          invitationData.contactType === "email" ? invitationData.contact : "",
+        guestPhone:
+          invitationData.contactType === "phone" ? invitationData.contact : "",
+        ticketType: "General",
+        ticketCount: invitationData.qrCodeCount,
+        message: invitationData.message,
+      });
+
+      if (!createResult.success) {
+        throw new Error(
+          createResult.message || "Failed to create guest ticket"
+        );
+      }
+
+      const ticketId = createResult.ticketId;
+
+      // Calculate cost
+      let cost = 0;
+      if (invitationData.contactType === "email") cost = pricing.email;
+      if (invitationData.contactType === "phone") cost = pricing.sms;
+
+      // Ensure minimum amount for testing if needed, but use real cost
+      if (cost <= 0) cost = 1; // Fallback or handle free?
+
+      const orderId = `inv_${Date.now()}_${Math.random()
+        .toString(36)
+        .substr(2, 9)}`;
+
+      // 2. Initiate Payment with Ticket ID
+      const response = await fetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: cost,
+          paymentReason: "Professional Invitation Delivery",
+          phoneNumber,
+          method: paymentMethod,
+          orderId,
+          invitationData: {
+            type: "professional_invitation",
+            ticketId: ticketId, // Pass ticketId
+            invitationId: ticketId, // Use ticketId as invitationId
+            eventId: invitationData.selectedEvent?.id,
+            fullName: invitationData.customerName,
+            email:
+              invitationData.contactType === "email"
+                ? invitationData.contact
+                : "",
+            phoneNumber:
+              invitationData.contactType === "phone"
+                ? invitationData.contact
+                : "",
+            contactType: invitationData.contactType,
+            guestType: invitationData.guestType,
+            quantity: invitationData.qrCodeCount,
+            message: invitationData.message,
+            userId: localStorage.getItem("userId"), // Organizer ID
+          },
+          successUrl: `${window.location.origin}/organizer/invitations?status=success&action=process_payment&orderId=${orderId}`,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.paymentUrl) {
+        window.location.href = data.paymentUrl;
+      } else {
+        toast.error("Failed to initiate payment");
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      toast.error("Payment failed");
+    } finally {
       setIsSantimLoading(false);
-      setShowPaymentModal(false);
-      await processPendingInvitation();
-    }, 2000);
+    }
   };
 
   const handleDownloadTicket = () => {

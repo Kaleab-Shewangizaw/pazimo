@@ -8,7 +8,11 @@ const {
   processPaidInvitationsEndpoint,
   getInvitationById,
   updateInvitationStatus,
+  createPendingInvitation,
 } = require("../controllers/invitationController");
+
+// Create pending invitation (Single)
+router.post("/invitations/pending", protect, createPendingInvitation);
 
 // Bulk create invitations (Step 1: Create pending)
 router.post("/invitations/bulk-create", protect, createBulkInvitations);
@@ -34,6 +38,9 @@ router.patch("/invitations/:id/status", updateInvitationStatus);
 router.post("/invitations", protect, async (req, res) => {
   try {
     // Map legacy fields if necessary or expect new fields
+    let type = req.body.type || req.body.contactType || "email";
+    if (type === "phone") type = "sms";
+
     const invitationData = {
       ...req.body,
       organizerId: req.user._id,
@@ -46,7 +53,8 @@ router.post("/invitations", protect, async (req, res) => {
       guestPhone:
         req.body.guestPhone ||
         (req.body.contactType === "phone" ? req.body.contact : undefined),
-      type: req.body.type || req.body.contactType || "email",
+      type: type,
+      guestType: req.body.guestType || "guest",
     };
 
     const invitation = new Invitation(invitationData);

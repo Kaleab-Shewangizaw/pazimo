@@ -41,6 +41,9 @@ const SantimTransactionSchema = new mongoose.Schema(
       userId: { type: String },
       ticketId: { type: String }, // Added ticketId
       type: { type: String },
+      contactType: { type: String },
+      guestType: { type: String },
+      message: { type: String },
       pendingInvitationIds: {
         type: [String],
         default: [],

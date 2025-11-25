@@ -7,10 +7,12 @@ class SantimPayService {
     this.merchantId = process.env.SANTIM_PAY_MERCHANT_ID;
     this.privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
     this.publicKey = process.env.SANTIM_PAY_PUBLIC_KEY;
-    this.isProduction = process.env.NODE_ENV === "production";
-    this.baseUrl = this.isProduction
-      ? "https://services.santimpay.com/api/v1/gateway"
-      : "https://testnet.santimpay.com/api/v1/gateway";
+
+    // FORCE PRODUCTION URL as requested
+    this.isProduction = true;
+    this.baseUrl = "https://services.santimpay.com/api/v1/gateway";
+
+    console.log("SantimPay Service Initialized: PRODUCTION Mode (Forced)");
   }
 
   generateSignedToken(amount, paymentReason) {
@@ -111,6 +113,9 @@ class SantimPayService {
   async checkTransactionStatus(transactionId) {
     const token = this.generateSignedTokenForGetTransaction(transactionId);
     try {
+      console.log(
+        `Checking status for ${transactionId} at ${this.baseUrl}/fetch-transaction-status`
+      );
       const response = await axios.post(
         `${this.baseUrl}/fetch-transaction-status`,
         {

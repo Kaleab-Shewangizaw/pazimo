@@ -290,7 +290,7 @@ function EventDetailContent() {
           fullName: "",
           email: "",
           phoneNumber: "",
-          paymentMethod: "telebirr",
+          paymentMethod: "Telebirr",
         });
       }
 

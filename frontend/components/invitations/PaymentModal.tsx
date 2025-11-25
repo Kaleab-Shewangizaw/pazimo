@@ -11,17 +11,21 @@ interface PaymentModalProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   pendingInvitation: any;
   pricing: Pricing;
-  isSantimLoading: boolean; // Keeping prop name for compatibility, but will use local loading
-  onPay: () => void; // This might be deprecated if we handle payment internally here
+  isSantimLoading: boolean;
+  onPay: (details: {
+    phoneNumber: string;
+    paymentMethod: string;
+  }) => Promise<void>;
   onCancel: () => void;
 }
 
 export default function PaymentModal({
   pendingInvitation,
   pricing,
+  isSantimLoading,
+  onPay,
   onCancel,
 }: PaymentModalProps) {
-  const [isLoading, setIsLoading] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [selectedMethod, setSelectedMethod] = useState("telebirr");
 
@@ -40,59 +44,7 @@ export default function PaymentModal({
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const orderId = crypto.randomUUID();
-
-      // Save pending invitation to localStorage for retrieval on success page
-      if (pendingInvitation) {
-        localStorage.setItem(
-          `invitation_${orderId}`,
-          JSON.stringify(pendingInvitation)
-        );
-      }
-
-      const response = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          orderId,
-          amount,
-          paymentReason: `Invitation for ${
-            pendingInvitation?.selectedEvent?.title || "Event"
-          }`,
-          phoneNumber,
-          invitationData: {
-            ...pendingInvitation,
-            type: "single_invitation",
-          },
-          method: selectedMethod,
-          successUrl: `${window.location.origin}/organizer/invitations?action=process_payment&orderId=${orderId}`,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Payment initiation failed");
-      }
-
-      if (data.paymentUrl) {
-        window.location.href = data.paymentUrl;
-      } else {
-        toast.success("Payment initiated! Please check your phone.");
-        onCancel(); // Close modal on success
-      }
-    } catch (error: unknown) {
-      console.error("Payment error:", error);
-      const message =
-        error instanceof Error ? error.message : "Failed to initiate payment";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
+    await onPay({ phoneNumber, paymentMethod: selectedMethod });
   };
 
   return (
@@ -148,9 +100,9 @@ export default function PaymentModal({
         <Button
           onClick={handlePayment}
           className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
-          disabled={isLoading || !phoneNumber || !selectedMethod}
+          disabled={isSantimLoading || !phoneNumber || !selectedMethod}
         >
-          {isLoading ? (
+          {isSantimLoading ? (
             <>
               <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...
             </>

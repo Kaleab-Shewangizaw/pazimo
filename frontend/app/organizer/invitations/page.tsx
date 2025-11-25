@@ -16,7 +16,6 @@ import QRModal from "@/components/QRModal";
 import BulkInvite from "@/components/bulkInviteModel";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { processInvitation } from "@/lib/invitationUtils";
 
 export default function InvitationsPage() {
   const searchParams = useSearchParams();
@@ -35,8 +34,6 @@ export default function InvitationsPage() {
     attendeesPerPage,
 
     // Data
-    events,
-    sentInvitations,
     attendees,
     filteredEvents,
     filteredInvitations,
@@ -87,7 +84,6 @@ export default function InvitationsPage() {
     handleViewQR,
     handleBulkInviteClick,
     handleSantimPayment,
-    processPendingInvitation,
 
     // Stats
     stats,
@@ -107,25 +103,58 @@ export default function InvitationsPage() {
         router.replace("/organizer/invitations");
 
         if (action === "process_payment") {
-          toast.info("Payment successful! Sending invitation...");
-          const storedInvitation = localStorage.getItem(
-            `invitation_${orderId}`
-          );
-          if (storedInvitation) {
-            try {
-              const invitationData = JSON.parse(storedInvitation);
-              const success = await processInvitation(invitationData);
-              if (success) {
-                toast.success("Invitation sent successfully!");
-              } else {
-                toast.error("Failed to send invitation.");
-              }
-              localStorage.removeItem(`invitation_${orderId}`);
-            } catch (e) {
-              console.error("Failed to process invitation", e);
-              toast.error("Error processing invitation.");
+          toast.info("Verifying payment...");
+          try {
+            const response = await fetch(
+              `/api/payments/verify?orderId=${orderId}`
+            );
+            const result = await response.json();
+
+            if (
+              response.ok &&
+              (result.status === "COMPLETED" ||
+                result.status === "SUCCESS" ||
+                result.success === true)
+            ) {
+              toast.success("Payment successful! Invitation sent.");
+              console.log(result);
+              //               try {
+              //   const response = await fetch(
+              //     `${process.env.NEXT_PUBLIC_API_URL}/api/send-sms`,
+              //     {
+              //       method: "POST",
+              //       headers: {
+              //         "Content-Type": "application/json",
+              //         Authorization: `Bearer ${localStorage.getItem("token")}`,
+              //       },
+              //       body: JSON.stringify({
+              //         phoneNumber: result.phoneNumber,
+              //         message: `Your invitation has been sent successfully! Event: ${result.eventTitle}.`,
+              //       }),
+              //     }
+              //   );
+
+              //   const smsResult = await response.json();
+
+              //   if (response.ok && smsResult.success) {
+              //     console.log("SMS sent successfully");
+              //   } else {
+              //     console.error("Failed to send SMS:", smsResult.message || smsResult);
+              //   }
+              // } catch (e) {
+              //   console.error("Error sending SMS:", e);
+              // }
+            } else {
+              console.warn("Payment verification warning:", result);
+              toast.warning(
+                "Payment pending or failed. Please check status later."
+              );
             }
+          } catch (e) {
+            console.error("Verification failed", e);
+            toast.error("Could not verify payment.");
           }
+          localStorage.removeItem(`invitation_${orderId}`);
         } else if (action === "process_bulk_payment") {
           toast.info("Payment successful! Processing bulk invitations...");
           const storedIds = localStorage.getItem(`bulk_invitations_${orderId}`);

@@ -1,0 +1,19 @@
+# SantimPay Configuration
+# Get these from your SantimPay Merchant Dashboard
+
+# Merchant ID
+SANTIM_PAY_MERCHANT_ID=your_merchant_id_here
+
+# Private Key (EC Private Key in PEM format)
+# Ensure newlines are correctly handled if putting in a single line, or use \n
+SANTIM_PAY_PRIVATE_KEY="-----BEGIN EC PRIVATE KEY-----\n...\n-----END EC PRIVATE KEY-----"
+
+# Public Key (For Webhook Verification)
+SANTIM_PAY_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
+
+# Environment (development for sandbox, production for live)
+NODE_ENV=development
+
+# Base URL for your application (for redirects)
+BASE_URL=http://localhost:3000
+BACKEND_URL=http://localhost:5000

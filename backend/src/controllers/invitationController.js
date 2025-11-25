@@ -433,6 +433,175 @@ const updateInvitationStatus = async (req, res) => {
   }
 };
 
+// Create and send a single paid invitation (called from payment fulfillment)
+const createAndSendProfessionalInvitation = async (data) => {
+  try {
+    const {
+      eventId,
+      organizerId,
+      guestName,
+      guestEmail,
+      guestPhone,
+      type,
+      amount,
+      message,
+      guestType,
+    } = data;
+
+    const event = await Event.findById(eventId);
+    if (!event) throw new Error("Event not found");
+
+    const invitationId = uuidv4();
+
+    // Generate QR Data
+    const qrPayload = {
+      invitationId,
+      eventId,
+      type: "guest_ticket",
+    };
+    const qrDataString = JSON.stringify(qrPayload);
+    const qrCodeBase64 = await QRCode.toDataURL(qrDataString);
+
+    // Generate RSVP Link
+    const frontendUrl =
+      process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+    const rsvpLink = `${frontendUrl}/guest-invitation?inv=${invitationId}`;
+
+    // Map type if needed (phone -> sms)
+    let contactType = type;
+    if (contactType === "phone") contactType = "sms";
+
+    // Create Invitation Record
+    const invitation = await Invitation.create({
+      invitationId,
+      eventId,
+      organizerId,
+      guestName,
+      guestEmail,
+      guestPhone,
+      type: contactType,
+      guestType: guestType || "guest",
+      amount: parseInt(amount) || 1,
+      status: "sent",
+      paymentStatus: "paid",
+      qrCodeData: qrCodeBase64,
+      rsvpLink,
+    });
+
+    // Send Email
+    if (["email", "both"].includes(contactType) && guestEmail) {
+      const emailHtml = createEmailTemplate({
+        guestName,
+        eventName: event.title,
+        eventDate: new Date(event.startDate).toLocaleDateString(),
+        eventTime: event.startTime || "TBD",
+        location:
+          typeof event.location === "string"
+            ? event.location
+            : event.location?.address || "See map",
+        rsvpLink,
+        amount: invitation.amount,
+        message,
+      });
+
+      await sendInvitationEmail({
+        to: guestEmail,
+        subject: `You're invited to ${event.title}!`,
+        body: emailHtml,
+        attachments: [
+          {
+            filename: "ticket-qr.png",
+            content: qrCodeBase64.split(";base64,").pop(),
+            encoding: "base64",
+          },
+        ],
+      });
+    }
+
+    // Send SMS
+    if (["sms", "both"].includes(contactType) && guestPhone) {
+      const smsMessage = `Hi ${guestName}, you are invited to ${event.title}. ${
+        message ? message + " " : ""
+      }Click here for your ticket: ${rsvpLink}`;
+
+      let phone = guestPhone.replace("+", "");
+      await axios
+        .post("https://api.geezsms.com/api/v1/sms/send", {
+          phone: phone,
+          msg: smsMessage,
+          token:
+            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
+        })
+        .catch((err) =>
+          console.error("SMS Error:", err.response?.data || err.message)
+        );
+    }
+
+    return invitation;
+  } catch (error) {
+    console.error("Error creating professional invitation:", error);
+    throw error;
+  }
+};
+
+// Create a single pending invitation
+const createPendingInvitation = async (req, res) => {
+  try {
+    const {
+      eventId,
+      guestName,
+      guestEmail,
+      guestPhone,
+      type,
+      amount,
+      message,
+      guestType,
+    } = req.body;
+    const organizerId = req.user._id;
+
+    const event = await Event.findOne({ _id: eventId, organizer: organizerId });
+    if (!event) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Event not found or unauthorized",
+      });
+    }
+
+    // Map type if needed (phone -> sms)
+    let contactType = type;
+    if (contactType === "phone") contactType = "sms";
+
+    const invitationId = uuidv4();
+
+    const invitation = await Invitation.create({
+      invitationId,
+      eventId,
+      organizerId,
+      guestName,
+      guestEmail,
+      guestPhone,
+      type: contactType,
+      guestType: guestType || "guest",
+      amount: parseInt(amount) || 1,
+      status: "pending_payment",
+      paymentStatus: "pending",
+      message,
+    });
+
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      data: invitation,
+    });
+  } catch (error) {
+    console.error("Create pending invitation error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to create invitation",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createBulkInvitations,
   processPaidInvitations,
@@ -441,4 +610,6 @@ module.exports = {
   sendInvitations: processPaidInvitationsEndpoint, // Alias for backward compatibility
   getInvitationById,
   updateInvitationStatus,
+  createAndSendProfessionalInvitation,
+  createPendingInvitation,
 };

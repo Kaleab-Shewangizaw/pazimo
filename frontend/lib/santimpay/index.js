@@ -6,9 +6,9 @@ export class SantimpaySdk {
     this.privateKey = privateKey;
     this.merchantId = merchantId;
     this.baseUrl = PRODUCTION_BASE_URL;
-    // if (testBed) {
-    //   this.baseUrl = TEST_BASE_URL;
-    // }
+    if (testBed) {
+      this.baseUrl = TEST_BASE_URL;
+    }
   }
   generateSignedTokenForInitiatePayment(amount, paymentReason) {
     const time = Math.floor(Date.now() / 1000);
@@ -240,9 +240,9 @@ export class SantimpaySdk {
       );
 
       if (response.status === 200) {
-        return response.data.url;
+        return response.data;
       } else {
-        throw new Error("Failed to initiate payment");
+        throw new Error("Failed to check transaction status");
       }
     } catch (error) {
       if (error.response && error.response.data) {

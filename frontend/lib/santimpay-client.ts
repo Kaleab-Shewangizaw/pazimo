@@ -16,9 +16,12 @@ if (!process.env.SANTIM_MERCHANT_ID) {
   console.warn("Using Test SantimPay Credentials");
 }
 
-// Initialize the SDK with testBed = true
+// Initialize the SDK
+// FORCE PRODUCTION as requested
+const isTestEnv = false;
+
 // @ts-ignore
-const santimPay = new SantimpaySdk(MERCHANT_ID, PRIVATE_KEY, true);
+const santimPay = new SantimpaySdk(MERCHANT_ID, PRIVATE_KEY, isTestEnv);
 
 export const generatePaymentUrl = async (
   orderId: string,

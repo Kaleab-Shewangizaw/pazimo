@@ -27,6 +27,11 @@ const invitationSchema = new mongoose.Schema(
     guestPhone: {
       type: String,
     },
+    guestType: {
+      type: String,
+      enum: ["guest", "paid"],
+      default: "guest",
+    },
     type: {
       type: String,
       enum: ["email", "sms", "both"],

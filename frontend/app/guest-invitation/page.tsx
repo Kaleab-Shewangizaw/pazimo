@@ -19,17 +19,17 @@ interface EventData {
   startTime: string;
   location: string | { address: string };
   description: string;
-  organizerName?: string;
+  organizer?: { name: string };
 }
 
 interface InvitationData {
-  invitationId: string;
+  ticketId: string;
   guestName: string;
   guestEmail?: string;
   guestPhone?: string;
-  amount: number;
+  ticketCount: number;
   status: string;
-  qrCodeData?: string;
+  qrCode?: string;
   event: EventData;
 }
 
@@ -43,7 +43,7 @@ function GuestInvitationContent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const invId = searchParams.get("inv");
+    const invId = searchParams.get("id") || searchParams.get("inv");
     if (invId) {
       fetchInvitation(invId);
     } else {
@@ -55,14 +55,16 @@ function GuestInvitationContent() {
   const fetchInvitation = async (id: string) => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/${id}`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${id}`
       );
       const result = await response.json();
 
       if (response.ok && result.success) {
         setInvitation(result.data);
         if (
-          ["confirmed", "accepted", "delivered"].includes(result.data.status)
+          ["confirmed", "accepted", "delivered", "used"].includes(
+            result.data.status
+          )
         ) {
           setIsConfirmed(true);
         } else if (result.data.status === "declined") {
@@ -84,7 +86,7 @@ function GuestInvitationContent() {
     setIsUpdating(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/${invitation.invitationId}/status`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${invitation.ticketId}/status`,
         {
           method: "PATCH",
           headers: {
@@ -115,9 +117,9 @@ function GuestInvitationContent() {
   };
 
   const handleDownloadTicket = () => {
-    if (!invitation || !invitation.qrCodeData) return;
+    if (!invitation || !invitation.qrCode) return;
     const link = document.createElement("a");
-    link.href = invitation.qrCodeData;
+    link.href = invitation.qrCode;
     link.download = `ticket-${invitation.event.title.replace(
       /\s+/g,
       "-"
@@ -210,8 +212,8 @@ function GuestInvitationContent() {
                 {invitation.event.title}
               </h2>
               <span className="inline-block px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
-                {invitation.amount > 1
-                  ? `${invitation.amount} Tickets`
+                {invitation.ticketCount > 1
+                  ? `${invitation.ticketCount} Tickets`
                   : "1 Ticket"}
               </span>
             </div>
@@ -289,7 +291,7 @@ function GuestInvitationContent() {
               </div>
             )}
 
-            {isConfirmed && invitation.qrCodeData && (
+            {isConfirmed && invitation.qrCode && (
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6 text-center">
                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center justify-center gap-2">
                   <QrCode className="w-5 h-5 text-blue-600" />
@@ -298,7 +300,7 @@ function GuestInvitationContent() {
 
                 <div className="flex flex-col items-center">
                   <Image
-                    src={invitation.qrCodeData}
+                    src={invitation.qrCode}
                     alt="Event Ticket QR Code"
                     width={192}
                     height={192}

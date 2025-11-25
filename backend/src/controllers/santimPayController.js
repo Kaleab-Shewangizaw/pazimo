@@ -3,6 +3,91 @@ const SantimTransaction = require("../models/SantimTransaction");
 const Ticket = require("../models/Ticket");
 const Event = require("../models/Event");
 const { StatusCodes } = require("http-status-codes");
+const {
+  createAndSendProfessionalInvitation,
+  processPaidInvitations,
+} = require("./invitationController");
+const { processGuestInvitation } = require("./ticketController");
+
+// Consolidated Fulfillment Logic
+const processTransactionFulfillment = async (transaction, paymentId) => {
+  try {
+    // If already completed, do nothing (idempotency)
+    if (transaction.status === "COMPLETED") {
+      console.log(
+        `Transaction ${transaction.transactionId} already completed.`
+      );
+      return;
+    }
+
+    console.log(`Fulfilling transaction ${transaction.transactionId}...`);
+    transaction.status = "COMPLETED";
+    if (paymentId) {
+      transaction.santimPayReference = paymentId;
+    }
+    await transaction.save();
+
+    const meta = transaction.metaData;
+
+    // 1. Ticket Purchase
+    if (
+      meta.eventId &&
+      meta.ticketTypeId &&
+      meta.type !== "professional_invitation"
+    ) {
+      await generateTicketsForTransaction(transaction);
+    }
+    // 2. Professional Invitation
+    else if (meta.type === "professional_invitation") {
+      console.log("Processing professional invitation fulfillment...");
+      if (meta.ticketId) {
+        // New flow: Process guest ticket invitation
+        console.log(
+          `Processing guest invitation for ticketId: ${meta.ticketId}`
+        );
+        try {
+          await processGuestInvitation(meta.ticketId);
+          console.log(
+            `Successfully processed guest invitation for ticketId: ${meta.ticketId}`
+          );
+        } catch (err) {
+          console.error(
+            `Failed to process guest invitation for ticketId: ${meta.ticketId}`,
+            err
+          );
+        }
+      } else if (meta.invitationId) {
+        // If we have a pending invitation ID, process it
+        console.log(
+          `Processing paid invitation for invitationId: ${meta.invitationId}`
+        );
+        await processPaidInvitations([meta.invitationId]);
+      } else {
+        // Legacy/Fallback: Create new if no ID provided
+        console.log("Creating new professional invitation (legacy flow)...");
+        await createAndSendProfessionalInvitation({
+          eventId: meta.eventId,
+          organizerId: meta.userId,
+          guestName: meta.fullName,
+          guestEmail: meta.email,
+          guestPhone: meta.phoneNumber,
+          type: meta.contactType,
+          amount: meta.quantity,
+          message: meta.message,
+          guestType: meta.guestType,
+        });
+      }
+    } else {
+      console.warn(
+        "Unknown transaction type or missing metadata for fulfillment:",
+        meta
+      );
+    }
+  } catch (error) {
+    console.error("Error in processTransactionFulfillment:", error);
+    throw error; // Re-throw to be caught by caller
+  }
+};
 
 // Initiate Payment (Frontend Request)
 const initiatePayment = async (req, res) => {
@@ -172,18 +257,30 @@ const getPaymentStatus = async (req, res) => {
     // If pending, verify with SantimPay
     if (transaction.status === "PENDING") {
       try {
+        console.log(
+          `Verifying transaction ${transaction.transactionId} with SantimPay...`
+        );
         const remoteStatus = await SantimPayService.checkTransactionStatus(
           transaction.transactionId
         );
+        console.log("SantimPay Remote Status Response:", remoteStatus);
+
         // SantimPay might return status in different fields depending on version
-        const status = remoteStatus.status || remoteStatus.paymentStatus;
-        const paymentId = remoteStatus.paymentId || remoteStatus.reference;
+        // Check for 'status' or 'paymentStatus'
+        // Also check if the response itself has a 'status' field (e.g. { status: "SUCCESS", data: { ... } })
+        const status =
+          remoteStatus.status ||
+          remoteStatus.paymentStatus ||
+          (remoteStatus.data && remoteStatus.data.status);
+        const paymentId =
+          remoteStatus.paymentId ||
+          remoteStatus.reference ||
+          (remoteStatus.data && remoteStatus.data.paymentId);
+
+        console.log(`Extracted Status: ${status}, PaymentId: ${paymentId}`);
 
         if (status === "COMPLETED" || status === "SUCCESS") {
-          transaction.status = "COMPLETED";
-          transaction.santimPayReference = paymentId;
-          await transaction.save();
-          await generateTicketsForTransaction(transaction);
+          await processTransactionFulfillment(transaction, paymentId);
         } else if (status === "FAILED" || status === "CANCELLED") {
           transaction.status = status;
           await transaction.save();
@@ -232,10 +329,7 @@ const handleWebhook = async (req, res) => {
 
     // Only process if status changed and is completed
     if (transaction.status !== "COMPLETED" && status === "COMPLETED") {
-      transaction.status = "COMPLETED";
-      transaction.santimPayReference = paymentId;
-      await transaction.save();
-      await generateTicketsForTransaction(transaction);
+      await processTransactionFulfillment(transaction, paymentId);
     } else if (status === "FAILED" || status === "CANCELLED") {
       transaction.status = status;
       await transaction.save();
@@ -307,16 +401,28 @@ const savePendingTransaction = async (req, res) => {
 
     // Construct metaData strictly
     const metaData = {
-      fullName: ticketData?.fullName || "",
-      email: ticketData?.email || "",
-      phoneNumber: phoneNumber || ticketData?.phoneNumber || "",
+      fullName: ticketData?.fullName || invitationData?.fullName || "",
+      email: ticketData?.email || invitationData?.email || "",
+      phoneNumber:
+        phoneNumber ||
+        ticketData?.phoneNumber ||
+        invitationData?.phoneNumber ||
+        "",
       ticketTypeId: ticketData?.ticketTypeId || "",
-      eventId: ticketData?.eventId || "",
-      quantity: ticketData?.quantity ? String(ticketData.quantity) : "0",
-      userId: ticketData?.userId || "",
-      ticketId: ticketData?.ticketId || "", // Store the frontend generated ticketId
+      eventId: ticketData?.eventId || invitationData?.eventId || "",
+      quantity: ticketData?.quantity
+        ? String(ticketData.quantity)
+        : invitationData?.quantity
+        ? String(invitationData.quantity)
+        : "0",
+      userId: ticketData?.userId || invitationData?.userId || "",
+      ticketId: ticketData?.ticketId || invitationData?.ticketId || "", // Store the frontend generated ticketId
       type: invitationData?.type || "ticket_purchase", // Default type
+      contactType: invitationData?.contactType || "",
+      guestType: invitationData?.guestType || "",
+      message: invitationData?.message || "",
       pendingInvitationIds: pendingInvitationIds,
+      invitationId: invitationData?.invitationId || "", // Store the pending invitation ID
     };
 
     // Save to SantimTransaction
@@ -364,59 +470,7 @@ const fulfillPayment = async (req, res) => {
       transaction.status !== "COMPLETED" &&
       (status === "COMPLETED" || status === "SUCCESS")
     ) {
-      transaction.status = "COMPLETED";
-      transaction.santimPayReference = paymentId;
-      await transaction.save();
-
-      // Access metaData directly as it is now a sub-document
-      const meta = transaction.metaData;
-
-      if (meta.eventId && meta.ticketTypeId) {
-        const { eventId, ticketTypeId, quantity, userId } = meta;
-        const event = await Event.findById(eventId);
-        if (event) {
-          const qty = parseInt(quantity);
-          const selectedType = event.ticketTypes.find(
-            (t) => t.name === ticketTypeId || t._id.toString() === ticketTypeId
-          );
-
-          if (selectedType) {
-            const typeIndex = event.ticketTypes.indexOf(selectedType);
-            if (typeIndex > -1) {
-              event.ticketTypes[typeIndex].quantity = Math.max(
-                0,
-                event.ticketTypes[typeIndex].quantity - qty
-              );
-              await event.save();
-            }
-
-            // Create a single ticket with the total quantity
-            const ticket = new Ticket({
-              event: event._id,
-              user: userId || null,
-              ticketType: selectedType.name,
-              price: selectedType.price * qty, // Total price
-              paymentReference: id, // Use transaction ID as reference
-              status: "active",
-              paymentStatus: "completed",
-              ticketCount: qty, // Store the quantity
-              ticketId: meta.ticketId || undefined, // Use the pre-generated ticketId if available
-            });
-            await ticket.save();
-
-            // Add ticket to user if userId exists
-            if (userId) {
-              await User.findByIdAndUpdate(userId, {
-                $push: { tickets: ticket._id },
-              });
-            }
-
-            console.log(
-              `Generated 1 ticket (count: ${qty}) for transaction ${id}`
-            );
-          }
-        }
-      }
+      await processTransactionFulfillment(transaction, paymentId);
     } else if (status === "FAILED" || status === "CANCELLED") {
       transaction.status = status;
       await transaction.save();

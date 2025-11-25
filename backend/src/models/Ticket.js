@@ -21,6 +21,11 @@ const TicketSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    isInvitation: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
     event: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Event",
@@ -29,11 +34,27 @@ const TicketSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: function () {
+        return !this.isInvitation;
+      },
+    },
+    guestName: {
+      type: String,
+      required: function () {
+        return this.isInvitation;
+      },
+    },
+    guestEmail: {
+      type: String,
+    },
+    guestPhone: {
+      type: String,
     },
     ticketType: {
       type: String,
-      required: true,
+      required: function () {
+        return !this.isInvitation;
+      },
     },
     price: {
       type: Number,
@@ -46,7 +67,15 @@ const TicketSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["active", "used", "cancelled", "expired", "pending"],
+      enum: [
+        "active",
+        "used",
+        "cancelled",
+        "expired",
+        "pending",
+        "confirmed",
+        "declined",
+      ],
       default: "active",
     },
     paymentStatus: {
@@ -93,7 +122,7 @@ TicketSchema.pre("save", async function (next) {
         _id: this._id,
         ticketId: this.ticketId,
         eventId: this.event.toString(),
-        userId: this.user.toString(),
+        userId: this.user ? this.user.toString() : null,
         ticketType: this.ticketType,
         price: this.price,
         purchaseDate: this.purchaseDate.toISOString(),
