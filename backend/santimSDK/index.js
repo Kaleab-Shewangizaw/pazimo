@@ -222,7 +222,8 @@ module.exports = class SantimpaySdk {
         `${this.baseUrl}/direct-payment`,
         payload,
         {
-          httpsAgent: new https.Agent({ family: 4 }),
+          httpsAgent: new https.Agent({ family: 4, keepAlive: true }),
+          timeout: 30000, // 30 seconds timeout
         }
       );
 

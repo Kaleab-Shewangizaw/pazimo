@@ -494,13 +494,25 @@ export default function InvitationPage() {
       return;
     }
 
+    let formattedContact = contact;
+    if (contactType === "phone") {
+      // Strip any non-digit characters just in case
+      let clean = contact.replace(/\D/g, "");
+      // If it starts with 0, remove it
+      if (clean.startsWith("0")) clean = clean.substring(1);
+      // If it starts with 251, remove it (we'll add +251 back)
+      if (clean.startsWith("251")) clean = clean.substring(3);
+
+      formattedContact = `+251${clean}`;
+    }
+
     // Validate contact based on type
-    if (contactType === "email" && !validateEmail(contact)) {
+    if (contactType === "email" && !validateEmail(formattedContact)) {
       alert("Please enter a valid email address");
       return;
     }
 
-    if (contactType === "phone" && !validatePhoneNumber(contact)) {
+    if (contactType === "phone" && !validatePhoneNumber(formattedContact)) {
       alert(
         "Please enter a valid Ethiopian phone number (+251911234567 or 0911234567)"
       );
@@ -516,7 +528,7 @@ export default function InvitationPage() {
 
     // Store invitation data
     setPendingInvitation({
-      contact,
+      contact: formattedContact,
       customerName,
       message,
       qrCodeCount,
@@ -790,7 +802,8 @@ export default function InvitationPage() {
 
   const validatePhoneNumber = (phone: string): boolean => {
     // Ethiopian phone number validation
-    const phoneRegex = /^(\+251|0)?[79]\d{8}$/;
+    // Allow +251 prefix or just the 9 digits starting with 7 or 9
+    const phoneRegex = /^(\+251)?[79]\d{8}$/;
     return phoneRegex.test(phone.replace(/\s+/g, ""));
   };
 
@@ -1605,43 +1618,63 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                         ? "Email Address"
                         : "Phone Number"}
                     </label>
-                    <input
-                      type={contactType === "email" ? "email" : "tel"}
-                      value={contact}
-                      onChange={(e) => setContact(e.target.value)}
-                      placeholder={
-                        contactType === "email"
-                          ? "Enter email address"
-                          : "Enter phone number (+251911234567)"
-                      }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
-                      required
-                    />
+                    <div className="relative">
+                      {contactType === "phone" && (
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium z-10">
+                          +251
+                        </span>
+                      )}
+                      <input
+                        type={contactType === "email" ? "email" : "tel"}
+                        value={contact}
+                        onChange={(e) => {
+                          if (contactType === "phone") {
+                            let val = e.target.value.replace(/\D/g, "");
+                            if (val.startsWith("0")) val = val.substring(1);
+                            if (val.startsWith("251")) val = val.substring(3);
+                            setContact(val);
+                          } else {
+                            setContact(e.target.value);
+                          }
+                        }}
+                        placeholder={
+                          contactType === "email"
+                            ? "Enter email address"
+                            : "911234567"
+                        }
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 ${
+                          contactType === "phone" ? "pl-14" : ""
+                        }`}
+                        required
+                      />
+                    </div>
                     {contactType === "phone" && (
                       <p className="text-xs text-gray-600 mt-1">
-                        Ethiopian format: +251911234567 or 0911234567
+                        Enter phone number (e.g., 911234567)
                       </p>
                     )}
                   </div>
 
-                  <div className="w-32">
-                    <label className="block text-sm font-medium text-gray-900 mb-2">
-                      QR Codes
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={qrCodeCount}
-                      onChange={(e) =>
-                        setQrCodeCount(
-                          Math.max(1, parseInt(e.target.value) || 1)
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
-                    />
-                    <p className="text-xs text-gray-600 mt-1">Max 10</p>
-                  </div>
+                  {guestType !== "paid" && (
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-900 mb-2">
+                        QR Codes
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={qrCodeCount}
+                        onChange={(e) =>
+                          setQrCodeCount(
+                            Math.max(1, parseInt(e.target.value) || 1)
+                          )
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                      />
+                      <p className="text-xs text-gray-600 mt-1">Max 10</p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Message */}

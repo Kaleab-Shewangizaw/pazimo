@@ -20,17 +20,17 @@ const PAYMENT_METHODS = [
   {
     id: "Commercial Bank of Ethiopia",
     name: "CBE",
-    image: "/cbe_birr.png", // Assuming this image is appropriate for CBE
+    image: "/cbe-logo.png", // Assuming this image is appropriate for CBE
   },
   {
     id: "Mpesa",
     name: "M-Pesa",
-    image: "/M-PESA_LOGO.png",
+    image: "/mpesa-logo.png",
   },
   {
     id: "Awash Bank",
     name: "Awash Bank",
-    image: "/Awash birr.jpeg",
+    image: "/Awash-Bank.png",
   },
 ];
 
@@ -39,8 +39,11 @@ export default function PaymentMethodSelector({
   selectedMethod,
   onSelect,
 }: PaymentMethodSelectorProps) {
-  const isTelebirrDisabled = phoneNumber.startsWith("07");
-  const isMpesaDisabled = phoneNumber.startsWith("09");
+  // Handle both 09/07 and 9/7 formats
+  const isTelebirrDisabled =
+    phoneNumber.startsWith("07") || phoneNumber.startsWith("7");
+  const isMpesaDisabled =
+    phoneNumber.startsWith("09") || phoneNumber.startsWith("9");
 
   const isDisabled = (methodId: string) => {
     if (methodId === "Telebirr" && isTelebirrDisabled) return true;
@@ -52,7 +55,7 @@ export default function PaymentMethodSelector({
     <RadioGroup
       value={selectedMethod}
       onValueChange={onSelect}
-      className="grid grid-cols-2 sm:grid-cols-2 gap-4"
+      className="grid grid-cols-2 sm:grid-cols-2 gap-3"
     >
       {PAYMENT_METHODS.map((method) => {
         const disabled = isDisabled(method.id);
@@ -62,18 +65,18 @@ export default function PaymentMethodSelector({
               value={method.id}
               id={`payment-${method.id}`}
               disabled={disabled}
-              className="peer sr-only"
+              className="peer sr-only "
             />
             <Label
               htmlFor={`payment-${method.id}`}
               className={cn(
-                "flex flex-col items-center justify-center p-4 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
+                "flex flex-col items-center justify-center py-2  rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
                 "peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50",
                 disabled &&
                   "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale"
               )}
             >
-              <div className="relative w-12 h-12 mb-3">
+              <div className="relative w-12 h-12 mb-1">
                 <Image
                   src={method.image}
                   alt={method.name}
@@ -81,13 +84,13 @@ export default function PaymentMethodSelector({
                   className="object-contain"
                 />
               </div>
-              <span className="text-xs font-medium text-center text-gray-700 peer-data-[state=checked]:text-orange-700">
+              <span className="text-[12px] font-bold text-center text-gray-700 peer-data-[state=checked]:text-orange-700">
                 {method.name}
               </span>
             </Label>
             {disabled && (
-              <span className="absolute -bottom-6 left-0 right-0 text-[10px] text-center text-red-500 font-medium">
-                Not available for this number
+              <span className="absolute -bottom-5 left-0 right-0 text-[9px] text-center text-red-500 font-medium">
+                Not available
               </span>
             )}
           </div>

@@ -690,6 +690,7 @@ const getEventTickets = async (req, res) => {
 const checkInTicket = async (req, res) => {
   try {
     const { ticketId } = req.params;
+    const { count = 1 } = req.body; // Default to 1 if not provided
 
     const ticket = await Ticket.findById(ticketId);
     if (!ticket) {
@@ -711,27 +712,54 @@ const checkInTicket = async (req, res) => {
       });
     }
 
-    if (ticket.checkedIn) {
+    // Check if already fully used
+    if (
+      ticket.status === "used" ||
+      ticket.checkedIn ||
+      ticket.ticketCount <= 0
+    ) {
       return res.status(StatusCodes.OK).json({
         success: true,
         alreadyCheckedIn: true,
-        message: "Ticket already checked in",
+        message: "Ticket already fully used",
         data: {
           ticket,
-          checkedInAt: ticket.checkedInAt,
+          remainingUses: 0,
         },
       });
     }
 
-    ticket.checkedIn = true;
-    ticket.checkedInAt = new Date();
-    ticket.status = "used";
+    // Check if enough uses remaining
+    if (ticket.ticketCount < count) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Not enough uses remaining. Available: ${ticket.ticketCount}, Requested: ${count}`,
+      });
+    }
+
+    // Decrement count
+    ticket.ticketCount -= count;
+
+    // If count reaches 0, mark as used/checkedIn
+    if (ticket.ticketCount <= 0) {
+      ticket.ticketCount = 0; // Safety
+      ticket.checkedIn = true;
+      ticket.checkedInAt = new Date();
+      ticket.status = "used";
+    }
+
     await ticket.save();
 
     res.status(StatusCodes.OK).json({
       success: true,
-      message: "Ticket checked in successfully",
-      ticket,
+      message: ticket.checkedIn
+        ? "Ticket fully checked in"
+        : "Ticket usage recorded",
+      data: {
+        ticket,
+        remainingUses: ticket.ticketCount,
+        fullyUsed: ticket.checkedIn,
+      },
     });
   } catch (error) {
     console.error("Check-in error:", error);
@@ -903,6 +931,50 @@ const validateQRCode = async (req, res) => {
   }
 };
 
+// Get ticket details by ID or Transaction Reference (Public)
+const getPublicTicketDetails = async (req, res) => {
+  const { id } = req.params;
+
+  let tickets = [];
+
+  // 1. Try finding by ticketId (string)
+  const ticketById = await Ticket.findOne({ ticketId: id })
+    .populate("event", "title startDate endDate location organizer")
+    .populate("user", "firstName lastName email");
+
+  if (ticketById) {
+    tickets.push(ticketById);
+  }
+
+  // 2. If not found, check if id is a valid ObjectId (for _id lookup)
+  if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
+    const ticket = await Ticket.findById(id)
+      .populate("event", "title startDate endDate location organizer")
+      .populate("user", "firstName lastName email");
+
+    if (ticket) {
+      tickets.push(ticket);
+    }
+  }
+
+  // 3. If still not found, try finding by paymentReference
+  if (tickets.length === 0) {
+    const txTickets = await Ticket.find({ paymentReference: id })
+      .populate("event", "title startDate endDate location organizer")
+      .populate("user", "firstName lastName email");
+
+    if (txTickets && txTickets.length > 0) {
+      tickets = txTickets;
+    }
+  }
+
+  if (tickets.length === 0) {
+    throw new NotFoundError("Ticket not found");
+  }
+
+  res.status(StatusCodes.OK).json({ success: true, data: tickets });
+};
+
 // Get ticket details by ID or Transaction Reference
 const getTicketDetails = async (req, res) => {
   const { id } = req.params;
@@ -1036,6 +1108,7 @@ module.exports = {
   getAllTicketsAdmin,
   validateQRCode,
   getTicketDetails,
+  getPublicTicketDetails,
   getInvitationTicket,
   updateInvitationTicketStatus,
   createGuestTicket,

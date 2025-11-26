@@ -84,10 +84,27 @@ export const validateAndCorrectRows = (rows: Row[]): ValidationResult => {
 
     // Validate Phone
     // Ethiopian regex: +2519..., +2517..., 09..., 07...
-    const isPhoneValid = (phone: string) =>
-      /^(\+2519\d{8}|\+2517\d{8}|09\d{8}|07\d{8})$/.test(phone?.trim());
     if (correctedRow.Type === "Phone" || correctedRow.Type === "Both") {
-      if (!correctedRow.Phone || !isPhoneValid(correctedRow.Phone)) {
+      let phone =
+        correctedRow.Phone?.toString().trim().replace(/\s+/g, "") || "";
+
+      // Normalize: 09... -> +2519..., 07... -> +2517...
+      if (phone.startsWith("09") || phone.startsWith("07")) {
+        phone = "+251" + phone.substring(1);
+      }
+      // If it starts with 9 or 7 and is 9 digits, prepend +251
+      else if (
+        (phone.startsWith("9") || phone.startsWith("7")) &&
+        phone.length === 9
+      ) {
+        phone = "+251" + phone;
+      }
+
+      correctedRow.Phone = phone;
+
+      const isPhoneValid = (p: string) => /^(\+251)[79]\d{8}$/.test(p);
+
+      if (!phone || !isPhoneValid(phone)) {
         error = error ? error + ", Invalid Phone" : "Invalid Phone";
       }
     }

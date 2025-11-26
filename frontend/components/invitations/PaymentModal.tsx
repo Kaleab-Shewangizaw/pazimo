@@ -44,7 +44,13 @@ export default function PaymentModal({
       return;
     }
 
-    await onPay({ phoneNumber, paymentMethod: selectedMethod });
+    // Normalize phone number
+    let finalPhone = phoneNumber;
+    if (!finalPhone.startsWith("+251")) {
+      finalPhone = `+251${finalPhone}`;
+    }
+
+    await onPay({ phoneNumber: finalPhone, paymentMethod: selectedMethod });
   };
 
   return (
@@ -75,12 +81,19 @@ export default function PaymentModal({
               Phone Number
             </Label>
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium z-10">
+                +251
+              </span>
               <Input
                 value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="09... or 07..."
-                className="pl-9"
+                onChange={(e) => {
+                  let val = e.target.value.replace(/\D/g, "");
+                  if (val.startsWith("0")) val = val.substring(1);
+                  if (val.startsWith("251")) val = val.substring(3);
+                  setPhoneNumber(val);
+                }}
+                placeholder="911234567"
+                className="pl-14"
               />
             </div>
           </div>

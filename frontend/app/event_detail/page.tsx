@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Suspense } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
@@ -102,6 +102,7 @@ type PurchasedTicket = {
   status: string;
   checkedIn: boolean;
   paymentReference?: string;
+  ticketCount?: number;
 };
 
 function EventDetailContent() {
@@ -134,6 +135,7 @@ function EventDetailContent() {
     paymentMethod: "Telebirr",
   });
   const [isSantimLoading, setIsSantimLoading] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Auth store
   // const { login, signup } = useAuthStore();
@@ -279,10 +281,16 @@ function EventDetailContent() {
       // Pre-fill form with user data if logged in
       const u = user || (useAuthStore.getState().user as any);
       if (u) {
+        let phone = u.phone || u.phoneNumber || "";
+        // Normalize phone number for display (remove +251, 251, or leading 0)
+        phone = phone.replace(/\D/g, ""); // Remove non-digits
+        if (phone.startsWith("251")) phone = phone.substring(3);
+        if (phone.startsWith("0")) phone = phone.substring(1);
+
         setSantimForm({
           fullName: `${u.firstName} ${u.lastName}`.trim(),
           email: u.email || "",
-          phoneNumber: u.phone || u.phoneNumber || "",
+          phoneNumber: phone,
           paymentMethod: "Telebirr",
         });
       } else {
@@ -304,27 +312,23 @@ function EventDetailContent() {
 
   const verifyAndShowTickets = async (txRef: string) => {
     try {
-      // Fetch tickets
+      // Fetch tickets using public endpoint
       const ticketsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/my-tickets`,
-        {
-          headers: {
-            Authorization: `Bearer ${useAuthStore.getState().token}`,
-          },
-        }
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`
       );
       if (ticketsResponse.ok) {
         const ticketsData = await ticketsResponse.json();
-        // Filter tickets for this transaction
-        const newTickets = ticketsData.data.filter(
-          (t: PurchasedTicket) => t.paymentReference === txRef
-        );
+        // The endpoint returns { success: true, data: [...] }
+        const newTickets = ticketsData.data || [];
+
         setPurchasedTickets(newTickets);
         setShowTicketModal(true);
         setShouldShowTicketModal(true);
         toast.success("Payment successful! Your tickets are ready.");
         // Clean URL if needed
         router.replace(`/event_detail?id=${eventId || ""}`);
+      } else {
+        throw new Error("Failed to fetch tickets");
       }
     } catch (e) {
       console.error("Ticket fetch error", e);
@@ -333,10 +337,15 @@ function EventDetailContent() {
   };
 
   const pollPaymentStatus = async (txRef: string) => {
+    // Clear any existing interval
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
     let attempts = 0;
     const maxAttempts = 60; // 2 minutes (2s interval)
 
-    const interval = setInterval(async () => {
+    pollingIntervalRef.current = setInterval(async () => {
       attempts++;
       try {
         const response = await fetch(
@@ -345,24 +354,23 @@ function EventDetailContent() {
         const data = await response.json();
 
         if (data.status === "COMPLETED" || data.status === "PAID") {
-          clearInterval(interval);
+          if (pollingIntervalRef.current)
+            clearInterval(pollingIntervalRef.current);
           setIsWaitingForPayment(false);
           setShowPaymentModal(false);
 
-          if (data.ticketId) {
-            toast.success("Payment successful! Redirecting to your ticket...");
-            router.push(`/my-account/tickets/${data.ticketId}`);
-          } else {
-            verifyAndShowTickets(txRef);
-          }
+          // Always show the modal instead of redirecting
+          verifyAndShowTickets(txRef);
         } else if (data.status === "FAILED") {
-          clearInterval(interval);
+          if (pollingIntervalRef.current)
+            clearInterval(pollingIntervalRef.current);
           setIsWaitingForPayment(false);
           toast.error("Payment failed. Please try again.");
         }
 
         if (attempts >= maxAttempts) {
-          clearInterval(interval);
+          if (pollingIntervalRef.current)
+            clearInterval(pollingIntervalRef.current);
           setIsWaitingForPayment(false);
           toast.error(
             "Payment verification timed out. Please check 'My Tickets' later."
@@ -390,6 +398,9 @@ function EventDetailContent() {
       );
       if (!selectedType) throw new Error("Ticket type not found");
 
+      // Format phone number with +251 prefix
+      const formattedPhone = `+251${santimForm.phoneNumber}`;
+
       // Implicit Auth for Guest
       let finalUserId = userId;
       if (!finalUserId) {
@@ -402,7 +413,7 @@ function EventDetailContent() {
               body: JSON.stringify({
                 fullName: santimForm.fullName,
                 email: santimForm.email,
-                phoneNumber: santimForm.phoneNumber,
+                phoneNumber: formattedPhone,
               }),
             }
           );
@@ -450,7 +461,7 @@ function EventDetailContent() {
           body: JSON.stringify({
             amount,
             paymentReason: `Ticket Purchase - ${event?.title}`,
-            phoneNumber: santimForm.phoneNumber,
+            phoneNumber: formattedPhone,
             orderId, // Pass the generated ID
             method: santimForm.paymentMethod,
             ticketDetails: {
@@ -1260,136 +1271,147 @@ function EventDetailContent() {
           if (!open) setShouldShowTicketModal(false);
         }}
       >
-        <DialogContent className="w-full max-w-sm md:max-w-md lg:max-w-lg rounded-xl p-4 md:p-5">
-          <DialogHeader>
-            <DialogTitle className="text-center text-lg md:text-xl">
-              Your Ticket
-              {purchasedTickets.length > 1
-                ? `s (${currentTicketIndex + 1}/${purchasedTickets.length})`
-                : ""}
-            </DialogTitle>
-            <DialogDescription className="text-center text-gray-600 text-xs md:text-sm">
-              Show this QR code at the venue for check-in.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="w-full max-w-sm md:max-w-md lg:max-w-lg rounded-xl p-0 overflow-hidden bg-white gap-0">
+          <div className="bg-[#0D47A1] p-6 text-white text-center">
+            <h2 className="text-2xl font-bold mb-1">You&apos;re Going!</h2>
+            <p className="text-blue-100 text-sm">Your ticket is ready</p>
+          </div>
 
-          {purchasedTickets.length > 0 && (
-            <div className="mt-2">
-              {(() => {
-                const ticket = purchasedTickets[currentTicketIndex];
-                return (
-                  <div className="border border-gray-200 rounded-lg p-4 md:p-5 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-sm">
-                    <div className="text-center mb-3">
-                      <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-1">
-                        Ticket #{currentTicketIndex + 1} - {ticket.ticketType}
-                      </h3>
-                      <p className="text-xs md:text-sm text-gray-600">
-                        Ticket ID: {ticket.ticketId}
-                      </p>
-                      <p className="text-xs md:text-sm text-gray-600">
-                        Price: {ticket.price} ETB
-                      </p>
-                    </div>
-                    <div className="flex justify-center mb-3">
-                      <div className="bg-white p-3 md:p-4 rounded-lg shadow-md border border-gray-200 relative">
+          <div className="p-6">
+            {/* Event Details */}
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                {event.title}
+              </h3>
+              <div className="flex flex-col gap-1 items-center text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-[#0D47A1]" />
+                  <span>{formatDate(event.startDate)}</span>
+                  <span className="text-gray-300">|</span>
+                  <Clock className="h-4 w-4 text-[#0D47A1]" />
+                  <span>{formatTimeWithAmPm(event.startTime)}</span>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <MapPin className="h-4 w-4 text-[#0D47A1]" />
+                  <span>{event.location.address}</span>
+                </div>
+              </div>
+            </div>
+
+            <Separator className="my-6" />
+
+            {purchasedTickets.length > 0 && (
+              <div className="space-y-6">
+                {(() => {
+                  const ticket = purchasedTickets[currentTicketIndex];
+                  return (
+                    <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
+                      {/* QR Code */}
+                      <div className="bg-white p-3 rounded-xl border-2 border-dashed border-gray-300 mb-5 shadow-sm">
                         <Image
                           src={ticket.qrCode ?? "/events/sampleqr.png"}
-                          alt={`QR Code for Ticket ${currentTicketIndex + 1}`}
-                          width={140}
-                          height={140}
-                          className="mx-auto md:hidden"
-                        />
-                        <Image
-                          src={ticket.qrCode ?? "/events/sampleqr.png"}
-                          alt={`QR Code for Ticket ${currentTicketIndex + 1}`}
-                          width={170}
-                          height={170}
-                          className="mx-auto hidden md:block"
+                          alt="Ticket QR"
+                          width={220}
+                          height={220}
+                          className="rounded-lg"
                         />
                       </div>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-[10px] md:text-xs text-gray-500 mb-2">
-                        Scan this QR code at the venue entrance
-                      </p>
-                      <Button
-                        onClick={() =>
-                          downloadQRCode(
-                            ticket.qrCode,
-                            ticket.ticketId,
-                            ticket.ticketType
-                          )
-                        }
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Download QR Code
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })()}
 
-              {purchasedTickets.length > 1 && (
-                <div className="mt-4 flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentTicketIndex(Math.max(0, currentTicketIndex - 1))
-                    }
-                    disabled={currentTicketIndex === 0}
-                  >
-                    Prev
-                  </Button>
-                  <div className="flex items-center gap-1 md:gap-2">
-                    {purchasedTickets.map((_, i) => (
-                      <span
-                        key={i}
-                        className={`h-1.5 w-1.5 md:h-2 md:w-2 rounded-full ${
-                          i === currentTicketIndex
-                            ? "bg-[#0D47A1]"
-                            : "bg-gray-300"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setCurrentTicketIndex(
-                        Math.min(
-                          purchasedTickets.length - 1,
-                          currentTicketIndex + 1
+                      {/* Ticket Info */}
+                      <div className="text-center space-y-2 w-full">
+                        <div className="flex justify-center">
+                          <Badge
+                            variant="secondary"
+                            className="text-base px-6 py-1.5 bg-blue-50 text-[#0D47A1] hover:bg-blue-100 border-blue-100"
+                          >
+                            Admits: {ticket.ticketCount || 1} Person
+                            {(ticket.ticketCount || 1) > 1 ? "s" : ""}
+                          </Badge>
+                        </div>
+                        <h4 className="font-bold text-lg text-gray-900 mt-2">
+                          {ticket.ticketType}
+                        </h4>
+                        <p className="text-xs text-gray-400 font-mono uppercase tracking-wider">
+                          ID: {ticket.ticketId}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Navigation if multiple */}
+                {purchasedTickets.length > 1 && (
+                  <div className="flex items-center justify-center gap-4 pt-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={() =>
+                        setCurrentTicketIndex(
+                          Math.max(0, currentTicketIndex - 1)
                         )
-                      )
-                    }
-                    disabled={
-                      currentTicketIndex === purchasedTickets.length - 1
-                    }
-                  >
-                    Next
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 md:mt-5 p-3 bg-blue-50 rounded-lg border border-blue-200 text-[11px] md:text-xs text-blue-800">
-            Keep this QR safe. You can access your tickets anytime from your
-            account dashboard.
+                      }
+                      disabled={currentTicketIndex === 0}
+                    >
+                      &lt;
+                    </Button>
+                    <div className="flex gap-1.5">
+                      {purchasedTickets.map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-2 w-2 rounded-full transition-colors ${
+                            i === currentTicketIndex
+                              ? "bg-[#0D47A1]"
+                              : "bg-gray-200"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={() =>
+                        setCurrentTicketIndex(
+                          Math.min(
+                            purchasedTickets.length - 1,
+                            currentTicketIndex + 1
+                          )
+                        )
+                      }
+                      disabled={
+                        currentTicketIndex === purchasedTickets.length - 1
+                      }
+                    >
+                      &gt;
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <div className="mt-3 md:mt-4 flex justify-end">
+
+          <div className="p-4 bg-gray-50 border-t flex gap-3">
             <Button
+              className="flex-1 bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:text-gray-900"
+              variant="outline"
+              onClick={() => {
+                const ticket = purchasedTickets[currentTicketIndex];
+                downloadQRCode(
+                  ticket.qrCode,
+                  ticket.ticketId,
+                  ticket.ticketType
+                );
+              }}
+            >
+              <Download className="mr-2 h-4 w-4" /> Save Image
+            </Button>
+            <Button
+              className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white shadow-md shadow-blue-900/10"
               onClick={() => {
                 setShowTicketModal(false);
                 setShouldShowTicketModal(false);
               }}
-              className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white"
-              size="sm"
             >
               Done
             </Button>
@@ -1411,26 +1433,7 @@ function EventDetailContent() {
           </DialogHeader>
 
           <form onSubmit={handleMobilePayment} className="space-y-6 pt-2">
-            {/* Order Summary */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-600">Item</span>
-                <span className="font-medium text-gray-900">
-                  {selectedTicketType} Ticket
-                </span>
-              </div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-600">Quantity</span>
-                <span className="font-medium text-gray-900">
-                  {ticketQuantity}
-                </span>
-              </div>
-              <Separator className="my-2" />
-              <div className="flex justify-between text-lg font-bold">
-                <span>Total</span>
-                <span className="text-[#0D47A1]">{calculateTotal()} ETB</span>
-              </div>
-            </div>
+            {/* Order Summary Removed */}
 
             {/* Personal Info */}
             <div className="space-y-3">
@@ -1483,20 +1486,27 @@ function EventDetailContent() {
                   >
                     Phone
                   </Label>
-                  <Input
-                    id="santim_phone"
-                    type="tel"
-                    value={santimForm.phoneNumber}
-                    onChange={(e) =>
-                      setSantimForm({
-                        ...santimForm,
-                        phoneNumber: e.target.value,
-                      })
-                    }
-                    placeholder="09..."
-                    required
-                    className="mt-1"
-                  />
+                  <div className="flex items-center border rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                    <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r text-sm font-medium">
+                      +251
+                    </div>
+                    <Input
+                      id="santim_phone"
+                      type="tel"
+                      // change the value to 9 digits without the country code
+
+                      value={santimForm.phoneNumber}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, "");
+                        if (val.startsWith("0")) val = val.substring(1);
+                        if (val.startsWith("251")) val = val.substring(3);
+                        setSantimForm({ ...santimForm, phoneNumber: val });
+                      }}
+                      placeholder="9..."
+                      required
+                      className="border-0 rounded-none focus-visible:ring-0 shadow-none"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
