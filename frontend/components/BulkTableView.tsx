@@ -47,12 +47,45 @@ export default function EditableTable({
   const [pendingInvitationIds, setPendingInvitationIds] = useState<string[]>(
     []
   );
+  const [pricing, setPricing] = useState({ email: 2, sms: 5 });
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
+    null
+  );
   const [successResult, setSuccessResult] = useState<{
     success: unknown[];
     failed: unknown[];
   } | null>(null);
 
   const displayData = data.length > 1000 ? data.slice(0, 1000) : data;
+
+  useEffect(() => {
+    const fetchPricing = async () => {
+      if (!event) return;
+      try {
+        const eventType = event.eventType || "public";
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/invitation-pricing/${eventType}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setPricing({
+            email: data.data.emailPrice,
+            sms: data.data.smsPrice,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch pricing:", error);
+      }
+    };
+
+    fetchPricing();
+  }, [event]);
+
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, [pollingInterval]);
 
   useEffect(() => {
     if (data.length > 1000) setShowDataTrimmed(true);
@@ -157,9 +190,10 @@ export default function EditableTable({
   const calculateCost = (): number => {
     return data.reduce((total, row) => {
       const amount = Number(row.Amount || 1);
-      if (row.Type === "Both") return total + 7 * amount;
-      if (row.Type === "Phone") return total + 5 * amount;
-      if (row.Type === "Email") return total + 2 * amount;
+      if (row.Type === "Both")
+        return total + (pricing.email + pricing.sms) * amount;
+      if (row.Type === "Phone") return total + pricing.sms * amount;
+      if (row.Type === "Email") return total + pricing.email * amount;
       return total;
     }, 0);
   };
@@ -308,6 +342,47 @@ export default function EditableTable({
     [setSelectedFile]
   );
 
+  const pollPaymentStatus = useCallback(
+    async (transactionId: string, invitationIds: string[]) => {
+      const interval = setInterval(async () => {
+        try {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/status/${transactionId}`
+          );
+          const data = await response.json();
+
+          if (
+            data.success &&
+            (data.status === "COMPLETED" || data.status === "PAID")
+          ) {
+            if (interval) clearInterval(interval);
+            setPollingInterval(null);
+            setShowPayment(false);
+            setIsSantimLoading(false);
+            toast.success("Payment successful! Invitations are being sent.");
+
+            // Since backend handles sending on payment success, we just show success UI
+            setSuccessResult({
+              success: invitationIds,
+              failed: [],
+            });
+            setSelectedFile(null);
+          } else if (data.status === "FAILED") {
+            if (interval) clearInterval(interval);
+            setPollingInterval(null);
+            setIsSantimLoading(false);
+            toast.error("Payment failed. Please try again.");
+          }
+        } catch (error) {
+          console.error("Polling error:", error);
+        }
+      }, 5000);
+
+      setPollingInterval(interval);
+    },
+    [processSending]
+  );
+
   const handleMobilePayment = async () => {
     if (!paymentConfig || !user) return;
     setIsSantimLoading(true);
@@ -315,39 +390,41 @@ export default function EditableTable({
     try {
       const txnId = crypto.randomUUID();
 
-      // Save pending invitation IDs to localStorage
-      localStorage.setItem(
-        `bulk_invitations_${txnId}`,
-        JSON.stringify(pendingInvitationIds)
-      );
-
-      const response = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: paymentConfig.amount,
-          paymentReason: `Bulk Invitation Fee`,
-          phoneNumber: paymentPhoneNumber,
-          invitationData: {
-            eventId: event._id,
-            userId: user._id || user.id,
-            txnId,
-            pendingInvitationIds,
-            type: "bulk_invitation_fee",
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/initiate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${useAuthStore.getState().token}`,
           },
-          orderId: txnId,
-          successUrl: `${window.location.origin}/organizer/invitations?action=process_bulk_payment&orderId=${txnId}`,
-        }),
-      });
+          body: JSON.stringify({
+            amount: paymentConfig.amount,
+            paymentReason: `Bulk Invitation Fee`,
+            phoneNumber: paymentPhoneNumber,
+            paymentMethod: paymentMethod,
+            invitationData: {
+              eventId: event._id,
+              userId: user._id || user.id,
+              txnId,
+              pendingInvitationIds,
+              type: "bulk_invitation_fee",
+            },
+          }),
+        }
+      );
 
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
 
-      if (data.paymentUrl) {
-        window.location.href = data.paymentUrl;
+      if (data.success && data.transactionId) {
+        toast.success(
+          "Payment initiated. Please check your phone to complete the payment."
+        );
+        pollPaymentStatus(data.transactionId, pendingInvitationIds);
       } else {
-        throw new Error("No payment URL returned");
+        throw new Error("Invalid response from server");
       }
     } catch (error: unknown) {
       console.error("Payment error:", error);
@@ -357,34 +434,6 @@ export default function EditableTable({
       setIsSantimLoading(false);
     }
   };
-
-  useEffect(() => {
-    const txRef = searchParams.get("tx_ref");
-    const status = searchParams.get("status");
-
-    if (txRef && status === "success") {
-      let foundKey = null;
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith("bulk_invitations_")) {
-          foundKey = key;
-          break;
-        }
-      }
-
-      if (foundKey) {
-        const storedIds = localStorage.getItem(foundKey);
-        if (storedIds) {
-          const ids = JSON.parse(storedIds);
-          setPendingInvitationIds(ids);
-          localStorage.removeItem(foundKey);
-
-          // Process sending
-          processSending(ids);
-        }
-      }
-    }
-  }, [searchParams, processSending]);
 
   const headers = [
     "No",

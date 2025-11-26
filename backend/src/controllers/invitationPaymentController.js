@@ -7,6 +7,7 @@ const {
   sendInvitationEmail,
   createEmailTemplate,
 } = require("./invitationEmailController");
+const { processPaidInvitations } = require("./invitationController");
 const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
@@ -49,11 +50,14 @@ const initiateInvitationPayment = async (req, res) => {
       guestName: invitationData.customerName,
       contact: invitationData.contact,
       method: invitationData.contactType, // "email" or "phone"
-      invitationType: invitationData.guestType, // "guest" or "paid"
+      invitationType: invitationData.guestType || invitationData.type, // "guest" or "paid" or "bulk_invitation_fee"
       message: invitationData.message,
       price: amount,
       eventId:
-        invitationData.selectedEvent.id || invitationData.selectedEvent._id,
+        invitationData.eventId ||
+        (invitationData.selectedEvent
+          ? invitationData.selectedEvent.id || invitationData.selectedEvent._id
+          : null),
       userId,
       ticketDetails: {
         qrCodeCount: invitationData.qrCodeCount,
@@ -171,6 +175,7 @@ const handlePaymentSuccess = async (payment) => {
       process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
 
     if (invitationType === "guest") {
+      // ... existing guest logic ...
       // 1. Create Ticket
       const ticketId = "TICKET-" + uuidv4();
 
@@ -281,6 +286,18 @@ const handlePaymentSuccess = async (payment) => {
               err.response ? err.response.data : err.message
             );
           });
+      }
+    } else if (invitationType === "bulk_invitation_fee") {
+      // Bulk Invitation Logic
+      const { pendingInvitationIds } = ticketDetails;
+      if (pendingInvitationIds && Array.isArray(pendingInvitationIds)) {
+        console.log(
+          `Processing ${pendingInvitationIds.length} bulk invitations for transaction ${payment.transactionId}`
+        );
+        await processPaidInvitations(
+          pendingInvitationIds,
+          payment.transactionId
+        );
       }
     } else if (invitationType === "paid") {
       // Paid Attendee - Just send link to event

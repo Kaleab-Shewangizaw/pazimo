@@ -1,6 +1,7 @@
 const Invitation = require("../models/Invitation");
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
+const InvitationPricing = require("../models/InvitationPricing");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { StatusCodes } = require("http-status-codes");
@@ -95,13 +96,19 @@ const createBulkInvitations = async (req, res) => {
       });
     }
 
+    // Fetch pricing for the event type
+    const eventType = event.eventType || "public";
+    const pricing = await InvitationPricing.findOne({ eventType });
+    const emailPrice = pricing ? pricing.emailPrice : 2; // Default fallback
+    const smsPrice = pricing ? pricing.smsPrice : 5; // Default fallback
+
     // Calculate costs
     let totalCost = 0;
     const invitationsToCreate = correctedRows.map((row) => {
       let cost = 0;
-      if (row.type === "email") cost = 2;
-      else if (row.type === "sms") cost = 5;
-      else if (row.type === "both") cost = 7;
+      if (row.type === "email") cost = emailPrice;
+      else if (row.type === "sms") cost = smsPrice;
+      else if (row.type === "both") cost = emailPrice + smsPrice;
 
       // Multiply by amount if pricing is per ticket, otherwise per invitation
       // Assuming per invitation for delivery cost
@@ -152,8 +159,9 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       const invitation = await Invitation.findOne({ invitationId: invId });
       if (!invitation) continue;
 
-      // Skip if already sent to avoid duplicates (optional check)
-      // if (invitation.status === 'sent') continue;
+      // Skip if already sent to avoid duplicates
+      if (invitation.status === "sent" || invitation.paymentStatus === "paid")
+        continue;
 
       const event = await Event.findById(invitation.eventId);
       if (!event) throw new Error("Event not found");
