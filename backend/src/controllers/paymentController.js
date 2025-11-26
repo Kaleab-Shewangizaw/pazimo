@@ -1,117 +1,81 @@
 const { StatusCodes } = require("http-status-codes");
-const paymentService = require("../services/paymentService");
-const CustomError = require("../errors/customError");
-const { processPaidInvitations } = require("./invitationController");
+const Payment = require("../models/Payment");
+const Ticket = require("../models/Ticket");
+const SantimPayService = require("../services/santimPayService");
+const { processSuccessfulPayment } = require("./ticketController");
 
 class PaymentController {
-  async initializePayment(req, res) {
-    this.handleErrors(res, async () => {
-      const paymentData = {
-        ...req.body,
-        tx_ref:
-          req.body.tx_ref ||
-          `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`,
-      };
-
-      const result = await paymentService.initializeTransaction(paymentData);
-      res.status(StatusCodes.OK).json(result);
-    });
-  }
-
-  async handleCallback(req, res) {
-    this.handleErrors(res, async () => {
-      const { trx_ref, ref_id, status } = req.query;
-
-      await paymentService.verifyCallback({ trx_ref, ref_id, status });
-
-      const transactionDetails = await paymentService.verifyTransaction(
-        trx_ref
-      );
-
-      if (transactionDetails.status !== "success") {
-        throw new CustomError(
-          "Transaction verification failed",
-          StatusCodes.BAD_REQUEST
-        );
+  async checkPaymentStatus(req, res) {
+    try {
+      const { txn } = req.query;
+      if (!txn) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          error: "Transaction ID (txn) is required",
+        });
       }
 
-      const paymentInfo = await paymentService.getStoredPaymentInfo(trx_ref);
-      if (!paymentInfo) {
-        throw new CustomError(
-          "Payment information not found",
-          StatusCodes.NOT_FOUND
-        );
+      const payment = await Payment.findOne({ transactionId: txn });
+
+      if (!payment) {
+        return res.status(StatusCodes.NOT_FOUND).json({
+          success: false,
+          status: "NOT_FOUND",
+          error: "Payment record not found",
+        });
       }
 
-      // Handle Invitation Payment
-      if (paymentInfo.type === "invitation" && paymentInfo.invitationIds) {
-        const invitationIds = Array.isArray(paymentInfo.invitationIds)
-          ? paymentInfo.invitationIds
-          : JSON.parse(paymentInfo.invitationIds);
+      // If pending, check with SantimPay directly
+      if (payment.status === "PENDING") {
+        try {
+          const statusData = await SantimPayService.checkTransactionStatus(txn);
+          // Check status from SantimPay response
+          const remoteStatus = statusData.status || statusData.paymentStatus;
 
-        await processPaidInvitations(invitationIds);
-
-        const successUrl = `${
-          process.env.NEXT_PUBLIC_FRONTEND_URL ||
-          process.env.FRONTEND_URL ||
-          "http://localhost:3000"
-        }/organizer/invitations?status=success`;
-        return res.redirect(successUrl);
+          if (remoteStatus === "COMPLETED" || remoteStatus === "SUCCESS") {
+            payment.status = "PAID";
+            await payment.save();
+            await processSuccessfulPayment(payment);
+          } else if (
+            remoteStatus === "FAILED" ||
+            remoteStatus === "CANCELLED"
+          ) {
+            payment.status = "FAILED";
+            await payment.save();
+          }
+        } catch (err) {
+          console.error("Error checking SantimPay status:", err.message);
+          // Ignore error and return current DB status
+        }
       }
 
-      let ticketType =
-        paymentInfo.ticketTypeId ||
-        paymentInfo.ticketType ||
-        paymentInfo.ticketTypeName;
-      if (!ticketType && transactionDetails.data?.customization?.description) {
-        const match =
-          transactionDetails.data.customization.description.match(
-            /\d+\s*x\s*(.+)/
-          );
-        if (match) ticketType = match[1].trim();
+      // Map internal status to frontend expected status
+      // Frontend expects: "COMPLETED" for success
+      let status = payment.status;
+      let ticketId = null;
+
+      if (status === "PAID") {
+        status = "COMPLETED";
+        // Find the ticket associated with this transaction
+        const ticket = await Ticket.findOne({ paymentReference: txn });
+        if (ticket) {
+          ticketId = ticket.ticketId;
+        }
       }
 
-      const purchaseData = {
-        eventId: paymentInfo.eventId,
-        ticketType,
-        quantity: paymentInfo.quantity,
-        userId: paymentInfo.userId,
-        transactionReference: trx_ref,
-        referenceId: ref_id,
-      };
-
-      const ticketResult = await paymentService.completeTicketPurchase(
-        purchaseData
-      );
-
-      const successUrl = `${
-        process.env.NEXT_PUBLIC_FRONTEND_URL ||
-        process.env.FRONTEND_URL ||
-        "http://localhost:3000"
-      }/payment/success?id=${paymentInfo.eventId}&quantity=${
-        paymentInfo.quantity
-      }&ticketType=${encodeURIComponent(
-        ticketType || "Regular"
-      )}&tx_ref=${trx_ref}`;
-      res.redirect(successUrl);
-    });
-  }
-
-  async verifyTransaction(req, res) {
-    this.handleErrors(res, async () => {
-      const { tx_ref } = req.params;
-      const result = await paymentService.verifyTransaction(tx_ref);
-      res.status(StatusCodes.OK).json(result);
-    });
-  }
-
-  handleErrors(res, fn) {
-    fn().catch((error) => {
-      res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json({
-        success: false,
-        error: error.message,
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        status: status,
+        transactionId: payment.transactionId,
+        ticketId: ticketId,
       });
-    });
+    } catch (error) {
+      console.error("Check payment status error:", error);
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        error: "Failed to check payment status",
+      });
+    }
   }
 }
 

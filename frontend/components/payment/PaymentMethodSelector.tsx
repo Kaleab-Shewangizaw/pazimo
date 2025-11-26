@@ -12,20 +12,25 @@ interface PaymentMethodSelectorProps {
 
 const PAYMENT_METHODS = [
   {
-    id: "telebirr",
+    id: "Telebirr",
     name: "Telebirr",
     description: "Telebirr is a mobile money service provider in Ethiopia",
     image: "/Telebirr.png",
   },
-
-  { id: "cbebirr", name: "CBE Birr", image: "/cbe_birr.png" },
-  { id: "mpesa", name: "M-Pesa", image: "/M-PESA_LOGO.png" },
-  { id: "awashbirr", name: "Awash Birr", image: "/Awash birr.jpeg" },
-  { id: "abyssinia", name: "Bank of Abyssinia", image: "/abissinia.png" },
   {
-    id: "coop",
-    name: "Cooperative Bank of Oromia",
-    image: "/Cooperative_Bank_of_Oromia.png",
+    id: "Commercial Bank of Ethiopia",
+    name: "CBE",
+    image: "/cbe_birr.png", // Assuming this image is appropriate for CBE
+  },
+  {
+    id: "Mpesa",
+    name: "M-Pesa",
+    image: "/M-PESA_LOGO.png",
+  },
+  {
+    id: "Awash Bank",
+    name: "Awash Bank",
+    image: "/Awash birr.jpeg",
   },
 ];
 
@@ -38,8 +43,8 @@ export default function PaymentMethodSelector({
   const isMpesaDisabled = phoneNumber.startsWith("09");
 
   const isDisabled = (methodId: string) => {
-    if (methodId === "telebirr" && isTelebirrDisabled) return true;
-    if (methodId === "mpesa" && isMpesaDisabled) return true;
+    if (methodId === "Telebirr" && isTelebirrDisabled) return true;
+    if (methodId === "Mpesa" && isMpesaDisabled) return true;
     return false;
   };
 
@@ -47,7 +52,7 @@ export default function PaymentMethodSelector({
     <RadioGroup
       value={selectedMethod}
       onValueChange={onSelect}
-      className="grid grid-cols-2 sm:grid-cols-3 gap-4"
+      className="grid grid-cols-2 sm:grid-cols-2 gap-4"
     >
       {PAYMENT_METHODS.map((method) => {
         const disabled = isDisabled(method.id);

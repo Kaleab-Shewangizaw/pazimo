@@ -118,6 +118,7 @@ function EventDetailContent() {
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [shouldShowTicketModal, setShouldShowTicketModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
 
   const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
   const [user, setUser] = useState<User | null>(null);
@@ -301,6 +302,78 @@ function EventDetailContent() {
     }
   };
 
+  const verifyAndShowTickets = async (txRef: string) => {
+    try {
+      // Fetch tickets
+      const ticketsResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/my-tickets`,
+        {
+          headers: {
+            Authorization: `Bearer ${useAuthStore.getState().token}`,
+          },
+        }
+      );
+      if (ticketsResponse.ok) {
+        const ticketsData = await ticketsResponse.json();
+        // Filter tickets for this transaction
+        const newTickets = ticketsData.data.filter(
+          (t: PurchasedTicket) => t.paymentReference === txRef
+        );
+        setPurchasedTickets(newTickets);
+        setShowTicketModal(true);
+        setShouldShowTicketModal(true);
+        toast.success("Payment successful! Your tickets are ready.");
+        // Clean URL if needed
+        router.replace(`/event_detail?id=${eventId || ""}`);
+      }
+    } catch (e) {
+      console.error("Ticket fetch error", e);
+      toast.error("Failed to load tickets");
+    }
+  };
+
+  const pollPaymentStatus = async (txRef: string) => {
+    let attempts = 0;
+    const maxAttempts = 60; // 2 minutes (2s interval)
+
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`
+        );
+        const data = await response.json();
+
+        if (data.status === "COMPLETED" || data.status === "PAID") {
+          clearInterval(interval);
+          setIsWaitingForPayment(false);
+          setShowPaymentModal(false);
+
+          if (data.ticketId) {
+            toast.success("Payment successful! Redirecting to your ticket...");
+            router.push(`/my-account/tickets/${data.ticketId}`);
+          } else {
+            verifyAndShowTickets(txRef);
+          }
+        } else if (data.status === "FAILED") {
+          clearInterval(interval);
+          setIsWaitingForPayment(false);
+          toast.error("Payment failed. Please try again.");
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          setIsWaitingForPayment(false);
+          toast.error(
+            "Payment verification timed out. Please check 'My Tickets' later."
+          );
+        }
+      } catch (e) {
+        console.error("Polling error", e);
+      }
+    }, 2000);
+  };
+
   const handleMobilePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSantimLoading) return;
@@ -369,38 +442,43 @@ function EventDetailContent() {
           ? crypto.randomUUID()
           : `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      const response = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          paymentReason: `Ticket Purchase - ${event?.title}`,
-          phoneNumber: santimForm.phoneNumber,
-          orderId, // Pass the generated ID
-          method: santimForm.paymentMethod,
-          ticketData: {
-            //random id generator
-            ticketId: ticketId,
-            eventId: eventId,
-            ticketTypeId: selectedType._id || selectedType.name,
-            quantity: ticketQuantity,
-            userId: finalUserId,
-            fullName: santimForm.fullName,
-            email: santimForm.email,
-          },
-          successUrl: `${window.location.origin}/my-account/tickets/${ticketId}`,
-        }),
-      });
+      const response = await fetch(
+        process.env.NEXT_PUBLIC_API_URL + "/api/tickets/ticket/initiate",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount,
+            paymentReason: `Ticket Purchase - ${event?.title}`,
+            phoneNumber: santimForm.phoneNumber,
+            orderId, // Pass the generated ID
+            method: santimForm.paymentMethod,
+            ticketDetails: {
+              // Changed from ticketData to ticketDetails to match backend
+              ticketId: ticketId,
+              eventId: eventId,
+              ticketTypeId: selectedType._id || selectedType.name,
+              quantity: ticketQuantity,
+              userId: finalUserId,
+              fullName: santimForm.fullName,
+              email: santimForm.email,
+            },
+            successUrl: `${window.location.origin}/my-account/tickets/${ticketId}`,
+          }),
+        }
+      );
 
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
 
-      if (data.paymentUrl) {
-        // Redirect to SantimPay
-        window.location.href = data.paymentUrl;
+      if (data.transactionId) {
+        setIsSantimLoading(false);
+        setIsWaitingForPayment(true);
+        toast.success("Payment initiated! Please check your phone.");
+        pollPaymentStatus(data.transactionId);
       } else {
-        throw new Error("No payment URL returned");
+        throw new Error("No transaction ID returned");
       }
     } catch (error: any) {
       console.error("Payment error:", error);
@@ -433,28 +511,7 @@ function EventDetailContent() {
 
               if (data.status === "COMPLETED") {
                 verified = true;
-                // Fetch tickets
-                const ticketsResponse = await fetch(
-                  `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/my-tickets`,
-                  {
-                    headers: {
-                      Authorization: `Bearer ${useAuthStore.getState().token}`,
-                    },
-                  }
-                );
-                if (ticketsResponse.ok) {
-                  const ticketsData = await ticketsResponse.json();
-                  // Filter tickets for this transaction
-                  const newTickets = ticketsData.data.filter(
-                    (t: PurchasedTicket) => t.paymentReference === txRef
-                  );
-                  setPurchasedTickets(newTickets);
-                  setShowTicketModal(true);
-                  setShouldShowTicketModal(true);
-                  toast.success("Payment successful! Your tickets are ready.");
-                  // Clean URL
-                  router.replace(`/event_detail?id=${eventId || ""}`);
-                }
+                verifyAndShowTickets(txRef);
               } else {
                 await new Promise((resolve) => setTimeout(resolve, 2000));
                 attempts++;
@@ -1487,6 +1544,26 @@ function EventDetailContent() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Waiting for Payment Modal */}
+      <Dialog open={isWaitingForPayment} onOpenChange={setIsWaitingForPayment}>
+        <DialogContent className="max-w-sm rounded-xl p-6 text-center">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold mb-2">
+              Waiting for Payment
+            </DialogTitle>
+            <DialogDescription>
+              Please check your phone and complete the payment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center py-6">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]"></div>
+          </div>
+          <p className="text-sm text-gray-500">
+            We are waiting for confirmation from the payment provider...
+          </p>
         </DialogContent>
       </Dialog>
     </div>

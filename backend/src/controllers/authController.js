@@ -19,7 +19,7 @@
 //   try {
 //     const user = await User.create(req.body);
 //     const token = signToken(user._id, user.role);
-    
+
 //     res.status(StatusCodes.CREATED).json({
 //       status: 'success',
 //       data: {
@@ -175,7 +175,7 @@
 //     // Update user's phone number
 //     const user = await User.findByIdAndUpdate(
 //       userId,
-//       { 
+//       {
 //         phoneNumber,
 //         isPhoneVerified: false // Reset verification status when phone number changes
 //       },
@@ -333,44 +333,40 @@
 //   verifyPhoneNumber,
 //   isAdmin,
 //   adminLogin,
-// }; 
+// };
 
-
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const { UnauthorizedError } = require('../errors');
-const { StatusCodes } = require('http-status-codes');
-const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const { UnauthorizedError } = require("../errors");
+const { StatusCodes } = require("http-status-codes");
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
 const signToken = (id, role) => {
   if (!process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET is not defined in environment variables');
+    throw new Error("JWT_SECRET is not defined in environment variables");
   }
-  return jwt.sign(
-    { id, role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
+  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  });
 };
 
 // Configure nodemailer
 const createTransporter = () => {
   return nodemailer.createTransport({
-    service: 'gmail',
+    service: "gmail",
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
+      pass: process.env.EMAIL_PASS,
+    },
   });
 };
-
 
 // Forgot Password
 // const forgotPassword = async (req, res) => {
 //   try {
 //     const { email } = req.body;
-    
+
 //     const user = await User.findOne({ email });
 //     if (!user) {
 //       return res.status(StatusCodes.NOT_FOUND).json({
@@ -390,7 +386,7 @@ const createTransporter = () => {
 
 //     // Send email
 //     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+
 //     const transporter = createTransporter();
 //     const mailOptions = {
 //       from: process.env.EMAIL_USER,
@@ -419,14 +415,13 @@ const createTransporter = () => {
 //   }
 // };
 
-
 // Forgot Password - NO EMAIL VERSION
 // const forgotPassword = async (req, res) => {
 //   try {
 //     const { email } = req.body;
-    
+
 //     console.log('Forgot password request for:', email);
-    
+
 //     const user = await User.findOne({ email });
 //     if (!user) {
 //       return res.status(404).json({
@@ -444,7 +439,7 @@ const createTransporter = () => {
 //     await user.save({ validateBeforeSave: false });
 
 //     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+
 //     // Just log the URL - NO EMAIL SENDING
 //     console.log('=================================');
 //     console.log('PASSWORD RESET URL:', resetURL);
@@ -468,9 +463,9 @@ const createTransporter = () => {
 // const forgotPassword = async (req, res) => {
 //   try {
 //     const { email } = req.body;
-    
+
 //     console.log('Forgot password request for:', email);
-    
+
 //     const user = await User.findOne({ email });
 //     if (!user) {
 //       return res.status(404).json({
@@ -488,7 +483,7 @@ const createTransporter = () => {
 //     await user.save({ validateBeforeSave: false });
 
 //     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+
 //     // Send email using Ethereal
 //     const testAccount = await nodemailer.createTestAccount();
 //     const transporter = nodemailer.createTransport({
@@ -522,7 +517,7 @@ const createTransporter = () => {
 //     };
 
 //     const info = await transporter.sendMail(mailOptions);
-    
+
 //     // Log preview URL for testing
 //     console.log('=================================');
 //     console.log('EMAIL PREVIEW URL:', nodemailer.getTestMessageUrl(info));
@@ -545,19 +540,22 @@ const createTransporter = () => {
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
-    
-    console.log('Forgot password request for:', email);
-    
+
+    console.log("Forgot password request for:", email);
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({
-        status: 'error',
-        message: 'No user found with that email address'
+        status: "error",
+        message: "No user found with that email address",
       });
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const passwordResetToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
     const passwordResetExpires = Date.now() + 10 * 60 * 1000;
 
     user.passwordResetToken = passwordResetToken;
@@ -565,20 +563,20 @@ const forgotPassword = async (req, res) => {
     await user.save({ validateBeforeSave: false });
 
     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+
     // Use Gmail
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      service: "gmail",
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
+        pass: process.env.EMAIL_PASS,
+      },
     });
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: user.email,
-      subject: 'Password Reset Request - PAZ',
+      subject: "Password Reset Request - PAZ",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #333; text-align: center;">Password Reset Request</h2>
@@ -594,13 +592,13 @@ const forgotPassword = async (req, res) => {
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
           <p style="color: #666; font-size: 12px;">This email was sent from PAZ Event Management System.</p>
         </div>
-      `
+      `,
     };
 
     // Send response immediately
     res.status(200).json({
-      status: 'success',
-      message: 'Password reset email sent successfully'
+      status: "success",
+      message: "Password reset email sent successfully",
     });
 
     // Send email in background
@@ -608,14 +606,14 @@ const forgotPassword = async (req, res) => {
       try {
         await transporter.sendMail(mailOptions);
       } catch (emailError) {
-        console.error('Failed to send email:', emailError);
+        console.error("Failed to send email:", emailError);
       }
     });
   } catch (error) {
-    console.error('Forgot password error:', error);
+    console.error("Forgot password error:", error);
     res.status(500).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 };
@@ -624,18 +622,18 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { token, password } = req.body;
-    
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
-    
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
     const user = await User.findOne({
       passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() }
+      passwordResetExpires: { $gt: Date.now() },
     });
 
     if (!user) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        message: 'Token is invalid or has expired'
+        status: "error",
+        message: "Token is invalid or has expired",
       });
     }
 
@@ -647,38 +645,35 @@ const resetPassword = async (req, res) => {
     const authToken = signToken(user._id, user.role);
 
     res.status(StatusCodes.OK).json({
-      status: 'success',
-      message: 'Password reset successfully',
+      status: "success",
+      message: "Password reset successfully",
       data: {
         user: {
           _id: user._id,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
-          role: user.role
+          role: user.role,
         },
-        token: authToken
-      }
+        token: authToken,
+      },
     });
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 };
-
-
-
 
 // Register user
 const register = async (req, res) => {
   try {
     const user = await User.create(req.body);
     const token = signToken(user._id, user.role);
-    
+
     res.status(StatusCodes.CREATED).json({
-      status: 'success',
+      status: "success",
       data: {
         user: {
           _id: user._id,
@@ -692,7 +687,7 @@ const register = async (req, res) => {
     });
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({
-      status: 'error',
+      status: "error",
       message: error.message,
     });
   }
@@ -704,22 +699,23 @@ const login = async (req, res) => {
     const { email, password } = req.body;
 
     // Find user
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      throw new UnauthorizedError('Invalid credentials');
+      throw new UnauthorizedError("Invalid credentials");
     }
 
     // Check password
     const isPasswordCorrect = await user.comparePassword(password);
     if (!isPasswordCorrect) {
-      throw new UnauthorizedError('Invalid credentials');
+      throw new UnauthorizedError("Invalid credentials");
     }
 
     // Check if user is active
     if (!user.isActive) {
       return res.status(StatusCodes.FORBIDDEN).json({
-        status: 'error',
-        message: 'Your account is not active. Please contact your administrator.'
+        status: "error",
+        message:
+          "Your account is not active. Please contact your administrator.",
       });
     }
 
@@ -727,7 +723,7 @@ const login = async (req, res) => {
     const token = signToken(user._id, user.role);
 
     res.status(StatusCodes.OK).json({
-      status: 'success',
+      status: "success",
       data: {
         user: {
           _id: user._id,
@@ -735,14 +731,14 @@ const login = async (req, res) => {
           lastName: user.lastName,
           email: user.email,
           role: user.role,
-          isActive: user.isActive
+          isActive: user.isActive,
         },
         token,
       },
     });
   } catch (error) {
     res.status(StatusCodes.UNAUTHORIZED).json({
-      status: 'error',
+      status: "error",
       message: error.message,
     });
   }
@@ -751,14 +747,14 @@ const login = async (req, res) => {
 // Get current user
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
+    const user = await User.findById(req.user._id).select("-password");
     res.status(StatusCodes.OK).json({
-      status: 'success',
+      status: "success",
       data: user,
     });
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({
-      status: 'error',
+      status: "error",
       message: error.message,
     });
   }
@@ -773,7 +769,7 @@ const updatePassword = async (req, res) => {
     // Check current password
     const isPasswordCorrect = await user.comparePassword(currentPassword);
     if (!isPasswordCorrect) {
-      throw new UnauthorizedError('Current password is incorrect');
+      throw new UnauthorizedError("Current password is incorrect");
     }
 
     // Update password
@@ -781,12 +777,12 @@ const updatePassword = async (req, res) => {
     await user.save();
 
     res.status(StatusCodes.OK).json({
-      status: 'success',
-      message: 'Password updated successfully',
+      status: "success",
+      message: "Password updated successfully",
     });
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({
-      status: 'error',
+      status: "error",
       message: error.message,
     });
   }
@@ -817,17 +813,17 @@ const updatePassword = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, email, phoneNumber } = req.body;
-    
+
     // Check if email is already taken by another user
-    const existingUser = await User.findOne({ 
-      email, 
-      _id: { $ne: req.user._id } 
+    const existingUser = await User.findOne({
+      email,
+      _id: { $ne: req.user._id },
     });
-    
+
     if (existingUser) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Email is already taken'
+        status: "error",
+        message: "Email is already taken",
       });
     }
 
@@ -835,15 +831,15 @@ const updateProfile = async (req, res) => {
       req.user._id,
       { firstName, lastName, email, phoneNumber },
       { new: true, runValidators: true }
-    ).select('-password');
+    ).select("-password");
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: user,
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
+      status: "error",
       message: error.message,
     });
   }
@@ -859,17 +855,17 @@ const updatePhoneNumber = async (req, res) => {
     const existingUser = await User.findOne({ phoneNumber });
     if (existingUser && existingUser._id.toString() !== userId) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Phone number already registered'
+        status: "error",
+        message: "Phone number already registered",
       });
     }
 
     // Update user's phone number
     const user = await User.findByIdAndUpdate(
       userId,
-      { 
+      {
         phoneNumber,
-        isPhoneVerified: false // Reset verification status when phone number changes
+        isPhoneVerified: false, // Reset verification status when phone number changes
       },
       { new: true, runValidators: true }
     );
@@ -877,13 +873,13 @@ const updatePhoneNumber = async (req, res) => {
     user.password = undefined;
 
     res.status(200).json({
-      status: 'success',
-      data: { user }
+      status: "success",
+      data: { user },
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 };
@@ -900,8 +896,8 @@ const verifyPhoneNumber = async (req, res) => {
 
     if (!isValidCode) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Invalid verification code'
+        status: "error",
+        message: "Invalid verification code",
       });
     }
 
@@ -915,13 +911,13 @@ const verifyPhoneNumber = async (req, res) => {
     user.password = undefined;
 
     res.status(200).json({
-      status: 'success',
-      data: { user }
+      status: "success",
+      data: { user },
     });
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 };
@@ -936,19 +932,19 @@ const adminLogin = async (req, res) => {
     if (!email || !password) {
       // console.log('Missing email or password'); // Debug log
       return res.status(400).json({
-        status: 'error',
-        message: 'Please provide email and password'
+        status: "error",
+        message: "Please provide email and password",
       });
     }
 
     // Check if user exists && password is correct
-    const user = await User.findOne({ email }).select('+password');
+    const user = await User.findOne({ email }).select("+password");
     // console.log('Found user:', user ? 'Yes' : 'No'); // Debug log
 
     if (!user) {
       return res.status(401).json({
-        status: 'error',
-        message: 'Incorrect email or password'
+        status: "error",
+        message: "Incorrect email or password",
       });
     }
 
@@ -957,17 +953,17 @@ const adminLogin = async (req, res) => {
 
     if (!isPasswordCorrect) {
       return res.status(401).json({
-        status: 'error',
-        message: 'Incorrect email or password'
+        status: "error",
+        message: "Incorrect email or password",
       });
     }
 
     // Check if user is admin or partner
-    if (user.role !== 'admin' && user.role !== 'partner') {
+    if (user.role !== "admin" && user.role !== "partner") {
       // console.log('User role:', user.role); // Debug log
       return res.status(403).json({
-        status: 'error',
-        message: 'Access denied. Admin or partner privileges required.'
+        status: "error",
+        message: "Access denied. Admin or partner privileges required.",
       });
     }
 
@@ -984,15 +980,15 @@ const adminLogin = async (req, res) => {
     // console.log('Login successful for admin:', user.email); // Debug log
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       token,
-      data: { user }
+      data: { user },
     });
   } catch (error) {
-    console.error('Admin login error:', error);
+    console.error("Admin login error:", error);
     res.status(400).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 };
@@ -1000,23 +996,20 @@ const adminLogin = async (req, res) => {
 // Add admin middleware
 const isAdmin = async (req, res, next) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'partner') {
+    if (req.user.role !== "admin" && req.user.role !== "partner") {
       return res.status(403).json({
-        status: 'error',
-        message: 'Access denied. Admin or partner privileges required.'
+        status: "error",
+        message: "Access denied. Admin or partner privileges required.",
       });
     }
     next();
   } catch (error) {
     res.status(400).json({
-      status: 'error',
-      message: error.message
+      status: "error",
+      message: error.message,
     });
   }
 };
-
-
-
 
 // ... keep all existing functions (register, login, getMe, etc.)
 
@@ -1024,45 +1017,46 @@ const isAdmin = async (req, res, next) => {
 const sendOtp = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
-    
-    const response = await fetch(`https://api.geezsms.com/api/v1/sms/otp?token=aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw&shortcode_id=825&phone=${phoneNumber}`);
+
+    const response = await fetch(
+      `https://api.geezsms.com/api/v1/sms/otp?token=aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw&shortcode_id=825&phone=${phoneNumber}`
+    );
     const result = await response.json();
-    
+
     if (result.error || result.data?.error !== false) {
       return res.status(400).json({
         error: true,
-        message: 'Failed to send OTP'
+        message: "Failed to send OTP",
       });
     }
-    
+
     res.status(200).json({
       error: false,
       code: result.code,
-      message: 'OTP sent successfully'
+      message: "OTP sent successfully",
     });
   } catch (error) {
     res.status(500).json({
       error: true,
-      message: error.message
+      message: error.message,
     });
   }
 };
-
 
 // Unified auth for ticket purchase
 const unifiedAuth = async (req, res) => {
   try {
     const { fullName, email, phoneNumber } = req.body;
-    
-    console.log('=== UNIFIED AUTH DEBUG ===');
-    console.log('Request body:', { fullName, email, phoneNumber });
+
+    console.log("=== UNIFIED AUTH DEBUG ===");
+    console.log("Request body:", { fullName, email, phoneNumber });
 
     // Validate required fields
     if (!fullName || !phoneNumber) {
-      console.log('Validation failed: missing required fields');
+      console.log("Validation failed: missing required fields");
       return res.status(400).json({
-        status: 'error',
-        message: 'Full name and phone number are required'
+        status: "error",
+        message: "Full name and phone number are required",
       });
     }
 
@@ -1073,75 +1067,76 @@ const unifiedAuth = async (req, res) => {
     const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
     if (nameParts.length < 2) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Please enter your full name (first and last name)'
+        status: "error",
+        message: "Please enter your full name (first and last name)",
       });
     }
     const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(' ');
+    const lastName = nameParts.slice(1).join(" ");
 
     // Check if user exists by email or phone number
     let existingUser = null;
-    
+
     // If email is provided, try to find by email first
     if (email && email.trim()) {
-      console.log('Searching for user by email:', email);
-      existingUser = await User.findOne({ email }).select('+password');
-      console.log('User found by email:', existingUser ? 'Yes' : 'No');
+      console.log("Searching for user by email:", email);
+      existingUser = await User.findOne({ email }).select("+password");
+      console.log("User found by email:", existingUser ? "Yes" : "No");
     }
-    
+
     // If not found by email or no email provided, try to find by phone number
     if (!existingUser) {
-      console.log('Searching for user by phone number:', phoneNumber);
-      existingUser = await User.findOne({ phoneNumber }).select('+password');
-      console.log('User found by phone:', existingUser ? 'Yes' : 'No');
+      console.log("Searching for user by phone number:", phoneNumber);
+      existingUser = await User.findOne({ phoneNumber }).select("+password");
+      console.log("User found by phone:", existingUser ? "Yes" : "No");
     }
-    
+
     if (existingUser) {
-      console.log('Existing user found:', {
+      console.log("Existing user found:", {
         id: existingUser._id,
         email: existingUser.email,
         phoneNumber: existingUser.phoneNumber,
         firstName: existingUser.firstName,
-        lastName: existingUser.lastName
+        lastName: existingUser.lastName,
       });
-      
+
       // User exists, try to login with phone number as password
-      console.log('Comparing password (phone number):', phoneNumber);
+      console.log("Comparing password (phone number):", phoneNumber);
       const isPasswordCorrect = await existingUser.comparePassword(password);
-      console.log('Password comparison result:', isPasswordCorrect);
-      
+      console.log("Password comparison result:", isPasswordCorrect);
+
       if (!isPasswordCorrect) {
-        console.log('Password comparison failed');
+        console.log("Password comparison failed");
         return res.status(401).json({
-          status: 'error',
-          message: 'Invalid credentials. Please check your phone number.'
+          status: "error",
+          message: "Invalid credentials. Please check your phone number.",
         });
       }
 
       // Check if user is active
       if (!existingUser.isActive) {
         return res.status(403).json({
-          status: 'error',
-          message: 'Your account is not active. Please contact your administrator.'
+          status: "error",
+          message:
+            "Your account is not active. Please contact your administrator.",
         });
       }
 
       // Update email if different and email is provided (user found by phone number but provided different email)
       if (email && email.trim() && existingUser.email !== email) {
         // Check if new email is already taken
-        const emailExists = await User.findOne({ 
-          email, 
-          _id: { $ne: existingUser._id } 
+        const emailExists = await User.findOne({
+          email,
+          _id: { $ne: existingUser._id },
         });
-        
+
         if (emailExists) {
           return res.status(400).json({
-            status: 'error',
-            message: 'Email is already registered to another account'
+            status: "error",
+            message: "Email is already registered to another account",
           });
         }
-        
+
         existingUser.email = email;
         await existingUser.save({ validateBeforeSave: false });
       }
@@ -1149,18 +1144,18 @@ const unifiedAuth = async (req, res) => {
       // Update phone number if different
       if (existingUser.phoneNumber !== phoneNumber) {
         // Check if new phone number is already taken
-        const phoneExists = await User.findOne({ 
-          phoneNumber, 
-          _id: { $ne: existingUser._id } 
+        const phoneExists = await User.findOne({
+          phoneNumber,
+          _id: { $ne: existingUser._id },
         });
-        
+
         if (phoneExists) {
           return res.status(400).json({
-            status: 'error',
-            message: 'Phone number is already registered to another account'
+            status: "error",
+            message: "Phone number is already registered to another account",
           });
         }
-        
+
         existingUser.phoneNumber = phoneNumber;
         existingUser.isPhoneVerified = false; // Reset verification
         await existingUser.save({ validateBeforeSave: false });
@@ -1174,8 +1169,8 @@ const unifiedAuth = async (req, res) => {
       const token = signToken(existingUser._id, existingUser.role);
 
       res.status(200).json({
-        status: 'success',
-        message: 'Login successful',
+        status: "success",
+        message: "Login successful",
         data: {
           user: {
             _id: existingUser._id,
@@ -1184,20 +1179,20 @@ const unifiedAuth = async (req, res) => {
             email: existingUser.email,
             phoneNumber: existingUser.phoneNumber,
             role: existingUser.role,
-            isActive: existingUser.isActive
+            isActive: existingUser.isActive,
           },
           token,
         },
       });
     } else {
       // User doesn't exist, create new account
-      
+
       // Check if phone number is already taken
       const phoneExists = await User.findOne({ phoneNumber });
       if (phoneExists) {
         return res.status(400).json({
-          status: 'error',
-          message: 'Phone number is already registered'
+          status: "error",
+          message: "Phone number is already registered",
         });
       }
 
@@ -1208,17 +1203,17 @@ const unifiedAuth = async (req, res) => {
         email: email || `user_${phoneNumber}@temp.com`, // Use temp email if none provided
         phoneNumber,
         password,
-        role: 'customer',
+        role: "customer",
         isActive: true,
-        isPhoneVerified: false
+        isPhoneVerified: false,
       });
 
       // Generate token
       const token = signToken(newUser._id, newUser.role);
 
       res.status(201).json({
-        status: 'success',
-        message: 'Account created successfully',
+        status: "success",
+        message: "Account created successfully",
         data: {
           user: {
             _id: newUser._id,
@@ -1227,27 +1222,27 @@ const unifiedAuth = async (req, res) => {
             email: newUser.email,
             phoneNumber: newUser.phoneNumber,
             role: newUser.role,
-            isActive: newUser.isActive
+            isActive: newUser.isActive,
           },
           token,
         },
       });
     }
   } catch (error) {
-    console.error('Unified auth error:', error);
-    
+    console.error("Unified auth error:", error);
+
     // Handle specific MongoDB errors
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({
-        status: 'error',
-        message: `${field} is already registered`
+        status: "error",
+        message: `${field} is already registered`,
       });
     }
-    
+
     res.status(500).json({
-      status: 'error',
-      message: error.message || 'Authentication failed'
+      status: "error",
+      message: error.message || "Authentication failed",
     });
   }
 };
@@ -1256,36 +1251,36 @@ const unifiedAuth = async (req, res) => {
 const deleteAccount = async (req, res) => {
   try {
     const userId = req.user._id;
-    
+
     // Find and delete the user
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
-        status: 'error',
-        message: 'User not found'
+        status: "error",
+        message: "User not found",
       });
     }
 
     // Delete user's tickets
-    const Ticket = require('../models/Ticket');
+    const Ticket = require("../models/Ticket");
     await Ticket.deleteMany({ user: userId });
 
     // Delete user's wishlist items
-    const Wishlist = require('../models/Wishlist');
+    const Wishlist = require("../models/Wishlist");
     await Wishlist.deleteMany({ userId });
 
     // Delete the user account
     await User.findByIdAndDelete(userId);
 
     res.status(200).json({
-      status: 'success',
-      message: 'Account deleted successfully'
+      status: "success",
+      message: "Account deleted successfully",
     });
   } catch (error) {
-    console.error('Delete account error:', error);
+    console.error("Delete account error:", error);
     res.status(500).json({
-      status: 'error',
-      message: error.message || 'Failed to delete account'
+      status: "error",
+      message: error.message || "Failed to delete account",
     });
   }
 };

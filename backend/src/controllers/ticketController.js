@@ -13,6 +13,94 @@ const {
   createEmailTemplate,
 } = require("./invitationEmailController");
 const axios = require("axios");
+const Payment = require("../models/Payment");
+const SantimPayService = require("../services/santimPayService");
+
+const validateSignature = (signature, payload) => {
+  try {
+    if (!signature) return false;
+    SantimPayService.verifyWebhook(signature);
+    return true;
+  } catch (error) {
+    console.error("Signature validation failed:", error.message);
+    return false;
+  }
+};
+
+// Helper to process successful payment and create ticket
+const processSuccessfulPayment = async (payment) => {
+  if (payment.status !== "PAID") return null;
+
+  const { eventId, ticketType, seatNumber, userId, ticketCount, ticketId } =
+    payment.ticketDetails;
+
+  // Check if ticket already exists (idempotency)
+  const existingTicket = await Ticket.findOne({ ticketId });
+  if (existingTicket) return existingTicket;
+
+  // Find the event and verify ticket type
+  const event = await Event.findById(eventId);
+  if (!event) {
+    throw new NotFoundError("Event not found");
+  }
+
+  // Find the ticket type in the event
+  const ticketTypeInfo = event.ticketTypes.find(
+    (type) => type.name === ticketType || type._id.toString() === ticketType
+  );
+  if (!ticketTypeInfo) {
+    throw new BadRequestError("Invalid ticket type");
+  }
+
+  // Check if ticket is available
+  if (
+    !ticketTypeInfo.available ||
+    ticketTypeInfo.quantity < (ticketCount || 1)
+  ) {
+    throw new BadRequestError("Ticket type is not available or sold out");
+  }
+
+  // Prepare ticket data
+  const ticketData = {
+    ticketId,
+    event: eventId,
+    ticketType: ticketTypeInfo.name, // Ensure we store the name
+    ticketCount: ticketCount || 1,
+    price: ticketTypeInfo.price * (ticketCount || 1),
+    seatNumber,
+    paymentReference: payment.transactionId,
+    status: "active",
+    paymentStatus: "completed",
+  };
+
+  // Handle User vs Guest
+  if (userId) {
+    ticketData.user = userId;
+  } else {
+    // If no user, treat as guest ticket (invitation style)
+    ticketData.isInvitation = true;
+    ticketData.guestName = payment.guestName || "Guest";
+    ticketData.guestPhone = payment.contact;
+    if (payment.ticketDetails && payment.ticketDetails.email) {
+      ticketData.guestEmail = payment.ticketDetails.email;
+    }
+  }
+
+  // Create the ticket
+  const ticket = await Ticket.create(ticketData);
+
+  // Update event ticket quantity
+  ticketTypeInfo.quantity -= ticketCount || 1;
+  await event.save();
+
+  // If user exists, add ticket to user's history (optional but good practice)
+  if (userId) {
+    const User = require("../models/User");
+    await User.findByIdAndUpdate(userId, { $push: { tickets: ticket._id } });
+  }
+
+  return ticket;
+};
 
 // Admin: Get all tickets with totals
 // const getAllTicketsAdmin = async (req, res) => {
@@ -98,44 +186,43 @@ const getAllTicketsAdmin = async (req, res) => {
 
 // Create a new ticket
 const createTicket = async (req, res) => {
-  const { eventId, ticketType, seatNumber, userId, ticketCount, ticketId } =
-    req.body;
+  const payload = req.body;
+  const transactionId = payload.id || payload.txnId; // depends on SantimPay
 
-  // Find the event and verify ticket type
-  const event = await Event.findById(eventId);
-  if (!event) {
-    throw new NotFoundError("Event not found");
+  // Validate signature / token sent by SantimPay
+  const signature = req.get("Signed-Token");
+  if (!validateSignature(signature, payload)) {
+    return res.status(400).send("Invalid signature");
   }
 
-  // Find the ticket type in the event
-  const ticketTypeInfo = event.ticketTypes.find(
-    (type) => type.name === ticketType
-  );
-  if (!ticketTypeInfo) {
-    throw new BadRequestError("Invalid ticket type");
+  const payment = await Payment.findOne({ transactionId });
+  if (!payment) {
+    return res.status(404).send("Payment record not found");
   }
 
-  // Check if ticket is available
-  if (!ticketTypeInfo.available || ticketTypeInfo.quantity <= 0) {
-    throw new BadRequestError("Ticket type is not available");
+  // Update payment status
+  if (
+    payload.status ===
+    "COMPLETED" /* or whatever SantimPay’s success status is */
+  ) {
+    payment.status = "PAID";
+  } else {
+    payment.status = "FAILED";
   }
 
-  // Create the ticket
-  const ticket = await Ticket.create({
-    ticketId,
-    event: eventId.populate("Event"),
-    user: userId.populate("User"),
-    ticketType,
-    ticketCount,
-    price: ticketTypeInfo.price,
-    seatNumber,
-  });
+  await payment.save();
 
-  // Update event ticket quantity
-  ticketTypeInfo.quantity -= 1;
-  await event.save();
-
-  res.status(StatusCodes.CREATED).json({ ticket });
+  if (payment.status === "PAID") {
+    try {
+      const ticket = await processSuccessfulPayment(payment);
+      res.status(StatusCodes.CREATED).json({ ticket });
+    } catch (error) {
+      console.error("Error processing successful payment:", error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).send(error.message);
+    }
+  } else {
+    res.status(StatusCodes.OK).send("Payment failed/cancelled");
+  }
 };
 
 // Create a guest ticket (Pending Payment)
@@ -955,4 +1042,5 @@ module.exports = {
   sendGuestInvitation,
   processGuestInvitation,
   confirmRSVP,
+  processSuccessfulPayment,
 };

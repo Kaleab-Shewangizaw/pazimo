@@ -1,12 +1,15 @@
-import axios from "axios";
-import { signES256 } from "./utils/cryptography.js";
+const axios = require("axios");
+const https = require("https");
 
-import { PRODUCTION_BASE_URL, TEST_BASE_URL } from "./utils/constants.js";
+const signES256 = require("./utils/cryptography.js").signES256;
+
+const PRODUCTION_BASE_URL = "https://services.santimpay.com/api/v1/gateway";
+const TEST_BASE_URL = "https://sandbox.santimpay.com/api/v1/gateway";
 
 const merchentId = process.env.SANTIM_PAY_MERCHANT_ID;
 const privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
 
-export class SantimpaySdk {
+module.exports = class SantimpaySdk {
   constructor(merchantId, privateKey, testBed = false) {
     this.privateKey = privateKey;
     this.merchantId = merchantId;
@@ -97,13 +100,10 @@ export class SantimpaySdk {
 
       const response = await axios.post(
         `${this.baseUrl}/initiate-payment`,
-        payload
-
-        // {
-        // headers: {
-        //   Authorization: `Bearer ${this.token}`
-        // }
-        // }
+        payload,
+        {
+          httpsAgent: new https.Agent({ family: 4 }),
+        }
       );
 
       if (response.status === 200) {
@@ -150,7 +150,10 @@ export class SantimpaySdk {
 
       const response = await axios.post(
         `${this.baseUrl}/payout-transfer`,
-        payload
+        payload,
+        {
+          httpsAgent: new https.Agent({ family: 4 }),
+        }
       );
 
       if (response.status === 200) {
@@ -217,13 +220,10 @@ export class SantimpaySdk {
 
       const response = await axios.post(
         `${this.baseUrl}/direct-payment`,
-        payload
-
-        // {
-        // headers: {
-        //   Authorization: `Bearer ${this.token}`
-        // }
-        // }
+        payload,
+        {
+          httpsAgent: new https.Agent({ family: 4 }),
+        }
       );
 
       if (response.status === 200) {
@@ -255,12 +255,10 @@ export class SantimpaySdk {
           id,
           merchantId: this.merchantId,
           signedToken: token,
+        },
+        {
+          httpsAgent: new https.Agent({ family: 4 }),
         }
-        // {
-        // headers: {
-        //   Authorization: `Bearer ${this.token}`
-        // }
-        // }
       );
 
       if (response.status === 200) {
@@ -275,6 +273,4 @@ export class SantimpaySdk {
       throw error;
     }
   }
-}
-
-export default SantimpaySdk;
+};

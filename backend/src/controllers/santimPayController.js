@@ -220,6 +220,15 @@ const generateTicketsForTransaction = async (transaction) => {
             ticketCount: qty, // Store the quantity
             ticketId: meta.ticketId || undefined, // Use the pre-generated ticketId if available
           });
+
+          // Handle Guest Details if no user
+          if (!userId) {
+            ticket.isInvitation = true;
+            ticket.guestName = meta.fullName || "Guest";
+            ticket.guestPhone = meta.phoneNumber;
+            ticket.guestEmail = meta.email;
+          }
+
           await ticket.save();
 
           // Add ticket to user if userId exists
