@@ -30,6 +30,7 @@ import { Button } from "./ui/button";
 import FileUploadComponent from "./DocumentPreview";
 import BulkInvite from "./bulkInviteModel";
 import { useRouter, useSearchParams } from "next/navigation";
+import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
 interface Event {
   id: number;
@@ -261,6 +262,12 @@ export default function InvitationPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
   const [pendingInvitation, setPendingInvitation] = useState<any>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] =
+    useState("Telebirr");
+  const [payerPhone, setPayerPhone] = useState("");
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
+    null
+  );
 
   useEffect(() => {
     setIsMounted(true);
@@ -1062,8 +1069,45 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
   const smsCost = smsInvitations * pricing.sms;
   const totalCost = emailCost + smsCost;
 
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, [pollingInterval]);
+
+  const pollPaymentStatus = async (transactionId: string) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/status/${transactionId}`
+      );
+      const data = await response.json();
+
+      if (data.success && data.status === "PAID") {
+        if (pollingInterval) clearInterval(pollingInterval);
+        setPollingInterval(null);
+        setIsSantimLoading(false);
+        setShowPaymentModal(false);
+        setPendingInvitation(null);
+
+        toast.success("Payment successful! Invitations sent.");
+        fetchSentInvitations(); // Refresh list
+      } else if (data.status === "FAILED") {
+        if (pollingInterval) clearInterval(pollingInterval);
+        setPollingInterval(null);
+        setIsSantimLoading(false);
+        toast.error("Payment failed. Please try again.");
+      }
+    } catch (error) {
+      console.error("Polling error:", error);
+    }
+  };
+
   const handleSantimPayment = async () => {
     if (!pendingInvitation) return;
+    if (!payerPhone) {
+      toast.error("Please enter a payer phone number");
+      return;
+    }
 
     setIsSantimLoading(true);
     try {
@@ -1074,29 +1118,42 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
         contactType === "email" ? pricing.email : pricing.sms;
       const amount = pricePerInvite * (qrCodeCount || 1);
 
-      const response = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          paymentReason: `Invitation for ${selectedEvent?.title}`,
-          phoneNumber: contactType === "phone" ? contact : undefined,
-          invitationData: {
-            ...pendingInvitation,
-            eventId: selectedEvent?.id,
-            organizerId: localStorage.getItem("userId"),
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/initiate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-        }),
-      });
+          body: JSON.stringify({
+            amount,
+            paymentReason: `Invitation for ${selectedEvent?.title}`,
+            phoneNumber: payerPhone,
+            invitationData: {
+              ...pendingInvitation,
+              selectedEvent: {
+                id: selectedEvent?.id,
+                title: selectedEvent?.title,
+              },
+              organizerId: localStorage.getItem("userId"),
+            },
+          }),
+        }
+      );
 
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
 
-      if (data.paymentUrl) {
-        window.location.href = data.paymentUrl;
+      if (data.transactionId) {
+        // Start Polling
+        const interval = setInterval(() => {
+          pollPaymentStatus(data.transactionId);
+        }, 3000);
+        setPollingInterval(interval);
       } else {
-        throw new Error("No payment URL returned");
+        throw new Error("No transaction ID returned");
       }
     } catch (error: any) {
       console.error("Payment error:", error);
@@ -2483,6 +2540,30 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                     ETB
                   </span>
                 </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payer Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={payerPhone}
+                  onChange={(e) => setPayerPhone(e.target.value)}
+                  placeholder="Enter phone number to charge (e.g., 09...)"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Payment Method
+                </label>
+                <PaymentMethodSelector
+                  phoneNumber={payerPhone}
+                  selectedMethod={selectedPaymentMethod}
+                  onSelect={setSelectedPaymentMethod}
+                />
               </div>
 
               <Button

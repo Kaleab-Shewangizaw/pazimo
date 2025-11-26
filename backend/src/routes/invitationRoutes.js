@@ -11,6 +11,24 @@ const {
   createPendingInvitation,
 } = require("../controllers/invitationController");
 
+const {
+  initiateInvitationPayment,
+  checkInvitationPaymentStatus,
+  invitationWebhook,
+} = require("../controllers/invitationPaymentController");
+
+// Invitation Payment Routes
+router.post(
+  "/invitations/payment/initiate",
+  protect,
+  initiateInvitationPayment
+);
+router.get(
+  "/invitations/payment/status/:transactionId",
+  checkInvitationPaymentStatus
+);
+router.post("/invitations/payment/webhook", invitationWebhook);
+
 // Create pending invitation (Single)
 router.post("/invitations/pending", protect, createPendingInvitation);
 

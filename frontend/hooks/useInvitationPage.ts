@@ -20,6 +20,9 @@ export function useInvitationPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
   const [payingPhoneNumber, setPayingPhoneNumber] = useState<string>("");
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
+    null
+  );
 
   // Data States
   const [events, setEvents] = useState<Event[]>([]);
@@ -141,6 +144,39 @@ export function useInvitationPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
+  }, [pollingInterval]);
+
+  const pollPaymentStatus = async (transactionId: string) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/status/${transactionId}`
+      );
+      const data = await response.json();
+
+      if (data.success && data.status === "PAID") {
+        if (pollingInterval) clearInterval(pollingInterval);
+        setPollingInterval(null);
+        setIsSantimLoading(false);
+        setShowPaymentModal(false);
+        setPendingInvitation(null);
+
+        toast.success("Payment successful! Invitations sent.");
+        fetchSentInvitations(); // Refresh list
+      } else if (data.status === "FAILED") {
+        if (pollingInterval) clearInterval(pollingInterval);
+        setPollingInterval(null);
+        setIsSantimLoading(false);
+        toast.error("Payment failed. Please try again.");
+      }
+    } catch (error) {
+      console.error("Polling error:", error);
+    }
+  };
 
   const fetchPricing = async (eventType: string) => {
     try {
@@ -772,83 +808,55 @@ export function useInvitationPage() {
         return;
       }
 
-      // 1. Create Guest Ticket
-      const createResult = await createGuestTicket({
-        eventId: invitationData.selectedEvent?.id,
-        guestName: invitationData.customerName,
-        guestEmail:
-          invitationData.contactType === "email" ? invitationData.contact : "",
-        guestPhone:
-          invitationData.contactType === "phone" ? invitationData.contact : "",
-        ticketType: "General",
-        ticketCount: invitationData.qrCodeCount,
-        message: invitationData.message,
-      });
-
-      if (!createResult.success) {
-        throw new Error(
-          createResult.message || "Failed to create guest ticket"
-        );
-      }
-
-      const ticketId = createResult.ticketId;
-
       // Calculate cost
       let cost = 0;
       if (invitationData.contactType === "email") cost = pricing.email;
       if (invitationData.contactType === "phone") cost = pricing.sms;
+      const amount = cost * (invitationData.qrCodeCount || 1);
 
-      // Ensure minimum amount for testing if needed, but use real cost
-      if (cost <= 0) cost = 1; // Fallback or handle free?
-
-      const orderId = `inv_${Date.now()}_${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-
-      // 2. Initiate Payment with Ticket ID
-      const response = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount: cost,
-          paymentReason: "Professional Invitation Delivery",
-          phoneNumber,
-          method: paymentMethod,
-          orderId,
-          invitationData: {
-            type: "professional_invitation",
-            ticketId: ticketId, // Pass ticketId
-            invitationId: ticketId, // Use ticketId as invitationId
-            eventId: invitationData.selectedEvent?.id,
-            fullName: invitationData.customerName,
-            email:
-              invitationData.contactType === "email"
-                ? invitationData.contact
-                : "",
-            phoneNumber:
-              invitationData.contactType === "phone"
-                ? invitationData.contact
-                : "",
-            contactType: invitationData.contactType,
-            guestType: invitationData.guestType,
-            quantity: invitationData.qrCodeCount,
-            message: invitationData.message,
-            userId: localStorage.getItem("userId"), // Organizer ID
+      // Initiate Payment with new Direct Payment Endpoint
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/initiate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
-          successUrl: `${window.location.origin}/organizer/invitations?status=success&action=process_payment&orderId=${orderId}`,
-        }),
-      });
+          body: JSON.stringify({
+            amount,
+            paymentReason: `Invitation for ${invitationData.selectedEvent?.title}`,
+            phoneNumber,
+            paymentMethod,
+            invitationData: {
+              ...invitationData,
+              selectedEvent: {
+                id: invitationData.selectedEvent?.id,
+                title: invitationData.selectedEvent?.title,
+              },
+              organizerId: localStorage.getItem("userId"),
+            },
+          }),
+        }
+      );
 
       const data = await response.json();
-      if (data.paymentUrl) {
-        window.location.href = data.paymentUrl;
+      if (!response.ok)
+        throw new Error(data.message || "Payment initiation failed");
+
+      if (data.transactionId) {
+        // Start Polling
+        const interval = setInterval(() => {
+          pollPaymentStatus(data.transactionId);
+        }, 3000);
+        setPollingInterval(interval);
+        toast.info("Payment initiated. Please confirm on your phone.");
       } else {
-        toast.error("Failed to initiate payment");
+        throw new Error("No transaction ID returned");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Payment error:", error);
-      toast.error("Payment failed");
-    } finally {
+      toast.error(error.message || "Payment failed");
       setIsSantimLoading(false);
     }
   };

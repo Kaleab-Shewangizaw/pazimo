@@ -443,6 +443,24 @@ const updateInvitationStatus = async (req, res) => {
     }
 
     invitation.status = status;
+
+    // If declined, delete the associated ticket
+    if (status === "declined") {
+      // Try to find ticket by paymentReference (transactionId)
+      if (invitation.paymentReference) {
+        await Ticket.findOneAndDelete({
+          paymentReference: invitation.paymentReference,
+        });
+      }
+      // Fallback: Try to extract ticketId from rsvpLink
+      else if (invitation.rsvpLink && invitation.rsvpLink.includes("inv=")) {
+        const ticketId = invitation.rsvpLink.split("inv=")[1].split("&")[0];
+        if (ticketId) {
+          await Ticket.findOneAndDelete({ ticketId: ticketId });
+        }
+      }
+    }
+
     await invitation.save();
 
     res.status(StatusCodes.OK).json({

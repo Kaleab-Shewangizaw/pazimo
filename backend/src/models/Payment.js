@@ -10,6 +10,11 @@ const Payment = new mongoose.Schema({
   guestName: String,
   contact: String,
   method: String, // "email" or "sms"
+  invitationType: {
+    type: String, // "guest" or "paid"
+    default: "guest",
+  },
+  message: String, // Optional message from organizer
   price: Number,
   eventId: {
     type: mongoose.Schema.Types.ObjectId,
