@@ -597,7 +597,7 @@ export default function InvitationPage() {
           formattedPhone = "+251" + formattedPhone;
         }
 
-        const smsMessage = `Hi ${customerName}, ${inviteMessage}`;
+        const smsMessage = `Hi ${customerName}\n\nEvent: ${selectedEvent?.title}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRsvp Link: ${qrCodeLink}`;
         success = await sendSMS(formattedPhone, smsMessage);
       }
 
@@ -931,7 +931,7 @@ export default function InvitationPage() {
               formattedPhone = "+251" + formattedPhone;
             }
 
-            const smsMessage = `Hi ${contact.name}, ${inviteMessage}`;
+            const smsMessage = `Hi ${contact.name}\nEvent: ${selectedEvent?.title}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRsvp Link: ${qrCodeLink}`;
             success = await sendSMS(formattedPhone, smsMessage);
           }
 
@@ -1104,11 +1104,15 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
 
         toast.success("Payment successful! Invitations sent.");
         fetchSentInvitations(); // Refresh list
-      } else if (data.status === "FAILED") {
+      } else if (data.status === "FAILED" || data.status === "CANCELLED") {
         if (pollingInterval) clearInterval(pollingInterval);
         setPollingInterval(null);
         setIsSantimLoading(false);
-        toast.error("Payment failed. Please try again.");
+        if (data.status === "CANCELLED") {
+          toast.info("Payment cancelled.");
+        } else {
+          toast.error("Payment failed. Please try again.");
+        }
       }
     } catch (error) {
       console.error("Polling error:", error);

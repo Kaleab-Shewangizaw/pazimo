@@ -367,11 +367,15 @@ export default function EditableTable({
               failed: [],
             });
             setSelectedFile(null);
-          } else if (data.status === "FAILED") {
+          } else if (data.status === "FAILED" || data.status === "CANCELLED") {
             if (interval) clearInterval(interval);
             setPollingInterval(null);
             setIsSantimLoading(false);
-            toast.error("Payment failed. Please try again.");
+            if (data.status === "CANCELLED") {
+              toast.info("Payment cancelled.");
+            } else {
+              toast.error("Payment failed. Please try again.");
+            }
           }
         } catch (error) {
           console.error("Polling error:", error);

@@ -287,7 +287,7 @@ export const processInvitation = async (invitationData: any) => {
         formattedPhone = "+251" + formattedPhone;
       }
 
-      const smsMessage = `Hi ${customerName}, ${inviteMessage}`;
+      const smsMessage = `Hi ${customerName}\n\n${inviteMessage}`;
       success = await sendSMS(formattedPhone, smsMessage);
     }
 

@@ -244,7 +244,13 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
 
       // Send SMS
       if (["sms", "both"].includes(invitation.type) && invitation.guestPhone) {
-        const message = `Hi ${invitation.guestName}, you are invited to ${event.title}. Click here for your ticket: ${rsvpLink}`;
+        const message = `Hi ${invitation.guestName}\n\nEvent: ${
+          event.title
+        }\nTime: ${event.startTime}\nLocation: ${
+          typeof event.location === "string"
+            ? event.location
+            : event.location?.address || "See map"
+        }\n\nRsvp Link: ${rsvpLink}`;
 
         // Call SMS API (GeezSMS)
         let phone = invitation.guestPhone.replace("+", "");
@@ -581,9 +587,13 @@ const createAndSendProfessionalInvitation = async (data) => {
 
     // Send SMS
     if (["sms", "both"].includes(contactType) && guestPhone) {
-      const smsMessage = `Hi ${guestName}, you are invited to ${event.title}. ${
-        message ? message + " " : ""
-      }Click here for your ticket: ${rsvpLink}`;
+      const smsMessage = `Hi ${guestName}\nEvent: ${event.title}\nTime: ${
+        event.startTime
+      }\nLocation: ${
+        typeof event.location === "string"
+          ? event.location
+          : event.location?.address || "See map"
+      }\n\nRsvp Link: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
       // Ensure phone starts with 251

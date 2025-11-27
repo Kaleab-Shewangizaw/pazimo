@@ -107,18 +107,27 @@ const checkInvitationPaymentStatus = async (req, res) => {
     const status = santimStatus.status || santimStatus.paymentStatus;
 
     if (status === "COMPLETED" || status === "SUCCESS") {
-      payment.status = "PAID";
-      payment.santimPayResponse = santimStatus;
-      await payment.save();
+      // Atomic update to prevent race condition
+      const updatedPayment = await Payment.findOneAndUpdate(
+        { transactionId, status: { $ne: "PAID" } },
+        { status: "PAID", santimPayResponse: santimStatus },
+        { new: true }
+      );
 
-      // Trigger Success Logic
-      await handlePaymentSuccess(payment);
+      if (updatedPayment) {
+        // Trigger Success Logic only if we updated the status
+        await handlePaymentSuccess(updatedPayment);
+      }
 
       return res.status(200).json({ success: true, status: "PAID" });
     } else if (status === "FAILED") {
       payment.status = "FAILED";
       await payment.save();
       return res.status(200).json({ success: true, status: "FAILED" });
+    } else if (status === "CANCELLED" || status === "EXPIRED") {
+      payment.status = "FAILED";
+      await payment.save();
+      return res.status(200).json({ success: true, status: "CANCELLED" });
     }
 
     return res.status(200).json({ success: true, status: "PENDING" });
@@ -146,11 +155,14 @@ const invitationWebhook = async (req, res) => {
     }
 
     if (payload.status === "COMPLETED" || payload.status === "SUCCESS") {
-      if (payment.status !== "PAID") {
-        payment.status = "PAID";
-        payment.santimPayResponse = payload;
-        await payment.save();
-        await handlePaymentSuccess(payment);
+      const updatedPayment = await Payment.findOneAndUpdate(
+        { transactionId, status: { $ne: "PAID" } },
+        { status: "PAID", santimPayResponse: payload },
+        { new: true }
+      );
+
+      if (updatedPayment) {
+        await handlePaymentSuccess(updatedPayment);
       }
     } else {
       payment.status = "FAILED";
@@ -175,6 +187,17 @@ const handlePaymentSuccess = async (payment) => {
       process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
 
     if (invitationType === "guest") {
+      // Check if already processed
+      const existingTicket = await Ticket.findOne({
+        paymentReference: payment.transactionId,
+      });
+      if (existingTicket) {
+        console.log(
+          `Payment ${payment.transactionId} already processed (Ticket exists).`
+        );
+        return;
+      }
+
       // ... existing guest logic ...
       // 1. Create Ticket
       const ticketId = "TICKET-" + uuidv4();
@@ -266,7 +289,13 @@ const handlePaymentSuccess = async (payment) => {
         if (phone.startsWith("0")) phone = "251" + phone.substring(1);
         else if (!phone.startsWith("251")) phone = "251" + phone;
 
-        const smsMessage = `Hi ${payment.guestName}, ${message}You have a ticket for ${event.title}. Ticket ID: ${ticketId}. View here: ${rsvpLink}`;
+        const smsMessage = `Hi ${payment.guestName}\n\nEvent: ${
+          event.title
+        }\nTime: ${event.startTime}\nLocation: ${
+          typeof event.location === "string"
+            ? event.location
+            : event.location?.address || "See map"
+        }\n\nRsvp Link: ${rsvpLink}`;
 
         console.log(`Sending SMS to ${phone}: ${smsMessage}`);
 
@@ -300,6 +329,17 @@ const handlePaymentSuccess = async (payment) => {
         );
       }
     } else if (invitationType === "paid") {
+      // Check if already processed
+      const existingInvitation = await Invitation.findOne({
+        paymentReference: payment.transactionId,
+      });
+      if (existingInvitation) {
+        console.log(
+          `Payment ${payment.transactionId} already processed (Invitation exists).`
+        );
+        return;
+      }
+
       // Paid Attendee - Just send link to event
       const eventLink = `${frontendUrl}/event_detail?id=${payment.eventId}`;
       const message = payment.message ? `${payment.message}\n\n` : "";
@@ -324,7 +364,13 @@ const handlePaymentSuccess = async (payment) => {
         if (phone.startsWith("0")) phone = "251" + phone.substring(1);
         else if (!phone.startsWith("251")) phone = "251" + phone;
 
-        const smsMessage = `Hi ${payment.guestName}, ${message}You are invited to ${event.title}. Get your ticket here: ${eventLink}`;
+        const smsMessage = `Hi ${payment.guestName}\n\nEvent: ${
+          event.title
+        }\nTime: ${event.startTime}\nLocation: ${
+          typeof event.location === "string"
+            ? event.location
+            : event.location?.address || "See map"
+        }\n\nRsvp Link: ${eventLink}`;
 
         console.log(`Sending SMS to ${phone}: ${smsMessage}`);
 
