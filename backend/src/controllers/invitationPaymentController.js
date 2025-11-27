@@ -38,7 +38,9 @@ const initiateInvitationPayment = async (req, res) => {
       amount,
       paymentReason,
       process.env.SANTIM_PAY_NOTIFY_URL ||
-        "http://localhost:3000/api/payment/santimpay/webhook", // Webhook URL
+        `${
+          process.env.BACKEND_URL || "http://localhost:5000"
+        }/api/payment/santimpay/webhook`, // Webhook URL
       phoneNumber,
       paymentMethod
     );

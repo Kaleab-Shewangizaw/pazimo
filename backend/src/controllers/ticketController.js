@@ -314,8 +314,7 @@ const processGuestInvitation = async (ticketId) => {
   const message = ticket.paymentReference;
 
   // Generate RSVP Link
-  const frontendUrl =
-    process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
   // Create Invitation Record
@@ -555,8 +554,7 @@ const createInvitationTicket = async (req, res) => {
     });
 
     // Generate RSVP Link
-    const frontendUrl =
-      process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     const rsvpLink = `${frontendUrl}/guest-invitation?id=${ticket.ticketId}`;
 
     // Send Email
