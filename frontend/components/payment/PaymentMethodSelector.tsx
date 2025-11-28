@@ -55,7 +55,7 @@ export default function PaymentMethodSelector({
     <RadioGroup
       value={selectedMethod}
       onValueChange={onSelect}
-      className="grid grid-cols-4 gap-2"
+      className="grid !grid-cols-4 gap-2"
     >
       {PAYMENT_METHODS.map((method) => {
         const disabled = isDisabled(method.id);
