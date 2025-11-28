@@ -37,6 +37,8 @@ const corsOptions = {
   origin: [
     "https://pazimo.vercel.app",
     "https://www.pazimo.vercel.app",
+    "https://pazimo-front-end.vercel.app",
+    "https://www.pazimo-front-end.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
     "https://pazimo.com",
