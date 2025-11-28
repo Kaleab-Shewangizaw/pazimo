@@ -55,7 +55,7 @@ export default function PaymentMethodSelector({
     <RadioGroup
       value={selectedMethod}
       onValueChange={onSelect}
-      className="grid grid-cols-2 sm:grid-cols-2 gap-3"
+      className="grid grid-cols-4 gap-2"
     >
       {PAYMENT_METHODS.map((method) => {
         const disabled = isDisabled(method.id);
@@ -65,18 +65,18 @@ export default function PaymentMethodSelector({
               value={method.id}
               id={`payment-${method.id}`}
               disabled={disabled}
-              className="peer sr-only "
+              className="peer sr-only"
             />
             <Label
               htmlFor={`payment-${method.id}`}
               className={cn(
-                "flex flex-col items-center justify-center py-2  rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
+                "flex flex-col items-center justify-start px-1 py-2 gap-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
                 "peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50",
                 disabled &&
-                  "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale"
+                  "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale",
               )}
             >
-              <div className="relative w-12 h-12 mb-1">
+              <div className="relative w-8 h-8 shrink-0">
                 <Image
                   src={method.image}
                   alt={method.name}
@@ -84,7 +84,7 @@ export default function PaymentMethodSelector({
                   className="object-contain"
                 />
               </div>
-              <span className="text-[12px] font-bold text-center text-gray-700 peer-data-[state=checked]:text-orange-700">
+              <span className="text-xs font-bold text-gray-700 peer-data-[state=checked]:text-orange-700">
                 {method.name}
               </span>
             </Label>

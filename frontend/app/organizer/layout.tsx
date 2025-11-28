@@ -46,20 +46,23 @@
 //   )
 // }
 
-
-import type React from "react"
-import { Inter } from "next/font/google"
+import type React from "react";
+// import { Inter } from "next/font/google"
 // import ClientLayout from "./clientLayout"
 // import ClientLayout from "./clientLayout"
-import ClientLayout from "./clientLayout"
-const inter = Inter({ subsets: ["latin"] })
+import ClientLayout from "./clientLayout";
+// const inter = Inter({ subsets: ["latin"] })
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={"font-sans"}>
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
-  )
+  );
 }

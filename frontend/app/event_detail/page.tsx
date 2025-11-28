@@ -324,7 +324,7 @@ function EventDetailContent() {
         setPurchasedTickets(newTickets);
         setShowTicketModal(true);
         setShouldShowTicketModal(true);
-        toast.success("Payment successful! Your tickets are ready.");
+        // toast.success("Payment successful! Your tickets are ready.");
         // Clean URL if needed
         router.replace(`/event_detail?id=${eventId || ""}`);
       } else {
@@ -799,7 +799,7 @@ function EventDetailContent() {
         {/* Calendar-style Date Display and Event Details Layout */}
         <div className="flex gap-4 items-start">
           {/* Calendar-style Date Box */}
-          <div className="flex-shrink-0 bg-white border border-gray-200 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
+          <div className="shrink-0 bg-white border border-gray-200 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
             <div className="text-xs font-medium text-gray-600 uppercase tracking-wide">
               {getDayName(event.startDate)}
             </div>
@@ -815,7 +815,7 @@ function EventDetailContent() {
           <div className="flex-1 space-y-3">
             {/* Location */}
             <div className="flex items-start gap-2 text-gray-700">
-              <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5 text-blue-600" />
+              <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
               <div>
                 <div className="text-sm font-medium text-blue-600">
                   {event.location.address}
@@ -851,7 +851,6 @@ function EventDetailContent() {
                 by {event.organizer.name}
               </div>
             )}
-
             {/* Age Restriction */}
             {event.ageRestriction?.hasRestriction && (
               <div className="flex items-center gap-2 text-gray-700">
@@ -1474,7 +1473,8 @@ function EventDetailContent() {
                       onChange={(e) =>
                         setSantimForm({ ...santimForm, email: e.target.value })
                       }
-                      placeholder="Optional"
+                      placeholder="Email address"
+                      required
                       className="mt-1"
                     />
                   </div>

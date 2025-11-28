@@ -25,6 +25,9 @@ function PaymentSuccessContent() {
     }
 
     const checkStatus = async () => {
+      // If we already know it's a success, don't poll again
+      if (status === "success") return;
+
       try {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txnId}`
@@ -42,7 +45,7 @@ function PaymentSuccessContent() {
               const invitationData = JSON.parse(storedInvitation);
               await processInvitation(invitationData);
               localStorage.removeItem(`invitation_${txnId}`);
-              toast.success("Invitation sent successfully!");
+              // toast.success("Invitation sent successfully!");
             } catch (e) {
               console.error("Failed to process invitation", e);
               toast.error("Payment successful, but failed to send invitation.");
@@ -69,7 +72,7 @@ function PaymentSuccessContent() {
     };
 
     checkStatus();
-  }, [txnId, pollCount]);
+  }, [txnId, pollCount, status]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

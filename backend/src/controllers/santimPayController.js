@@ -126,7 +126,7 @@ const initiatePayment = async (req, res) => {
     }
 
     // Define redirect URLs
-    const baseUrl = process.env.BASE_URL || "http://localhost:3000";
+    const baseUrl = process.env.FRONTEND_URL || "http://localhost:3000";
     const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
 
     const successRedirectUrl =

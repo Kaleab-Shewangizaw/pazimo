@@ -53,7 +53,7 @@ router.post("/ticket/initiate", async (req, res) => {
       paymentReason ||
       `Ticket purchase: ${selectedEvent.title} - ${ticketDetails.ticketTypeId}`;
     const notifyUrl = `${
-      process.env.BASE_URL || "http://localhost:5000"
+      process.env.BACKEND_URL || "http://localhost:5000"
     }/api/tickets`;
 
     // Use provided orderId or generate one

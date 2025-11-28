@@ -3,12 +3,53 @@ const SantimpaySdk = require("../../santimSDK/index.js");
 
 class SantimPayService {
   constructor() {
+    let privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
+    
+    // Debug key format
+    if (privateKey) {
+      console.log("SantimPay Private Key Length:", privateKey.length);
+      console.log("SantimPay Private Key has newlines:", privateKey.includes("\n"));
+      console.log("SantimPay Private Key has literal \\n:", privateKey.includes("\\n"));
+      
+      // Fix key if it has literal \n but no actual newlines
+      if (privateKey.includes("\\n") && !privateKey.includes("\n")) {
+        console.log("Fixing SantimPay Private Key: Replacing literal \\n with actual newlines");
+        privateKey = privateKey.replace(/\\n/g, "\n");
+      }
+    } else {
+      console.error("SantimPay Private Key is MISSING!");
+    }
+
     this.sdk = new SantimpaySdk(
       process.env.SANTIM_PAY_MERCHANT_ID,
-      process.env.SANTIM_PAY_PRIVATE_KEY,
-      false // Set to true for sandbox if needed, false for production
+      privateKey,
+      process.env.NODE_ENV === "development" // True for sandbox if NODE_ENV is development
     );
     this.publicKey = process.env.SANTIM_PAY_PUBLIC_KEY;
+  }
+
+  async initiatePayment(data) {
+    try {
+      const paymentUrl = await this.sdk.generatePaymentUrl(
+        data.transactionId,
+        data.amount,
+        data.paymentReason,
+        data.successRedirectUrl,
+        data.failureRedirectUrl,
+        data.notifyUrl,
+        data.phoneNumber,
+        data.cancelRedirectUrl
+      );
+      
+      return {
+        paymentUrl,
+        transactionId: data.transactionId,
+        paymentId: null // SDK doesn't return this immediately for initiate
+      };
+    } catch (error) {
+      console.error("SantimPay Initiate Payment Error:", error);
+      throw error;
+    }
   }
 
   async directPayment(

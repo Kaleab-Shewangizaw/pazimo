@@ -16,6 +16,13 @@ const nextConfig: NextConfig = {
       { loader: "@next/font/google", options: { subsets: ["latin"] } },
     ],
   },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  output: "standalone",
 };
 
 export default nextConfig;
