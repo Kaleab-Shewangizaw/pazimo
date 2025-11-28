@@ -9,6 +9,18 @@ const nextConfig: NextConfig = {
         port: "",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "pazimoapp.testserveret.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "pazimo.com",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
   experimental: {

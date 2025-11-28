@@ -185,7 +185,8 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       // We use the ticket's QR code and ID for the invitation.
 
       // Generate RSVP/Guest Link using Ticket ID
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const frontendUrl =
+        process.env.FRONTEND_URL || "https://pazimo.vercel.app";
       const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
       // Update Invitation
@@ -522,7 +523,7 @@ const createAndSendProfessionalInvitation = async (data) => {
     const qrCodeBase64 = await QRCode.toDataURL(qrDataString);
 
     // Generate RSVP Link
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
     const rsvpLink = `${frontendUrl}/guest-invitation?inv=${invitationId}`;
 
     // Map type if needed (phone -> sms)

@@ -264,7 +264,7 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
             
             <div>
               <span class="ticket-id">${
-                process.env.BASE_URL
+                process.env.BASE_URL || "https://pazimo.vercel.app"
               }/guest-invitation?inv=${invitation.uniqueId}</span>
             </div>
             <p style="font-size: 13px; color: #6b7280; margin-top: 10px;">Please present this QR code at the entrance.</p>

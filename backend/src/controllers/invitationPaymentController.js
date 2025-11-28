@@ -39,7 +39,7 @@ const initiateInvitationPayment = async (req, res) => {
       paymentReason,
       process.env.SANTIM_PAY_NOTIFY_URL ||
         `${
-          process.env.BACKEND_URL || "http://localhost:5000"
+          process.env.BACKEND_URL || "https://pazimoapp.testserveret.com"
         }/api/payment/santimpay/webhook`, // Webhook URL
       phoneNumber,
       paymentMethod
@@ -186,7 +186,7 @@ const handlePaymentSuccess = async (payment) => {
 
     const { invitationType, ticketDetails } = payment;
     const frontendUrl =
-      process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000";
+      process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.vercel.app";
 
     if (invitationType === "guest") {
       // Check if already processed

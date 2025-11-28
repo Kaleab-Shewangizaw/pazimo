@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ["localhost", "pazimo.com"],
+    domains: ["localhost", "pazimo.com", "pazimoapp.testserveret.com"],
   },
 
   eslint: {
