@@ -4,18 +4,25 @@ const SantimpaySdk = require("../../santimSDK/index.js");
 class SantimPayService {
   constructor() {
     let privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
-    
+
     // Debug key format
     if (privateKey) {
       console.log("SantimPay Private Key Length:", privateKey.length);
-      console.log("SantimPay Private Key has newlines:", privateKey.includes("\n"));
-      console.log("SantimPay Private Key has literal \\n:", privateKey.includes("\\n"));
-      
-      // Fix key if it has literal \n but no actual newlines
-      if (privateKey.includes("\\n") && !privateKey.includes("\n")) {
-        console.log("Fixing SantimPay Private Key: Replacing literal \\n with actual newlines");
+
+      // Aggressively fix newlines if literal \n is found
+      if (privateKey.includes("\\n")) {
+        console.log(
+          "Fixing SantimPay Private Key: Replacing literal \\n with actual newlines"
+        );
         privateKey = privateKey.replace(/\\n/g, "\n");
       }
+
+      // Remove surrounding quotes if they exist (artifact of some env injections)
+      if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+        privateKey = privateKey.slice(1, -1);
+      }
+
+      console.log("Key starts with:", privateKey.substring(0, 30));
     } else {
       console.error("SantimPay Private Key is MISSING!");
     }
@@ -40,11 +47,11 @@ class SantimPayService {
         data.phoneNumber,
         data.cancelRedirectUrl
       );
-      
+
       return {
         paymentUrl,
         transactionId: data.transactionId,
-        paymentId: null // SDK doesn't return this immediately for initiate
+        paymentId: null, // SDK doesn't return this immediately for initiate
       };
     } catch (error) {
       console.error("SantimPay Initiate Payment Error:", error);

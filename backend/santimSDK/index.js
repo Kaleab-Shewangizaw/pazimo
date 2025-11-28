@@ -102,7 +102,7 @@ module.exports = class SantimpaySdk {
         `${this.baseUrl}/initiate-payment`,
         payload,
         {
-          httpsAgent: new https.Agent({ family: 4 }),
+          httpsAgent: new https.Agent({ keepAlive: true }),
         }
       );
 
@@ -152,7 +152,7 @@ module.exports = class SantimpaySdk {
         `${this.baseUrl}/payout-transfer`,
         payload,
         {
-          httpsAgent: new https.Agent({ family: 4 }),
+          httpsAgent: new https.Agent({ keepAlive: true }),
         }
       );
 
@@ -222,7 +222,7 @@ module.exports = class SantimpaySdk {
         `${this.baseUrl}/direct-payment`,
         payload,
         {
-          httpsAgent: new https.Agent({ family: 4, keepAlive: true }),
+          httpsAgent: new https.Agent({ keepAlive: true }),
           timeout: 30000, // 30 seconds timeout
         }
       );
@@ -258,7 +258,7 @@ module.exports = class SantimpaySdk {
           signedToken: token,
         },
         {
-          httpsAgent: new https.Agent({ family: 4 }),
+          httpsAgent: new https.Agent({ keepAlive: true }),
         }
       );
 
