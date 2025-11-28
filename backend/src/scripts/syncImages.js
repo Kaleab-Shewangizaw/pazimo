@@ -6,6 +6,7 @@ require("dotenv").config({ path: path.join(__dirname, "../../.env") });
 
 const Event = require("../models/Event");
 const OrganizerRegistration = require("../models/OrganizerRegistration");
+const Category = require("../models/Category");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 const REMOTE_BASE_URL = "https://pazimo.com/uploads";
@@ -102,6 +103,16 @@ const syncImages = async () => {
     for (const reg of registrations) {
       if (reg.businessLicenseUrl) {
         await downloadImage(reg.businessLicenseUrl);
+      }
+    }
+
+    // 3. Sync Categories
+    const categories = await Category.find({});
+    console.log(`Found ${categories.length} categories`);
+
+    for (const cat of categories) {
+      if (cat.image) {
+        await downloadImage(cat.image);
       }
     }
 
