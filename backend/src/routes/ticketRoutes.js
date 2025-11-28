@@ -19,6 +19,7 @@ const {
   sendGuestInvitation,
   confirmRSVP,
   getPublicTicketDetails,
+  cancelPaymentIntent,
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
@@ -172,6 +173,7 @@ router.get("/invitation/:ticketId", getInvitationTicket);
 router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
 router.get("/public/details/:id", getPublicTicketDetails);
+router.post("/payment/cancel", cancelPaymentIntent);
 
 // All other routes use authentication
 router.use(authenticateUser);

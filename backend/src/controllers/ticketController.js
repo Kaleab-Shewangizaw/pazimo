@@ -1158,6 +1158,51 @@ const updateInvitationTicketStatus = async (req, res) => {
     .json({ success: true, message: `Invitation ${status}` });
 };
 
+// Cancel a pending payment
+const cancelPaymentIntent = async (req, res) => {
+  try {
+    const { transactionId } = req.body;
+
+    if (!transactionId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Transaction ID is required",
+      });
+    }
+
+    const payment = await Payment.findOne({ transactionId });
+
+    if (!payment) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Payment record not found",
+      });
+    }
+
+    if (payment.status === "PAID") {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Cannot cancel a completed payment",
+      });
+    }
+
+    payment.status = "FAILED"; // Or 'CANCELLED' if you add that to enum
+    await payment.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Payment cancelled successfully",
+    });
+  } catch (error) {
+    console.error("Cancel payment error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to cancel payment",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createTicket,
   createInvitationTicket,
@@ -1177,4 +1222,5 @@ module.exports = {
   processGuestInvitation,
   confirmRSVP,
   processSuccessfulPayment,
+  cancelPaymentIntent,
 };

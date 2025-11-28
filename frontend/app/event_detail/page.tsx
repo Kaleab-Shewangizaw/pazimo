@@ -336,6 +336,38 @@ function EventDetailContent() {
     }
   };
 
+  const [currentTransactionId, setCurrentTransactionId] = useState<
+    string | null
+  >(null);
+
+  const stopPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    setIsWaitingForPayment(false);
+  };
+
+  const handleCancelPayment = async () => {
+    stopPolling();
+    if (currentTransactionId) {
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/payment/cancel`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transactionId: currentTransactionId }),
+          }
+        );
+        toast.info("Payment cancelled");
+      } catch (e) {
+        console.error("Error cancelling payment:", e);
+      }
+      setCurrentTransactionId(null);
+    }
+  };
+
   const pollPaymentStatus = async (txRef: string) => {
     // Clear any existing interval
     if (pollingIntervalRef.current) {
@@ -354,24 +386,18 @@ function EventDetailContent() {
         const data = await response.json();
 
         if (data.status === "COMPLETED" || data.status === "PAID") {
-          if (pollingIntervalRef.current)
-            clearInterval(pollingIntervalRef.current);
-          setIsWaitingForPayment(false);
+          stopPolling();
           setShowPaymentModal(false);
 
           // Always show the modal instead of redirecting
           verifyAndShowTickets(txRef);
         } else if (data.status === "FAILED") {
-          if (pollingIntervalRef.current)
-            clearInterval(pollingIntervalRef.current);
-          setIsWaitingForPayment(false);
+          stopPolling();
           toast.error("Payment failed. Please try again.");
         }
 
         if (attempts >= maxAttempts) {
-          if (pollingIntervalRef.current)
-            clearInterval(pollingIntervalRef.current);
-          setIsWaitingForPayment(false);
+          stopPolling();
           toast.error(
             "Payment verification timed out. Please check 'My Tickets' later."
           );
@@ -494,6 +520,7 @@ function EventDetailContent() {
       if (data.transactionId) {
         setIsSantimLoading(false);
         setIsWaitingForPayment(true);
+        setCurrentTransactionId(data.transactionId);
         toast.success("Payment initiated! Please check your phone.");
         pollPaymentStatus(data.transactionId);
       } else {
@@ -1566,7 +1593,14 @@ function EventDetailContent() {
       </Dialog>
 
       {/* Waiting for Payment Modal */}
-      <Dialog open={isWaitingForPayment} onOpenChange={setIsWaitingForPayment}>
+      <Dialog
+        open={isWaitingForPayment}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelPayment();
+          }
+        }}
+      >
         <DialogContent className="max-w-sm rounded-xl p-6 text-center">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold mb-2">
@@ -1579,9 +1613,16 @@ function EventDetailContent() {
           <div className="flex justify-center py-6">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]"></div>
           </div>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 mb-4">
             We are waiting for confirmation from the payment provider...
           </p>
+          <Button
+            variant="outline"
+            className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+            onClick={handleCancelPayment}
+          >
+            Cancel Payment
+          </Button>
         </DialogContent>
       </Dialog>
     </div>
