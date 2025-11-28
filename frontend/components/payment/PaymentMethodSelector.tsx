@@ -55,7 +55,7 @@ export default function PaymentMethodSelector({
     <RadioGroup
       value={selectedMethod}
       onValueChange={onSelect}
-      className="grid !grid-cols-4 gap-2"
+      className="grid grid-cols-4 gap-2"
     >
       {PAYMENT_METHODS.map((method) => {
         const disabled = isDisabled(method.id);
@@ -73,7 +73,7 @@ export default function PaymentMethodSelector({
                 "flex flex-col items-center justify-start px-1 py-2 gap-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
                 "peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50",
                 disabled &&
-                  "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale",
+                  "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale"
               )}
             >
               <div className="relative w-8 h-8 shrink-0">
@@ -90,7 +90,7 @@ export default function PaymentMethodSelector({
             </Label>
             {disabled && (
               <span className="absolute -bottom-5 left-0 right-0 text-[9px] text-center text-red-500 font-medium">
-                Not available
+                use {method.id} compatible number
               </span>
             )}
           </div>
