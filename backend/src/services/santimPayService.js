@@ -23,6 +23,18 @@ class SantimPayService {
       }
 
       console.log("Key starts with:", privateKey.substring(0, 30));
+
+      if (privateKey.length < 60) {
+        console.error(
+          "CRITICAL ERROR: SantimPay Private Key is truncated or invalid."
+        );
+        console.error(
+          "It seems only the header was read. Ensure your .env file handles multiline keys correctly."
+        );
+        console.error(
+          "Solution: Wrap the key in double quotes in your .env file, or replace newlines with \\n."
+        );
+      }
     } else {
       console.error("SantimPay Private Key is MISSING!");
     }
