@@ -74,8 +74,59 @@ const processSuccessfulPayment = async (payment) => {
   };
 
   // Handle User vs Guest
-  if (userId) {
-    ticketData.user = userId;
+  let finalUserId = payment.userId || userId;
+  const User = require("../models/User");
+
+  if (!finalUserId) {
+    // Try to find existing user by phone or email
+    const email = payment.ticketDetails?.email;
+    const phone = payment.contact;
+
+    let user = null;
+
+    // Check by email first (Priority 1)
+    if (email) {
+      user = await User.findOne({ email: email });
+    }
+
+    // If not found by email, check by phone (Priority 2)
+    if (!user && phone) {
+      user = await User.findOne({ phoneNumber: phone });
+    }
+
+    if (user) {
+      finalUserId = user._id;
+    } else if (email && phone) {
+      // Create new user if we have both email and phone
+      try {
+        const splitName = (payment.guestName || "Guest User").split(" ");
+        const firstName = splitName[0];
+        const lastName = splitName.slice(1).join(" ") || "User";
+        // Use phone number as password as requested
+        const password = phone;
+
+        user = await User.create({
+          firstName,
+          lastName,
+          email,
+          phoneNumber: phone,
+          password: password,
+          role: "customer",
+          isPhoneVerified: true,
+          isActive: true,
+        });
+        finalUserId = user._id;
+        console.log(`Auto-created user ${user._id} for ticket purchase`);
+      } catch (err) {
+        console.error("Failed to auto-create user:", err.message);
+        // Fallback to guest if user creation fails
+      }
+    }
+  }
+
+  if (finalUserId) {
+    ticketData.user = finalUserId;
+    ticketData.isInvitation = false;
   } else {
     // If no user, treat as guest ticket (invitation style)
     ticketData.isInvitation = true;
@@ -93,10 +144,11 @@ const processSuccessfulPayment = async (payment) => {
   ticketTypeInfo.quantity -= ticketCount || 1;
   await event.save();
 
-  // If user exists, add ticket to user's history (optional but good practice)
-  if (userId) {
-    const User = require("../models/User");
-    await User.findByIdAndUpdate(userId, { $push: { tickets: ticket._id } });
+  // If user exists, add ticket to user's history
+  if (finalUserId) {
+    await User.findByIdAndUpdate(finalUserId, {
+      $push: { tickets: ticket._id },
+    });
   }
 
   return ticket;
@@ -931,46 +983,57 @@ const validateQRCode = async (req, res) => {
 
 // Get ticket details by ID or Transaction Reference (Public)
 const getPublicTicketDetails = async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  let tickets = [];
+    let tickets = [];
 
-  // 1. Try finding by ticketId (string)
-  const ticketById = await Ticket.findOne({ ticketId: id })
-    .populate("event", "title startDate endDate location organizer")
-    .populate("user", "firstName lastName email");
-
-  if (ticketById) {
-    tickets.push(ticketById);
-  }
-
-  // 2. If not found, check if id is a valid ObjectId (for _id lookup)
-  if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
-    const ticket = await Ticket.findById(id)
+    // 1. Try finding by ticketId (string)
+    const ticketById = await Ticket.findOne({ ticketId: id })
       .populate("event", "title startDate endDate location organizer")
       .populate("user", "firstName lastName email");
 
-    if (ticket) {
-      tickets.push(ticket);
+    if (ticketById) {
+      tickets.push(ticketById);
     }
-  }
 
-  // 3. If still not found, try finding by paymentReference
-  if (tickets.length === 0) {
-    const txTickets = await Ticket.find({ paymentReference: id })
-      .populate("event", "title startDate endDate location organizer")
-      .populate("user", "firstName lastName email");
+    // 2. If not found, check if id is a valid ObjectId (for _id lookup)
+    if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
+      const ticket = await Ticket.findById(id)
+        .populate("event", "title startDate endDate location organizer")
+        .populate("user", "firstName lastName email");
 
-    if (txTickets && txTickets.length > 0) {
-      tickets = txTickets;
+      if (ticket) {
+        tickets.push(ticket);
+      }
     }
-  }
 
-  if (tickets.length === 0) {
-    throw new NotFoundError("Ticket not found");
-  }
+    // 3. If still not found, try finding by paymentReference
+    if (tickets.length === 0) {
+      const txTickets = await Ticket.find({ paymentReference: id })
+        .populate("event", "title startDate endDate location organizer")
+        .populate("user", "firstName lastName email");
 
-  res.status(StatusCodes.OK).json({ success: true, data: tickets });
+      if (txTickets && txTickets.length > 0) {
+        tickets = txTickets;
+      }
+    }
+
+    if (tickets.length === 0) {
+      return res
+        .status(StatusCodes.NOT_FOUND)
+        .json({ success: false, message: "Ticket not found" });
+    }
+
+    res.status(StatusCodes.OK).json({ success: true, data: tickets });
+  } catch (error) {
+    console.error("Get public ticket details error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to fetch ticket details",
+      error: error.message,
+    });
+  }
 };
 
 // Get ticket details by ID or Transaction Reference

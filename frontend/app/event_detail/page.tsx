@@ -483,6 +483,14 @@ function EventDetailContent() {
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
 
+      // Handle auto-login if token/user returned
+      if (data.token && data.user) {
+        useAuthStore.getState().setAuth({ user: data.user, token: data.token });
+        setUser(data.user);
+        setUserId(data.user.id || data.user._id);
+        toast.success("Account created/verified successfully!");
+      }
+
       if (data.transactionId) {
         setIsSantimLoading(false);
         setIsWaitingForPayment(true);
