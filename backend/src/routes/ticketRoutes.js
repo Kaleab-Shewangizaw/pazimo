@@ -110,7 +110,7 @@ router.post("/ticket/initiate", async (req, res) => {
       `Ticket purchase: ${selectedEvent.title} - ${ticketDetails.ticketTypeId}`;
     const notifyUrl = `${
       process.env.BACKEND_URL || "http://localhost:5000"
-    }/api/tickets`;
+    }/api/webhook/santimpay`;
 
     // Use provided orderId or generate one
     const transactionId =
