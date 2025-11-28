@@ -1,6 +1,7 @@
 const Ticket = require("../models/Ticket");
 const Event = require("../models/Event");
 const Invitation = require("../models/Invitation");
+const User = require("../models/User");
 const { StatusCodes } = require("http-status-codes");
 const {
   BadRequestError,
@@ -29,6 +30,7 @@ const validateSignature = (signature, payload) => {
 
 // Helper to process successful payment and create ticket
 const processSuccessfulPayment = async (payment) => {
+  console.log("Processing successful payment:", payment.transactionId);
   if (payment.status !== "PAID") return null;
 
   const { eventId, ticketType, seatNumber, userId, ticketCount, ticketId } =
@@ -75,12 +77,18 @@ const processSuccessfulPayment = async (payment) => {
 
   // Handle User vs Guest
   let finalUserId = payment.userId || userId;
-  const User = require("../models/User");
+  console.log(`Initial finalUserId: ${finalUserId}`);
 
   if (!finalUserId) {
     // Try to find existing user by phone or email
-    const email = payment.ticketDetails?.email;
-    const phone = payment.contact;
+    const rawEmail = payment.ticketDetails?.email;
+    const rawPhone = payment.contact;
+
+    const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
+    // Normalize phone: remove spaces, dashes, etc. if needed, but keep consistent with DB
+    const phone = rawPhone ? rawPhone.replace(/\s+/g, "") : null;
+
+    console.log(`Searching for user by email: ${email} or phone: ${phone}`);
 
     let user = null;
 
@@ -95,6 +103,7 @@ const processSuccessfulPayment = async (payment) => {
     }
 
     if (user) {
+      console.log(`Found existing user: ${user._id}`);
       finalUserId = user._id;
     } else if (email && phone) {
       // Create new user if we have both email and phone
@@ -124,6 +133,8 @@ const processSuccessfulPayment = async (payment) => {
     }
   }
 
+  console.log(`Final resolved userId: ${finalUserId}`);
+
   if (finalUserId) {
     ticketData.user = finalUserId;
     ticketData.isInvitation = false;
@@ -139,6 +150,7 @@ const processSuccessfulPayment = async (payment) => {
 
   // Create the ticket
   const ticket = await Ticket.create(ticketData);
+  console.log(`Ticket created: ${ticket._id}`);
 
   // Update event ticket quantity
   ticketTypeInfo.quantity -= ticketCount || 1;
@@ -149,6 +161,7 @@ const processSuccessfulPayment = async (payment) => {
     await User.findByIdAndUpdate(finalUserId, {
       $push: { tickets: ticket._id },
     });
+    console.log(`Added ticket to user ${finalUserId} history`);
   }
 
   return ticket;
@@ -695,11 +708,41 @@ const createInvitationTicket = async (req, res) => {
 
 // Get user's tickets
 const getUserTickets = async (req, res) => {
-  const tickets = await Ticket.find({ user: req.user.userId })
-    .populate("event", "title startDate endDate location")
-    .sort("-createdAt");
+  try {
+    console.log(`Fetching tickets for user: ${req.user.userId}`);
 
-  res.status(StatusCodes.OK).json({ tickets, count: tickets.length });
+    // Fetch full user details to get email and phone
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res
+        .status(StatusCodes.NOT_FOUND)
+        .json({ message: "User not found" });
+    }
+
+    // Find tickets linked by ID OR matching email OR matching phone
+    const query = {
+      $or: [{ user: user._id }],
+    };
+
+    if (user.email) {
+      query.$or.push({ guestEmail: user.email.toLowerCase() });
+    }
+    if (user.phoneNumber) {
+      query.$or.push({ guestPhone: user.phoneNumber });
+    }
+
+    const tickets = await Ticket.find(query)
+      .populate("event", "title startDate endDate location")
+      .sort("-createdAt");
+
+    console.log(`Found ${tickets.length} tickets for user ${req.user.userId}`);
+    res.status(StatusCodes.OK).json({ tickets, count: tickets.length });
+  } catch (error) {
+    console.error("Error fetching user tickets:", error);
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ error: error.message });
+  }
 };
 
 // Get event tickets (works with or without authentication)
