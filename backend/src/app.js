@@ -35,6 +35,8 @@ const app = express();
 // CORS configuration
 const corsOptions = {
   origin: [
+    "https://pazimo.vercel.app",
+    "https://www.pazimo.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
     "https://pazimo.com",

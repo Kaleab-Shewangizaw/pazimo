@@ -6,13 +6,10 @@ const signES256 = require("./utils/cryptography.js").signES256;
 const PRODUCTION_BASE_URL = "https://services.santimpay.com/api/v1/gateway";
 const TEST_BASE_URL = "https://sandbox.santimpay.com/api/v1/gateway";
 
-const merchentId = process.env.SANTIM_PAY_MERCHANT_ID;
-const privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
-
 module.exports = class SantimpaySdk {
   constructor(merchantId, privateKey, testBed = false) {
-    this.privateKey = privateKey;
-    this.merchantId = merchantId;
+    this.privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
+    this.merchantId = process.env.SANTIM_PAY_MERCHANT_ID;
 
     this.baseUrl = PRODUCTION_BASE_URL;
 
@@ -31,7 +28,7 @@ module.exports = class SantimpaySdk {
       generated: time,
     };
 
-    return signES256(payload, this.privateKey);
+    return signES256(payload, this.privateKey, "ES256");
   }
 
   generateSignedTokenForDirectPayment(
@@ -51,7 +48,7 @@ module.exports = class SantimpaySdk {
       generated: time,
     };
 
-    return signES256(payload, this.privateKey);
+    return signES256(payload, this.privateKey, "ES256");
   }
 
   generateSignedTokenForGetTransaction(id) {
