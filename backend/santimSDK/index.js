@@ -8,8 +8,8 @@ const TEST_BASE_URL = "https://sandbox.santimpay.com/api/v1/gateway";
 
 module.exports = class SantimpaySdk {
   constructor(merchantId, privateKey, testBed = false) {
-    this.privateKey = process.env.SANTIM_PAY_PRIVATE_KEY;
-    this.merchantId = process.env.SANTIM_PAY_MERCHANT_ID;
+    this.privateKey = privateKey;
+    this.merchantId = merchantId;
 
     this.baseUrl = PRODUCTION_BASE_URL;
 
