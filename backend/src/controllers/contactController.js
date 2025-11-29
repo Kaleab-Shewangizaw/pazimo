@@ -8,7 +8,9 @@ const createTransporter = () => {
     );
   }
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.zoho.com",
+    port: 465,
+    secure: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -37,7 +39,7 @@ const submitContact = async (req, res) => {
 
     const transporter = createTransporter();
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `Pazimo Contact <${process.env.EMAIL_USER}>`,
       to: toRecipients,
       subject: `[PAZ Contact] ${safeSubject}`,
       replyTo: email,
@@ -82,18 +84,17 @@ const submitContact = async (req, res) => {
       `,
     };
 
-    // respond fast, send email asynchronously
+    console.log(
+      `[Contact] Received message from ${email}. Sending via Zoho to ${toRecipients}...`
+    );
+
+    // Send email synchronously to ensure it works and catch errors
+    await transporter.sendMail(mailOptions);
+    console.log(`[Contact] Email sent successfully to ${toRecipients}`);
+
     res
       .status(StatusCodes.OK)
-      .json({ status: "success", message: "Message received" });
-
-    setImmediate(async () => {
-      try {
-        await transporter.sendMail(mailOptions);
-      } catch (emailErr) {
-        console.error("Failed to send contact email:", emailErr);
-      }
-    });
+      .json({ status: "success", message: "Message sent successfully" });
   } catch (error) {
     console.error("Contact submit error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

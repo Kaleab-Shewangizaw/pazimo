@@ -64,6 +64,7 @@ export default function ContactPage() {
       setSubmitted(true);
     } catch (err) {
       toast.error("Could not send your message. Please try again.");
+      console.error(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -83,8 +84,8 @@ export default function ContactPage() {
               <span className="text-blue-600 dark:text-blue-400">Touch</span>
             </h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-              Have a question, feedback, or need support? We'd love to hear from
-              you. Send us a message and we'll respond promptly.
+              Have a question, feedback, or need support? We&apos;d love to hear
+              from you. Send us a message and we&apos;ll respond promptly.
             </p>
           </div>
 
@@ -170,7 +171,7 @@ export default function ContactPage() {
                             <SelectValue placeholder="Choose team" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="kaleab.stk@gmail.com">
+                            <SelectItem value="support@pazimo.com">
                               General Support (support@pazimo.com)
                             </SelectItem>
                             <SelectItem value="finance@pazimo.com">
