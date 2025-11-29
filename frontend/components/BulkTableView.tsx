@@ -189,7 +189,7 @@ export default function EditableTable({
   // Cost calculation
   const calculateCost = (): number => {
     return data.reduce((total, row) => {
-      const amount = row.Amount !== undefined ? Number(row.Amount) : 0;
+      const amount = Number(row.Amount || 1);
       if (row.Type === "Both")
         return total + (pricing.email + pricing.sms) * amount;
       if (row.Type === "Phone") return total + pricing.sms * amount;
@@ -208,7 +208,7 @@ export default function EditableTable({
       Email: "",
       Phone: "",
       Type: "Email",
-      Amount: 0,
+      Amount: 1,
       Message: "",
       QR: "",
       eventDetail: event,
