@@ -37,7 +37,7 @@ const submitContact = async (req, res) => {
 
     const transporter = createTransporter();
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `Pazimo Contact <${process.env.EMAIL_USER}>`,
       to: toRecipients,
       subject: `[PAZ Contact] ${safeSubject}`,
       replyTo: email,
@@ -82,6 +82,10 @@ const submitContact = async (req, res) => {
       `,
     };
 
+    console.log(
+      `[Contact] Received message from ${email}. Sending to ${toRecipients}...`
+    );
+
     // respond fast, send email asynchronously
     res
       .status(StatusCodes.OK)
@@ -90,8 +94,9 @@ const submitContact = async (req, res) => {
     setImmediate(async () => {
       try {
         await transporter.sendMail(mailOptions);
+        console.log(`[Contact] Email sent successfully to ${toRecipients}`);
       } catch (emailErr) {
-        console.error("Failed to send contact email:", emailErr);
+        console.error("[Contact] Failed to send contact email:", emailErr);
       }
     });
   } catch (error) {
