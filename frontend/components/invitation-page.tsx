@@ -1371,7 +1371,9 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                           {event.title}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {event.description || "No description"}
+                          {event.description && event.description.length > 20
+                            ? event.description?.slice(0, 20) + "..."
+                            : event.description || "No description"}
                         </div>
                       </div>
                     </td>
@@ -1381,7 +1383,9 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {event.location}
+                        {event.location.length > 20
+                          ? event.location.slice(0, 20) + "..."
+                          : event.location}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

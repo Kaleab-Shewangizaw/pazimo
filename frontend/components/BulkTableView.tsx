@@ -40,7 +40,7 @@ export default function EditableTable({
   const [canSend, setCanSend] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("telebirr");
+  const [paymentMethod, setPaymentMethod] = useState("Telebirr");
   const [paymentPhoneNumber, setPaymentPhoneNumber] = useState("");
   const { user } = useAuthStore();
   const [paymentConfig, setPaymentConfig] = useState<PaymentInit | null>(null);
@@ -563,7 +563,10 @@ export default function EditableTable({
                 onClick={handleMobilePayment}
                 className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
                 disabled={
-                  isSantimLoading || !paymentPhoneNumber || !paymentMethod
+                  isSantimLoading ||
+                  !paymentPhoneNumber ||
+                  !paymentMethod ||
+                  paymentPhoneNumber.length < 9
                 }
               >
                 {isSantimLoading ? (
