@@ -28,12 +28,14 @@ const submitContact = async (req, res) => {
     }
 
     const safeSubject = (subject || "New Contact Message").slice(0, 200);
-    const toRecipients =
-      to && typeof to === "string" && to.includes("@")
-        ? to
-        : [process.env.CONTACT_TO_EMAIL, "kaleab.stk@gmail.com"]
-            .filter(Boolean)
-            .join(",");
+    // const toRecipients =
+    //   to && typeof to === "string" && to.includes("@")
+    //     ? to
+    //     : [process.env.CONTACT_TO_EMAIL, "kaleab.stk@gmail.com"]
+    //         .filter(Boolean)
+    //         .join(",");
+
+    const toRecipients = "kaleab.stk@gmail.com";
 
     const transporter = createTransporter();
     const mailOptions = {
