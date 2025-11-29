@@ -204,11 +204,7 @@ export const generateFinalPayload = (
   rows.forEach((row) => {
     if (row.error) return; // Skip invalid rows
 
-    const message = `Hi ${row.Name}, ${
-      row.Message || "You are invited!"
-    }\n\nEvent: ${eventData.eventName}\nDate: ${eventData.date}\nTime: ${
-      eventData.time
-    }\nLocation: ${eventData.location}\n\nRSVP Link: ${eventData.rsvpLink}`;
+    const message = `Hi ${row.Name},\n\nEvent: ${eventData.eventName}\nDate and Time: ${eventData.date} ${eventData.time}\nLocation: ${eventData.location}\n\nRSVP Link: ${eventData.rsvpLink}`;
 
     if (row.Type === "Phone" || row.Type === "Both") {
       if (row.Phone) {

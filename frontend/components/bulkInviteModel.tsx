@@ -106,14 +106,14 @@ export default function BulkInvite({
   const pricing = { email: 2, sms: 5 };
 
   const downloadTemplate = (type: string) => {
-    let csvContent = "Customer Name,Contact,Contact Type,Message\n";
+    let csvContent = "Customer Name,Contact,Contact Type,Amount,Message\n";
     if (type === "email") {
-      csvContent += "John Doe,johndoe@example.com,email,Hello John!\n";
+      csvContent += "John Doe,johndoe@example.com,email,1,Hello John!\n";
     } else if (type === "phone") {
-      csvContent += "Jane Doe,+1234567890,phone,Hello Jane!\n";
+      csvContent += "Jane Doe,+1234567890,phone,1,Hello Jane!\n";
     } else if (type === "mixed") {
       csvContent +=
-        "John Doe,johndoe@example.com,email,Hello John!\nJane Doe,+1234567890,phone,Hello Jane!\n";
+        "John Doe,johndoe@example.com,email,1,Hello John!\nJane Doe,+1234567890,phone,2,Hello Jane!\n";
     }
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -264,6 +264,14 @@ export default function BulkInvite({
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="font-medium text-blue-600">Column D:</span>
+                    <span>
+                      Amount (Optional)
+                      <br />
+                      Number of tickets (Default: 1)
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-medium text-blue-600">Column E:</span>
                     <span>
                       Message (Optional)
                       <br />

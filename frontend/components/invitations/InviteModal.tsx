@@ -170,22 +170,24 @@ export default function InviteModal({
               )}
             </div>
 
-            <div className="w-32">
-              <label className="block text-sm font-medium text-gray-900 mb-2">
-                QR Codes
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={qrCodeCount}
-                onChange={(e) =>
-                  setQrCodeCount(Math.max(1, parseInt(e.target.value) || 1))
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
-              />
-              <p className="text-xs text-gray-600 mt-1">Max 10</p>
-            </div>
+            {guestType !== "paid" && (
+              <div className="w-32">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Tickets
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={qrCodeCount}
+                  onChange={(e) =>
+                    setQrCodeCount(Math.max(1, parseInt(e.target.value) || 1))
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                />
+                <p className="text-xs text-gray-600 mt-1">Max 10</p>
+              </div>
+            )}
           </div>
 
           {/* Message */}
@@ -251,7 +253,7 @@ export default function InviteModal({
                     </span>
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {qrCodeCount} QR code{qrCodeCount > 1 ? "s" : ""} via{" "}
+                    {qrCodeCount} Ticket{qrCodeCount > 1 ? "s" : ""} via{" "}
                     {contactType === "email" ? "Email" : "SMS"}
                   </div>
                 </>
