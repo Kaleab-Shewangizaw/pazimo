@@ -189,7 +189,7 @@ export default function EditableTable({
   // Cost calculation
   const calculateCost = (): number => {
     return data.reduce((total, row) => {
-      const amount = Number(row.Amount || 1);
+      const amount = row.Amount !== undefined ? Number(row.Amount) : 0;
       if (row.Type === "Both")
         return total + (pricing.email + pricing.sms) * amount;
       if (row.Type === "Phone") return total + pricing.sms * amount;
@@ -208,7 +208,7 @@ export default function EditableTable({
       Email: "",
       Phone: "",
       Type: "Email",
-      Amount: 1,
+      Amount: 0,
       Message: "",
       QR: "",
       eventDetail: event,
@@ -552,6 +552,13 @@ export default function EditableTable({
             </div>
           </div>
         )}
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+          <p>
+            <strong>Note:</strong> If Amount is <strong>0</strong>, an event
+            link will be sent without a ticket (Free of charge). If Amount is{" "}
+            <strong>1 or more</strong>, it is a paid invitation with tickets.
+          </p>
+        </div>
         <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-xs text-left table-fixed">
             <thead className="bg-gray-100 sticky top-0">
@@ -664,14 +671,14 @@ export default function EditableTable({
                       {key === "Amount" && (
                         <input
                           type="number"
-                          min={1}
+                          min={0}
                           max={10}
                           value={row.Amount}
                           onChange={(e) =>
                             handleChange(
                               i,
                               "Amount",
-                              Math.max(1, Math.min(10, Number(e.target.value)))
+                              Math.max(0, Math.min(10, Number(e.target.value)))
                             )
                           }
                           className="border border-gray-300 px-2 py-1 rounded w-full"

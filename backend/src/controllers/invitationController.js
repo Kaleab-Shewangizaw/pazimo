@@ -21,7 +21,7 @@ const validateBulkRows = (rows, eventId) => {
 
     // Fix amount
     let amount = parseInt(row.amount || row.Amount || row.qrCodecount, 10);
-    if (isNaN(amount) || amount < 1) amount = 1;
+    if (isNaN(amount) || amount < 0) amount = 0;
     if (amount > 10) amount = 10;
     corrected.amount = amount;
 
@@ -171,7 +171,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       let uniqueId = invitation.invitationId;
 
       // Only create a ticket if it's a GUEST invitation (free)
-      if (invitation.guestType !== "paid") {
+      if (invitation.guestType !== "paid" && invitation.amount > 0) {
         ticket = await Ticket.create({
           event: invitation.eventId,
           isInvitation: true,
@@ -196,7 +196,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       let actionLink;
       let actionText;
 
-      if (invitation.guestType === "paid") {
+      if (invitation.guestType === "paid" || invitation.amount === 0) {
         actionLink = `${frontendUrl}/event_detail?id=${event._id}`;
         actionText = "Buy Ticket";
       } else {

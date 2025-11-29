@@ -20,7 +20,11 @@ export const validateAndCorrectRows = (rows: Row[]): ValidationResult => {
 
   const totalCalculation = (rows: Row[]): number => {
     return rows.reduce((total, row) => {
-      const amount = Number(row.Amount || 1);
+      // If Amount is 0, it's free (0 cost). If undefined/null, default to 0.
+      const amount =
+        row.Amount !== undefined && row.Amount !== null
+          ? Number(row.Amount)
+          : 0;
 
       if (row.Type === "Both") return total + 7 * amount;
       if (row.Type === "Phone") return total + 5 * amount;
@@ -124,6 +128,9 @@ export const validateAndCorrectRows = (rows: Row[]): ValidationResult => {
 
     // Fix Amount
     // 2 birr per Email, 5 birr per SMS times the number of amount
+    if (correctedRow.Amount === undefined || correctedRow.Amount === null) {
+      correctedRow.Amount = 0;
+    }
 
     // Message
     if (!correctedRow.Message) {
