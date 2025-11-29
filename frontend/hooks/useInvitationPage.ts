@@ -243,6 +243,7 @@ export function useInvitationPage() {
           tags: event.tags,
           category: event.category,
           ageRestriction: event.ageRestriction,
+          coverImages: event.coverImages,
           _id: event._id,
         }));
 
@@ -390,6 +391,11 @@ export function useInvitationPage() {
         ? "Click below to purchase your ticket"
         : "Scan the QR code or click the link below to confirm your attendance";
 
+    const eventImage =
+      event?.coverImages && event.coverImages.length > 0
+        ? event.coverImages[0]
+        : "https://pazimo.vercel.app/images/default-event.jpg";
+
     return `
 <!DOCTYPE html>
 <html>
@@ -414,12 +420,20 @@ export function useInvitationPage() {
       transform: translateY(-2px);
       box-shadow: 0 6px 8px rgba(102, 126, 234, 0.6);
     }
+    .header-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+      border-radius: 8px 8px 0 0;
+    }
   </style>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0;">
-      <img src="https://pazimo.com/logo.png" alt="Pazimo" style="height: 50px; margin-bottom: 20px;" />
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); border-radius: 8px;">
+    <div style="padding: 0;">
+      <img src="${eventImage}" alt="${event?.title}" class="header-image" />
+    </div>
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
       <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🎉 You're Invited!</h1>
       <p style="color: #e2e8f0; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Join us for an amazing event</p>
     </div>
@@ -679,7 +693,7 @@ export function useInvitationPage() {
       });
 
       const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
-      const inviteMessage = message
+      const smsInviteMessage = message
         ? `${message}\n\n${eventDetails}`
         : `You're invited to ${selectedEvent?.title}!\n\n${eventDetails}`;
 
@@ -687,10 +701,11 @@ export function useInvitationPage() {
 
       if (contactType === "email") {
         const subject = `🎉 You're Invited: ${selectedEvent?.title}`;
+        // For email, we don't need to append event details to the message as they are already in the template
         const emailBody = createEmailTemplate(
           customerName,
           selectedEvent,
-          inviteMessage,
+          message, // Pass only the custom message
           qrCodeLink,
           guestType
         );
@@ -703,7 +718,7 @@ export function useInvitationPage() {
           formattedPhone = "+251" + formattedPhone;
         }
 
-        const smsMessage = `Hi ${customerName}, ${inviteMessage}`;
+        const smsMessage = `Hi ${customerName}, ${smsInviteMessage}`;
         success = await sendSMS(formattedPhone, smsMessage);
       }
 

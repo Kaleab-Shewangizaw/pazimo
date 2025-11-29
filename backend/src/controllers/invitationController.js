@@ -166,31 +166,50 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       const event = await Event.findById(invitation.eventId);
       if (!event) throw new Error("Event not found");
 
-      // Create a Free Ticket for this invitation
-      const ticket = await Ticket.create({
-        event: invitation.eventId,
-        isInvitation: true,
-        guestName: invitation.guestName,
-        guestEmail: invitation.guestEmail,
-        guestPhone: invitation.guestPhone,
-        ticketType: "Guest Ticket",
-        ticketCount: invitation.amount, // Use amount from bulk data
-        price: 0, // Free ticket
-        status: "active",
-        paymentStatus: "completed",
-        paymentReference: paymentReference || invitation.paymentReference,
-      });
+      let ticket = null;
+      let qrCodeBase64 = "";
+      let uniqueId = invitation.invitationId;
 
-      // The Ticket pre-save hook generates the QR code.
-      // We use the ticket's QR code and ID for the invitation.
+      // Only create a ticket if it's a GUEST invitation (free)
+      if (invitation.guestType !== "paid") {
+        ticket = await Ticket.create({
+          event: invitation.eventId,
+          isInvitation: true,
+          guestName: invitation.guestName,
+          guestEmail: invitation.guestEmail,
+          guestPhone: invitation.guestPhone,
+          ticketType: "Guest Ticket",
+          ticketCount: invitation.amount, // Use amount from bulk data
+          price: 0, // Free ticket
+          status: "active",
+          paymentStatus: "completed",
+          paymentReference: paymentReference || invitation.paymentReference,
+        });
+        uniqueId = ticket.ticketId;
+        qrCodeBase64 = ticket.qrCode;
+      }
 
-      // Generate RSVP/Guest Link using Ticket ID
+      // Generate RSVP/Guest Link
       const frontendUrl =
         process.env.FRONTEND_URL || "https://pazimo.vercel.app";
-      const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
+
+      let actionLink;
+      let actionText;
+
+      if (invitation.guestType === "paid") {
+        actionLink = `${frontendUrl}/event_detail?id=${event._id}`;
+        actionText = "Buy Ticket";
+      } else {
+        actionLink = `${frontendUrl}/guest-invitation?inv=${uniqueId}`;
+        actionText = "Confirm Attendance";
+      }
+
+      const rsvpLink = actionLink;
 
       // Update Invitation
-      invitation.qrCodeData = ticket.qrCode; // Sync QR code
+      if (ticket) {
+        invitation.qrCodeData = ticket.qrCode; // Sync QR code
+      }
       invitation.rsvpLink = rsvpLink;
       invitation.paymentStatus = "paid";
       invitation.status = "sent";
@@ -216,31 +235,34 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
         const invitationData = {
           guestName: invitation.guestName,
           ticketType: "Guest Ticket",
-          uniqueId: ticket.ticketId, // Use Ticket ID
-          actionLink: rsvpLink,
-          actionText: "Confirm Attendance",
+          uniqueId: uniqueId,
+          actionLink: actionLink,
+          actionText: actionText,
         };
 
-        // Use Ticket's QR Code
-        const qrCodeBase64 = ticket.qrCode;
+        const eventImage =
+          event.coverImages && event.coverImages.length > 0
+            ? event.coverImages[0]
+            : "";
 
         const emailHtml = createEmailTemplate(
           eventData,
           invitationData,
-          qrCodeBase64
+          qrCodeBase64,
+          eventImage
         );
 
         await sendInvitationEmail({
           to: invitation.guestEmail,
           subject: `You're invited to ${event.title}!`,
           body: emailHtml,
-          attachments: [
-            {
-              filename: "ticket-qr.png",
-              content: qrCodeBase64.split(";base64,").pop(),
-              encoding: "base64",
-            },
-          ],
+          // attachments: [
+          //   {
+          //     filename: "ticket-qr.png",
+          //     content: qrCodeBase64.split(";base64,").pop(),
+          //     encoding: "base64",
+          //   },
+          // ],
         });
       }
 
@@ -514,19 +536,52 @@ const createAndSendProfessionalInvitation = async (data) => {
     if (!event) throw new Error("Event not found");
 
     const invitationId = uuidv4();
+    let ticket = null;
+    let qrCodeBase64 = "";
+    let uniqueId = invitationId;
 
-    // Generate QR Data
-    const qrPayload = {
-      invitationId,
-      eventId,
-      type: "guest_ticket",
-    };
-    const qrDataString = JSON.stringify(qrPayload);
-    const qrCodeBase64 = await QRCode.toDataURL(qrDataString);
+    if (guestType !== "paid") {
+      // Create Ticket
+      ticket = await Ticket.create({
+        event: eventId,
+        isInvitation: true,
+        guestName,
+        guestEmail,
+        guestPhone,
+        ticketType: "Guest Ticket",
+        ticketCount: parseInt(amount) || 1,
+        price: 0,
+        status: "active",
+        paymentStatus: "completed",
+      });
+      uniqueId = ticket.ticketId;
+      qrCodeBase64 = ticket.qrCode;
+    } else {
+      // Generate QR Data
+      const qrPayload = {
+        invitationId,
+        eventId,
+        type: "guest_ticket",
+      };
+      const qrDataString = JSON.stringify(qrPayload);
+      qrCodeBase64 = await QRCode.toDataURL(qrDataString);
+    }
 
     // Generate RSVP Link
     const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
-    const rsvpLink = `${frontendUrl}/guest-invitation?inv=${invitationId}`;
+
+    let actionLink;
+    let actionText;
+
+    if (guestType === "paid") {
+      actionLink = `${frontendUrl}/event_detail?id=${eventId}`;
+      actionText = "Buy Ticket";
+    } else {
+      actionLink = `${frontendUrl}/guest-invitation?inv=${uniqueId}`;
+      actionText = "Confirm Attendance";
+    }
+
+    const rsvpLink = actionLink;
 
     // Map type if needed (phone -> sms)
     let contactType = type;
@@ -563,28 +618,34 @@ const createAndSendProfessionalInvitation = async (data) => {
       const invitationData = {
         guestName,
         ticketType: "Guest Ticket",
-        uniqueId: invitationId,
-        actionLink: rsvpLink,
-        actionText: "Confirm Attendance",
+        uniqueId: uniqueId,
+        actionLink: actionLink,
+        actionText: actionText,
       };
+
+      const eventImage =
+        event.coverImages && event.coverImages.length > 0
+          ? event.coverImages[0]
+          : "";
 
       const emailHtml = createEmailTemplate(
         eventData,
         invitationData,
-        qrCodeBase64
+        qrCodeBase64,
+        eventImage
       );
 
       await sendInvitationEmail({
         to: guestEmail,
         subject: `You're invited to ${event.title}!`,
         body: emailHtml,
-        attachments: [
-          {
-            filename: "ticket-qr.png",
-            content: qrCodeBase64.split(";base64,").pop(),
-            encoding: "base64",
-          },
-        ],
+        // attachments: [
+        //   {
+        //     filename: "ticket-qr.png",
+        //     content: qrCodeBase64.split(";base64,").pop(),
+        //     encoding: "base64",
+        //   },
+        // ],
       });
     }
 

@@ -91,9 +91,28 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
 </html>`;
   }
 
-  // Handle the new signature: (event, invitation, qrCodeUrl)
+  // Handle the new signature: (event, invitation, qrCodeUrl, eventImage)
   const event = eventOrData;
   const invitation = invitationData;
+  // Use the passed eventImage or fallback to a placeholder if needed
+  // If eventImage is not passed as 4th arg, check if it's in event object
+  const eventImage =
+    qrCodeUrl && typeof qrCodeUrl === "string" && !qrCodeUrl.startsWith("data:")
+      ? qrCodeUrl
+      : event.image || "https://pazimo.vercel.app/images/default-event.jpg";
+
+  // If the 3rd argument was the QR code (data URL), keep it. If it was the image (string url), we might have swapped them.
+  // But let's stick to the signature: createEmailTemplate(event, invitation, qrCodeUrl, eventImage)
+  // To be safe with existing calls, we'll check arguments.
+
+  let finalQrCodeUrl = qrCodeUrl;
+  let finalEventImage =
+    event.image || "https://pazimo.vercel.app/images/default-event.jpg";
+
+  // If the function is called with 4 arguments: createEmailTemplate(event, invitation, qrCode, image)
+  if (arguments.length >= 4) {
+    finalEventImage = arguments[3];
+  }
 
   const eventDate = new Date(event.date).toLocaleDateString("en-US", {
     weekday: "long",
@@ -142,8 +161,16 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
         .header {
           background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
           color: white;
-          padding: 40px 20px;
+          padding: 0;
           text-align: center;
+        }
+        .header-image {
+          width: 100%;
+          height: 200px;
+          object-fit: cover;
+        }
+        .header-content {
+          padding: 30px 20px;
         }
         .header h1 {
           margin: 0;
@@ -245,8 +272,15 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>You're Invited!</h1>
-          <p>You have received a special invitation</p>
+          ${
+            finalEventImage
+              ? `<img src="${finalEventImage}" alt="${event.title}" class="header-image" />`
+              : ""
+          }
+          <div class="header-content">
+            <h1>You're Invited!</h1>
+            <p>You have received a special invitation</p>
+          </div>
         </div>
         
         <div class="content">

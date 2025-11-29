@@ -431,25 +431,11 @@ const processGuestInvitation = async (ticketId) => {
 
     const emailHtml = createEmailTemplate(eventData, invitationData, qrCodeUrl);
 
-    // Extract base64 for attachment (remove "data:image/png;base64,")
-    const qrCodeBase64 = ticket.qrCode
-      ? ticket.qrCode.split(";base64,").pop()
-      : "";
-
     try {
       await sendInvitationEmail({
         to: ticket.guestEmail,
         subject: `You're invited to ${event.title}!`,
         body: emailHtml,
-        attachments: qrCodeBase64
-          ? [
-              {
-                filename: "ticket-qr.png",
-                content: qrCodeBase64,
-                encoding: "base64",
-              },
-            ]
-          : [],
       });
       console.log(`Invitation email sent to ${ticket.guestEmail}`);
     } catch (emailError) {
@@ -673,28 +659,34 @@ const createInvitationTicket = async (req, res) => {
       };
 
       const qrCodeUrl = ticket.qrCode;
+      const eventImage =
+        event.coverImages && event.coverImages.length > 0
+          ? event.coverImages[0]
+          : "";
+
       const emailHtml = createEmailTemplate(
         eventData,
         invitationData,
-        qrCodeUrl
+        qrCodeUrl,
+        eventImage
       );
 
       // We need the QR code from the ticket.
       // The pre-save hook generates it, but it's a data URL.
       // We need to strip the prefix for attachment.
-      const qrCodeBase64 = ticket.qrCode.split(";base64,").pop();
+      // const qrCodeBase64 = ticket.qrCode.split(";base64,").pop();
 
       await sendInvitationEmail({
         to: guestEmail,
         subject: `You're invited to ${event.title}!`,
         body: emailHtml,
-        attachments: [
-          {
-            filename: "ticket-qr.png",
-            content: qrCodeBase64,
-            encoding: "base64",
-          },
-        ],
+        // attachments: [
+        //   {
+        //     filename: "ticket-qr.png",
+        //     content: qrCodeBase64,
+        //     encoding: "base64",
+        //   },
+        // ],
       });
     }
 

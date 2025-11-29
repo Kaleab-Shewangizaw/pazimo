@@ -19,6 +19,7 @@ export interface Event {
   tags?: string[];
   category?: string;
   ageRestriction?: string;
+  coverImages?: string[];
 }
 
 export interface Invitation {
