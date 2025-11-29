@@ -18,8 +18,8 @@ const PAYMENT_METHODS = [
     image: "/Telebirr.png",
   },
   {
-    id: "Commercial Bank of Ethiopia",
-    name: "CBE",
+    id: "CBE Birr",
+    name: "CBE Birr",
     image: "/cbe-logo.png", // Assuming this image is appropriate for CBE
   },
   {

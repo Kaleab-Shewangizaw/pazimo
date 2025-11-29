@@ -27,7 +27,7 @@ export default function PaymentModal({
   onCancel,
 }: PaymentModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [selectedMethod, setSelectedMethod] = useState("telebirr");
+  const [selectedMethod, setSelectedMethod] = useState("Telebirr");
 
   const amount = (
     (pendingInvitation?.contactType === "email" ? pricing.email : pricing.sms) *

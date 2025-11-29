@@ -176,7 +176,7 @@ export default function TicketsPage() {
 
   useEffect(() => {
     const fetchTickets = async () => {
-      console.log("Starting to fetch tickets...");
+      // console.log("Starting to fetch tickets...");
 
       const storedAuth = localStorage.getItem("auth-storage");
       let userId;
@@ -187,12 +187,12 @@ export default function TicketsPage() {
           const parsedAuth = JSON.parse(storedAuth);
           userId = parsedAuth.state?.user?._id;
           token = parsedAuth.state?.token;
-          console.log(
-            "Auth found - User ID:",
-            userId,
-            "Token exists:",
-            !!token
-          );
+          // console.log(
+          //   "Auth found - User ID:",
+          //   userId,
+          //   "Token exists:",
+          //   !!token
+          // );
         } catch (e) {
           console.error("Failed to parse auth", e);
           setLoading(false);

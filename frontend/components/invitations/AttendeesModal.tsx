@@ -155,12 +155,6 @@ export default function AttendeesModal({
                 </button>
               </>
             )}
-            <button
-              onClick={onClose}
-              className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm"
-            >
-              Close
-            </button>
           </div>
         </div>
       </div>

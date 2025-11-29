@@ -118,7 +118,7 @@ app.post("/api/send-sms", async (req, res) => {
         body: JSON.stringify({
           contacts: [{ phone_number: phone }],
           msg: message,
-          sender: "PAZ Events",
+          sender: "Pazimo invitation",
         }),
       }
     );

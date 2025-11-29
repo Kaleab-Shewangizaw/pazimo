@@ -664,25 +664,25 @@ function EventDetailContent() {
   };
 
   // Debug: Log ticket information
-  console.log("=== TICKET DEBUG INFO ===");
-  console.log("All tickets from API:", event.ticketTypes);
-  console.log("Total tickets:", event.ticketTypes?.length || 0);
-  console.log(
-    "Tickets with available=true:",
-    event.ticketTypes?.filter((t) => t.available === true).length || 0
-  );
-  console.log(
-    "Tickets with available=false:",
-    event.ticketTypes?.filter((t) => t.available === false).length || 0
-  );
-  console.log(
-    "Tickets with available=undefined:",
-    event.ticketTypes?.filter((t) => t.available === undefined).length || 0
-  );
-  console.log("Filtered tickets to display:", ticketsToDisplay);
-  console.log("Tickets to display count:", ticketsToDisplay?.length || 0);
-  console.log("Selected ticket type:", selectedTicketType);
-  console.log("========================");
+  // console.log("=== TICKET DEBUG INFO ===");
+  // console.log("All tickets from API:", event.ticketTypes);
+  // console.log("Total tickets:", event.ticketTypes?.length || 0);
+  // console.log(
+  //   "Tickets with available=true:",
+  //   event.ticketTypes?.filter((t) => t.available === true).length || 0
+  // );
+  // console.log(
+  //   "Tickets with available=false:",
+  //   event.ticketTypes?.filter((t) => t.available === false).length || 0
+  // );
+  // console.log(
+  //   "Tickets with available=undefined:",
+  //   event.ticketTypes?.filter((t) => t.available === undefined).length || 0
+  // );
+  // console.log("Filtered tickets to display:", ticketsToDisplay);
+  // console.log("Tickets to display count:", ticketsToDisplay?.length || 0);
+  // console.log("Selected ticket type:", selectedTicketType);
+  // console.log("========================");
 
   const getDayName = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
