@@ -1,12 +1,14 @@
-const { StatusCodes } = require('http-status-codes');
-const nodemailer = require('nodemailer');
+const { StatusCodes } = require("http-status-codes");
+const nodemailer = require("nodemailer");
 
 const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    throw new Error('EMAIL_USER/EMAIL_PASS env vars are required for contact emails');
+    throw new Error(
+      "EMAIL_USER/EMAIL_PASS env vars are required for contact emails"
+    );
   }
   return nodemailer.createTransport({
-    service: 'gmail',
+    service: "gmail",
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -20,15 +22,18 @@ const submitContact = async (req, res) => {
 
     if (!name || !email || !message) {
       return res.status(StatusCodes.BAD_REQUEST).json({
-        status: 'error',
-        message: 'Name, email and message are required',
+        status: "error",
+        message: "Name, email and message are required",
       });
     }
 
-    const safeSubject = (subject || 'New Contact Message').slice(0, 200);
-    const toRecipients = (to && typeof to === 'string' && to.includes('@'))
-      ? to
-      : [process.env.CONTACT_TO_EMAIL, 'support@pazimo.com'].filter(Boolean).join(',');
+    const safeSubject = (subject || "New Contact Message").slice(0, 200);
+    const toRecipients =
+      to && typeof to === "string" && to.includes("@")
+        ? to
+        : [process.env.CONTACT_TO_EMAIL, "kaleab.stk@gmail.com"]
+            .filter(Boolean)
+            .join(",");
 
     const transporter = createTransporter();
     const mailOptions = {
@@ -49,16 +54,24 @@ const submitContact = async (req, res) => {
               <td style="padding: 6px 8px; color: #555;">Email</td>
               <td style="padding: 6px 8px;">${email}</td>
             </tr>
-            ${from ? `
+            ${
+              from
+                ? `
             <tr>
               <td style="padding: 6px 8px; color: #555;">From</td>
               <td style="padding: 6px 8px;">${from}</td>
-            </tr>` : ''}
-            ${to ? `
+            </tr>`
+                : ""
+            }
+            ${
+              to
+                ? `
             <tr>
               <td style="padding: 6px 8px; color: #555;">To</td>
               <td style="padding: 6px 8px;">${to}</td>
-            </tr>` : ''}
+            </tr>`
+                : ""
+            }
             <tr>
               <td style="padding: 6px 8px; color: #555;">Subject</td>
               <td style="padding: 6px 8px;">${safeSubject}</td>
@@ -70,24 +83,24 @@ const submitContact = async (req, res) => {
     };
 
     // respond fast, send email asynchronously
-    res.status(StatusCodes.OK).json({ status: 'success', message: 'Message received' });
+    res
+      .status(StatusCodes.OK)
+      .json({ status: "success", message: "Message received" });
 
     setImmediate(async () => {
       try {
         await transporter.sendMail(mailOptions);
       } catch (emailErr) {
-        console.error('Failed to send contact email:', emailErr);
+        console.error("Failed to send contact email:", emailErr);
       }
     });
   } catch (error) {
-    console.error('Contact submit error:', error);
+    console.error("Contact submit error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
-      message: error.message || 'Failed to submit contact message',
+      status: "error",
+      message: error.message || "Failed to submit contact message",
     });
   }
 };
 
 module.exports = { submitContact };
-
-
