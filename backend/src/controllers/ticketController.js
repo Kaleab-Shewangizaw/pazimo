@@ -421,6 +421,8 @@ const processGuestInvitation = async (ticketId) => {
       guestName: ticket.guestName,
       ticketType: ticket.ticketType || "General",
       uniqueId: ticket.ticketId,
+      actionLink: rsvpLink,
+      actionText: "Confirm Attendance",
     };
 
     // Use the QR code from the ticket (Data URL)
@@ -666,6 +668,8 @@ const createInvitationTicket = async (req, res) => {
         guestName,
         ticketType: ticket.ticketType || "General",
         uniqueId: ticket.ticketId,
+        actionLink: rsvpLink,
+        actionText: "Confirm Attendance",
       };
 
       const qrCodeUrl = ticket.qrCode;

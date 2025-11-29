@@ -107,6 +107,14 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
     minute: "2-digit",
   });
 
+  const frontendUrl = "https://pazimo.vercel.app";
+  // Use provided actionLink or fallback to guest invitation
+  const actionLink =
+    invitation.actionLink ||
+    `${frontendUrl}/guest-invitation?inv=${invitation.uniqueId}`;
+
+  const actionText = invitation.actionText || "Confirm Attendance";
+
   return `
     <!DOCTYPE html>
     <html>
@@ -216,13 +224,21 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
         }
         .button {
           display: inline-block;
-          background-color: #4f46e5;
-          color: white;
-          padding: 12px 24px;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: #ffffff !important;
+          padding: 15px 40px;
+          border-radius: 30px;
           text-decoration: none;
-          border-radius: 6px;
-          font-weight: 600;
+          font-weight: 700;
+          font-size: 18px;
+          box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);
+          transition: all 0.3s ease;
           margin-top: 20px;
+          text-align: center;
+        }
+        .button:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 8px rgba(102, 126, 234, 0.6);
         }
       </style>
     </head>
@@ -260,14 +276,25 @@ const createEmailTemplate = (eventOrData, invitationData, qrCodeUrl) => {
           </div>
 
           <div class="qr-section">
-            <p style="margin-top: 0; margin-bottom: 15px; font-weight: 600; color: #4b5563;">Your Entry Ticket confirm using the following link</p>
+            <p style="margin-top: 0; margin-bottom: 15px; font-weight: 600; color: #4b5563;">
+              ${
+                actionText === "Buy Ticket"
+                  ? "Click below to purchase your ticket"
+                  : "Your Entry Ticket - Please Confirm"
+              }
+            </p>
             
-            <div>
-              <span class="ticket-id">${
-                process.env.BASE_URL || "https://pazimo.vercel.app"
-              }/guest-invitation?inv=${invitation.uniqueId}</span>
+            <div style="text-align: center;">
+              <a href="${actionLink}" class="button">${actionText}</a>
             </div>
-            <p style="font-size: 13px; color: #6b7280; margin-top: 10px;">Please present this QR code at the entrance.</p>
+            
+            <p style="font-size: 13px; color: #6b7280; margin-top: 20px;">
+              ${
+                actionText === "Buy Ticket"
+                  ? "You will receive your QR code after payment."
+                  : "Please present your QR code at the entrance."
+              }
+            </p>
           </div>
 
           <p>We look forward to seeing you there!</p>

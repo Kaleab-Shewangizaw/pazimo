@@ -340,7 +340,7 @@ export function useInvitationPage() {
   ) => {
     try {
       const baseUrl =
-        process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
+        process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.vercel.app";
       let qrUrl: string;
 
       if (guestType === "paid") {
@@ -380,8 +380,16 @@ export function useInvitationPage() {
     customerName: string,
     event: Event | null,
     message: string,
-    qrLink: string
+    qrLink: string,
+    guestType: "guest" | "paid" = "guest"
   ) => {
+    const actionText =
+      guestType === "paid" ? "Buy Ticket" : "Confirm Attendance";
+    const actionDescription =
+      guestType === "paid"
+        ? "Click below to purchase your ticket"
+        : "Scan the QR code or click the link below to confirm your attendance";
+
     return `
 <!DOCTYPE html>
 <html>
@@ -389,6 +397,24 @@ export function useInvitationPage() {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Event Invitation</title>
+  <style>
+    .button {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff !important;
+      padding: 15px 40px;
+      border-radius: 30px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 18px;
+      box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);
+      transition: all 0.3s ease;
+    }
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 8px rgba(102, 126, 234, 0.6);
+    }
+  </style>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
@@ -433,9 +459,11 @@ export function useInvitationPage() {
       }
       <div style="text-align: center; margin: 30px 0;">
         <div style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 12px; padding: 20px; margin: 20px 0;">
-          <h3 style="color: #ffffff; margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">🎫 Quick RSVP</h3>
-          <p style="color: #f0fff4; margin: 0 0 15px 0; font-size: 14px;">Scan the QR code or click the link below to confirm your attendance</p>
-          <a href="${qrLink}" style="display: inline-block; background: #ffffff; color: #38a169; padding: 12px 30px; border-radius: 25px; text-decoration: none; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: all 0.3s ease;">🔗 RSVP Now</a>
+          <h3 style="color: #ffffff; margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">🎫 ${
+            guestType === "paid" ? "Get Your Ticket" : "Quick RSVP"
+          }</h3>
+          <p style="color: #f0fff4; margin: 0 0 15px 0; font-size: 14px;">${actionDescription}</p>
+          <a href="${qrLink}" class="button">${actionText}</a>
         </div>
       </div>
     </div>
@@ -640,7 +668,7 @@ export function useInvitationPage() {
         // Generate UUID for the invitation
         invitationId = generateUUID();
         const baseUrl =
-          process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
+          process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.vercel.app";
         qrCodeLink = `${baseUrl}/guest-invitation?inv=${invitationId}`;
       }
 
@@ -663,7 +691,8 @@ export function useInvitationPage() {
           customerName,
           selectedEvent,
           inviteMessage,
-          qrCodeLink
+          qrCodeLink,
+          guestType
         );
         success = await sendEmail(contact, subject, emailBody);
       } else {

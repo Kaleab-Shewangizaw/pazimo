@@ -217,6 +217,8 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           guestName: invitation.guestName,
           ticketType: "Guest Ticket",
           uniqueId: ticket.ticketId, // Use Ticket ID
+          actionLink: rsvpLink,
+          actionText: "Confirm Attendance",
         };
 
         // Use Ticket's QR Code
@@ -562,6 +564,8 @@ const createAndSendProfessionalInvitation = async (data) => {
         guestName,
         ticketType: "Guest Ticket",
         uniqueId: invitationId,
+        actionLink: rsvpLink,
+        actionText: "Confirm Attendance",
       };
 
       const emailHtml = createEmailTemplate(
