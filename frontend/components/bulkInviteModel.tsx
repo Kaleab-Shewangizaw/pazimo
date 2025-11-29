@@ -141,7 +141,7 @@ export default function BulkInvite({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 max-h-screen">
       <div className="bg-white border border-gray-200 rounded-xl max-w-6xl w-full p-6 md:p-8 shadow-xl relative">
         <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5 text-blue-600" />

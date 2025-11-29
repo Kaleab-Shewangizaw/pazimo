@@ -1,5 +1,5 @@
 import React from "react";
-import { Search } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
 import { Event } from "@/types/invitation";
 
 interface EventsTableProps {
@@ -57,19 +57,19 @@ export default function EventsTable({
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Event
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
                 Date & Time
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                 Location
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
                 Type
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">
                 Organizer
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
                 Status
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -80,8 +80,14 @@ export default function EventsTable({
           <tbody className="bg-white divide-y divide-gray-200">
             {isLoading ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
-                  Loading events...
+                <td
+                  colSpan={7}
+                  className="px-6 py-12 text-center text-gray-500"
+                >
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <p>Loading events...</p>
+                  </div>
                 </td>
               </tr>
             ) : paginatedEvents.length === 0 ? (
@@ -102,21 +108,27 @@ export default function EventsTable({
                       <div className="text-sm font-medium text-gray-900">
                         {event.title}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div
+                        className="text-sm text-gray-500 max-w-[150px] truncate"
+                        title={event.description}
+                      >
                         {event.description || "No description"}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap hidden sm:table-cell">
                     <div className="text-sm text-gray-900">{event.date}</div>
                     <div className="text-sm text-gray-500">{event.time}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
+                  <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
+                    <div
+                      className="text-sm text-gray-900 max-w-[150px] truncate"
+                      title={event.location}
+                    >
                       {event.location}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap hidden lg:table-cell">
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         event.isPublic === false
@@ -127,12 +139,12 @@ export default function EventsTable({
                       {event.isPublic === false ? "private" : "public"}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap hidden xl:table-cell">
                     <div className="text-sm text-gray-900">
                       {event.organizer}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap hidden lg:table-cell">
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         event.status === "active"

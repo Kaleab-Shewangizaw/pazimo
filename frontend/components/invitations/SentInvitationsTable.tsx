@@ -8,6 +8,7 @@ import {
   Clock,
   AlertCircle,
   CheckIcon,
+  Loader2,
 } from "lucide-react";
 import { Invitation } from "@/types/invitation";
 
@@ -221,9 +222,12 @@ export default function SentInvitationsTable({
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 md:px-6 py-8 text-center text-gray-500"
+                    className="px-4 md:px-6 py-12 text-center text-gray-500"
                   >
-                    Loading invitations...
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                      <p>Loading invitations...</p>
+                    </div>
                   </td>
                 </tr>
               ) : filteredInvitations.length === 0 ? (

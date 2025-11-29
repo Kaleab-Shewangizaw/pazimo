@@ -580,13 +580,14 @@ export function useInvitationPage() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const formattedAttendees = invitations.map((inv: any) => ({
           id: inv._id,
-          customerName: inv.customerName,
-          contact: inv.contact,
+          customerName: inv.guestName || inv.customerName || "Unknown Guest",
+          contact:
+            inv.guestEmail || inv.guestPhone || inv.contact || "No Contact",
           guestType: inv.guestType || "guest",
           confirmedAt: inv.rsvpConfirmedAt
             ? new Date(inv.rsvpConfirmedAt).toLocaleDateString()
             : "Not confirmed",
-          status: inv.rsvpStatus || "pending",
+          status: inv.rsvpStatus || inv.status || "pending",
         }));
         setAttendees(formattedAttendees);
       } else {

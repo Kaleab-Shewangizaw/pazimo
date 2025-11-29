@@ -174,13 +174,13 @@
 //     return Math.ceil(data.length / itemsPerPage);
 //   };
 
-//   const PaginationControls = ({ 
-//     currentPage, 
-//     totalPages, 
-//     onPageChange, 
-//     itemsPerPage, 
+//   const PaginationControls = ({
+//     currentPage,
+//     totalPages,
+//     onPageChange,
+//     itemsPerPage,
 //     onItemsPerPageChange,
-//     totalItems 
+//     totalItems
 //   }: {
 //     currentPage: number;
 //     totalPages: number;
@@ -197,7 +197,7 @@
 //         <div className="flex items-center gap-2 text-sm text-gray-600">
 //           <span>Showing {startItem} to {endItem} of {totalItems} results</span>
 //         </div>
-        
+
 //         <div className="flex items-center gap-4">
 //           <div className="flex items-center gap-2">
 //             <span className="text-sm text-gray-600">Items per page:</span>
@@ -213,7 +213,7 @@
 //               </SelectContent>
 //             </Select>
 //           </div>
-          
+
 //           <div className="flex items-center gap-1">
 //             <Button
 //               variant="outline"
@@ -233,7 +233,7 @@
 //             >
 //               <ChevronLeft className="h-4 w-4" />
 //             </Button>
-            
+
 //             <div className="flex items-center gap-1 mx-2">
 //               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
 //                 let pageNum;
@@ -246,7 +246,7 @@
 //                 } else {
 //                   pageNum = currentPage - 2 + i;
 //                 }
-                
+
 //                 return (
 //                   <Button
 //                     key={pageNum}
@@ -260,7 +260,7 @@
 //                 );
 //               })}
 //             </div>
-            
+
 //             <Button
 //               variant="outline"
 //               size="sm"
@@ -327,13 +327,13 @@
 //             <CardDescription>{error}</CardDescription>
 //           </CardHeader>
 //           <CardFooter>
-//             <Button 
+//             <Button
 //               onClick={() => {
 //                 const userId = localStorage.getItem('userId');
 //                 if (userId) {
 //                   fetchEvents(userId);
 //                 }
-//               }} 
+//               }}
 //               className="w-full"
 //             >
 //               Try Again
@@ -673,28 +673,20 @@
 //   );
 // }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-"use client"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useEventStore } from "@/store/eventStore"
-import { Button } from "@/components/ui/button"
-import { Card, CardHeader, CardTitle, CardDescription, CardFooter, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEventStore } from "@/store/eventStore";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+  CardContent,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Calendar,
   DollarSign,
@@ -723,10 +715,28 @@ import {
   ExternalLink,
   AlertCircle,
   Clock,
-} from "lucide-react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+  Loader2,
+} from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import {
   XAxis,
   YAxis,
@@ -739,177 +749,202 @@ import {
   Pie,
   PieChart,
   Cell,
-} from "recharts"
-import QRCode from "qrcode"
-import { toast } from "sonner"
+} from "recharts";
+import QRCode from "qrcode";
+import { toast } from "sonner";
 
 export default function OrganizerDashboard() {
-  const router = useRouter()
-  const { events, isLoading, error, fetchEvents } = useEventStore()
-  const [user, setUser] = useState<any>(null)
-  const [checkedAuth, setCheckedAuth] = useState(false)
-  const [activeTicketsByEvent, setActiveTicketsByEvent] = useState<{ [eventId: string]: any[] }>({})
-  const [allTicketsByEvent, setAllTicketsByEvent] = useState<{ [eventId: string]: any[] }>({})
-  const [withdrawals, setWithdrawals] = useState<any[]>([])
-  const [balance, setBalance] = useState<any>(null)
-  const [withdrawalsLoading, setWithdrawalsLoading] = useState(true)
+  const router = useRouter();
+  const { events, isLoading, error, fetchEvents } = useEventStore();
+  const [user, setUser] = useState<any>(null);
+  const [checkedAuth, setCheckedAuth] = useState(false);
+  const [activeTicketsByEvent, setActiveTicketsByEvent] = useState<{
+    [eventId: string]: any[];
+  }>({});
+  const [allTicketsByEvent, setAllTicketsByEvent] = useState<{
+    [eventId: string]: any[];
+  }>({});
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [balance, setBalance] = useState<any>(null);
+  const [withdrawalsLoading, setWithdrawalsLoading] = useState(true);
   const [showEarnings, setShowEarnings] = useState<{ [key: string]: boolean }>({
     revenue: true,
     "organizer-revenue": true,
     "pazimo-commission": true,
-  })
-  const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("")
-  const [selectedEvent, setSelectedEvent] = useState<any>(null)
+  });
+  const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
 
   // Pagination states
-  const [eventsPage, setEventsPage] = useState(1)
-  const [withdrawalsPage, setWithdrawalsPage] = useState(1)
-  const [analyticsPage, setAnalyticsPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(5)
+  const [eventsPage, setEventsPage] = useState(1);
+  const [withdrawalsPage, setWithdrawalsPage] = useState(1);
+  const [analyticsPage, setAnalyticsPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   useEffect(() => {
-    const authState = localStorage.getItem("auth-storage")
+    const authState = localStorage.getItem("auth-storage");
     if (!authState) {
-      setCheckedAuth(true)
-      return
+      setCheckedAuth(true);
+      return;
     }
     try {
-      const { state } = JSON.parse(authState)
-      const { user, token, isAuthenticated } = state
+      const { state } = JSON.parse(authState);
+      const { user, token, isAuthenticated } = state;
       if (!isAuthenticated || !token || user.role !== "organizer") {
-        setCheckedAuth(true)
-        return
+        setCheckedAuth(true);
+        return;
       }
-      setUser(user)
-      localStorage.setItem("userId", user._id)
-      localStorage.setItem("userRole", user.role)
-      localStorage.setItem("token", token)
-      fetchEvents(user._id)
-      setCheckedAuth(true)
+      setUser(user);
+      localStorage.setItem("userId", user._id);
+      localStorage.setItem("userRole", user.role);
+      localStorage.setItem("token", token);
+      fetchEvents(user._id);
+      setCheckedAuth(true);
     } catch (error) {
-      setCheckedAuth(true)
+      setCheckedAuth(true);
     }
-  }, [fetchEvents])
+  }, [fetchEvents]);
 
   useEffect(() => {
     const fetchTickets = async () => {
-      if (!user || !events.length) return
-      const token = localStorage.getItem("token")
-      const ticketsMap: { [eventId: string]: any[] } = {}
-      const allTicketsMap: { [eventId: string]: any[] } = {}
-      
+      if (!user || !events.length) return;
+      const token = localStorage.getItem("token");
+      const ticketsMap: { [eventId: string]: any[] } = {};
+      const allTicketsMap: { [eventId: string]: any[] } = {};
+
       // Fetch all tickets for each event to show comprehensive analytics
       // including both active and used tickets
-      
+
       for (const event of events) {
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event._id}`, {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event._id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const allTickets = data.tickets || [];
+
+            console.log(`Event ${event.title} tickets:`, allTickets);
+
+            // Store all tickets (for analytics and total counts)
+            allTicketsMap[event._id] = allTickets;
+
+            // Filter for active tickets only (for revenue calculations)
+            const activeTickets = allTickets.filter(
+              (t: any) => t.status === "active"
+            );
+            ticketsMap[event._id] = activeTickets;
+          } else {
+            console.log(
+              `Failed to fetch tickets for event ${event.title}:`,
+              res.status
+            );
+            ticketsMap[event._id] = [];
+            allTicketsMap[event._id] = [];
+          }
+        } catch (error) {
+          console.error(
+            `Error fetching tickets for event ${event.title}:`,
+            error
+          );
+          ticketsMap[event._id] = [];
+          allTicketsMap[event._id] = [];
+        }
+      }
+      setActiveTicketsByEvent(ticketsMap);
+      setAllTicketsByEvent(allTicketsMap);
+    };
+
+    fetchTickets();
+  }, [user, events]);
+
+  useEffect(() => {
+    const fetchWithdrawals = async () => {
+      setWithdrawalsLoading(true);
+      const storedAuth = localStorage.getItem("auth-storage");
+      let token = "";
+      let userId = "";
+      if (storedAuth) {
+        try {
+          const parsedAuth = JSON.parse(storedAuth);
+          token = parsedAuth.state?.token;
+          userId = parsedAuth.state?.user?._id;
+        } catch {}
+      }
+      if (!token || !userId) {
+        setWithdrawals([]);
+        setBalance(null);
+        setWithdrawalsLoading(false);
+        return;
+      }
+      // Fetch withdrawals
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals`,
+          {
             headers: {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            const allTickets = data.tickets || []
-            
-            console.log(`Event ${event.title} tickets:`, allTickets)
-            
-            // Store all tickets (for analytics and total counts)
-            allTicketsMap[event._id] = allTickets
-            
-            // Filter for active tickets only (for revenue calculations)
-            const activeTickets = allTickets.filter((t: any) => t.status === "active")
-            ticketsMap[event._id] = activeTickets
-          } else {
-            console.log(`Failed to fetch tickets for event ${event.title}:`, res.status)
-            ticketsMap[event._id] = []
-            allTicketsMap[event._id] = []
+            credentials: "include",
           }
-        } catch (error) {
-          console.error(`Error fetching tickets for event ${event.title}:`, error)
-          ticketsMap[event._id] = []
-          allTicketsMap[event._id] = []
-        }
-      }
-      setActiveTicketsByEvent(ticketsMap)
-      setAllTicketsByEvent(allTicketsMap)
-    }
-
-    fetchTickets()
-  }, [user, events])
-
-  useEffect(() => {
-    const fetchWithdrawals = async () => {
-      setWithdrawalsLoading(true)
-      const storedAuth = localStorage.getItem("auth-storage")
-      let token = ""
-      let userId = ""
-      if (storedAuth) {
-        try {
-          const parsedAuth = JSON.parse(storedAuth)
-          token = parsedAuth.state?.token
-          userId = parsedAuth.state?.user?._id
-        } catch {}
-      }
-      if (!token || !userId) {
-        setWithdrawals([])
-        setBalance(null)
-        setWithdrawalsLoading(false)
-        return
-      }
-      // Fetch withdrawals
-      try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        })
+        );
         if (res.ok) {
-          const data = await res.json()
-          setWithdrawals(data.data || [])
+          const data = await res.json();
+          setWithdrawals(data.data || []);
         } else {
-          setWithdrawals([])
+          setWithdrawals([]);
         }
       } catch {
-        setWithdrawals([])
+        setWithdrawals([]);
       }
       // Fetch balance
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-        })
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+          }
+        );
         if (res.ok) {
-          const data = await res.json()
-          setBalance(data.data || null)
+          const data = await res.json();
+          setBalance(data.data || null);
         } else {
-          setBalance(null)
+          setBalance(null);
         }
       } catch {
-        setBalance(null)
+        setBalance(null);
       }
-      setWithdrawalsLoading(false)
-    }
+      setWithdrawalsLoading(false);
+    };
 
-    fetchWithdrawals()
-  }, [user])
+    fetchWithdrawals();
+  }, [user]);
 
   // Pagination helper functions
-  const getPaginatedData = (data: any[], page: number, itemsPerPage: number) => {
-    const startIndex = (page - 1) * itemsPerPage
-    const endIndex = startIndex + itemsPerPage
-    return data.slice(startIndex, endIndex)
-  }
+  const getPaginatedData = (
+    data: any[],
+    page: number,
+    itemsPerPage: number
+  ) => {
+    const startIndex = (page - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return data.slice(startIndex, endIndex);
+  };
 
   const getTotalPages = (data: any[], itemsPerPage: number) => {
-    return Math.ceil(data.length / itemsPerPage)
-  }
+    return Math.ceil(data.length / itemsPerPage);
+  };
 
   const PaginationControls = ({
     currentPage,
@@ -919,15 +954,15 @@ export default function OrganizerDashboard() {
     onItemsPerPageChange,
     totalItems,
   }: {
-    currentPage: number
-    totalPages: number
-    onPageChange: (page: number) => void
-    itemsPerPage: number
-    onItemsPerPageChange: (items: number) => void
-    totalItems: number
+    currentPage: number;
+    totalPages: number;
+    onPageChange: (page: number) => void;
+    itemsPerPage: number;
+    onItemsPerPageChange: (items: number) => void;
+    totalItems: number;
   }) => {
-    const startItem = (currentPage - 1) * itemsPerPage + 1
-    const endItem = Math.min(currentPage * itemsPerPage, totalItems)
+    const startItem = (currentPage - 1) * itemsPerPage + 1;
+    const endItem = Math.min(currentPage * itemsPerPage, totalItems);
     return (
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 mt-4 p-2 sm:p-4 bg-gray-50 rounded-lg">
         <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
@@ -938,8 +973,13 @@ export default function OrganizerDashboard() {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="flex items-center gap-1 sm:gap-2">
-            <span className="text-xs sm:text-sm text-gray-600">Items per page:</span>
-            <Select value={itemsPerPage.toString()} onValueChange={(value) => onItemsPerPageChange(Number(value))}>
+            <span className="text-xs sm:text-sm text-gray-600">
+              Items per page:
+            </span>
+            <Select
+              value={itemsPerPage.toString()}
+              onValueChange={(value) => onItemsPerPageChange(Number(value))}
+            >
               <SelectTrigger className="w-16 sm:w-20 h-7 sm:h-8">
                 <SelectValue />
               </SelectTrigger>
@@ -974,15 +1014,15 @@ export default function OrganizerDashboard() {
 
             <div className="flex items-center gap-1 mx-1 sm:mx-2">
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum
+                let pageNum;
                 if (totalPages <= 5) {
-                  pageNum = i + 1
+                  pageNum = i + 1;
                 } else if (currentPage <= 3) {
-                  pageNum = i + 1
+                  pageNum = i + 1;
                 } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i
+                  pageNum = totalPages - 4 + i;
                 } else {
-                  pageNum = currentPage - 2 + i
+                  pageNum = currentPage - 2 + i;
                 }
 
                 return (
@@ -995,7 +1035,7 @@ export default function OrganizerDashboard() {
                   >
                     {pageNum}
                   </Button>
-                )
+                );
               })}
             </div>
 
@@ -1020,11 +1060,15 @@ export default function OrganizerDashboard() {
           </div>
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   if (!checkedAuth) {
-    return <div className="flex items-center justify-center min-h-screen">Loading...</div>
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Loading...
+      </div>
+    );
   }
 
   if (!user) {
@@ -1033,27 +1077,33 @@ export default function OrganizerDashboard() {
         <Card className="w-[350px]">
           <CardHeader>
             <CardTitle>Authentication Required</CardTitle>
-            <CardDescription>Please sign in as an organizer to view your dashboard</CardDescription>
+            <CardDescription>
+              Please sign in as an organizer to view your dashboard
+            </CardDescription>
           </CardHeader>
           <CardFooter>
-            <Button onClick={() => window.location.href = "/organizer/sign-in"} className="w-full">
+            <Button
+              onClick={() => (window.location.href = "/organizer/sign-in")}
+              className="w-full"
+            >
               Sign In
             </Button>
           </CardFooter>
         </Card>
       </div>
-    )
+    );
   }
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <h2 className="text-2xl font-semibold mb-4">Loading events...</h2>
-          <p className="text-gray-500">Please wait while we fetch your events</p>
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">Loading Dashboard...</h2>
+          <p className="text-gray-500">Please wait while we fetch your data</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (error) {
@@ -1067,9 +1117,9 @@ export default function OrganizerDashboard() {
           <CardFooter>
             <Button
               onClick={() => {
-                const userId = localStorage.getItem("userId")
+                const userId = localStorage.getItem("userId");
                 if (userId) {
-                  fetchEvents(userId)
+                  fetchEvents(userId);
                 }
               }}
               className="w-full"
@@ -1079,50 +1129,68 @@ export default function OrganizerDashboard() {
           </CardFooter>
         </Card>
       </div>
-    )
+    );
   }
 
   // --- Stat Calculations ---
-  const totalEvents = events.length
-  const publishedEvents = events.filter((e) => e.status === "published").length
-  const draftEvents = events.filter((e) => e.status === "draft").length
-  const cancelledEvents = events.filter((e) => e.status === "cancelled").length
-  const completedEvents = events.filter((e) => e.status === "completed").length
+  const totalEvents = events.length;
+  const publishedEvents = events.filter((e) => e.status === "published").length;
+  const draftEvents = events.filter((e) => e.status === "draft").length;
+  const cancelledEvents = events.filter((e) => e.status === "cancelled").length;
+  const completedEvents = events.filter((e) => e.status === "completed").length;
 
   // Calculate totals from actual ticket data
-  const totalTicketsSold = Object.values(allTicketsByEvent).reduce((sum, tickets) => sum + tickets.length, 0)
-  const totalUsedTickets = Object.values(allTicketsByEvent).reduce((sum, tickets) => 
-    sum + tickets.filter((t: any) => t.status === "used").length, 0
-  )
-  const totalActiveTickets = Object.values(activeTicketsByEvent).reduce((sum, tickets) => sum + tickets.length, 0)
-  const totalConfirmedTickets = Object.values(allTicketsByEvent).reduce((sum, tickets) => 
-    sum + tickets.filter((t: any) => t.status === "confirmed").length, 0
-  )
+  const totalTicketsSold = Object.values(allTicketsByEvent).reduce(
+    (sum, tickets) => sum + tickets.length,
+    0
+  );
+  const totalUsedTickets = Object.values(allTicketsByEvent).reduce(
+    (sum, tickets) =>
+      sum + tickets.filter((t: any) => t.status === "used").length,
+    0
+  );
+  const totalActiveTickets = Object.values(activeTicketsByEvent).reduce(
+    (sum, tickets) => sum + tickets.length,
+    0
+  );
+  const totalConfirmedTickets = Object.values(allTicketsByEvent).reduce(
+    (sum, tickets) =>
+      sum + tickets.filter((t: any) => t.status === "confirmed").length,
+    0
+  );
 
   // Total revenue: use balance data from backend for accurate calculations
-  const totalRevenue = balance?.totalRevenue || 0
+  const totalRevenue = balance?.totalRevenue || 0;
 
   // --- Chart Data Preparation ---
 
   // Revenue trend data (last 6 months) - use balance breakdown if available
-  const revenueData = balance?.revenueBreakdown?.slice(0, 6).map((eventRevenue) => {
-    const event = events.find(e => e._id === eventRevenue.eventId)
-    return {
-      month: event ? new Date(event.startDate).toLocaleDateString("en-US", { month: "short" }) : "N/A",
-      revenue: eventRevenue.totalRevenue,
-      tickets: eventRevenue.totalTicketsSold,
-      event: eventRevenue.eventTitle.substring(0, 15) + "...",
-    }
-  }) || events.slice(0, 6).map((event) => {
-    const allTickets = allTicketsByEvent[event._id] || []
-    const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0)
-    return {
-      month: new Date(event.startDate).toLocaleDateString("en-US", { month: "short" }),
-      revenue: revenue,
-      tickets: allTickets.length,
-      event: event.title.substring(0, 15) + "...",
-    }
-  })
+  const revenueData =
+    balance?.revenueBreakdown?.slice(0, 6).map((eventRevenue) => {
+      const event = events.find((e) => e._id === eventRevenue.eventId);
+      return {
+        month: event
+          ? new Date(event.startDate).toLocaleDateString("en-US", {
+              month: "short",
+            })
+          : "N/A",
+        revenue: eventRevenue.totalRevenue,
+        tickets: eventRevenue.totalTicketsSold,
+        event: eventRevenue.eventTitle.substring(0, 15) + "...",
+      };
+    }) ||
+    events.slice(0, 6).map((event) => {
+      const allTickets = allTicketsByEvent[event._id] || [];
+      const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+      return {
+        month: new Date(event.startDate).toLocaleDateString("en-US", {
+          month: "short",
+        }),
+        revenue: revenue,
+        tickets: allTickets.length,
+        event: event.title.substring(0, 15) + "...",
+      };
+    });
 
   // Event status distribution for pie chart
   const statusData = [
@@ -1130,43 +1198,53 @@ export default function OrganizerDashboard() {
     { name: "Draft", value: draftEvents, color: "#F59E0B" },
     { name: "Cancelled", value: cancelledEvents, color: "#EF4444" },
     { name: "Completed", value: completedEvents, color: "#3B82F6" },
-  ].filter((item) => item.value > 0)
+  ].filter((item) => item.value > 0);
 
   // Monthly performance data
   const monthlyData = events.slice(0, 12).map((event, index) => {
-    const allTickets = allTicketsByEvent[event._id] || []
-    const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0)
+    const allTickets = allTicketsByEvent[event._id] || [];
+    const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
     return {
-      month: new Date(event.startDate).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      month: new Date(event.startDate).toLocaleDateString("en-US", {
+        month: "short",
+        year: "2-digit",
+      }),
       events: 1,
       revenue: revenue,
       tickets: allTickets.length,
-    }
-  })
+    };
+  });
 
   // Top performing events - use balance breakdown if available
-  const topEvents = balance?.revenueBreakdown?.map((eventRevenue) => ({
-    name: eventRevenue.eventTitle.substring(0, 20) + "...",
-    revenue: eventRevenue.totalRevenue,
-    tickets: eventRevenue.totalTicketsSold,
-    status: events.find(e => e._id === eventRevenue.eventId)?.status || "unknown",
-  })).sort((a, b) => b.revenue - a.revenue).slice(0, 5) || events
-    .map((event) => {
-      const allTickets = allTicketsByEvent[event._id] || []
-      const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0)
-      return {
-        name: event.title.substring(0, 20) + "...",
-        revenue: revenue,
-        tickets: allTickets.length,
-        status: event.status,
-      }
-    })
-    .sort((a, b) => b.revenue - a.revenue)
-    .slice(0, 5)
+  const topEvents =
+    balance?.revenueBreakdown
+      ?.map((eventRevenue) => ({
+        name: eventRevenue.eventTitle.substring(0, 20) + "...",
+        revenue: eventRevenue.totalRevenue,
+        tickets: eventRevenue.totalTicketsSold,
+        status:
+          events.find((e) => e._id === eventRevenue.eventId)?.status ||
+          "unknown",
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5) ||
+    events
+      .map((event) => {
+        const allTickets = allTicketsByEvent[event._id] || [];
+        const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+        return {
+          name: event.title.substring(0, 20) + "...",
+          revenue: revenue,
+          tickets: allTickets.length,
+          status: event.status,
+        };
+      })
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5);
 
   // Commission calculations - use backend balance data
-  const organizerRevenue = balance?.availableBalance || 0
-  const pazimoCommission = totalRevenue - organizerRevenue
+  const organizerRevenue = balance?.availableBalance || 0;
+  const pazimoCommission = totalRevenue - organizerRevenue;
 
   // --- Stat Cards Data (Top Row) ---
   const statCards = [
@@ -1190,7 +1268,7 @@ export default function OrganizerDashboard() {
       borderColor: "border-l-emerald-600",
       isMoney: true,
     },
- 
+
     {
       id: "tickets",
       title: "Total Tickets Sold",
@@ -1211,7 +1289,7 @@ export default function OrganizerDashboard() {
       borderColor: "border-l-purple-600",
       isMoney: false,
     },
-  ]
+  ];
 
   // --- Event Status Cards (Second Row) ---
   const statusCards = [
@@ -1247,54 +1325,61 @@ export default function OrganizerDashboard() {
       iconBg: "bg-blue-50",
       iconColor: "text-blue-400",
     },
-  ]
+  ];
 
   // Paginated data
-  const paginatedEvents = getPaginatedData(events, eventsPage, itemsPerPage)
-  const paginatedWithdrawals = getPaginatedData(withdrawals, withdrawalsPage, itemsPerPage)
-  const paginatedAnalytics = getPaginatedData(events, analyticsPage, itemsPerPage)
+  const paginatedEvents = getPaginatedData(events, eventsPage, itemsPerPage);
+  const paginatedWithdrawals = getPaginatedData(
+    withdrawals,
+    withdrawalsPage,
+    itemsPerPage
+  );
+  const paginatedAnalytics = getPaginatedData(
+    events,
+    analyticsPage,
+    itemsPerPage
+  );
 
   // QR Code functionality
   const generateQRCode = async (event: any) => {
     try {
-      const shareQrUrl = `${window.location.origin}/events/${event._id}`
+      const shareQrUrl = `${window.location.origin}/events/${event._id}`;
       const qrDataUrl = await QRCode.toDataURL(shareQrUrl, {
         width: 300,
         margin: 2,
         color: {
-          dark: '#0D47A1',
-          light: '#FFFFFF'
-        }
-      })
-      setShareQrDataUrl(qrDataUrl)
-      setSelectedEvent(event)
+          dark: "#0D47A1",
+          light: "#FFFFFF",
+        },
+      });
+      setShareQrDataUrl(qrDataUrl);
+      setSelectedEvent(event);
     } catch (error) {
-      console.error('Error generating QR code:', error)
-      toast.error('Failed to generate QR code')
+      console.error("Error generating QR code:", error);
+      toast.error("Failed to generate QR code");
     }
-  }
+  };
 
   const downloadQRCode = () => {
-    if (!shareQrDataUrl || !selectedEvent) return
-    const link = document.createElement('a')
-    link.href = shareQrDataUrl
-    link.download = `buy-${selectedEvent._id}-ticket.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
+    if (!shareQrDataUrl || !selectedEvent) return;
+    const link = document.createElement("a");
+    link.href = shareQrDataUrl;
+    link.download = `buy-${selectedEvent._id}-ticket.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const copyBuyLink = () => {
-    if (!selectedEvent) return
-    const shareQrUrl = `${window.location.origin}/events/${selectedEvent._id}`
-    navigator.clipboard.writeText(shareQrUrl)
-    toast.success('Buy link copied')
-  }
+    if (!selectedEvent) return;
+    const shareQrUrl = `${window.location.origin}/events/${selectedEvent._id}`;
+    navigator.clipboard.writeText(shareQrUrl);
+    toast.success("Buy link copied");
+  };
 
   return (
     <div className="p-1 sm:p-2 lg:p-4 bg-gradient-to-br from-blue-50 to-white min-h-screen">
       <div className="flex flex-col gap-4 sm:gap-6 lg:gap-8 max-w-full sm:max-w-7xl mx-auto">
-        
         {/* Welcome Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-4 sm:p-6 text-white shadow-lg">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1307,8 +1392,8 @@ export default function OrganizerDashboard() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button 
-                onClick={() => router.push('/organizer/events/create')}
+              <Button
+                onClick={() => router.push("/organizer/events/create")}
                 className="bg-white text-blue-600 hover:bg-blue-50 font-medium"
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -1321,38 +1406,40 @@ export default function OrganizerDashboard() {
         {/* Quick Actions */}
         <Card className="border border-gray-200 shadow-md">
           <CardHeader className="p-3 sm:p-4 pb-2">
-            <CardTitle className="text-sm sm:text-base font-semibold">Quick Actions</CardTitle>
+            <CardTitle className="text-sm sm:text-base font-semibold">
+              Quick Actions
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-3 sm:p-4 pt-0">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-3 flex flex-col items-center gap-2 hover:bg-blue-50"
-                onClick={() => router.push('/organizer/events/create')}
+                onClick={() => router.push("/organizer/events/create")}
               >
                 <Plus className="h-5 w-5 text-blue-600" />
                 <span className="text-xs font-medium">New Event</span>
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-3 flex flex-col items-center gap-2 hover:bg-green-50"
-                onClick={() => router.push('/organizer/withdrawals')}
+                onClick={() => router.push("/organizer/withdrawals")}
               >
                 <CreditCard className="h-5 w-5 text-green-600" />
                 <span className="text-xs font-medium">Withdraw</span>
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-3 flex flex-col items-center gap-2 hover:bg-purple-50"
-                onClick={() => router.push('/organizer/invitations')}
+                onClick={() => router.push("/organizer/invitations")}
               >
                 <Share2 className="h-5 w-5 text-purple-600" />
                 <span className="text-xs font-medium">Invite</span>
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-3 flex flex-col items-center gap-2 hover:bg-orange-50"
-                onClick={() => router.push('/organizer/account')}
+                onClick={() => router.push("/organizer/account")}
               >
                 <Settings className="h-5 w-5 text-orange-600" />
                 <span className="text-xs font-medium">Settings</span>
@@ -1370,28 +1457,51 @@ export default function OrganizerDashboard() {
               <CardContent className="p-2 sm:p-3 lg:p-4">
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">{stat.title}</h3>
+                    <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">
+                      {stat.title}
+                    </h3>
                     <div className="flex items-baseline gap-1 sm:gap-2">
                       {stat.isMoney ? (
                         <>
                           <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 truncate">
-                            {showEarnings[stat.id] ? `${stat.value.toFixed(2)} Birr` : "••••••"}
+                            {showEarnings[stat.id]
+                              ? `${stat.value.toFixed(2)} Birr`
+                              : "••••••"}
                           </p>
                           <button
-                            onClick={() => setShowEarnings(prev => ({ ...prev, [stat.id]: !prev[stat.id] }))}
+                            onClick={() =>
+                              setShowEarnings((prev) => ({
+                                ...prev,
+                                [stat.id]: !prev[stat.id],
+                              }))
+                            }
                             className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                            aria-label={showEarnings[stat.id] ? "Hide earnings" : "Show earnings"}
+                            aria-label={
+                              showEarnings[stat.id]
+                                ? "Hide earnings"
+                                : "Show earnings"
+                            }
                           >
-                            {showEarnings[stat.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            {showEarnings[stat.id] ? (
+                              <EyeOff className="h-3 w-3" />
+                            ) : (
+                              <Eye className="h-3 w-3" />
+                            )}
                           </button>
                         </>
                       ) : (
-                        <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">{stat.value}</p>
+                        <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">
+                          {stat.value}
+                        </p>
                       )}
                     </div>
                   </div>
-                  <div className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}>
-                    <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`} />
+                  <div
+                    className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}
+                  >
+                    <stat.icon
+                      className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -1409,11 +1519,19 @@ export default function OrganizerDashboard() {
               <CardContent className="p-2 sm:p-3 lg:p-4">
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">{stat.title}</h3>
-                    <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">{stat.value}</p>
+                    <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">
+                      {stat.title}
+                    </h3>
+                    <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">
+                      {stat.value}
+                    </p>
                   </div>
-                  <div className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}>
-                    <stat.icon className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`} />
+                  <div
+                    className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}
+                  >
+                    <stat.icon
+                      className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -1429,7 +1547,10 @@ export default function OrganizerDashboard() {
                 <div>
                   <p className="text-xs text-gray-500 mb-1">Conversion Rate</p>
                   <p className="text-lg sm:text-xl font-bold text-gray-800">
-                    {totalTicketsSold > 0 ? ((totalUsedTickets / totalTicketsSold) * 100).toFixed(1) : '0'}%
+                    {totalTicketsSold > 0
+                      ? ((totalUsedTickets / totalTicketsSold) * 100).toFixed(1)
+                      : "0"}
+                    %
                   </p>
                 </div>
                 <div className="bg-blue-100 p-2 rounded-lg">
@@ -1438,14 +1559,19 @@ export default function OrganizerDashboard() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Avg. Ticket Price</p>
+                  <p className="text-xs text-gray-500 mb-1">
+                    Avg. Ticket Price
+                  </p>
                   <p className="text-lg sm:text-xl font-bold text-gray-800">
-                    {totalTicketsSold > 0 ? (totalRevenue / totalTicketsSold).toFixed(0) : '0'} Birr
+                    {totalTicketsSold > 0
+                      ? (totalRevenue / totalTicketsSold).toFixed(0)
+                      : "0"}{" "}
+                    Birr
                   </p>
                 </div>
                 <div className="bg-green-100 p-2 rounded-lg">
@@ -1454,7 +1580,7 @@ export default function OrganizerDashboard() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="p-3 sm:p-4">
               <div className="flex items-center justify-between">
@@ -1470,7 +1596,7 @@ export default function OrganizerDashboard() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <CardContent className="p-3 sm:p-4">
               <div className="flex items-center justify-between">
@@ -1514,7 +1640,13 @@ export default function OrganizerDashboard() {
                     <XAxis dataKey="event" fontSize={10} />
                     <YAxis fontSize={10} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Area type="monotone" dataKey="revenue" stroke="#10B981" fill="#10B981" fillOpacity={0.3} />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#10B981"
+                      fill="#10B981"
+                      fillOpacity={0.3}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartContainer>
@@ -1590,8 +1722,18 @@ export default function OrganizerDashboard() {
                     <YAxis yAxisId="left" fontSize={10} />
                     <YAxis yAxisId="right" orientation="right" fontSize={10} />
                     <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar yAxisId="left" dataKey="revenue" fill="#8884d8" name="Revenue (Birr)" />
-                    <Bar yAxisId="right" dataKey="tickets" fill="#82ca9d" name="Tickets Sold" />
+                    <Bar
+                      yAxisId="left"
+                      dataKey="revenue"
+                      fill="#8884d8"
+                      name="Revenue (Birr)"
+                    />
+                    <Bar
+                      yAxisId="right"
+                      dataKey="tickets"
+                      fill="#82ca9d"
+                      name="Tickets Sold"
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartContainer>
@@ -1620,7 +1762,12 @@ export default function OrganizerDashboard() {
                   <BarChart data={topEvents} layout="horizontal">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" fontSize={10} />
-                    <YAxis dataKey="name" type="category" width={80} fontSize={9} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={80}
+                      fontSize={9}
+                    />
                     <ChartTooltip content={<ChartTooltipContent />} />
                     <Bar dataKey="revenue" fill="#F97316" />
                   </BarChart>
@@ -1643,20 +1790,26 @@ export default function OrganizerDashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">System Status</span>
-                  <Badge className="bg-green-100 text-green-700 text-xs">Operational</Badge>
+                  <Badge className="bg-green-100 text-green-700 text-xs">
+                    Operational
+                  </Badge>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">API Response</span>
-                  <span className="text-xs font-medium text-green-600">98ms</span>
+                  <span className="text-xs font-medium text-green-600">
+                    98ms
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Uptime</span>
-                  <span className="text-xs font-medium text-green-600">99.9%</span>
+                  <span className="text-xs font-medium text-green-600">
+                    99.9%
+                  </span>
                 </div>
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="border border-gray-200 shadow-md">
             <CardHeader className="p-3 pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1668,24 +1821,35 @@ export default function OrganizerDashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Events Created</span>
-                  <span className="text-xs font-medium">{events.filter(e => {
-                    const eventDate = new Date(e.createdAt || e.startDate)
-                    const now = new Date()
-                    return eventDate.getMonth() === now.getMonth() && eventDate.getFullYear() === now.getFullYear()
-                  }).length}</span>
+                  <span className="text-xs font-medium">
+                    {
+                      events.filter((e) => {
+                        const eventDate = new Date(e.createdAt || e.startDate);
+                        const now = new Date();
+                        return (
+                          eventDate.getMonth() === now.getMonth() &&
+                          eventDate.getFullYear() === now.getFullYear()
+                        );
+                      }).length
+                    }
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Tickets Sold</span>
-                  <span className="text-xs font-medium">{totalTicketsSold}</span>
+                  <span className="text-xs font-medium">
+                    {totalTicketsSold}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Revenue</span>
-                  <span className="text-xs font-medium">{totalRevenue.toFixed(0)} Birr</span>
+                  <span className="text-xs font-medium">
+                    {totalRevenue.toFixed(0)} Birr
+                  </span>
                 </div>
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="border border-gray-200 shadow-md">
             <CardHeader className="p-3 pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1697,15 +1861,32 @@ export default function OrganizerDashboard() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Event Growth</span>
-                  <span className="text-xs font-medium text-green-600">+{Math.max(0, events.length - 5)}</span>
+                  <span className="text-xs font-medium text-green-600">
+                    +{Math.max(0, events.length - 5)}
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Revenue Growth</span>
-                  <span className="text-xs font-medium text-green-600">+{((totalRevenue / Math.max(1, events.length)) * 0.15).toFixed(0)}%</span>
+                  <span className="text-xs font-medium text-green-600">
+                    +
+                    {(
+                      (totalRevenue / Math.max(1, events.length)) *
+                      0.15
+                    ).toFixed(0)}
+                    %
+                  </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">User Engagement</span>
-                  <span className="text-xs font-medium text-green-600">+{Math.min(95, 80 + (totalUsedTickets / Math.max(1, totalTicketsSold)) * 15).toFixed(0)}%</span>
+                  <span className="text-xs font-medium text-green-600">
+                    +
+                    {Math.min(
+                      95,
+                      80 +
+                        (totalUsedTickets / Math.max(1, totalTicketsSold)) * 15
+                    ).toFixed(0)}
+                    %
+                  </span>
                 </div>
               </div>
             </CardContent>
@@ -1716,7 +1897,9 @@ export default function OrganizerDashboard() {
         <Card className="border border-gray-200 shadow-lg hover:shadow-xl mb-6 sm:mb-8">
           <CardHeader className="p-3 sm:p-4 lg:p-6 pb-0">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm sm:text-base lg:text-lg xl:text-xl">Event Analytics & Ticket Status</CardTitle>
+              <CardTitle className="text-sm sm:text-base lg:text-lg xl:text-xl">
+                Event Analytics & Ticket Status
+              </CardTitle>
               <Badge variant="outline" className="text-xs">
                 Live Data
               </Badge>
@@ -1745,26 +1928,42 @@ export default function OrganizerDashboard() {
                   ) : (
                     paginatedAnalytics.map((event) => {
                       // Use actual ticket data for accurate counts
-                      const allTickets = allTicketsByEvent[event._id] || []
-                      const activeTickets = activeTicketsByEvent[event._id] || []
-                      const usedTickets = allTickets.filter((t: any) => t.status === "used")
-                      
-                      const totalTickets = allTickets.length
-                      const activeTicketsCount = activeTickets.length
-                      const usedTicketsCount = usedTickets.length
-                      const totalRevenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0)
-                      const attendees = usedTicketsCount
-                      
+                      const allTickets = allTicketsByEvent[event._id] || [];
+                      const activeTickets =
+                        activeTicketsByEvent[event._id] || [];
+                      const usedTickets = allTickets.filter(
+                        (t: any) => t.status === "used"
+                      );
+
+                      const totalTickets = allTickets.length;
+                      const activeTicketsCount = activeTickets.length;
+                      const usedTicketsCount = usedTickets.length;
+                      const totalRevenue = allTickets.reduce(
+                        (sum, t) => sum + (t.price || 0),
+                        0
+                      );
+                      const attendees = usedTicketsCount;
+
                       return (
                         <TableRow key={event._id}>
-                          <TableCell className="text-xs max-w-[80px] truncate">{event.title}</TableCell>
-                          <TableCell className="text-xs">{totalTickets}</TableCell>
-                          <TableCell className="text-xs">{activeTicketsCount}</TableCell>
-                          <TableCell className="text-xs">{usedTicketsCount}</TableCell>
-                          <TableCell className="text-xs">{totalRevenue.toFixed(0)} Birr</TableCell>
+                          <TableCell className="text-xs max-w-[80px] truncate">
+                            {event.title}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {totalTickets}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {activeTicketsCount}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {usedTicketsCount}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {totalRevenue.toFixed(0)} Birr
+                          </TableCell>
                           <TableCell className="text-xs">{attendees}</TableCell>
                         </TableRow>
-                      )
+                      );
                     })
                   )}
                 </TableBody>
@@ -1786,7 +1985,9 @@ export default function OrganizerDashboard() {
         {/* Withdrawal History Table */}
         <Card className="border border-gray-200 shadow-lg hover:shadow-xl mb-6 sm:mb-8">
           <CardHeader className="p-4 sm:p-6 pb-0">
-            <CardTitle className="text-base sm:text-lg md:text-xl">Withdrawal History</CardTitle>
+            <CardTitle className="text-base sm:text-lg md:text-xl">
+              Withdrawal History
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
             {withdrawalsLoading ? (
@@ -1799,11 +2000,21 @@ export default function OrganizerDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs sm:text-sm">Date</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Amount</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Status</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Transaction ID</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Notes</TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Date
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Amount
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Status
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Transaction ID
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Notes
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1812,7 +2023,9 @@ export default function OrganizerDashboard() {
                           <TableCell className="text-xs sm:text-sm">
                             {new Date(w.createdAt).toLocaleDateString()}
                           </TableCell>
-                          <TableCell className="text-xs sm:text-sm font-medium">{w.amount.toFixed(2)} Birr</TableCell>
+                          <TableCell className="text-xs sm:text-sm font-medium">
+                            {w.amount.toFixed(2)} Birr
+                          </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             <Badge
                               variant="outline"
@@ -1820,15 +2033,19 @@ export default function OrganizerDashboard() {
                                 w.status === "processed"
                                   ? "bg-green-100 text-green-700"
                                   : w.status === "pending"
-                                    ? "bg-yellow-100 text-yellow-700"
-                                    : "bg-red-100 text-red-700"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : "bg-red-100 text-red-700"
                               }
                             >
                               {w.status}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-xs sm:text-sm">{w.transactionId || "-"}</TableCell>
-                          <TableCell className="text-xs sm:text-sm max-w-[120px] truncate">{w.notes}</TableCell>
+                          <TableCell className="text-xs sm:text-sm">
+                            {w.transactionId || "-"}
+                          </TableCell>
+                          <TableCell className="text-xs sm:text-sm max-w-[120px] truncate">
+                            {w.notes}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1860,10 +2077,13 @@ export default function OrganizerDashboard() {
             <CardContent className="p-3 sm:p-4 pt-0">
               <div className="space-y-3 max-h-64 overflow-y-auto">
                 {events.slice(0, 5).map((event, index) => {
-                  const tickets = allTicketsByEvent[event._id] || []
-                  const recentTickets = tickets.slice(0, 2)
+                  const tickets = allTicketsByEvent[event._id] || [];
+                  const recentTickets = tickets.slice(0, 2);
                   return (
-                    <div key={event._id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50">
+                    <div
+                      key={event._id}
+                      className="flex items-start gap-3 p-2 rounded-lg hover:bg-gray-50"
+                    >
                       <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
@@ -1873,21 +2093,25 @@ export default function OrganizerDashboard() {
                           {tickets.length} tickets sold • {event.status}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {new Date(event.createdAt || event.startDate).toLocaleDateString()}
+                          {new Date(
+                            event.createdAt || event.startDate
+                          ).toLocaleDateString()}
                         </p>
                       </div>
-                      <Badge 
-                        variant="outline" 
+                      <Badge
+                        variant="outline"
                         className={`text-xs ${
-                          event.status === 'published' ? 'bg-green-50 text-green-700' :
-                          event.status === 'draft' ? 'bg-yellow-50 text-yellow-700' :
-                          'bg-gray-50 text-gray-700'
+                          event.status === "published"
+                            ? "bg-green-50 text-green-700"
+                            : event.status === "draft"
+                            ? "bg-yellow-50 text-yellow-700"
+                            : "bg-gray-50 text-gray-700"
                         }`}
                       >
                         {event.status}
                       </Badge>
                     </div>
-                  )
+                  );
                 })}
                 {events.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
@@ -1913,7 +2137,9 @@ export default function OrganizerDashboard() {
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs font-medium text-blue-900">New Feature</p>
+                      <p className="text-xs font-medium text-blue-900">
+                        New Feature
+                      </p>
                       <p className="text-xs text-blue-700 mt-1">
                         QR code generation now available for all events
                       </p>
@@ -1924,7 +2150,9 @@ export default function OrganizerDashboard() {
                   <div className="flex items-start gap-2">
                     <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs font-medium text-green-900">System Update</p>
+                      <p className="text-xs font-medium text-green-900">
+                        System Update
+                      </p>
                       <p className="text-xs text-green-700 mt-1">
                         Improved analytics and reporting
                       </p>
@@ -1935,7 +2163,9 @@ export default function OrganizerDashboard() {
                   <div className="flex items-start gap-2">
                     <Clock className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-xs font-medium text-yellow-900">Reminder</p>
+                      <p className="text-xs font-medium text-yellow-900">
+                        Reminder
+                      </p>
                       <p className="text-xs text-yellow-700 mt-1">
                         Complete your profile for better visibility
                       </p>
@@ -1951,10 +2181,12 @@ export default function OrganizerDashboard() {
         <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
           <CardHeader className="p-4 sm:p-6 pb-0">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base sm:text-lg md:text-xl">My Events</CardTitle>
-              <Button 
-                onClick={() => router.push('/organizer/events')} 
-                variant="outline" 
+              <CardTitle className="text-base sm:text-lg md:text-xl">
+                My Events
+              </CardTitle>
+              <Button
+                onClick={() => router.push("/organizer/events")}
+                variant="outline"
                 size="sm"
                 className="text-xs"
               >
@@ -1967,9 +2199,11 @@ export default function OrganizerDashboard() {
             {events.length === 0 ? (
               <div className="text-center py-8">
                 <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No events found. Create your first event to get started!</p>
-                <Button 
-                  onClick={() => router.push('/organizer/events/create')} 
+                <p className="text-gray-500">
+                  No events found. Create your first event to get started!
+                </p>
+                <Button
+                  onClick={() => router.push("/organizer/events/create")}
                   className="mt-4"
                 >
                   Create Event
@@ -1981,11 +2215,21 @@ export default function OrganizerDashboard() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-xs sm:text-sm">Event Title</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Status</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Start Date</TableHead>
-                        <TableHead className="text-xs sm:text-sm">End Date</TableHead>
-                        <TableHead className="text-xs sm:text-sm">Actions</TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Event Title
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Status
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Start Date
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          End Date
+                        </TableHead>
+                        <TableHead className="text-xs sm:text-sm">
+                          Actions
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -2001,20 +2245,24 @@ export default function OrganizerDashboard() {
                                 event.status === "published"
                                   ? "bg-green-100 text-green-700"
                                   : event.status === "draft"
-                                    ? "bg-yellow-100 text-yellow-700"
-                                    : event.status === "cancelled"
-                                      ? "bg-red-100 text-red-700"
-                                      : "bg-blue-100 text-blue-700"
+                                  ? "bg-yellow-100 text-yellow-700"
+                                  : event.status === "cancelled"
+                                  ? "bg-red-100 text-red-700"
+                                  : "bg-blue-100 text-blue-700"
                               }
                             >
                               {event.status}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
-                            {event.startDate ? new Date(event.startDate).toLocaleDateString() : "N/A"}
+                            {event.startDate
+                              ? new Date(event.startDate).toLocaleDateString()
+                              : "N/A"}
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
-                            {event.endDate ? new Date(event.endDate).toLocaleDateString() : "N/A"}
+                            {event.endDate
+                              ? new Date(event.endDate).toLocaleDateString()
+                              : "N/A"}
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             <div className="flex items-center gap-1">
@@ -2030,7 +2278,9 @@ export default function OrganizerDashboard() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => router.push(`/organizer/events/${event._id}`)}
+                                onClick={() =>
+                                  router.push(`/organizer/events/${event._id}`)
+                                }
                                 className="h-7 px-2 text-xs"
                               >
                                 View
@@ -2067,25 +2317,33 @@ export default function OrganizerDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-center">
-                  <img src={shareQrDataUrl} alt="Event QR Code" className="w-64 h-64" />
+                  <img
+                    src={shareQrDataUrl}
+                    alt="Event QR Code"
+                    className="w-64 h-64"
+                  />
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={downloadQRCode} className="flex-1">
                     <Download className="h-4 w-4 mr-2" />
                     Download
                   </Button>
-                  <Button onClick={copyBuyLink} variant="outline" className="flex-1">
+                  <Button
+                    onClick={copyBuyLink}
+                    variant="outline"
+                    className="flex-1"
+                  >
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Link
                   </Button>
                 </div>
               </CardContent>
               <CardFooter>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => {
-                    setShareQrDataUrl("")
-                    setSelectedEvent(null)
+                    setShareQrDataUrl("");
+                    setSelectedEvent(null);
                   }}
                   className="w-full"
                 >
@@ -2097,5 +2355,5 @@ export default function OrganizerDashboard() {
         )}
       </div>
     </div>
-  )
+  );
 }
