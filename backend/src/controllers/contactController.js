@@ -9,8 +9,8 @@ const createTransporter = () => {
   }
   return nodemailer.createTransport({
     host: "smtp.zoho.com",
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false, // Use TLS
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -96,7 +96,10 @@ const submitContact = async (req, res) => {
       .status(StatusCodes.OK)
       .json({ status: "success", message: "Message sent successfully" });
   } catch (error) {
-    console.error("Contact submit error:", error);
+    console.error(
+      "Contact submit error details:",
+      JSON.stringify(error, null, 2)
+    );
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: error.message || "Failed to submit contact message",
