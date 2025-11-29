@@ -6,10 +6,12 @@ const createTransporter = () => {
     throw new Error("EMAIL_USER/EMAIL_PASS env vars are required");
   }
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.zoho.com",
+    port: 587,
+    secure: false, // Use TLS
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: process.env.EMAIL_USER_ZOHO,
+      pass: process.env.EMAIL_PASS_ZOHO,
     },
   });
 };
@@ -148,7 +150,7 @@ const sendInvitationEmail = async (req, res) => {
 
     const transporter = createTransporter();
     const mailOptions = {
-      from: `Pazimo Invitation <${process.env.EMAIL_USER}>`,
+      from: `Pazimo Invitation <${process.env.EMAIL_SENDER_ZOHO}>`,
       to,
       subject,
       html: body,
