@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import QrModal from "./qrModel";
 import base64id from "base64id";
-import { PlusIcon, X, Loader2 } from "lucide-react";
+import { PlusIcon, Loader2, CreditCard } from "lucide-react";
 import { PaymentInit, Row } from "@/types/bulk-invite";
 import { toast } from "sonner";
 import { Event } from "@/types/invitation";
@@ -295,7 +295,15 @@ export default function EditableTable({
       );
 
       setPaymentConfig(config);
-      setPaymentPhoneNumber(user.phoneNumber || "");
+
+      let initialPhone = user.phoneNumber || "";
+      initialPhone = initialPhone.replace(/\D/g, "");
+      if (initialPhone.startsWith("0"))
+        initialPhone = initialPhone.substring(1);
+      if (initialPhone.startsWith("251"))
+        initialPhone = initialPhone.substring(3);
+
+      setPaymentPhoneNumber(initialPhone);
       setShowPayment(true);
     } catch (error: unknown) {
       console.error("Send error:", error);
@@ -389,7 +397,19 @@ export default function EditableTable({
 
   const handleMobilePayment = async () => {
     if (!paymentConfig || !user) return;
+
+    if (!paymentPhoneNumber) {
+      toast.error("Please enter a phone number");
+      return;
+    }
+
     setIsSantimLoading(true);
+
+    // Normalize phone number
+    let finalPhone = paymentPhoneNumber;
+    if (!finalPhone.startsWith("+251")) {
+      finalPhone = `+251${finalPhone}`;
+    }
 
     try {
       const txnId = crypto.randomUUID();
@@ -405,7 +425,7 @@ export default function EditableTable({
           body: JSON.stringify({
             amount: paymentConfig.amount,
             paymentReason: `Bulk Invitation Fee`,
-            phoneNumber: paymentPhoneNumber,
+            phoneNumber: finalPhone,
             paymentMethod: paymentMethod,
             invitationData: {
               eventId: event._id,
@@ -483,54 +503,60 @@ export default function EditableTable({
     <>
       <div className="w-full border border-gray-300 rounded-lg overflow-auto">
         {showPayment && paymentConfig && (
-          <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-start pt-4 md:justify-center md:pt-0 rounded-xl p-4 md:p-8">
-            <div className="w-full max-w-md bg-white shadow-2xl rounded-xl p-6 border border-gray-200 max-h-[85vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-900">Checkout</h3>
-                <button
-                  onClick={() => setShowPayment(false)}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Payment Required
+              </h3>
+              <p className="text-sm text-gray-600 mb-6">
+                Complete payment to send bulk invitations for:{" "}
+                <strong>{event.title}</strong>
+              </p>
 
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 mb-6">
+              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
                 <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600">Total Amount</span>
-                  <span className="font-bold text-gray-900">
-                    {paymentConfig.amount} ETB
-                  </span>
+                  <span>Total Amount:</span>
+                  <span>{paymentConfig.amount} ETB</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Transaction Ref</span>
-                  <span className="font-mono text-xs text-gray-500">
-                    {paymentConfig.tx_ref}
-                  </span>
+                <div className="border-t border-gray-300 pt-2 flex justify-between font-semibold">
+                  <span>Total:</span>
+                  <span>{paymentConfig.amount} ETB</span>
                 </div>
               </div>
 
-              <div className="mb-6">
-                <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
-                  Phone Number
-                </Label>
-                <Input
-                  value={paymentPhoneNumber}
-                  onChange={(e) => setPaymentPhoneNumber(e.target.value)}
-                  placeholder="09|07..."
-                  className="mt-1"
-                />
-              </div>
+              <div className="space-y-6 mb-6">
+                <div>
+                  <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+                    Phone Number
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium z-10">
+                      +251
+                    </span>
+                    <Input
+                      value={paymentPhoneNumber}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, "");
+                        if (val.startsWith("0")) val = val.substring(1);
+                        if (val.startsWith("251")) val = val.substring(3);
+                        setPaymentPhoneNumber(val);
+                      }}
+                      placeholder="911234567"
+                      className="pl-14"
+                    />
+                  </div>
+                </div>
 
-              <div className="mb-6">
-                <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
-                  Payment Method
-                </Label>
-                <PaymentMethodSelector
-                  phoneNumber={paymentPhoneNumber}
-                  selectedMethod={paymentMethod}
-                  onSelect={setPaymentMethod}
-                />
+                <div>
+                  <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+                    Payment Method
+                  </Label>
+                  <PaymentMethodSelector
+                    phoneNumber={paymentPhoneNumber}
+                    selectedMethod={paymentMethod}
+                    onSelect={setPaymentMethod}
+                  />
+                </div>
               </div>
 
               <Button
@@ -546,20 +572,26 @@ export default function EditableTable({
                     Processing...
                   </>
                 ) : (
-                  `Pay ${paymentConfig.amount} ETB`
+                  <>
+                    <CreditCard className="mr-2 h-5 w-5" /> Pay{" "}
+                    {paymentConfig.amount} ETB
+                  </>
                 )}
               </Button>
+
+              <div className="mt-2">
+                <button
+                  onClick={() => setShowPayment(false)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 hover:bg-gray-50 transition-all duration-200 font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-          <p>
-            <strong>Note:</strong> If Amount is <strong>0</strong>, an event
-            link will be sent without a ticket (Free of charge). If Amount is{" "}
-            <strong>1 or more</strong>, it is a paid invitation with tickets.
-          </p>
-        </div>
-        <div className="max-h-[500px] overflow-y-auto overflow-x-auto">
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800"></div>
+        <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-xs text-left table-fixed">
             <thead className="bg-gray-100 sticky top-0">
               <tr>
@@ -671,14 +703,15 @@ export default function EditableTable({
                       {key === "Amount" && (
                         <input
                           type="number"
-                          min={0}
+                          min={1}
                           max={10}
                           value={row.Amount}
+                          defaultValue={1}
                           onChange={(e) =>
                             handleChange(
                               i,
                               "Amount",
-                              Math.max(0, Math.min(10, Number(e.target.value)))
+                              Math.max(1, Math.min(10, Number(e.target.value)))
                             )
                           }
                           className="border border-gray-300 px-2 py-1 rounded w-full"
