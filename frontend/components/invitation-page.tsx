@@ -1662,7 +1662,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                   {guestType !== "paid" && (
                     <div className="w-32">
                       <label className="block text-sm font-medium text-gray-900 mb-2">
-                        QR Codes
+                        Tickets
                       </label>
                       <input
                         type="number"
@@ -1745,7 +1745,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                           </span>
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          {qrCodeCount} QR code{qrCodeCount > 1 ? "s" : ""} via{" "}
+                          {qrCodeCount} Ticket{qrCodeCount > 1 ? "s" : ""} via{" "}
                           {contactType === "email" ? "Email" : "SMS"}
                         </div>
                       </>
