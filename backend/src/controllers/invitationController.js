@@ -268,13 +268,14 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
 
       // Send SMS
       if (["sms", "both"].includes(invitation.type) && invitation.guestPhone) {
-        const message = `Hi ${invitation.guestName}\n\nEvent: ${
-          event.title
-        }\nTime: ${event.startTime}\nLocation: ${
+        const eventDate = new Date(event.startDate).toLocaleDateString();
+        const eventTime = event.startTime || "";
+        const location =
           typeof event.location === "string"
             ? event.location
-            : event.location?.address || "See map"
-        }\n\nRsvp Link: ${rsvpLink}`;
+            : event.location?.address || "See map";
+
+        const message = `Hi ${invitation.guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
         // Call SMS API (GeezSMS)
         let phone = invitation.guestPhone.replace("+", "");
@@ -651,13 +652,14 @@ const createAndSendProfessionalInvitation = async (data) => {
 
     // Send SMS
     if (["sms", "both"].includes(contactType) && guestPhone) {
-      const smsMessage = `Hi ${guestName}\nEvent: ${event.title}\nTime: ${
-        event.startTime
-      }\nLocation: ${
+      const eventDate = new Date(event.startDate).toLocaleDateString();
+      const eventTime = event.startTime || "";
+      const location =
         typeof event.location === "string"
           ? event.location
-          : event.location?.address || "See map"
-      }\n\nRsvp Link: ${rsvpLink}`;
+          : event.location?.address || "See map";
+
+      const smsMessage = `Hi ${guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
       // Ensure phone starts with 251

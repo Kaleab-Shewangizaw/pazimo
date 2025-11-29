@@ -389,12 +389,7 @@ export function useInvitationPage() {
     const actionDescription =
       guestType === "paid"
         ? "Click below to purchase your ticket"
-        : "Scan the QR code or click the link below to confirm your attendance";
-
-    const eventImage =
-      event?.coverImages && event.coverImages.length > 0
-        ? event.coverImages[0]
-        : "https://pazimo.vercel.app/images/default-event.jpg";
+        : "Click the link below to confirm your attendance";
 
     return `
 <!DOCTYPE html>
@@ -420,20 +415,11 @@ export function useInvitationPage() {
       transform: translateY(-2px);
       box-shadow: 0 6px 8px rgba(102, 126, 234, 0.6);
     }
-    .header-image {
-      width: 100%;
-      height: 200px;
-      object-fit: cover;
-      border-radius: 8px 8px 0 0;
-    }
   </style>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); border-radius: 8px;">
-    <div style="padding: 0;">
-      <img src="${eventImage}" alt="${event?.title}" class="header-image" />
-    </div>
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0;">
       <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🎉 You're Invited!</h1>
       <p style="color: #e2e8f0; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Join us for an amazing event</p>
     </div>
@@ -673,6 +659,76 @@ export function useInvitationPage() {
         selectedEvent,
       } = invitationData;
 
+      // If it's a guest (free) invitation, use the backend endpoint to create ticket and send email
+      if (guestType === "guest" && !overrideQrLink) {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          toast.error("Authentication required");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const isEmail = validateEmail(contact);
+        const isPhone = validatePhoneNumber(contact);
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              eventId: selectedEvent?.id,
+              guestName: customerName,
+              guestEmail: isEmail ? contact : undefined,
+              guestPhone: isPhone ? contact : undefined,
+              ticketCount: qrCodeCount,
+              message: message,
+              ticketType: "Guest",
+            }),
+          }
+        );
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          const newInvitation: Invitation = {
+            id: result.ticket?.ticketId || Date.now(),
+            eventTitle: selectedEvent?.title || "",
+            customerName,
+            contact,
+            contactType,
+            guestType,
+            qrCodeCount,
+            message,
+            sentAt: new Date().toLocaleString(),
+            status: "delivered",
+            qrCode: "",
+            eventId: selectedEvent?.id,
+            rsvpLink: "",
+          };
+          setSentInvitations((prev) => [newInvitation, ...prev]);
+          setQrCodeUsage((prev) => ({
+            ...prev,
+            [contact]: (prev[contact] || 0) + qrCodeCount,
+          }));
+
+          setContact("");
+          setCustomerName("");
+          setMessage("");
+          setQrCodeCount(1);
+          setGuestType("guest");
+          setPendingInvitation(null);
+          toast.success(`Invitation sent successfully to ${customerName}!`);
+        } else {
+          toast.error(result.message || "Failed to send invitation");
+        }
+        setIsSubmitting(false);
+        return;
+      }
+
       let qrCodeLink: string;
       let invitationId = "";
 
@@ -697,10 +753,10 @@ export function useInvitationPage() {
         color: { dark: "#0D47A1", light: "#FFFFFF" },
       });
 
-      const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
+      const eventDetails = `Event: ${selectedEvent?.title}\nDate and Time: ${selectedEvent?.date} ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
       const smsInviteMessage = message
         ? `${message}\n\n${eventDetails}`
-        : `You're invited to ${selectedEvent?.title}!\n\n${eventDetails}`;
+        : `\n\n${eventDetails}`;
 
       let success = false;
 

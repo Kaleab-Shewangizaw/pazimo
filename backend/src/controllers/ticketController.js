@@ -16,6 +16,7 @@ const {
 const axios = require("axios");
 const Payment = require("../models/Payment");
 const SantimPayService = require("../services/santimPayService");
+const { v4: uuidv4 } = require("uuid");
 
 const validateSignature = (signature, payload) => {
   try {
@@ -336,6 +337,115 @@ const createGuestTicket = async (req, res) => {
       paymentReference: message, // Store message temporarily or add a field
     });
 
+    // Generate RSVP Link
+    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+    const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
+
+    // Create Invitation Record to track it
+    try {
+      await Invitation.create({
+        invitationId: uuidv4(),
+        eventId,
+        organizerId: event.organizer,
+        guestName,
+        guestEmail,
+        guestPhone,
+        type: guestEmail ? "email" : "sms",
+        guestType: "guest",
+        amount: ticketCount || 1,
+        status: "sent",
+        paymentStatus: "paid",
+        rsvpLink: rsvpLink,
+        rsvpStatus: "pending",
+        qrCodeData: ticket.qrCode,
+      });
+    } catch (invError) {
+      console.error("Failed to create invitation record:", invError);
+      // Continue execution
+    }
+
+    // Send Email
+    if (guestEmail) {
+      const eventData = {
+        title: event.title,
+        date: event.startDate,
+        location:
+          typeof event.location === "string"
+            ? event.location
+            : event.location?.address || "See map",
+      };
+
+      const invitationData = {
+        guestName,
+        ticketType: ticket.ticketType || "General",
+        uniqueId: ticket.ticketId,
+        actionLink: rsvpLink,
+        actionText: "Confirm Attendance",
+      };
+
+      const qrCodeUrl = ticket.qrCode;
+      const eventImage =
+        event.coverImages && event.coverImages.length > 0
+          ? event.coverImages[0]
+          : "";
+
+      const emailHtml = createEmailTemplate(
+        eventData,
+        invitationData,
+        qrCodeUrl,
+        eventImage
+      );
+
+      // We need the QR code from the ticket.
+      // The pre-save hook generates it, but it's a data URL.
+      // We need to strip the prefix for attachment.
+      // const qrCodeBase64 = ticket.qrCode.split(";base64,").pop();
+
+      await sendInvitationEmail({
+        to: guestEmail,
+        subject: `You're invited to ${event.title}!`,
+        body: emailHtml,
+        // attachments: [
+        //   {
+        //     filename: "ticket-qr.png",
+        //     content: qrCodeBase64,
+        //     encoding: "base64",
+        //   },
+        // ],
+      });
+    }
+
+    // Send SMS
+    if (guestPhone) {
+      const eventDate = new Date(event.startDate).toLocaleDateString();
+      const eventTime = event.startTime || "";
+      const location =
+        typeof event.location === "string"
+          ? event.location
+          : event.location?.address || "See map";
+
+      const smsMessage = `Hi ${guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+
+      let phone = guestPhone.replace("+", "");
+      // Ensure phone starts with 251
+      if (phone.startsWith("0")) {
+        phone = "251" + phone.substring(1);
+      } else if (!phone.startsWith("251")) {
+        phone = "251" + phone;
+      }
+
+      await axios
+        .post("https://api.geezsms.com/api/v1/sms/send", {
+          phone: phone,
+          msg: smsMessage,
+          token:
+            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
+        })
+        .catch((err) =>
+          console.error("SMS Error:", err.response?.data || err.message)
+        );
+    }
+
     res.status(StatusCodes.CREATED).json({
       success: true,
       message: "Guest ticket created",
@@ -451,11 +561,14 @@ const processGuestInvitation = async (ticketId) => {
   // Send SMS
   if (ticket.guestPhone) {
     console.log(`Sending SMS to ${ticket.guestPhone}`);
-    const smsMessage = `Hi ${ticket.guestName}, you are invited to ${
-      event.title
-    }. ${
-      message ? message + " " : ""
-    }Click here to confirm your attendance: ${rsvpLink}`;
+    const eventDate = new Date(event.startDate).toLocaleDateString();
+    const eventTime = event.startTime || "";
+    const location =
+      typeof event.location === "string"
+        ? event.location
+        : event.location?.address || "See map";
+
+    const smsMessage = `Hi ${ticket.guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
     let phone = ticket.guestPhone.replace("+", "");
     // Ensure phone starts with 251
@@ -637,7 +750,7 @@ const createInvitationTicket = async (req, res) => {
 
     // Generate RSVP Link
     const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
-    const rsvpLink = `${frontendUrl}/guest-invitation?id=${ticket.ticketId}`;
+    const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
     // Send Email
     if (guestEmail) {
@@ -692,9 +805,14 @@ const createInvitationTicket = async (req, res) => {
 
     // Send SMS
     if (guestPhone) {
-      const smsMessage = `Hi ${guestName}, you are invited to ${event.title}. ${
-        message ? message + " " : ""
-      }Click here to confirm: ${rsvpLink}`;
+      const eventDate = new Date(event.startDate).toLocaleDateString();
+      const eventTime = event.startTime || "";
+      const location =
+        typeof event.location === "string"
+          ? event.location
+          : event.location?.address || "See map";
+
+      const smsMessage = `Hi ${guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
       // Ensure phone starts with 251
