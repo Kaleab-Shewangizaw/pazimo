@@ -2609,7 +2609,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
 
               <Button
                 onClick={handleSantimPayment}
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg mb-4"
                 disabled={isSantimLoading}
               >
                 {isSantimLoading ? (

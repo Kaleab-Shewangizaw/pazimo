@@ -75,7 +75,7 @@ export default function SantimPayButton({
     <button
       onClick={handlePayment}
       disabled={loading}
-      className={`flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed ${className}`}
+      className={`flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed ${className}`}
     >
       {loading ? (
         <>

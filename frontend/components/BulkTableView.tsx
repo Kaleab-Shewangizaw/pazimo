@@ -13,7 +13,6 @@ import {
   validateAndCorrectRows,
 } from "@/utils/bulkInviteValidation";
 import { useAuthStore } from "@/store/authStore";
-import { useSearchParams } from "next/navigation";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
@@ -33,7 +32,6 @@ export default function EditableTable({
   setSelectedFile,
   setShowBulkModal,
 }: EditableTableProps) {
-  const searchParams = useSearchParams();
   const [showDataTrimmed, setShowDataTrimmed] = useState(false);
   const [qrRow, setQrRow] = useState<Row | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -561,7 +559,7 @@ export default function EditableTable({
 
               <Button
                 onClick={handleMobilePayment}
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg mb-4"
                 disabled={
                   isSantimLoading ||
                   !paymentPhoneNumber ||

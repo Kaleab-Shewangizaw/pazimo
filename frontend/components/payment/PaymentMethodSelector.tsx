@@ -71,7 +71,7 @@ export default function PaymentMethodSelector({
               htmlFor={`payment-${method.id}`}
               className={cn(
                 "flex flex-col items-center justify-start px-1 py-2 gap-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
-                "peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50",
+                "peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50",
                 disabled &&
                   "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale"
               )}
@@ -84,7 +84,7 @@ export default function PaymentMethodSelector({
                   className="object-contain"
                 />
               </div>
-              <span className="text-xs font-bold text-gray-700 peer-data-[state=checked]:text-orange-700">
+              <span className="text-xs font-bold text-gray-700 peer-data-[state=checked]:text-blue-700">
                 {method.name}
               </span>
             </Label>

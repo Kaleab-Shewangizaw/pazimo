@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { CreditCard, Loader2, Phone } from "lucide-react";
+import { CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -112,7 +112,7 @@ export default function PaymentModal({
 
         <Button
           onClick={handlePayment}
-          className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg mb-4"
           disabled={
             isSantimLoading ||
             !phoneNumber ||

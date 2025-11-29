@@ -1572,11 +1572,12 @@ function EventDetailContent() {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-[#28a745] hover:bg-[#218838] text-white"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 disabled={
                   isSantimLoading ||
                   !santimForm.phoneNumber ||
-                  !santimForm.paymentMethod
+                  !santimForm.paymentMethod ||
+                  santimForm.phoneNumber.length < 9
                 }
               >
                 {isSantimLoading ? (
