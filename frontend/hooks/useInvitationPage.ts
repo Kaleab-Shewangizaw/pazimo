@@ -304,10 +304,13 @@ export function useInvitationPage() {
             contact:
               inv.type === "email"
                 ? inv.guestEmail
-                : inv.type === "phone"
+                : inv.type === "phone" || inv.type === "sms"
                 ? inv.guestPhone
                 : inv.contact || "",
-            contactType: (inv.type || inv.contactType || "email").toLowerCase(),
+            contactType: (inv.type === "sms"
+              ? "phone"
+              : inv.type || inv.contactType || "email"
+            ).toLowerCase(),
             guestType: inv.paymentStatus === "paid" ? "paid" : "guest",
             paymentStatus: inv.paymentStatus || "free",
             qrCodeCount: inv.amount || inv.qrCodeCount || 1,
@@ -594,6 +597,20 @@ export function useInvitationPage() {
     }
   };
 
+  const generateUUID = () => {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        var r = (Math.random() * 16) | 0,
+          v = c == "x" ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      }
+    );
+  };
+
   const processPendingInvitation = async (
     data?: typeof pendingInvitation,
     overrideQrLink?: string
@@ -615,18 +632,23 @@ export function useInvitationPage() {
       } = invitationData;
 
       let qrCodeLink: string;
+      let invitationId = "";
 
       if (overrideQrLink) {
         qrCodeLink = overrideQrLink;
       } else {
-        const qrCodeData = await generateQRCode(
-          selectedEvent?.id || 0,
-          customerName,
-          contact,
-          guestType
-        );
-        qrCodeLink = qrCodeData.url;
+        // Generate UUID for the invitation
+        invitationId = generateUUID();
+        const baseUrl =
+          process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
+        qrCodeLink = `${baseUrl}/guest-invitation?inv=${invitationId}`;
       }
+
+      const qrCodeImage = await QRCode.toDataURL(qrCodeLink, {
+        width: 300,
+        margin: 2,
+        color: { dark: "#0D47A1", light: "#FFFFFF" },
+      });
 
       const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
       const inviteMessage = message
@@ -684,6 +706,7 @@ export function useInvitationPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
+              invitationId: invitationId || undefined,
               eventId: selectedEvent?.id,
               customerName,
               contact,

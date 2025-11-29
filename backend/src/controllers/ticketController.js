@@ -539,6 +539,35 @@ const confirmRSVP = async (req, res) => {
 
     await ticket.save();
 
+    // Sync with Invitation model
+    try {
+      const query = {
+        eventId: ticket.event._id
+          ? ticket.event._id.toString()
+          : ticket.event.toString(),
+        $or: [],
+      };
+
+      if (ticket.guestEmail) query.$or.push({ guestEmail: ticket.guestEmail });
+      if (ticket.guestPhone) query.$or.push({ guestPhone: ticket.guestPhone });
+
+      if (query.$or.length > 0) {
+        const invitation = await Invitation.findOne(query).sort({
+          createdAt: -1,
+        });
+        if (invitation) {
+          invitation.rsvpStatus = "confirmed";
+          invitation.rsvpConfirmedAt = new Date();
+          await invitation.save();
+          console.log(
+            `Synced Invitation status to confirmed for ticket ${ticketId}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error syncing Invitation status:", error);
+    }
+
     res.status(StatusCodes.OK).json({
       success: true,
       message: "RSVP Confirmed",
@@ -1195,6 +1224,35 @@ const updateInvitationTicketStatus = async (req, res) => {
 
   ticket.status = status;
   await ticket.save();
+
+  // Sync with Invitation model
+  try {
+    const query = {
+      eventId: ticket.event.toString(),
+      $or: [],
+    };
+
+    if (ticket.guestEmail) query.$or.push({ guestEmail: ticket.guestEmail });
+    if (ticket.guestPhone) query.$or.push({ guestPhone: ticket.guestPhone });
+
+    if (query.$or.length > 0) {
+      const invitation = await Invitation.findOne(query).sort({
+        createdAt: -1,
+      });
+      if (invitation) {
+        invitation.rsvpStatus = status;
+        if (status === "confirmed") {
+          invitation.rsvpConfirmedAt = new Date();
+        }
+        await invitation.save();
+        console.log(
+          `Synced Invitation status to ${status} for ticket ${ticketId}`
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error syncing Invitation status:", error);
+  }
 
   res
     .status(StatusCodes.OK)

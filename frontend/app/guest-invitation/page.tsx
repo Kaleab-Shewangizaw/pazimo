@@ -42,6 +42,10 @@ function GuestInvitationContent() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState("");
 
+  const [invitationType, setInvitationType] = useState<"ticket" | "invitation">(
+    "ticket"
+  );
+
   useEffect(() => {
     const invId = searchParams.get("id") || searchParams.get("inv");
     if (invId) {
@@ -54,20 +58,46 @@ function GuestInvitationContent() {
 
   const fetchInvitation = async (id: string) => {
     try {
-      const response = await fetch(
+      // Try fetching as Ticket first
+      let response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${id}`
       );
-      const result = await response.json();
+      let result = await response.json();
+      let type: "ticket" | "invitation" = "ticket";
+
+      if (!response.ok || !result.success) {
+        // Try fetching as Invitation
+        response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/${id}`
+        );
+        result = await response.json();
+        type = "invitation";
+      }
 
       if (response.ok && result.success) {
-        setInvitation(result.data);
+        setInvitationType(type);
+
+        // Map Invitation data to match InvitationData interface if needed
+        const data = result.data;
+        if (type === "invitation") {
+          data.ticketId = data.invitationId;
+          data.ticketCount = data.amount;
+          data.qrCode = data.qrCodeData;
+        }
+
+        setInvitation(data);
+
         if (
           ["confirmed", "accepted", "delivered", "used"].includes(
-            result.data.status
-          )
+            data.status
+          ) ||
+          (type === "invitation" && data.rsvpStatus === "confirmed")
         ) {
           setIsConfirmed(true);
-        } else if (result.data.status === "declined") {
+        } else if (
+          data.status === "declined" ||
+          (type === "invitation" && data.rsvpStatus === "declined")
+        ) {
           setIsDeclined(true);
         }
       } else {
@@ -85,16 +115,18 @@ function GuestInvitationContent() {
     if (!invitation) return;
     setIsUpdating(true);
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${invitation.ticketId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status }),
-        }
-      );
+      const endpoint =
+        invitationType === "ticket"
+          ? `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${invitation.ticketId}/status`
+          : `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/${invitation.ticketId}/status`; // ticketId is mapped from invitationId
+
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
       const result = await response.json();
 
       if (response.ok && result.success) {
