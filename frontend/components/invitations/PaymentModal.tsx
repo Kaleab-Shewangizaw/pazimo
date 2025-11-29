@@ -93,7 +93,7 @@ export default function PaymentModal({
                   setPhoneNumber(val);
                 }}
                 placeholder="911234567"
-                className="pl-14"
+                className="pl-14 placeholder:text-gray-300"
               />
             </div>
           </div>
@@ -113,7 +113,12 @@ export default function PaymentModal({
         <Button
           onClick={handlePayment}
           className="w-full bg-orange-600 hover:bg-orange-700 text-white h-12 text-lg mb-4"
-          disabled={isSantimLoading || !phoneNumber || !selectedMethod}
+          disabled={
+            isSantimLoading ||
+            !phoneNumber ||
+            !selectedMethod ||
+            phoneNumber?.length < 9
+          }
         >
           {isSantimLoading ? (
             <>
