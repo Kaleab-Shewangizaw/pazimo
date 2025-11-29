@@ -148,7 +148,7 @@ const sendInvitationEmail = async (req, res) => {
 
     const transporter = createTransporter();
     const mailOptions = {
-      from: `Pazimo invitation <${process.env.EMAIL_USER}>`,
+      from: `Pazimo Invitation <${process.env.EMAIL_USER}>`,
       to,
       subject,
       html: body,

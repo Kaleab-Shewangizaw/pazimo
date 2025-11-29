@@ -277,13 +277,6 @@ const handlePaymentSuccess = async (payment) => {
           to: payment.contact,
           subject: `Your Ticket for ${event.title}`,
           body: emailHtml,
-          attachments: [
-            {
-              filename: "ticket-qr.png",
-              content: qrCodeBase64.split(";base64,").pop(),
-              encoding: "base64",
-            },
-          ],
         });
       } else if (payment.method === "phone") {
         // SMS
