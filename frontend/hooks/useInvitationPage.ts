@@ -683,7 +683,12 @@ export function useInvitationPage() {
         invitationId = generateUUID();
         const baseUrl =
           process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.vercel.app";
-        qrCodeLink = `${baseUrl}/guest-invitation?inv=${invitationId}`;
+
+        if (guestType === "paid") {
+          qrCodeLink = `${baseUrl}/event_detail?id=${selectedEvent?.id}`;
+        } else {
+          qrCodeLink = `${baseUrl}/guest-invitation?inv=${invitationId}`;
+        }
       }
 
       const qrCodeImage = await QRCode.toDataURL(qrCodeLink, {
