@@ -28,18 +28,16 @@ const submitContact = async (req, res) => {
     }
 
     const safeSubject = (subject || "New Contact Message").slice(0, 200);
-    // const toRecipients =
-    //   to && typeof to === "string" && to.includes("@")
-    //     ? to
-    //     : [process.env.CONTACT_TO_EMAIL, "kaleab.stk@gmail.com"]
-    //         .filter(Boolean)
-    //         .join(",");
-
-    const toRecipients = "kaleab.stk@gmail.com";
+    const toRecipients =
+      to && typeof to === "string" && to.includes("@")
+        ? to
+        : [process.env.CONTACT_TO_EMAIL, "support@pazimo.com"]
+            .filter(Boolean)
+            .join(",");
 
     const transporter = createTransporter();
     const mailOptions = {
-      from: `Pazimo Contact <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: toRecipients,
       subject: `[PAZ Contact] ${safeSubject}`,
       replyTo: email,
@@ -84,10 +82,6 @@ const submitContact = async (req, res) => {
       `,
     };
 
-    console.log(
-      `[Contact] Received message from ${email}. Sending to ${toRecipients}...`
-    );
-
     // respond fast, send email asynchronously
     res
       .status(StatusCodes.OK)
@@ -96,9 +90,8 @@ const submitContact = async (req, res) => {
     setImmediate(async () => {
       try {
         await transporter.sendMail(mailOptions);
-        console.log(`[Contact] Email sent successfully to ${toRecipients}`);
       } catch (emailErr) {
-        console.error("[Contact] Failed to send contact email:", emailErr);
+        console.error("Failed to send contact email:", emailErr);
       }
     });
   } catch (error) {

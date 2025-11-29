@@ -170,7 +170,7 @@ export default function ContactPage() {
                             <SelectValue placeholder="Choose team" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="support@pazimo.com">
+                            <SelectItem value="kaleab.stk@gmail.com">
                               General Support (support@pazimo.com)
                             </SelectItem>
                             <SelectItem value="finance@pazimo.com">
