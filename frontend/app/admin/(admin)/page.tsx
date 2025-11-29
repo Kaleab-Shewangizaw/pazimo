@@ -348,7 +348,7 @@ export default function AdminDashboardPage() {
       borderColor: "border-l-green-600",
     },
     {
-      title: "Available balance",
+      title: "Organizer Revenue (97%)",
       value: `${(stats.totalRevenue * 0.97).toFixed(2)} Birr`,
       icon: DollarSign,
       iconBg: "bg-purple-100",

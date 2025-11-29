@@ -1260,7 +1260,7 @@ export default function OrganizerDashboard() {
     },
     {
       id: "organizer-revenue",
-      title: "Organizer Revenue (97%)",
+      title: "Available balance",
       value: organizerRevenue,
       icon: DollarSign,
       iconBg: "bg-emerald-100",
