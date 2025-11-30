@@ -1,137 +1,148 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import Image from "next/image"
-import { Calendar, MapPin, Star, Users, Gift, UserCheck } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
-import { toast } from "sonner"
+import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
+import { Calendar, MapPin, Star, Users, Gift, UserCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { toast } from "sonner";
 
 type FeaturedEvent = {
-  id: string
-  title: string
-  description: string
-  date: string
-  startTime: string // 👈 add this
-  endTime: string   // 👈 add this
-  location: string
-  venue: string
-  image: string
-  price: string
-  rating: number
-  attendees: number
-  categories: string[]
-  organization: string
-  originalEvent: any
-}
-
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  startTime: string; // 👈 add this
+  endTime: string; // 👈 add this
+  location: string;
+  venue: string;
+  image: string;
+  price: string;
+  rating: number;
+  attendees: number;
+  categories: string[];
+  organization: string;
+  originalEvent: any;
+};
 
 // Normalize various time formats (e.g., "18:00", "6:00 PM", "6 PM") to 24-hour HH:MM
 const normalizeTimeTo24h = (raw?: string): string => {
-  if (!raw || typeof raw !== 'string') return '23:59'
-  const t = raw.trim().toUpperCase()
+  if (!raw || typeof raw !== "string") return "23:59";
+  const t = raw.trim().toUpperCase();
   // 12h with AM/PM, with or without minutes
-  const ampm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/)
+  const ampm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/);
   if (ampm) {
-    let hour = parseInt(ampm[1], 10)
-    const minute = ampm[2] ? parseInt(ampm[2], 10) : 0
-    const isPM = ampm[3] === 'PM'
-    if (hour === 12) hour = isPM ? 12 : 0
-    else if (isPM) hour += 12
-    const hh = hour.toString().padStart(2, '0')
-    const mm = minute.toString().padStart(2, '0')
-    return `${hh}:${mm}`
+    let hour = parseInt(ampm[1], 10);
+    const minute = ampm[2] ? parseInt(ampm[2], 10) : 0;
+    const isPM = ampm[3] === "PM";
+    if (hour === 12) hour = isPM ? 12 : 0;
+    else if (isPM) hour += 12;
+    const hh = hour.toString().padStart(2, "0");
+    const mm = minute.toString().padStart(2, "0");
+    return `${hh}:${mm}`;
   }
   // 24h with minutes
-  const hm = t.match(/^(\d{1,2}):(\d{2})$/)
+  const hm = t.match(/^(\d{1,2}):(\d{2})$/);
   if (hm) {
-    const hh = Math.min(23, Math.max(0, parseInt(hm[1], 10))).toString().padStart(2, '0')
-    const mm = Math.min(59, Math.max(0, parseInt(hm[2], 10))).toString().padStart(2, '0')
-    return `${hh}:${mm}`
+    const hh = Math.min(23, Math.max(0, parseInt(hm[1], 10)))
+      .toString()
+      .padStart(2, "0");
+    const mm = Math.min(59, Math.max(0, parseInt(hm[2], 10)))
+      .toString()
+      .padStart(2, "0");
+    return `${hh}:${mm}`;
   }
   // hour only
-  const h = t.match(/^(\d{1,2})$/)
+  const h = t.match(/^(\d{1,2})$/);
   if (h) {
-    const hh = Math.min(23, Math.max(0, parseInt(h[1], 10))).toString().padStart(2, '0')
-    return `${hh}:00`
+    const hh = Math.min(23, Math.max(0, parseInt(h[1], 10)))
+      .toString()
+      .padStart(2, "0");
+    return `${hh}:00`;
   }
-  return '23:59'
-}
+  return "23:59";
+};
 
 // Safely build an end Date using endDate and endTime with reasonable fallbacks
 const buildEventEndDate = (event: any): Date | null => {
-  const dateStr: string | undefined = event?.endDate || event?.startDate
-  if (!dateStr) return null
-  const time24 = normalizeTimeTo24h(event?.endTime)
-  const isoCandidate = `${dateStr}T${time24}:00`
-  const d = new Date(isoCandidate)
-  if (!isNaN(d.getTime())) return d
+  const dateStr: string | undefined = event?.endDate || event?.startDate;
+  if (!dateStr) return null;
+  const time24 = normalizeTimeTo24h(event?.endTime);
+  const isoCandidate = `${dateStr}T${time24}:00`;
+  const d = new Date(isoCandidate);
+  if (!isNaN(d.getTime())) return d;
   // Fallback: try just the date, then set end of day
-  const d2 = new Date(dateStr)
+  const d2 = new Date(dateStr);
   if (!isNaN(d2.getTime())) {
-    d2.setHours(23, 59, 0, 0)
-    return d2
+    d2.setHours(23, 59, 0, 0);
+    return d2;
   }
-  return null
-}
+  return null;
+};
 
 // Function to check if event is sold out (ONLY when end date/time passed)
 const isEventSoldOut = (event: any) => {
-  const endDate = buildEventEndDate(event)
-  return !!(endDate && endDate.getTime() <= Date.now())
-}
+  const endDate = buildEventEndDate(event);
+  return !!(endDate && endDate.getTime() <= Date.now());
+};
 
 export default function LargeEventCarousel() {
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [isAnimating, setIsAnimating] = useState(false)
-  const [featuredEvents, setFeaturedEvents] = useState<FeaturedEvent[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [featuredEvents, setFeaturedEvents] = useState<FeaturedEvent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Swipe functionality states
-  const [touchStart, setTouchStart] = useState<number | null>(null)
-  const [touchEnd, setTouchEnd] = useState<number | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragOffset, setDragOffset] = useState(0)
-  const carouselRef = useRef<HTMLDivElement>(null)
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchFeaturedEvents()
-  }, [])
+    fetchFeaturedEvents();
+  }, []);
 
   const fetchFeaturedEvents = async () => {
     try {
-      setIsLoading(true)
+      setIsLoading(true);
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&bannerStatus=true&sort=-createdAt&limit=3`,
         {
           headers: {
             Accept: "application/json",
           },
-        },
-      )
+        }
+      );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch events")
+        throw new Error("Failed to fetch events");
       }
 
-      const data = await response.json()
-      console.log("API Response:", data) // Debug log
+      const data = await response.json();
+      console.log("API Response:", data); // Debug log
 
       // Transform the data to match the expected format
       const transformedEvents = data.data
-        .filter((event: any) => event.bannerStatus === true && event.isPublic === true)
+        .filter(
+          (event: any) => event.bannerStatus === true && event.isPublic === true
+        )
         .map((event: any) => {
           // Debug log for each event's images
-          console.log("Event images:", event.coverImages)
+          console.log("Event images:", event.coverImages);
 
           const imageUrl =
             event.coverImages && event.coverImages.length > 0
               ? event.coverImages[0].startsWith("http")
                 ? event.coverImages[0]
-                : `${process.env.NEXT_PUBLIC_API_URL}${event.coverImages[0].startsWith("/") ? event.coverImages[0] : `/${event.coverImages[0]}`}`
-              : "/placeholder.svg?height=600&width=400&text=Event+Poster"
+                : `${process.env.NEXT_PUBLIC_API_URL}${
+                    event.coverImages[0].startsWith("/")
+                      ? event.coverImages[0]
+                      : `/${event.coverImages[0]}`
+                  }`
+              : "/placeholder.svg?height=600&width=400&text=Event+Poster";
 
-          console.log("Processed image URL:", imageUrl) // Debug log
+          console.log("Processed image URL:", imageUrl); // Debug log
 
           // return {
           //   id: event._id,
@@ -157,38 +168,65 @@ export default function LargeEventCarousel() {
           // }
 
           // Compute wave-aware price for featured card
-          const now = new Date()
+          const now = new Date();
           const hasWave = (t: any) =>
-            !!(t?.startDate && t?.endDate) || String(t?.description || "").toLowerCase().includes("wave")
-          const anyWave = Array.isArray(event.ticketTypes) && event.ticketTypes.some(hasWave)
-          let priceLabel = "Free"
+            !!(t?.startDate && t?.endDate) ||
+            String(t?.description || "")
+              .toLowerCase()
+              .includes("wave");
+          const anyWave =
+            Array.isArray(event.ticketTypes) && event.ticketTypes.some(hasWave);
+          let priceLabel = "Free";
           if (anyWave) {
-            const activeWaveTickets = (event.ticketTypes || []).filter((t: any) => {
-              if (!hasWave(t)) return false
-              if (t?.available === false) return false
-              if (t?.startDate && t?.endDate) {
-                const s = new Date(t.startDate)
-                const e = new Date(t.endDate)
-                return now >= s && now <= e
+            const activeWaveTickets = (event.ticketTypes || []).filter(
+              (t: any) => {
+                if (!hasWave(t)) return false;
+                if (t?.available === false) return false;
+                if (t?.startDate && t?.endDate) {
+                  const s = new Date(t.startDate);
+                  const e = new Date(t.endDate);
+                  return now >= s && now <= e;
+                }
+                return false;
               }
-              return false
-            })
+            );
             if (activeWaveTickets.length > 0) {
-              activeWaveTickets.sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
-              priceLabel = activeWaveTickets[0].price > 0 ? `From ${activeWaveTickets[0].price} ETB` : "Free"
+              activeWaveTickets.sort(
+                (a: any, b: any) =>
+                  new Date(b.startDate).getTime() -
+                  new Date(a.startDate).getTime()
+              );
+              priceLabel =
+                activeWaveTickets[0].price > 0
+                  ? `From ${activeWaveTickets[0].price} ETB`
+                  : "Free";
             } else if (event.ticketTypes && event.ticketTypes.length > 0) {
-              priceLabel = event.ticketTypes[0].price > 0 ? `From ${event.ticketTypes[0].price} ETB` : "Free"
+              priceLabel =
+                event.ticketTypes[0].price > 0
+                  ? `From ${event.ticketTypes[0].price} ETB`
+                  : "Free";
             }
           } else if (event.ticketTypes && event.ticketTypes.length > 0) {
-            priceLabel = `From ${Math.min(...event.ticketTypes.map((t: any) => t.price))} ETB`
+            priceLabel = `From ${Math.min(
+              ...event.ticketTypes.map((t: any) => t.price)
+            )} ETB`;
           }
 
           return {
             id: event._id,
             title: event.title,
             description: event.description,
-            date: new Date(event.startDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
-            startTime: event.startTime || new Date(event.startDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            date: new Date(event.startDate).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
+            startTime:
+              event.startTime ||
+              new Date(event.startDate).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
             endTime: event.endTime || "",
             location: event.location.city,
             venue: event.location.address,
@@ -199,129 +237,126 @@ export default function LargeEventCarousel() {
             categories: [event.category?.name || "Uncategorized"],
             organization:
               event.organizer?.organization ||
-              `${event.organizer?.firstName || ""} ${event.organizer?.lastName || ""}`.trim() ||
+              `${event.organizer?.firstName || ""} ${
+                event.organizer?.lastName || ""
+              }`.trim() ||
               "Event Organization",
             originalEvent: event,
-          }
+          };
+        });
 
-        })
-
-      console.log("Transformed events:", transformedEvents) // Debug log
-      setFeaturedEvents(transformedEvents)
+      console.log("Transformed events:", transformedEvents); // Debug log
+      setFeaturedEvents(transformedEvents);
     } catch (error) {
-      console.error("Error fetching featured events:", error)
-      toast.error("Failed to fetch featured events")
+      console.error("Error fetching featured events:", error);
+      toast.error("Failed to fetch featured events");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-
-
-
-
+  };
 
   // Touch event handlers for mobile
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart(e.targetTouches[0].clientX)
-    setTouchEnd(null)
-    setIsDragging(true)
-    setDragOffset(0)
-  }
+    setTouchStart(e.targetTouches[0].clientX);
+    setTouchEnd(null);
+    setIsDragging(true);
+    setDragOffset(0);
+  };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchStart) return
+    if (!touchStart) return;
 
-    const currentTouch = e.targetTouches[0].clientX
-    const distance = touchStart - currentTouch
+    const currentTouch = e.targetTouches[0].clientX;
+    const distance = touchStart - currentTouch;
 
-    setTouchEnd(currentTouch) // This was missing — needed for swipe logic in touchEnd
-    setDragOffset(-distance * 0.1) // Optional: adjust swipe sensitivity
-  }
+    setTouchEnd(currentTouch); // This was missing — needed for swipe logic in touchEnd
+    setDragOffset(-distance * 0.1); // Optional: adjust swipe sensitivity
+  };
 
   const handleTouchEnd = () => {
-    if (!touchStart || touchEnd === null) return
+    if (!touchStart || touchEnd === null) return;
 
-    const distance = touchStart - touchEnd
-    const minSwipeDistance = 50
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 50;
 
     if (Math.abs(distance) > minSwipeDistance) {
       if (distance < 0) {
-        prevSlide() // swipe right
+        prevSlide(); // swipe right
       } else {
-        nextSlide() // swipe left
+        nextSlide(); // swipe left
       }
     }
 
-    setTouchStart(null)
-    setTouchEnd(null)
-    setIsDragging(false)
-    setDragOffset(0)
-  }
+    setTouchStart(null);
+    setTouchEnd(null);
+    setIsDragging(false);
+    setDragOffset(0);
+  };
 
   // Mouse event handlers for desktop
   const handleMouseDown = (e: React.MouseEvent) => {
-    setTouchStart(e.clientX)
-    setTouchEnd(null)
-    setIsDragging(true)
-    setDragOffset(0)
-  }
+    setTouchStart(e.clientX);
+    setTouchEnd(null);
+    setIsDragging(true);
+    setDragOffset(0);
+  };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!touchStart || !isDragging) return
+    if (!touchStart || !isDragging) return;
 
-    const currentX = e.clientX
-    const distance = touchStart - currentX
-    setDragOffset(-distance * 0.1)
-  }
+    const currentX = e.clientX;
+    const distance = touchStart - currentX;
+    setDragOffset(-distance * 0.1);
+  };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    if (!touchStart) return
+    if (!touchStart) return;
 
-    const distance = touchStart - e.clientX
-    const minSwipeDistance = 50
+    const distance = touchStart - e.clientX;
+    const minSwipeDistance = 50;
 
     if (Math.abs(distance) > minSwipeDistance) {
       if (distance < 0) {
-        prevSlide()
+        prevSlide();
       } else {
-        nextSlide()
+        nextSlide();
       }
     }
 
-    setTouchStart(null)
-    setTouchEnd(null)
-    setIsDragging(false)
-    setDragOffset(0)
-  }
-
-
-
-
+    setTouchStart(null);
+    setTouchEnd(null);
+    setIsDragging(false);
+    setDragOffset(0);
+  };
 
   const nextSlide = useCallback(() => {
     if (!isAnimating) {
-      setIsAnimating(true)
-      setCurrentIndex((prevIndex) => (prevIndex === featuredEvents.length - 1 ? 0 : prevIndex + 1))
-      setTimeout(() => setIsAnimating(false), 500)
+      setIsAnimating(true);
+      setCurrentIndex((prevIndex) =>
+        prevIndex === featuredEvents.length - 1 ? 0 : prevIndex + 1
+      );
+      setTimeout(() => setIsAnimating(false), 500);
     }
-  }, [isAnimating, featuredEvents.length])
+  }, [isAnimating, featuredEvents.length]);
 
   const prevSlide = useCallback(() => {
     if (!isAnimating) {
-      setIsAnimating(true)
-      setCurrentIndex((prevIndex) => (prevIndex === 0 ? featuredEvents.length - 1 : prevIndex - 1))
-      setTimeout(() => setIsAnimating(false), 500)
+      setIsAnimating(true);
+      setCurrentIndex((prevIndex) =>
+        prevIndex === 0 ? featuredEvents.length - 1 : prevIndex - 1
+      );
+      setTimeout(() => setIsAnimating(false), 500);
     }
-  }, [isAnimating, featuredEvents.length])
+  }, [isAnimating, featuredEvents.length]);
 
   // Auto-advance slides
   useEffect(() => {
     const interval = setInterval(() => {
-      nextSlide()
-    }, 6000)
+      nextSlide();
+    }, 6000);
 
-    return () => clearInterval(interval)
-  }, [nextSlide])
+    return () => clearInterval(interval);
+  }, [nextSlide]);
 
   // Touch event handlers for swipe functionality
   // const handleTouchStart = (e: React.TouchEvent) => {
@@ -402,70 +437,79 @@ export default function LargeEventCarousel() {
   // }
 
   const handleMouseLeave = () => {
-    setTouchStart(null)
-    setTouchEnd(null)
-    setIsDragging(false)
-    setDragOffset(0)
-  }
+    setTouchStart(null);
+    setTouchEnd(null);
+    setIsDragging(false);
+    setDragOffset(0);
+  };
 
   const formatTimeWithAmPm = (time24?: string): string => {
-    if (!time24) return ""
+    if (!time24) return "";
 
-    const [hourStr, minuteStr] = time24.split(":")
-    if (hourStr === undefined || minuteStr === undefined) return time24
+    const [hourStr, minuteStr] = time24.split(":");
+    if (hourStr === undefined || minuteStr === undefined) return time24;
 
-    let hour = parseInt(hourStr, 10)
-    const minute = parseInt(minuteStr, 10)
-    const ampm = hour >= 12 ? "PM" : "AM"
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
 
-    hour = hour % 12
-    if (hour === 0) hour = 12
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
 
-    const minuteFormatted = minute < 10 ? `0${minute}` : minute
+    const minuteFormatted = minute < 10 ? `0${minute}` : minute;
 
-    return `${hour}:${minuteFormatted} ${ampm}`
-  }
+    return `${hour}:${minuteFormatted} ${ampm}`;
+  };
 
   const formatTimeRange = (startTime?: string, endTime?: string) => {
-    const start = formatTimeWithAmPm(startTime)
-    const end = formatTimeWithAmPm(endTime)
+    const start = formatTimeWithAmPm(startTime);
+    const end = formatTimeWithAmPm(endTime);
 
-    if (!start && !end) return "Time TBA"
-    if (!start) return end
-    if (!end) return start
+    if (!start && !end) return "Time TBA";
+    if (!start) return end;
+    if (!end) return start;
 
-    return `${start} - ${end}`
-  }
-
-
-
+    return `${start} - ${end}`;
+  };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading featured events...</p>
+          <p className="mt-2 text-muted-foreground">
+            Loading featured events...
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!featuredEvents.length) {
     return (
       <div className="flex items-center justify-center min-h-[400px] bg-gray-100 mx-4 sm:mx-8 md:mx-12 my-6 rounded-xl">
         <div className="text-center p-8">
-          <h3 className="text-xl font-semibold text-gray-700 mb-2">No Featured Events</h3>
-          <p className="text-gray-500">To feature events contact <a href="mailto:admin@pazimo.com" className="text-blue-600 hover:underline">admin@pazimo.com</a></p>
+          <h3 className="text-xl font-semibold text-gray-700 mb-2">
+            No Featured Events
+          </h3>
+          <p className="text-gray-500">
+            To feature events contact{" "}
+            <a
+              href="mailto:admin@pazimo.com"
+              className="text-blue-600 hover:underline"
+            >
+              admin@pazimo.com
+            </a>
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
-  const currentEvent = featuredEvents[currentIndex]
+  const currentEvent = featuredEvents[currentIndex];
 
   if (!currentEvent) {
-    return null
+    return null;
   }
 
   return (
@@ -479,12 +523,15 @@ export default function LargeEventCarousel() {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+      style={{ cursor: isDragging ? "grabbing" : "grab" }}
     >
       {/* Background Image */}
       <div className="absolute inset-0 transition-opacity duration-1000 ease-in-out">
         <Image
-          src={currentEvent.image || "/placeholder.svg?height=650&width=1200&text=Featured+Event"}
+          src={
+            currentEvent.image ||
+            "/placeholder.svg?height=650&width=1200&text=Featured+Event"
+          }
           alt={currentEvent.title}
           fill
           className="object-contain bg-black"
@@ -492,9 +539,10 @@ export default function LargeEventCarousel() {
           sizes="100vw"
           quality={90}
           onError={(e) => {
-            console.error("Image failed to load:", currentEvent.image)
-            const target = e.target as HTMLImageElement
-            target.src = "/placeholder.svg?height=650&width=1200&text=Featured+Event"
+            console.error("Image failed to load:", currentEvent.image);
+            const target = e.target as HTMLImageElement;
+            target.src =
+              "/placeholder.svg?height=650&width=1200&text=Featured+Event";
           }}
         />
       </div>
@@ -513,20 +561,28 @@ export default function LargeEventCarousel() {
             {currentEvent.price}
           </div>
           {(() => {
-            const ev = currentEvent.originalEvent
-            const now = new Date()
-            const hasWave = (t: any) => !!(t?.startDate && t?.endDate) || String(t?.description || '').toLowerCase().includes('wave')
+            const ev = currentEvent.originalEvent;
+            const now = new Date();
+            const hasWave = (t: any) =>
+              !!(t?.startDate && t?.endDate) ||
+              String(t?.description || "")
+                .toLowerCase()
+                .includes("wave");
             const active = (ev?.ticketTypes || []).filter((t: any) => {
-              if (!hasWave(t)) return false
-              if (t?.available === false) return false
-              const s = new Date(t.startDate)
-              const e = new Date(t.endDate)
-              return now >= s && now <= e
-            })
+              if (!hasWave(t)) return false;
+              if (t?.available === false) return false;
+              const s = new Date(t.startDate);
+              const e = new Date(t.endDate);
+              return now >= s && now <= e;
+            });
             if (active.length > 0 && active[0]?.wave) {
-              return <div className="mt-2 bg-white/90 text-amber-700 text-xs font-semibold px-2 py-1 rounded shadow">{active[0].wave}</div>
+              return (
+                <div className="mt-2 bg-white/90 text-amber-700 text-xs font-semibold px-2 py-1 rounded shadow">
+                  {active[0].wave}
+                </div>
+              );
             }
-            return null
+            return null;
           })()}
         </div>
       )}
@@ -547,21 +603,32 @@ export default function LargeEventCarousel() {
               {currentEvent.title.toUpperCase()}
             </h1>
             {(() => {
-              const ev = currentEvent.originalEvent
-              const now = new Date()
-              const hasWave = (t: any) => !!(t?.startDate && t?.endDate) || String(t?.description || '').toLowerCase().includes('wave')
+              const ev = currentEvent.originalEvent;
+              const now = new Date();
+              const hasWave = (t: any) =>
+                !!(t?.startDate && t?.endDate) ||
+                String(t?.description || "")
+                  .toLowerCase()
+                  .includes("wave");
               const active = (ev?.ticketTypes || []).filter((t: any) => {
-                if (!hasWave(t)) return false
-                if (t?.available === false) return false
-                const s = new Date(t.startDate)
-                const e = new Date(t.endDate)
-                return now >= s && now <= e
-              })
-              if (active.length > 0 && (active[0]?.wave || active[0]?.description)) {
-                const label = active[0].wave || active[0].description
-                return <p className="text-amber-300 text-xs sm:text-sm font-semibold mb-3 sm:mb-4">{label}</p>
+                if (!hasWave(t)) return false;
+                if (t?.available === false) return false;
+                const s = new Date(t.startDate);
+                const e = new Date(t.endDate);
+                return now >= s && now <= e;
+              });
+              if (
+                active.length > 0 &&
+                (active[0]?.wave || active[0]?.description)
+              ) {
+                const label = active[0].wave || active[0].description;
+                return (
+                  <p className="text-amber-300 text-xs sm:text-sm font-semibold mb-3 sm:mb-4">
+                    {label}
+                  </p>
+                );
               }
-              return null
+              return null;
             })()}
 
             {/* Event Description */}
@@ -576,17 +643,26 @@ export default function LargeEventCarousel() {
               <div className="flex items-center gap-2 sm:gap-3 sm:bg-white/10 sm:backdrop-blur-sm rounded-lg p-2 sm:p-3 sm:border sm:border-white/20">
                 <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300 flex-shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-white sm:text-base">{currentEvent.date}</p>
+                  <p className="text-xs font-semibold text-white sm:text-base">
+                    {currentEvent.date}
+                  </p>
                   <p className="text-white/80 text-xs sm:text-sm">
-                    {formatTimeRange(currentEvent.startTime, currentEvent.endTime)}
+                    {formatTimeRange(
+                      currentEvent.startTime,
+                      currentEvent.endTime
+                    )}
                   </p>
                 </div>
               </div>
               <div className="hidden sm:flex items-center gap-2 sm:gap-3 bgwhite/10 backdrop-blur-sm rounded-lg p-2 sm:p-3 border border-white/20">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-white">{currentEvent.venue}</p>
-                  <p className="text-white/80 text-xs sm:text-sm">{currentEvent.location}</p>
+                  <p className="font-semibold text-white">
+                    {currentEvent.venue}
+                  </p>
+                  <p className="text-white/80 text-xs sm:text-sm">
+                    {currentEvent.location}
+                  </p>
                 </div>
               </div>
             </div>
@@ -599,12 +675,20 @@ export default function LargeEventCarousel() {
                     <Star
                       key={i}
                       className="h-3 w-3 sm:h-4 sm:w-4"
-                      fill={i < Math.floor(currentEvent.rating) ? "#fbbf24" : "none"}
-                      stroke={i < Math.floor(currentEvent.rating) ? "#fbbf24" : "#ffffff"}
+                      fill={
+                        i < Math.floor(currentEvent.rating) ? "#fbbf24" : "none"
+                      }
+                      stroke={
+                        i < Math.floor(currentEvent.rating)
+                          ? "#fbbf24"
+                          : "#ffffff"
+                      }
                     />
                   ))}
                 </div>
-                <span className="text-xs sm:text-sm font-medium text-white">{currentEvent.rating.toFixed(1)}</span>
+                <span className="text-xs sm:text-sm font-medium text-white">
+                  {currentEvent.rating.toFixed(1)}
+                </span>
               </div>
               <div className="flex items-center gap-1 sm:gap-2">
                 <Users className="h-3 w-3 sm:h-4 sm:w-4 text-amber-300" />
@@ -617,10 +701,18 @@ export default function LargeEventCarousel() {
                 <div className="flex items-center gap-1 sm:gap-2">
                   <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-blue-300" />
                   <span className="text-xs sm:text-sm font-medium text-white">
-                    {currentEvent.originalEvent.ageRestriction.minAge && !currentEvent.originalEvent.ageRestriction.maxAge && `${currentEvent.originalEvent.ageRestriction.minAge}+`}
-                    {!currentEvent.originalEvent.ageRestriction.minAge && currentEvent.originalEvent.ageRestriction.maxAge && `Up to ${currentEvent.originalEvent.ageRestriction.maxAge}`}
-                    {currentEvent.originalEvent.ageRestriction.minAge && currentEvent.originalEvent.ageRestriction.maxAge && `${currentEvent.originalEvent.ageRestriction.minAge}-${currentEvent.originalEvent.ageRestriction.maxAge}`}
-                    {!currentEvent.originalEvent.ageRestriction.minAge && !currentEvent.originalEvent.ageRestriction.maxAge && 'Age restricted'}
+                    {currentEvent.originalEvent.ageRestriction.minAge &&
+                      !currentEvent.originalEvent.ageRestriction.maxAge &&
+                      `${currentEvent.originalEvent.ageRestriction.minAge}+`}
+                    {!currentEvent.originalEvent.ageRestriction.minAge &&
+                      currentEvent.originalEvent.ageRestriction.maxAge &&
+                      `Up to ${currentEvent.originalEvent.ageRestriction.maxAge}`}
+                    {currentEvent.originalEvent.ageRestriction.minAge &&
+                      currentEvent.originalEvent.ageRestriction.maxAge &&
+                      `${currentEvent.originalEvent.ageRestriction.minAge}-${currentEvent.originalEvent.ageRestriction.maxAge}`}
+                    {!currentEvent.originalEvent.ageRestriction.minAge &&
+                      !currentEvent.originalEvent.ageRestriction.maxAge &&
+                      "Age restricted"}
                   </span>
                 </div>
               )}
@@ -655,7 +747,10 @@ export default function LargeEventCarousel() {
               {/* Event Poster Image */}
               <div className="relative h-full w-full">
                 <Image
-                  src={currentEvent.image || "/placeholder.svg?height=300&width=220&text=Event+Poster"}
+                  src={
+                    currentEvent.image ||
+                    "/placeholder.svg?height=300&width=220&text=Event+Poster"
+                  }
                   alt={currentEvent.title}
                   fill
                   className="object-contain bg-black"
@@ -663,9 +758,10 @@ export default function LargeEventCarousel() {
                   quality={80}
                   priority
                   onError={(e) => {
-                    console.error("Image failed to load:", currentEvent.image)
-                    const target = e.target as HTMLImageElement
-                    target.src = "/placeholder.svg?height=300&width=220&text=Event+Poster"
+                    console.error("Image failed to load:", currentEvent.image);
+                    const target = e.target as HTMLImageElement;
+                    target.src =
+                      "/placeholder.svg?height=300&width=220&text=Event+Poster";
                   }}
                 />
 
@@ -684,5 +780,5 @@ export default function LargeEventCarousel() {
         </div>
       </div>
     </section>
-  )
+  );
 }

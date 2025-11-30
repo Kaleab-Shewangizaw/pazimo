@@ -175,14 +175,18 @@ export default function EventCarousel() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=1000`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events`
       );
       if (!response.ok) {
         throw new Error("Failed to fetch events");
       }
       const data = await response.json();
 
-      const publishedEvents = data.data || [];
+      // Filter for published events only and show only public events
+      const publishedEvents = data.data.filter(
+        (event: Event) =>
+          event.status === "published" && event.isPublic === true
+      );
       setEvents(publishedEvents);
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -241,7 +245,7 @@ export default function EventCarousel() {
       }
     });
 
-    setFilteredEvents(filtered.slice(0, 10));
+    setFilteredEvents(filtered);
   };
 
   const fetchWishlist = async () => {
