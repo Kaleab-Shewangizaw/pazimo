@@ -1,343 +1,380 @@
-"use client"
+"use client";
 
-import { useState, useRef, useEffect } from "react"
-import Image from "next/image"
-import { Heart, Eye, EyeOff } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { cn } from "@/lib/utils"
-import Link from "next/link"
-import { toast } from "sonner"
+import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
+import { Heart, Eye, EyeOff } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
+import Link from "next/link";
+import { toast } from "sonner";
 
 type Event = {
-  _id: string
-  title: string
-  description: string
-  startDate: string
-  endDate: string
-  startTime: string
-  endTime: string
+  _id: string;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
   location: {
-    address: string
-    city: string
-    country: string
-  }
+    address: string;
+    city: string;
+    country: string;
+  };
   category: {
-    _id: string
-    name: string
-    description: string
-  }
-  coverImages: string[]
+    _id: string;
+    name: string;
+    description: string;
+  };
+  coverImages: string[];
   ticketTypes: Array<{
-    name: string
-    price: number
-    quantity: number
-    available?: boolean
-    description?: string
-    startDate?: string
-    endDate?: string
-  }>
-  status: string
-  isPublic?: boolean
-}
+    name: string;
+    price: number;
+    quantity: number;
+    available?: boolean;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+  }>;
+  status: string;
+  isPublic?: boolean;
+};
 
 export default function EventCarousel() {
-  const [wishlist, setWishlist] = useState<string[]>([])
-  const [events, setEvents] = useState<Event[]>([])
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false)
-  const [showSoldOut, setShowSoldOut] = useState<boolean>(true)
-  const [sortBy, setSortBy] = useState<string>("newest")
-  const carouselRef = useRef<HTMLDivElement>(null)
-  const [isHovered, setIsHovered] = useState(false)
+  const [wishlist, setWishlist] = useState<string[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+  const [showSoldOut, setShowSoldOut] = useState<boolean>(true);
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Normalize time to 24h (handles "18:00", "6:00 PM", "6 PM"). Defaults to 23:59
   const normalizeTimeTo24h = (raw?: string): string => {
-    if (!raw || typeof raw !== 'string') return '23:59'
-    const t = raw.trim().toUpperCase()
-    const ampm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/)
+    if (!raw || typeof raw !== "string") return "23:59";
+    const t = raw.trim().toUpperCase();
+    const ampm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/);
     if (ampm) {
-      let hour = parseInt(ampm[1], 10)
-      const minute = ampm[2] ? parseInt(ampm[2], 10) : 0
-      const isPM = ampm[3] === 'PM'
-      if (hour === 12) hour = isPM ? 12 : 0
-      else if (isPM) hour += 12
-      const hh = hour.toString().padStart(2, '0')
-      const mm = minute.toString().padStart(2, '0')
-      return `${hh}:${mm}`
+      let hour = parseInt(ampm[1], 10);
+      const minute = ampm[2] ? parseInt(ampm[2], 10) : 0;
+      const isPM = ampm[3] === "PM";
+      if (hour === 12) hour = isPM ? 12 : 0;
+      else if (isPM) hour += 12;
+      const hh = hour.toString().padStart(2, "0");
+      const mm = minute.toString().padStart(2, "0");
+      return `${hh}:${mm}`;
     }
-    const hm = t.match(/^(\d{1,2}):(\d{2})$/)
+    const hm = t.match(/^(\d{1,2}):(\d{2})$/);
     if (hm) {
-      const hh = Math.min(23, Math.max(0, parseInt(hm[1], 10))).toString().padStart(2, '0')
-      const mm = Math.min(59, Math.max(0, parseInt(hm[2], 10))).toString().padStart(2, '0')
-      return `${hh}:${mm}`
+      const hh = Math.min(23, Math.max(0, parseInt(hm[1], 10)))
+        .toString()
+        .padStart(2, "0");
+      const mm = Math.min(59, Math.max(0, parseInt(hm[2], 10)))
+        .toString()
+        .padStart(2, "0");
+      return `${hh}:${mm}`;
     }
-    const h = t.match(/^(\d{1,2})$/)
+    const h = t.match(/^(\d{1,2})$/);
     if (h) {
-      const hh = Math.min(23, Math.max(0, parseInt(h[1], 10))).toString().padStart(2, '0')
-      return `${hh}:00`
+      const hh = Math.min(23, Math.max(0, parseInt(h[1], 10)))
+        .toString()
+        .padStart(2, "0");
+      return `${hh}:00`;
     }
-    return '23:59'
-  }
+    return "23:59";
+  };
 
   // Build end datetime with safe fallbacks
   const buildEventEndDate = (event: Event): Date | null => {
-    const dateStr = event?.endDate || event?.startDate
-    if (!dateStr) return null
-    const time24 = normalizeTimeTo24h(event?.endTime)
-    const isoCandidate = `${dateStr}T${time24}:00`
-    const d = new Date(isoCandidate)
-    if (!isNaN(d.getTime())) return d
-    const d2 = new Date(dateStr)
+    const dateStr = event?.endDate || event?.startDate;
+    if (!dateStr) return null;
+    const time24 = normalizeTimeTo24h(event?.endTime);
+    const isoCandidate = `${dateStr}T${time24}:00`;
+    const d = new Date(isoCandidate);
+    if (!isNaN(d.getTime())) return d;
+    const d2 = new Date(dateStr);
     if (!isNaN(d2.getTime())) {
-      d2.setHours(23, 59, 0, 0)
-      return d2
+      d2.setHours(23, 59, 0, 0);
+      return d2;
     }
-    return null
-  }
+    return null;
+  };
 
   // Function to check if a ticket type is currently available
   const isTicketTypeAvailable = (ticket: any) => {
-    const now = new Date()
-    
+    const now = new Date();
+
     // Check if ticket is marked as available
-    if (ticket.available === false) return false
-    
+    if (ticket.available === false) return false;
+
     // Check if ticket has quantity
-    if (ticket.quantity <= 0) return false
-    
+    if (ticket.quantity <= 0) return false;
+
     // Check ticket-specific date range if exists
     if (ticket.startDate && ticket.endDate) {
-      const ticketStart = new Date(ticket.startDate)
-      const ticketEnd = new Date(ticket.endDate)
-      if (now < ticketStart || now > ticketEnd) return false
+      const ticketStart = new Date(ticket.startDate);
+      const ticketEnd = new Date(ticket.endDate);
+      if (now < ticketStart || now > ticketEnd) return false;
     }
-    
-    return true
-  }
+
+    return true;
+  };
 
   // Function to check if event is sold out
   const isEventSoldOut = (event: Event) => {
-    const now = new Date()
-    
+    const now = new Date();
+
     // Check if event end date has passed
-    const eventEndDate = buildEventEndDate(event)
-    if (eventEndDate && eventEndDate.getTime() <= now.getTime()) return true
-    
+    const eventEndDate = buildEventEndDate(event);
+    if (eventEndDate && eventEndDate.getTime() <= now.getTime()) return true;
+
     // Check if all tickets have quantity 0 or are marked unavailable
-    return event.ticketTypes.every(ticket => 
-      ticket.quantity === 0 || ticket.available === false
-    )
-  }
+    return event.ticketTypes.every(
+      (ticket) => ticket.quantity === 0 || ticket.available === false
+    );
+  };
 
   useEffect(() => {
-    fetchEvents()
-    fetchWishlist()
-  }, [])
+    fetchEvents();
+    fetchWishlist();
+  }, []);
 
   useEffect(() => {
-    filterAndSortEvents()
-  }, [events, showSoldOut, sortBy])
+    filterAndSortEvents();
+  }, [events, showSoldOut, sortBy]);
 
   // Auto-scroll functionality
   useEffect(() => {
-    if (!carouselRef.current || filteredEvents.length === 0 || isHovered) return
+    if (!carouselRef.current || filteredEvents.length === 0 || isHovered)
+      return;
 
-    const scrollContainer = carouselRef.current
-    const scrollWidth = scrollContainer.scrollWidth
-    const clientWidth = scrollContainer.clientWidth
-    const maxScroll = scrollWidth - clientWidth
+    const scrollContainer = carouselRef.current;
+    const scrollWidth = scrollContainer.scrollWidth;
+    const clientWidth = scrollContainer.clientWidth;
+    const maxScroll = scrollWidth - clientWidth;
 
-    if (maxScroll <= 0) return // No need to scroll if content fits
+    if (maxScroll <= 0) return; // No need to scroll if content fits
 
     const interval = setInterval(() => {
       if (scrollContainer.scrollLeft >= maxScroll) {
         // Reset to beginning when reaching the end
-        scrollContainer.scrollTo({ left: 0, behavior: 'smooth' })
+        scrollContainer.scrollTo({ left: 0, behavior: "smooth" });
       } else {
         // Scroll by one card width (320px + 16px gap = 336px)
-        scrollContainer.scrollBy({ left: 336, behavior: 'smooth' })
+        scrollContainer.scrollBy({ left: 336, behavior: "smooth" });
       }
-    }, 10000) // Auto-scroll every 10 seconds
+    }, 10000); // Auto-scroll every 10 seconds
 
-    return () => clearInterval(interval)
-  }, [filteredEvents.length, isHovered])
+    return () => clearInterval(interval);
+  }, [filteredEvents.length, isHovered]);
 
   const fetchEvents = async () => {
     try {
-      setIsLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events`)
+      setIsLoading(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=10`
+      );
       if (!response.ok) {
-        throw new Error("Failed to fetch events")
+        throw new Error("Failed to fetch events");
       }
-      const data = await response.json()
-      
-      // Filter for published events only and show only public events
-      const publishedEvents = data.data.filter((event: Event) => 
-        event.status === 'published' && event.isPublic === true
-      )
-      setEvents(publishedEvents)
+      const data = await response.json();
+
+      const publishedEvents = data.data || [];
+      setEvents(publishedEvents);
     } catch (error) {
-      console.error("Error fetching events:", error)
-      toast.error("Failed to fetch events")
+      console.error("Error fetching events:", error);
+      toast.error("Failed to fetch events");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const filterAndSortEvents = () => {
-    let filtered = [...events]
+    let filtered = [...events];
 
     // Filter out sold out events if showSoldOut is false
     if (!showSoldOut) {
-      filtered = filtered.filter((event) => !isEventSoldOut(event))
+      filtered = filtered.filter((event) => !isEventSoldOut(event));
     }
 
     filtered.sort((a, b) => {
-      const availableTicketsA = a.ticketTypes.filter(t => isTicketTypeAvailable(t))
-      const availableTicketsB = b.ticketTypes.filter(t => isTicketTypeAvailable(t))
-      
-      const priceA = availableTicketsA.length > 0 ? Math.min(...availableTicketsA.map(t => t.price)) : Math.min(...a.ticketTypes.map(t => t.price))
-      const priceB = availableTicketsB.length > 0 ? Math.min(...availableTicketsB.map(t => t.price)) : Math.min(...b.ticketTypes.map(t => t.price))
+      const availableTicketsA = a.ticketTypes.filter((t) =>
+        isTicketTypeAvailable(t)
+      );
+      const availableTicketsB = b.ticketTypes.filter((t) =>
+        isTicketTypeAvailable(t)
+      );
+
+      const priceA =
+        availableTicketsA.length > 0
+          ? Math.min(...availableTicketsA.map((t) => t.price))
+          : Math.min(...a.ticketTypes.map((t) => t.price));
+      const priceB =
+        availableTicketsB.length > 0
+          ? Math.min(...availableTicketsB.map((t) => t.price))
+          : Math.min(...b.ticketTypes.map((t) => t.price));
 
       switch (sortBy) {
         case "price-low":
-          return priceA - priceB
+          return priceA - priceB;
         case "price-high":
-          return priceB - priceA
+          return priceB - priceA;
         case "newest":
-          return new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+          return (
+            new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+          );
         case "availability":
-          const aSoldOut = isEventSoldOut(a)
-          const bSoldOut = isEventSoldOut(b)
-          if (aSoldOut && !bSoldOut) return 1
-          if (!aSoldOut && bSoldOut) return -1
-          return new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+          const aSoldOut = isEventSoldOut(a);
+          const bSoldOut = isEventSoldOut(b);
+          if (aSoldOut && !bSoldOut) return 1;
+          if (!aSoldOut && bSoldOut) return -1;
+          return (
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+          );
         case "popular":
-          return 0
+          return 0;
         default:
-          return 0
+          return 0;
       }
-    })
+    });
 
-    setFilteredEvents(filtered)
-  }
+    setFilteredEvents(filtered);
+  };
 
   const fetchWishlist = async () => {
     try {
-      const storedAuth = localStorage.getItem("auth-storage")
+      const storedAuth = localStorage.getItem("auth-storage");
       if (!storedAuth) {
-        const localWishlist = localStorage.getItem("event-wishlist")
+        const localWishlist = localStorage.getItem("event-wishlist");
         if (localWishlist) {
-          setWishlist(JSON.parse(localWishlist))
+          setWishlist(JSON.parse(localWishlist));
         }
-        return
+        return;
       }
 
-      const parsedAuth = JSON.parse(storedAuth)
-      const userId = parsedAuth.state?.user?._id
+      const parsedAuth = JSON.parse(storedAuth);
+      const userId = parsedAuth.state?.user?._id;
 
       if (!userId) {
-        const localWishlist = localStorage.getItem("event-wishlist")
+        const localWishlist = localStorage.getItem("event-wishlist");
         if (localWishlist) {
-          setWishlist(JSON.parse(localWishlist))
+          setWishlist(JSON.parse(localWishlist));
         }
-        return
+        return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`)
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
+      );
       if (!response.ok) {
-        throw new Error("Failed to fetch wishlist")
+        throw new Error("Failed to fetch wishlist");
       }
 
-      const data = await response.json()
+      const data = await response.json();
       if (data.data && Array.isArray(data.data)) {
-        const wishlistIds = data.data.map((item: any) => item.eventId || item._id)
-        setWishlist(wishlistIds)
+        const wishlistIds = data.data.map(
+          (item: any) => item.eventId || item._id
+        );
+        setWishlist(wishlistIds);
       }
     } catch (error) {
-      console.error("Error fetching wishlist:", error)
-      const localWishlist = localStorage.getItem("event-wishlist")
+      console.error("Error fetching wishlist:", error);
+      const localWishlist = localStorage.getItem("event-wishlist");
       if (localWishlist) {
-        setWishlist(JSON.parse(localWishlist))
+        setWishlist(JSON.parse(localWishlist));
       }
     }
-  }
+  };
 
   const formatTimeWithAmPm = (time24?: string): string => {
-    if (!time24) return ""
-  
-    const [hourStr, minuteStr] = time24.split(":")
-    if (hourStr === undefined || minuteStr === undefined) return time24
-  
-    let hour = parseInt(hourStr, 10)
-    const minute = parseInt(minuteStr, 10)
-    const ampm = hour >= 12 ? "PM" : "AM"
-  
-    hour = hour % 12
-    if (hour === 0) hour = 12
-  
-    const minuteFormatted = minute < 10 ? `0${minute}` : minute
-  
-    return `${hour}:${minuteFormatted} ${ampm}`
-  }
-  
+    if (!time24) return "";
+
+    const [hourStr, minuteStr] = time24.split(":");
+    if (hourStr === undefined || minuteStr === undefined) return time24;
+
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
+
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+
+    const minuteFormatted = minute < 10 ? `0${minute}` : minute;
+
+    return `${hour}:${minuteFormatted} ${ampm}`;
+  };
+
   const formatTimeRange = (startTime?: string, endTime?: string) => {
-    const start = formatTimeWithAmPm(startTime)
-    const end = formatTimeWithAmPm(endTime)
-  
-    if (!start && !end) return "Time TBA"
-    if (!start) return end
-    if (!end) return start
-  
-    return `${start} - ${end}`
-  }
+    const start = formatTimeWithAmPm(startTime);
+    const end = formatTimeWithAmPm(endTime);
+
+    if (!start && !end) return "Time TBA";
+    if (!start) return end;
+    if (!end) return start;
+
+    return `${start} - ${end}`;
+  };
 
   const toggleWishlist = async (eventId: string) => {
     try {
-      setIsWishlistLoading(true)
-      const storedAuth = localStorage.getItem("auth-storage")
-      let userId
+      setIsWishlistLoading(true);
+      const storedAuth = localStorage.getItem("auth-storage");
+      let userId;
 
       if (storedAuth) {
-        const parsedAuth = JSON.parse(storedAuth)
-        userId = parsedAuth.state?.user?._id
+        const parsedAuth = JSON.parse(storedAuth);
+        userId = parsedAuth.state?.user?._id;
       }
 
-      const newWishlist = wishlist.includes(eventId) ? wishlist.filter((id) => id !== eventId) : [...wishlist, eventId]
-      setWishlist(newWishlist)
-      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist))
+      const newWishlist = wishlist.includes(eventId)
+        ? wishlist.filter((id) => id !== eventId)
+        : [...wishlist, eventId];
+      setWishlist(newWishlist);
+      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
 
       if (userId) {
-        const action = wishlist.includes(eventId) ? "remove" : "add"
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            eventId,
-            action,
-          }),
-        })
+        const action = wishlist.includes(eventId) ? "remove" : "add";
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              eventId,
+              action,
+            }),
+          }
+        );
 
         if (!response.ok) {
-          throw new Error(`Failed to ${action} event to wishlist`)
+          throw new Error(`Failed to ${action} event to wishlist`);
         }
 
-        toast.success(wishlist.includes(eventId) ? "Removed from wishlist" : "Added to wishlist")
+        toast.success(
+          wishlist.includes(eventId)
+            ? "Removed from wishlist"
+            : "Added to wishlist"
+        );
       } else {
-        toast.success(wishlist.includes(eventId) ? "Removed from wishlist" : "Added to wishlist")
+        toast.success(
+          wishlist.includes(eventId)
+            ? "Removed from wishlist"
+            : "Added to wishlist"
+        );
       }
     } catch (error) {
-      console.error("Error updating wishlist:", error)
-      toast.error("Failed to update wishlist")
-      await fetchWishlist()
+      console.error("Error updating wishlist:", error);
+      toast.error("Failed to update wishlist");
+      await fetchWishlist();
     } finally {
-      setIsWishlistLoading(false)
+      setIsWishlistLoading(false);
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -347,7 +384,7 @@ export default function EventCarousel() {
           <p className="mt-2 text-[#1a2d5a]">Loading events...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (events.length === 0) {
@@ -357,22 +394,27 @@ export default function EventCarousel() {
           <p className="text-[#1a2d5a]">No events available</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (filteredEvents.length === 0 && !showSoldOut) {
     return (
       <div className="relative px-4 sm:px-8 md:px-16 py-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-[#1a2d5a]">Featured Events</h3>
+          <h3 className="text-lg font-semibold text-[#1a2d5a]">
+            Featured Events
+          </h3>
           <div className="flex items-center gap-4">
             <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="show-sold-out-carousel" 
-                checked={showSoldOut} 
-                onCheckedChange={(checked) => setShowSoldOut(checked === true)} 
+              <Checkbox
+                id="show-sold-out-carousel"
+                checked={showSoldOut}
+                onCheckedChange={(checked) => setShowSoldOut(checked === true)}
               />
-              <label htmlFor="show-sold-out-carousel" className="text-sm font-medium">
+              <label
+                htmlFor="show-sold-out-carousel"
+                className="text-sm font-medium"
+              >
                 Show sold out
               </label>
             </div>
@@ -381,8 +423,12 @@ export default function EventCarousel() {
         <div className="flex items-center justify-center min-h-[300px] bg-gray-50 rounded-xl">
           <div className="text-center p-8">
             <EyeOff className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-700 mb-2">No Available Events</h3>
-            <p className="text-gray-500 mb-4">All events are currently sold out.</p>
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              No Available Events
+            </h3>
+            <p className="text-gray-500 mb-4">
+              All events are currently sold out.
+            </p>
             <Button
               variant="outline"
               onClick={() => setShowSoldOut(true)}
@@ -394,18 +440,17 @@ export default function EventCarousel() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="relative px-4 sm:px-8 md:px-16 py-6">
-      <div className="flex items-center justify-between mb-6">
-      </div>
+      <div className="flex items-center justify-between mb-6"></div>
 
-      <div 
-        className="overflow-x-auto scrollbar-hide" 
+      <div
+        className="overflow-x-auto scrollbar-hide"
         ref={carouselRef}
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
@@ -433,7 +478,11 @@ export default function EventCarousel() {
                         event.coverImages && event.coverImages.length > 0
                           ? event.coverImages[0].startsWith("http")
                             ? event.coverImages[0]
-                            : `${process.env.NEXT_PUBLIC_API_URL}${event.coverImages[0].startsWith("/") ? event.coverImages[0] : `/${event.coverImages[0]}`}`
+                            : `${process.env.NEXT_PUBLIC_API_URL}${
+                                event.coverImages[0].startsWith("/")
+                                  ? event.coverImages[0]
+                                  : `/${event.coverImages[0]}`
+                              }`
                           : "/placeholder.svg?height=400&width=320&text=Event+Poster"
                       }
                       alt={event.title}
@@ -442,8 +491,9 @@ export default function EventCarousel() {
                       sizes="320px"
                       quality={90}
                       onError={(e) => {
-                        const target = e.target as HTMLImageElement
-                        target.src = "/placeholder.svg?height=400&width=320&text=Event+Poster"
+                        const target = e.target as HTMLImageElement;
+                        target.src =
+                          "/placeholder.svg?height=400&width=320&text=Event+Poster";
                       }}
                     />
 
@@ -455,16 +505,29 @@ export default function EventCarousel() {
                   <button
                     className={cn(
                       "absolute bottom-3 right-3 p-2.5 rounded-full bg-white/90 backdrop-blur-sm transition-all duration-300 shadow-lg hover:shadow-xl",
-                      wishlist.includes(event._id) ? "text-red-500 bg-red-50" : "text-gray-600 hover:text-red-500",
-                      isWishlistLoading ? "opacity-50 cursor-not-allowed" : "hover:scale-110",
+                      wishlist.includes(event._id)
+                        ? "text-red-500 bg-red-50"
+                        : "text-gray-600 hover:text-red-500",
+                      isWishlistLoading
+                        ? "opacity-50 cursor-not-allowed"
+                        : "hover:scale-110"
                     )}
                     onClick={() => toggleWishlist(event._id)}
                     disabled={isWishlistLoading}
-                    aria-label={wishlist.includes(event._id) ? "Remove from wishlist" : "Add to wishlist"}
+                    aria-label={
+                      wishlist.includes(event._id)
+                        ? "Remove from wishlist"
+                        : "Add to wishlist"
+                    }
                   >
                     <Heart
-                      className={cn("h-5 w-5", isWishlistLoading ? "animate-pulse" : "")}
-                      fill={wishlist.includes(event._id) ? "currentColor" : "none"}
+                      className={cn(
+                        "h-5 w-5",
+                        isWishlistLoading ? "animate-pulse" : ""
+                      )}
+                      fill={
+                        wishlist.includes(event._id) ? "currentColor" : "none"
+                      }
                     />
                   </button>
 
@@ -492,15 +555,25 @@ export default function EventCarousel() {
                     <div className="bg-gradient-to-r from-[#1a2d5a]/10 to-[#1a2d5a]/5 rounded-lg px-3 py-2">
                       <p className="text-[#1a2d5a] font-bold text-sm">
                         {(() => {
-                          const availableTickets = event.ticketTypes.filter(ticket => isTicketTypeAvailable(ticket))
-                          
+                          const availableTickets = event.ticketTypes.filter(
+                            (ticket) => isTicketTypeAvailable(ticket)
+                          );
+
                           if (availableTickets.length === 0) {
-                            const lowestPrice = Math.min(...event.ticketTypes.map(t => t.price))
-                            return lowestPrice > 0 ? `${lowestPrice} ETB` : "Free"
+                            const lowestPrice = Math.min(
+                              ...event.ticketTypes.map((t) => t.price)
+                            );
+                            return lowestPrice > 0
+                              ? `${lowestPrice} ETB`
+                              : "Free";
                           }
-                          
-                          const lowestAvailablePrice = Math.min(...availableTickets.map(t => t.price))
-                          return lowestAvailablePrice > 0 ? `${lowestAvailablePrice} ETB` : "Free"
+
+                          const lowestAvailablePrice = Math.min(
+                            ...availableTickets.map((t) => t.price)
+                          );
+                          return lowestAvailablePrice > 0
+                            ? `${lowestAvailablePrice} ETB`
+                            : "Free";
                         })()}
                       </p>
                     </div>
@@ -531,5 +604,5 @@ export default function EventCarousel() {
         </div>
       </div>
     </div>
-  )
+  );
 }

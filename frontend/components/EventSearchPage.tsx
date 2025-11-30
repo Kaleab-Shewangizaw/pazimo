@@ -1,385 +1,443 @@
+"use client";
 
-"use client"
+import Link from "next/link";
+import { Suspense, lazy, useEffect, useState } from "react";
+import {
+  ChevronDown,
+  X,
+  SlidersHorizontal,
+  Filter,
+  Users,
+  DollarSign,
+  Eye,
+  Loader2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import EventCardSkeleton from "@/components/skeleton/event-card-skeleton";
+import { toast } from "sonner";
+import { useAuthStore } from "@/store/authStore";
+import { useRouter, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 
-import Link from "next/link"
-import { Suspense, lazy, useEffect, useState } from "react"
-import { ChevronDown, X, SlidersHorizontal, Filter, Users, DollarSign, Eye, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Slider } from "@/components/ui/slider"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Separator } from "@/components/ui/separator"
-import EventCardSkeleton from "@/components/skeleton/event-card-skeleton"
-import { toast } from "sonner"
-import { useAuthStore } from "@/store/authStore"
-import { useRouter, useSearchParams } from "next/navigation"
-import { cn } from "@/lib/utils"
-
-const EventGrid = lazy(() => import("@/components/skeleton/event-grid"))
+const EventGrid = lazy(() => import("@/components/skeleton/event-grid"));
 
 type Event = {
-  _id: string
-  title: string
-  description: string
-  startDate: string
-  endDate: string
-  startTime?: string
-  endTime?: string
+  _id: string;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  endTime?: string;
   location: {
-    address: string
-    city: string
-    country: string
-  }
+    address: string;
+    city: string;
+    country: string;
+  };
   category: {
-    _id: string
-    name: string
-    description: string
-  }
-  coverImages: string[]
+    _id: string;
+    name: string;
+    description: string;
+  };
+  coverImages: string[];
   ticketTypes: Array<{
-    name: string
-    price: number
-    quantity: number
-    available: boolean
-    endDate?: string
-    wave?: string
-  }>
-  status: string
-  ageLimit?: string
-  capacity?: number
-  isPublic?: boolean
-}
+    name: string;
+    price: number;
+    quantity: number;
+    available: boolean;
+    endDate?: string;
+    wave?: string;
+  }>;
+  status: string;
+  ageLimit?: string;
+  capacity?: number;
+  isPublic?: boolean;
+};
 
-const AGE_RESTRICTIONS = ["3+", "13+", "18+", "21+", "25+"]
+const AGE_RESTRICTIONS = ["3+", "13+", "18+", "21+", "25+"];
 
 // Function to check if a ticket type is currently available
 const isTicketTypeAvailable = (ticket: any) => {
-  const now = new Date()
-  
+  const now = new Date();
+
   // Check if ticket is marked as available
-  if (ticket.available === false) return false
-  
+  if (ticket.available === false) return false;
+
   // Check if ticket has quantity
-  if (ticket.quantity <= 0) return false
-  
+  if (ticket.quantity <= 0) return false;
+
   // Check ticket-specific date range if exists
   if (ticket.startDate && ticket.endDate) {
-    const ticketStart = new Date(ticket.startDate)
-    const ticketEnd = new Date(ticket.endDate)
-    if (now < ticketStart || now > ticketEnd) return false
+    const ticketStart = new Date(ticket.startDate);
+    const ticketEnd = new Date(ticket.endDate);
+    if (now < ticketStart || now > ticketEnd) return false;
   }
-  
-  return true
-}
+
+  return true;
+};
 
 // Get available tickets for current wave
 const getAvailableTickets = (event: Event) => {
-  return event.ticketTypes.filter(ticket => isTicketTypeAvailable(ticket))
-}
+  return event.ticketTypes.filter((ticket) => isTicketTypeAvailable(ticket));
+};
 
 // Get current active ticket (cheapest available)
 const getCurrentTicket = (event: Event) => {
-  const availableTickets = getAvailableTickets(event)
-  if (availableTickets.length === 0) return null
-  return availableTickets.reduce((cheapest, current) => 
+  const availableTickets = getAvailableTickets(event);
+  if (availableTickets.length === 0) return null;
+  return availableTickets.reduce((cheapest, current) =>
     current.price < cheapest.price ? current : cheapest
-  )
-}
+  );
+};
 
 // Function to check if event is sold out
 const isEventSoldOut = (event: Event) => {
-  const now = new Date()
-  
-  // Check if event end date has passed
-  const endDate = new Date(event.endDate)
-  if (event.endTime && /^\d{1,2}:\d{2}$/.test(event.endTime)) {
-    const [h, m] = event.endTime.split(":").map((v) => Number.parseInt(v, 10))
-    endDate.setHours(h, m, 59, 999)
-  } else {
-    endDate.setHours(23, 59, 59, 999)
-  }
-  
-  if (endDate.getTime() <= now.getTime()) return true
-  
-  // Check if all tickets have quantity 0 or are marked unavailable
-  return event.ticketTypes.every(ticket => 
-    ticket.quantity === 0 || ticket.available === false
-  )
-}
+  const now = new Date();
 
+  // Check if event end date has passed
+  const endDate = new Date(event.endDate);
+  if (event.endTime && /^\d{1,2}:\d{2}$/.test(event.endTime)) {
+    const [h, m] = event.endTime.split(":").map((v) => Number.parseInt(v, 10));
+    endDate.setHours(h, m, 59, 999);
+  } else {
+    endDate.setHours(23, 59, 59, 999);
+  }
+
+  if (endDate.getTime() <= now.getTime()) return true;
+
+  // Check if all tickets have quantity 0 or are marked unavailable
+  return event.ticketTypes.every(
+    (ticket) => ticket.quantity === 0 || ticket.available === false
+  );
+};
 
 export default function EventSearchPage() {
-  const [isClient, setIsClient] = useState(false)
-  const [events, setEvents] = useState<Event[]>([])
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isNavigating, setIsNavigating] = useState(false)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [categoriesFromEvents, setCategoriesFromEvents] = useState<string[]>([])
-  const [selectedAge, setSelectedAge] = useState<string>("")
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 2000])
-  const [sortBy, setSortBy] = useState<string>("newest")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [showSoldOut, setShowSoldOut] = useState<boolean>(true) // New state for showing/hiding sold out events
-  const [isFilterOpen, setIsFilterOpen] = useState(false) // Mobile filter sheet state
-  const eventsPerPage = 9
-  const [wishlist, setWishlist] = useState<string[]>([])
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false)
-  const { user } = useAuthStore()
-  const router = useRouter()
-  const searchParams = useSearchParams()
+  const [isClient, setIsClient] = useState(false);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [categoriesFromEvents, setCategoriesFromEvents] = useState<string[]>(
+    []
+  );
+  const [selectedAge, setSelectedAge] = useState<string>("");
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 2000]);
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [showSoldOut, setShowSoldOut] = useState<boolean>(true); // New state for showing/hiding sold out events
+  const [isFilterOpen, setIsFilterOpen] = useState(false); // Mobile filter sheet state
+  const eventsPerPage = 9;
+  const [wishlist, setWishlist] = useState<string[]>([]);
+  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+  const { user } = useAuthStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
-    setIsClient(true)
-    fetchEvents()
-  }, [])
+    setIsClient(true);
+    fetchEvents();
+  }, []);
 
   // Handle URL parameters for search and category filtering
   useEffect(() => {
-    const searchParam = searchParams.get('search')
-    const categoryParam = searchParams.get('category')
-    
+    const searchParam = searchParams.get("search");
+    const categoryParam = searchParams.get("category");
+
     if (searchParam) {
       // Set search term from URL
       // Note: This would need a search state if you want to display the search term
     }
-    
+
     if (categoryParam && events.length > 0) {
       // Check if categoryParam is an ID (24 characters) or name
       if (categoryParam.length === 24) {
         // It's a category ID, find the category name
-        const eventWithCategory = events.find(event => event.category?._id === categoryParam)
+        const eventWithCategory = events.find(
+          (event) => event.category?._id === categoryParam
+        );
         if (eventWithCategory?.category?.name) {
-          setSelectedCategories([eventWithCategory.category.name])
+          setSelectedCategories([eventWithCategory.category.name]);
         }
       } else {
         // It's a category name
-        setSelectedCategories([categoryParam])
+        setSelectedCategories([categoryParam]);
       }
     }
-  }, [searchParams, events])
+  }, [searchParams, events]);
 
   useEffect(() => {
     if (isClient && user?.role === "organizer") {
-      router.replace("/organizer/events")
+      router.replace("/organizer/events");
     }
-  }, [isClient, user, router])
+  }, [isClient, user, router]);
 
   useEffect(() => {
-    filterEvents()
-  }, [events, selectedCategories, selectedAge, priceRange, sortBy, showSoldOut])
+    filterEvents();
+  }, [
+    events,
+    selectedCategories,
+    selectedAge,
+    priceRange,
+    sortBy,
+    showSoldOut,
+  ]);
 
   useEffect(() => {
     const fetchWishlist = async () => {
       try {
-        const storedAuth = localStorage.getItem("auth-storage")
+        const storedAuth = localStorage.getItem("auth-storage");
         if (!storedAuth) {
-          const localWishlist = localStorage.getItem("event-wishlist")
-          if (localWishlist) setWishlist(JSON.parse(localWishlist))
-          return
+          const localWishlist = localStorage.getItem("event-wishlist");
+          if (localWishlist) setWishlist(JSON.parse(localWishlist));
+          return;
         }
 
-        const parsedAuth = JSON.parse(storedAuth)
-        const userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id
+        const parsedAuth = JSON.parse(storedAuth);
+        const userId =
+          parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
 
         if (!userId) {
-          const localWishlist = localStorage.getItem("event-wishlist")
-          if (localWishlist) setWishlist(JSON.parse(localWishlist))
-          return
+          const localWishlist = localStorage.getItem("event-wishlist");
+          if (localWishlist) setWishlist(JSON.parse(localWishlist));
+          return;
         }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`)
-        if (!response.ok) throw new Error("Failed to fetch wishlist")
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
+        );
+        if (!response.ok) throw new Error("Failed to fetch wishlist");
 
-        const data = await response.json()
+        const data = await response.json();
         if (data.data && Array.isArray(data.data)) {
-          const wishlistIds = data.data.map((item: any) => item.eventId || item._id)
-          setWishlist(wishlistIds)
+          const wishlistIds = data.data.map(
+            (item: any) => item.eventId || item._id
+          );
+          setWishlist(wishlistIds);
         }
       } catch {
-        const localWishlist = localStorage.getItem("event-wishlist")
-        if (localWishlist) setWishlist(JSON.parse(localWishlist))
+        const localWishlist = localStorage.getItem("event-wishlist");
+        if (localWishlist) setWishlist(JSON.parse(localWishlist));
       }
-    }
+    };
 
-    fetchWishlist()
-  }, [])
+    fetchWishlist();
+  }, []);
 
   const fetchEvents = async () => {
     try {
-      setIsLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events`)
-      if (!response.ok) throw new Error("Failed to fetch events")
+      setIsLoading(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=1000`
+      );
+      if (!response.ok) throw new Error("Failed to fetch events");
 
-      const data = await response.json()
-      
-      // Filter for published events only and show only public events
-      const publishedEvents = data.data.filter((event: Event) => 
-        event.status === 'published' && event.isPublic === true
-      )
-      
+      const data = await response.json();
+
+      const publishedEvents = data.data || [];
+
       const categories = Array.from(
-        new Set(publishedEvents.map((event: Event) => event.category?.name || "Uncategorized")),
-      ) as string[]
+        new Set(
+          publishedEvents.map(
+            (event: Event) => event.category?.name || "Uncategorized"
+          )
+        )
+      ) as string[];
 
-      setCategoriesFromEvents(categories)
-      setEvents(publishedEvents)
-      setFilteredEvents(publishedEvents)
+      setCategoriesFromEvents(categories);
+      setEvents(publishedEvents);
+      setFilteredEvents(publishedEvents);
     } catch (error) {
-      console.error("Error fetching events:", error)
-      toast.error("Failed to fetch events")
+      console.error("Error fetching events:", error);
+      toast.error("Failed to fetch events");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-
-
+  };
 
   const filterEvents = () => {
-    let filtered = [...events]
+    let filtered = [...events];
 
     // Filter by search term
-    const searchParam = searchParams.get('search')
+    const searchParam = searchParams.get("search");
     if (searchParam) {
-      const searchTerm = searchParam.toLowerCase()
-      filtered = filtered.filter((event) => 
-        event.title.toLowerCase().includes(searchTerm) ||
-        event.description.toLowerCase().includes(searchTerm) ||
-        event.location.city.toLowerCase().includes(searchTerm) ||
-        event.category?.name.toLowerCase().includes(searchTerm)
-      )
+      const searchTerm = searchParam.toLowerCase();
+      filtered = filtered.filter(
+        (event) =>
+          event.title.toLowerCase().includes(searchTerm) ||
+          event.description.toLowerCase().includes(searchTerm) ||
+          event.location.city.toLowerCase().includes(searchTerm) ||
+          event.category?.name.toLowerCase().includes(searchTerm)
+      );
     }
 
     // Filter by categories
-    const categoryParam = searchParams.get('category')
+    const categoryParam = searchParams.get("category");
     if (selectedCategories.length > 0) {
-      filtered = filtered.filter((event) => selectedCategories.includes(event.category?.name || "Uncategorized"))
+      filtered = filtered.filter((event) =>
+        selectedCategories.includes(event.category?.name || "Uncategorized")
+      );
     } else if (categoryParam && categoryParam.length === 24) {
       // Direct filtering by category ID if no selected categories but URL has category ID
-      filtered = filtered.filter((event) => event.category?._id === categoryParam)
+      filtered = filtered.filter(
+        (event) => event.category?._id === categoryParam
+      );
     }
 
     // Filter by age
     if (selectedAge) {
-      const selected = Number.parseInt(selectedAge)
+      const selected = Number.parseInt(selectedAge);
       filtered = filtered.filter((event) => {
-        const eventAge = Number.parseInt(event.ageLimit || "0")
-        return eventAge <= selected
-      })
+        const eventAge = Number.parseInt(event.ageLimit || "0");
+        return eventAge <= selected;
+      });
     }
 
     // Filter by price range using current active tickets
     filtered = filtered.filter((event) => {
-      const currentTicket = getCurrentTicket(event)
-      const minPrice = currentTicket?.price || 0
-      return minPrice >= priceRange[0] && minPrice <= priceRange[1]
-    })
+      const currentTicket = getCurrentTicket(event);
+      const minPrice = currentTicket?.price || 0;
+      return minPrice >= priceRange[0] && minPrice <= priceRange[1];
+    });
 
     // Filter by sold out status
     if (!showSoldOut) {
-      filtered = filtered.filter((event) => !isEventSoldOut(event))
+      filtered = filtered.filter((event) => !isEventSoldOut(event));
     }
 
     // Sort events
     filtered.sort((a, b) => {
-      const priceA = Math.min(...a.ticketTypes.map((t) => t.price))
-      const priceB = Math.min(...b.ticketTypes.map((t) => t.price))
+      const priceA = Math.min(...a.ticketTypes.map((t) => t.price));
+      const priceB = Math.min(...b.ticketTypes.map((t) => t.price));
 
       switch (sortBy) {
         case "price-low":
-          return priceA - priceB
+          return priceA - priceB;
         case "price-high":
-          return priceB - priceA
+          return priceB - priceA;
         case "newest":
-          return new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+          return (
+            new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+          );
         case "popular":
-          return 0
+          return 0;
         case "availability": // New sort option - available events first
-          const aSoldOut = isEventSoldOut(a)
-          const bSoldOut = isEventSoldOut(b)
-          if (aSoldOut && !bSoldOut) return 1
-          if (!aSoldOut && bSoldOut) return -1
-          return new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+          const aSoldOut = isEventSoldOut(a);
+          const bSoldOut = isEventSoldOut(b);
+          if (aSoldOut && !bSoldOut) return 1;
+          if (!aSoldOut && bSoldOut) return -1;
+          return (
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+          );
         default:
-          return 0
+          return 0;
       }
-    })
+    });
 
-    setFilteredEvents(filtered)
-    setCurrentPage(1)
-  }
+    setFilteredEvents(filtered);
+    setCurrentPage(1);
+  };
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category],
-    )
-  }
+      prev.includes(category)
+        ? prev.filter((c) => c !== category)
+        : [...prev, category]
+    );
+  };
 
   const handleAgeChange = (age: string) => {
-    setSelectedAge((prev) => (prev === age ? "" : age))
-  }
+    setSelectedAge((prev) => (prev === age ? "" : age));
+  };
 
   const removeCategory = (category: string) => {
-    setSelectedCategories((prev) => prev.filter((c) => c !== category))
-  }
+    setSelectedCategories((prev) => prev.filter((c) => c !== category));
+  };
 
   const clearAllFilters = () => {
-    setSelectedCategories([])
-    setSelectedAge("")
-    setPriceRange([0, 2000])
-    setShowSoldOut(true)
-  }
+    setSelectedCategories([]);
+    setSelectedAge("");
+    setPriceRange([0, 2000]);
+    setShowSoldOut(true);
+  };
 
-  const indexOfLastEvent = currentPage * eventsPerPage
-  const indexOfFirstEvent = indexOfLastEvent - eventsPerPage
-  const currentEvents = filteredEvents.slice(indexOfFirstEvent, indexOfLastEvent)
-  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage)
+  const indexOfLastEvent = currentPage * eventsPerPage;
+  const indexOfFirstEvent = indexOfLastEvent - eventsPerPage;
+  const currentEvents = filteredEvents.slice(
+    indexOfFirstEvent,
+    indexOfLastEvent
+  );
+  const totalPages = Math.ceil(filteredEvents.length / eventsPerPage);
 
   // Count sold out events for display
-  const soldOutCount = filteredEvents.filter((event) => isEventSoldOut(event)).length
-  const availableCount = filteredEvents.length - soldOutCount
+  const soldOutCount = filteredEvents.filter((event) =>
+    isEventSoldOut(event)
+  ).length;
+  const availableCount = filteredEvents.length - soldOutCount;
 
   // Count active filters
   const activeFiltersCount =
     selectedCategories.length +
     (selectedAge ? 1 : 0) +
     (!showSoldOut ? 1 : 0) +
-    (priceRange[0] !== 0 || priceRange[1] !== 2000 ? 1 : 0)
+    (priceRange[0] !== 0 || priceRange[1] !== 2000 ? 1 : 0);
 
   const toggleWishlist = async (eventId: string) => {
     try {
-      setIsWishlistLoading(true)
-      const storedAuth = localStorage.getItem("auth-storage")
-      let userId
+      setIsWishlistLoading(true);
+      const storedAuth = localStorage.getItem("auth-storage");
+      let userId;
 
       if (storedAuth) {
-        const parsedAuth = JSON.parse(storedAuth)
-        userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id
+        const parsedAuth = JSON.parse(storedAuth);
+        userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
       }
 
-      const isRemoving = wishlist.includes(eventId)
-      const newWishlist = isRemoving ? wishlist.filter((id) => id !== eventId) : [...wishlist, eventId]
+      const isRemoving = wishlist.includes(eventId);
+      const newWishlist = isRemoving
+        ? wishlist.filter((id) => id !== eventId)
+        : [...wishlist, eventId];
 
-      setWishlist(newWishlist)
-      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist))
+      setWishlist(newWishlist);
+      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
 
       if (userId) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId }),
-        })
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ eventId }),
+          }
+        );
       }
 
-      toast.success(isRemoving ? "Removed from wishlist" : "Added to wishlist")
+      toast.success(isRemoving ? "Removed from wishlist" : "Added to wishlist");
     } catch (error) {
-      toast.error("Failed to update wishlist")
+      toast.error("Failed to update wishlist");
     } finally {
-      setIsWishlistLoading(false)
+      setIsWishlistLoading(false);
     }
-  }
+  };
 
   // Enhanced Filter content component for mobile with compact design
   const MobileFilterContent = () => (
@@ -388,7 +446,9 @@ export default function EventSearchPage() {
       <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
         <div className="grid grid-cols-2 gap-4 text-center">
           <div>
-            <div className="text-xl font-bold text-green-600">{availableCount}</div>
+            <div className="text-xl font-bold text-green-600">
+              {availableCount}
+            </div>
             <div className="text-sm text-gray-600">Available</div>
           </div>
           <div>
@@ -419,7 +479,7 @@ export default function EventSearchPage() {
                   "flex items-center space-x-3 p-4 rounded-lg border transition-colors cursor-pointer",
                   selectedCategories.includes(category)
                     ? "bg-blue-50 border-blue-200"
-                    : "bg-white border-gray-200 hover:border-gray-300",
+                    : "bg-white border-gray-200 hover:border-gray-300"
                 )}
                 onClick={() => handleCategoryChange(category)}
               >
@@ -485,12 +545,18 @@ export default function EventSearchPage() {
               max={2000}
               step={100}
               value={priceRange}
-              onValueChange={(value) => setPriceRange(value as [number, number])}
+              onValueChange={(value) =>
+                setPriceRange(value as [number, number])
+              }
               className="my-6"
             />
             <div className="flex justify-between text-sm font-medium">
-              <span className="bg-gray-100 px-3 py-2 rounded">{priceRange[0]} ETB</span>
-              <span className="bg-gray-100 px-3 py-2 rounded">{priceRange[1]} ETB</span>
+              <span className="bg-gray-100 px-3 py-2 rounded">
+                {priceRange[0]} ETB
+              </span>
+              <span className="bg-gray-100 px-3 py-2 rounded">
+                {priceRange[1]} ETB
+              </span>
             </div>
           </div>
         </div>
@@ -506,13 +572,22 @@ export default function EventSearchPage() {
           <div
             className={cn(
               "flex items-center justify-between p-4 rounded-lg border transition-colors cursor-pointer",
-              showSoldOut ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200 hover:border-gray-300",
+              showSoldOut
+                ? "bg-blue-50 border-blue-200"
+                : "bg-white border-gray-200 hover:border-gray-300"
             )}
             onClick={() => setShowSoldOut(!showSoldOut)}
           >
             <div className="flex items-center space-x-3">
-                              <Checkbox id="show-sold-out-mobile" checked={showSoldOut} onCheckedChange={(checked) => setShowSoldOut(checked === true)} />
-              <label htmlFor="show-sold-out-mobile" className="text-sm font-medium cursor-pointer">
+              <Checkbox
+                id="show-sold-out-mobile"
+                checked={showSoldOut}
+                onCheckedChange={(checked) => setShowSoldOut(checked === true)}
+              />
+              <label
+                htmlFor="show-sold-out-mobile"
+                className="text-sm font-medium cursor-pointer"
+              >
                 Show sold out events
               </label>
             </div>
@@ -528,17 +603,24 @@ export default function EventSearchPage() {
       {/* Footer Actions - Compact */}
       <div className="mt-6 pt-6 border-t space-y-3 px-2">
         {activeFiltersCount > 0 && (
-          <Button variant="outline" onClick={clearAllFilters} className="w-full bg-transparent h-10">
+          <Button
+            variant="outline"
+            onClick={clearAllFilters}
+            className="w-full bg-transparent h-10"
+          >
             <X className="h-4 w-4 mr-2" />
             Clear All Filters ({activeFiltersCount})
           </Button>
         )}
-        <Button onClick={() => setIsFilterOpen(false)} className="w-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 h-10">
+        <Button
+          onClick={() => setIsFilterOpen(false)}
+          className="w-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 h-10"
+        >
           Apply Filters
         </Button>
       </div>
     </div>
-  )
+  );
 
   // Desktop Filter content component (unchanged)
   const DesktopFilterContent = () => (
@@ -553,7 +635,10 @@ export default function EventSearchPage() {
                 checked={selectedCategories.includes(category)}
                 onCheckedChange={() => handleCategoryChange(category)}
               />
-              <label htmlFor={category} className="text-sm font-medium leading-none">
+              <label
+                htmlFor={category}
+                className="text-sm font-medium leading-none"
+              >
                 {category}
               </label>
             </div>
@@ -597,8 +682,15 @@ export default function EventSearchPage() {
       <div className="border-t pt-6">
         <h3 className="text-lg font-medium mb-4">Availability</h3>
         <div className="flex items-center space-x-2">
-          <Checkbox id="show-sold-out" checked={showSoldOut} onCheckedChange={(checked) => setShowSoldOut(checked === true)} />
-          <label htmlFor="show-sold-out" className="text-sm font-medium leading-none">
+          <Checkbox
+            id="show-sold-out"
+            checked={showSoldOut}
+            onCheckedChange={(checked) => setShowSoldOut(checked === true)}
+          />
+          <label
+            htmlFor="show-sold-out"
+            className="text-sm font-medium leading-none"
+          >
             Show sold out events
           </label>
         </div>
@@ -611,13 +703,17 @@ export default function EventSearchPage() {
 
       {activeFiltersCount > 0 && (
         <div className="border-t pt-6">
-          <Button variant="outline" onClick={clearAllFilters} className="w-full bg-transparent">
+          <Button
+            variant="outline"
+            onClick={clearAllFilters}
+            className="w-full bg-transparent"
+          >
             Clear All Filters
           </Button>
         </div>
       )}
     </div>
-  )
+  );
 
   if (isLoading) {
     return (
@@ -629,7 +725,7 @@ export default function EventSearchPage() {
           </div>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -653,15 +749,25 @@ export default function EventSearchPage() {
             <h2 className="text-lg font-medium mb-4">Applied Filters:</h2>
             <div className="flex flex-wrap gap-2">
               {selectedCategories.map((category) => (
-                <Badge key={category} variant="outline" className="flex items-center gap-1 px-3 py-1 rounded-full">
+                <Badge
+                  key={category}
+                  variant="outline"
+                  className="flex items-center gap-1 px-3 py-1 rounded-full"
+                >
                   {category}
-                  <button className="ml-1" onClick={() => removeCategory(category)}>
+                  <button
+                    className="ml-1"
+                    onClick={() => removeCategory(category)}
+                  >
                     <X className="h-4 w-4" />
                   </button>
                 </Badge>
               ))}
               {!showSoldOut && (
-                <Badge variant="outline" className="flex items-center gap-1 px-3 py-1 rounded-full">
+                <Badge
+                  variant="outline"
+                  className="flex items-center gap-1 px-3 py-1 rounded-full"
+                >
                   Hide Sold Out
                   <button className="ml-1" onClick={() => setShowSoldOut(true)}>
                     <X className="h-4 w-4" />
@@ -688,15 +794,24 @@ export default function EventSearchPage() {
                     className="flex items-center gap-1 px-2 py-1 rounded-full text-xs"
                   >
                     {category}
-                    <button className="ml-1" onClick={() => removeCategory(category)}>
+                    <button
+                      className="ml-1"
+                      onClick={() => removeCategory(category)}
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
                 ))}
                 {!showSoldOut && (
-                  <Badge variant="outline" className="flex items-center gap-1 px-2 py-1 rounded-full text-xs">
+                  <Badge
+                    variant="outline"
+                    className="flex items-center gap-1 px-2 py-1 rounded-full text-xs"
+                  >
                     Hide Sold Out
-                    <button className="ml-1" onClick={() => setShowSoldOut(true)}>
+                    <button
+                      className="ml-1"
+                      onClick={() => setShowSoldOut(true)}
+                    >
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
@@ -705,7 +820,10 @@ export default function EventSearchPage() {
 
               <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="outline" className="flex items-center gap-2 whitespace-nowrap bg-transparent">
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2 whitespace-nowrap bg-transparent"
+                  >
                     <SlidersHorizontal className="h-4 w-4" />
                     Filters
                     {activeFiltersCount > 0 && (
@@ -762,7 +880,9 @@ export default function EventSearchPage() {
           </div>
 
           {currentEvents.length === 0 && !isLoading && (
-            <p className="text-center text-gray-500 mt-10">No events match your filters.</p>
+            <p className="text-center text-gray-500 mt-10">
+              No events match your filters.
+            </p>
           )}
 
           {isClient ? (
@@ -803,41 +923,51 @@ export default function EventSearchPage() {
                   variant="outline"
                   size="icon"
                   className="w-9 h-9 bg-transparent"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(prev - 1, 1))
+                  }
                   disabled={currentPage === 1}
                 >
                   <span className="sr-only">Previous page</span>
                   <ChevronDown className="h-4 w-4 rotate-90" />
                 </Button>
                 {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  let pageNumber
+                  let pageNumber;
                   if (totalPages <= 5) {
-                    pageNumber = i + 1
+                    pageNumber = i + 1;
                   } else if (currentPage <= 3) {
-                    pageNumber = i + 1
+                    pageNumber = i + 1;
                   } else if (currentPage >= totalPages - 2) {
-                    pageNumber = totalPages - 4 + i
+                    pageNumber = totalPages - 4 + i;
                   } else {
-                    pageNumber = currentPage - 2 + i
+                    pageNumber = currentPage - 2 + i;
                   }
 
                   return (
                     <Button
                       key={pageNumber}
-                      variant={currentPage === pageNumber ? "default" : "outline"}
+                      variant={
+                        currentPage === pageNumber ? "default" : "outline"
+                      }
                       size="sm"
-                      className={`w-9 h-9 ${currentPage === pageNumber ? "bg-[#0D47A1] text-white hover:bg-[#0D47A1]/90" : ""}`}
+                      className={`w-9 h-9 ${
+                        currentPage === pageNumber
+                          ? "bg-[#0D47A1] text-white hover:bg-[#0D47A1]/90"
+                          : ""
+                      }`}
                       onClick={() => setCurrentPage(pageNumber)}
                     >
                       {pageNumber}
                     </Button>
-                  )
+                  );
                 })}
                 <Button
                   variant="outline"
                   size="icon"
                   className="w-9 h-9 bg-transparent"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                  }
                   disabled={currentPage === totalPages}
                 >
                   <span className="sr-only">Next page</span>
@@ -849,6 +979,5 @@ export default function EventSearchPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
-
