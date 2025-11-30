@@ -241,6 +241,7 @@ export default function InvitationPage() {
   const [qrCodesPage, setQrCodesPage] = useState(1);
   const qrCodesPerPage = 3;
   const [showAttendeesModal, setShowAttendeesModal] = useState(false);
+  const [isLoadingAttendees, setIsLoadingAttendees] = useState(false);
   const [selectedEventAttendees, setSelectedEventAttendees] =
     useState<Event | null>(null);
   const [attendees, setAttendees] = useState<
@@ -597,7 +598,33 @@ export default function InvitationPage() {
           formattedPhone = "+251" + formattedPhone;
         }
 
-        const smsMessage = `Hi ${customerName}\n\nEvent: ${selectedEvent?.title}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRsvp Link: ${qrCodeLink}`;
+        // Format date and time
+        const eventDateObj = new Date(selectedEvent?.startDate || "");
+        const dateStr = eventDateObj.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        let timeStr = selectedEvent?.time || "";
+        if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+          const [hours, minutes] = timeStr.split(":");
+          const h = parseInt(hours, 10);
+          if (!isNaN(h)) {
+            const ampm = h >= 12 ? "PM" : "AM";
+            const h12 = h % 12 || 12;
+            timeStr = `${h12.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+          }
+        }
+
+        const dateTimeStr = `${dateStr} | ${timeStr}`;
+
+        const smsMessage = `Hi ${customerName}\n${
+          message ? "\n" + message + "\n" : ""
+        }\nEvent: ${selectedEvent?.title}\nTime: ${dateTimeStr}\nLocation: ${
+          selectedEvent?.location
+        }\n\nRsvp Link: ${qrCodeLink}`;
         success = await sendSMS(formattedPhone, smsMessage);
       }
 
@@ -688,6 +715,7 @@ export default function InvitationPage() {
   const handleViewAttendees = async (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
+    setIsLoadingAttendees(true);
 
     try {
       const userId = localStorage.getItem("userId");
@@ -728,6 +756,8 @@ export default function InvitationPage() {
     } catch (error) {
       console.error("Error fetching attendees:", error);
       setAttendees([]);
+    } finally {
+      setIsLoadingAttendees(false);
     }
   };
 
@@ -931,7 +961,37 @@ export default function InvitationPage() {
               formattedPhone = "+251" + formattedPhone;
             }
 
-            const smsMessage = `Hi ${contact.name}\nEvent: ${selectedEvent?.title}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRsvp Link: ${qrCodeLink}`;
+            // Format date and time
+            const eventDateObj = new Date(selectedEvent?.startDate || "");
+            const dateStr = eventDateObj.toLocaleDateString("en-US", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            });
+
+            let timeStr = selectedEvent?.time || "";
+            if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+              const [hours, minutes] = timeStr.split(":");
+              const h = parseInt(hours, 10);
+              if (!isNaN(h)) {
+                const ampm = h >= 12 ? "PM" : "AM";
+                const h12 = h % 12 || 12;
+                timeStr = `${h12
+                  .toString()
+                  .padStart(2, "0")}:${minutes} ${ampm}`;
+              }
+            }
+
+            const dateTimeStr = `${dateStr} | ${timeStr}`;
+
+            const smsMessage = `Hi ${contact.name}\n${
+              contact.message ? "\n" + contact.message + "\n" : ""
+            }\nEvent: ${
+              selectedEvent?.title
+            }\nTime: ${dateTimeStr}\nLocation: ${
+              selectedEvent?.location
+            }\n\nRsvp Link: ${qrCodeLink}`;
             success = await sendSMS(formattedPhone, smsMessage);
           }
 
@@ -2063,124 +2123,135 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                 </p>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                          Name
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                          Contact
-                        </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {attendees.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={3}
-                            className="px-3 py-6 text-center text-gray-500"
-                          >
-                            No attendees found
-                          </td>
-                        </tr>
-                      ) : (
-                        attendees
-                          .slice(
-                            (attendeesPage - 1) * attendeesPerPage,
-                            attendeesPage * attendeesPerPage
-                          )
-                          .map((attendee) => (
-                            <tr key={attendee.id} className="hover:bg-gray-50">
-                              <td className="px-3 py-3">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {attendee.customerName}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {attendee.guestType === "paid"
-                                    ? "Paid"
-                                    : "Guest"}
-                                </div>
-                              </td>
-                              <td className="px-3 py-3">
-                                <div className="text-sm text-gray-900">
-                                  {attendee.contact}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {attendee.confirmedAt}
-                                </div>
-                              </td>
-                              <td className="px-3 py-3">
-                                <span
-                                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    attendee.status === "confirmed"
-                                      ? "bg-green-100 text-green-800"
-                                      : attendee.status === "declined"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-yellow-100 text-yellow-800"
-                                  }`}
-                                >
-                                  {attendee.status.charAt(0).toUpperCase() +
-                                    attendee.status.slice(1)}
-                                </span>
+              {isLoadingAttendees ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                              Name
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                              Contact
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                              Status
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {attendees.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={3}
+                                className="px-3 py-6 text-center text-gray-500"
+                              >
+                                No attendees found
                               </td>
                             </tr>
-                          ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                          ) : (
+                            attendees
+                              .slice(
+                                (attendeesPage - 1) * attendeesPerPage,
+                                attendeesPage * attendeesPerPage
+                              )
+                              .map((attendee) => (
+                                <tr
+                                  key={attendee.id}
+                                  className="hover:bg-gray-50"
+                                >
+                                  <td className="px-3 py-3">
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {attendee.customerName}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {attendee.guestType === "paid"
+                                        ? "Paid"
+                                        : "Guest"}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <div className="text-sm text-gray-900">
+                                      {attendee.contact}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {attendee.confirmedAt}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-3">
+                                    <span
+                                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        attendee.status === "confirmed"
+                                          ? "bg-green-100 text-green-800"
+                                          : attendee.status === "declined"
+                                          ? "bg-red-100 text-red-800"
+                                          : "bg-yellow-100 text-yellow-800"
+                                      }`}
+                                    >
+                                      {attendee.status.charAt(0).toUpperCase() +
+                                        attendee.status.slice(1)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
 
-              <div className="mt-4 flex justify-between items-center">
-                <div className="text-sm text-gray-600">
-                  Total: {attendees.length} | Page {attendeesPage} of{" "}
-                  {Math.ceil(attendees.length / attendeesPerPage) || 1}
-                </div>
-                <div className="flex gap-2">
-                  {Math.ceil(attendees.length / attendeesPerPage) > 1 && (
-                    <>
-                      <button
-                        onClick={() =>
-                          setAttendeesPage((prev) => Math.max(prev - 1, 1))
-                        }
-                        disabled={attendeesPage === 1}
-                        className="px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
-                      >
-                        Prev
-                      </button>
-                      <button
-                        onClick={() =>
-                          setAttendeesPage((prev) =>
-                            Math.min(
-                              prev + 1,
+                  <div className="mt-4 flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                      Total: {attendees.length} | Page {attendeesPage} of{" "}
+                      {Math.ceil(attendees.length / attendeesPerPage) || 1}
+                    </div>
+                    <div className="flex gap-2">
+                      {Math.ceil(attendees.length / attendeesPerPage) > 1 && (
+                        <>
+                          <button
+                            onClick={() =>
+                              setAttendeesPage((prev) => Math.max(prev - 1, 1))
+                            }
+                            disabled={attendeesPage === 1}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                          >
+                            Prev
+                          </button>
+                          <button
+                            onClick={() =>
+                              setAttendeesPage((prev) =>
+                                Math.min(
+                                  prev + 1,
+                                  Math.ceil(attendees.length / attendeesPerPage)
+                                )
+                              )
+                            }
+                            disabled={
+                              attendeesPage ===
                               Math.ceil(attendees.length / attendeesPerPage)
-                            )
-                          )
-                        }
-                        disabled={
-                          attendeesPage ===
-                          Math.ceil(attendees.length / attendeesPerPage)
-                        }
-                        className="px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                            }
+                            className="px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
+                          >
+                            Next
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={() => setShowAttendeesModal(false)}
+                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm"
                       >
-                        Next
+                        Close
                       </button>
-                    </>
-                  )}
-                  <button
-                    onClick={() => setShowAttendeesModal(false)}
-                    className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
