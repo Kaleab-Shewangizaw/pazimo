@@ -624,7 +624,7 @@ export default function InvitationPage() {
           message ? "\n" + message + "\n" : ""
         }\nEvent: ${selectedEvent?.title}\nTime: ${dateTimeStr}\nLocation: ${
           selectedEvent?.location
-        }\n\nRsvp Link: ${qrCodeLink}`;
+        }\n\nRSVP Link: ${qrCodeLink}`;
         success = await sendSMS(formattedPhone, smsMessage);
       }
 

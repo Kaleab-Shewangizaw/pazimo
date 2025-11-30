@@ -116,7 +116,6 @@ const userSchema = new mongoose.Schema(
     phoneNumber: {
       type: String,
       required: [true, "Phone number is required"],
-      unique: true,
       trim: true,
       validate: {
         validator: function (v) {
@@ -175,7 +174,7 @@ const userSchema = new mongoose.Schema(
 
 // Indexes for better query performance
 userSchema.index({ email: 1 });
-userSchema.index({ phoneNumber: 1 });
+userSchema.index({ phoneNumber: 1, role: 1 }, { unique: true });
 userSchema.index({ role: 1 });
 
 // Hash password before saving

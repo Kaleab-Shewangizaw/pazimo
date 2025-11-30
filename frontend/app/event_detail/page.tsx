@@ -456,9 +456,11 @@ function EventDetailContent() {
 
             toast.success("Account created/verified successfully!");
           } else {
-            // If auth fails (e.g. existing user with different password),
-            // we proceed as guest (finalUserId remains null).
-            console.warn("Implicit auth failed, proceeding as guest");
+            const errorData = await authResponse.json();
+            // If auth fails (e.g. restricted account), stop payment
+            toast.error(errorData.message || "Authentication failed");
+            setIsSantimLoading(false);
+            return;
           }
         } catch (err) {
           console.error("Implicit auth error:", err);

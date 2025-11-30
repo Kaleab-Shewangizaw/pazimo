@@ -1053,7 +1053,6 @@ const unifiedAuth = async (req, res) => {
 
     // Validate required fields
     if (!fullName || !phoneNumber) {
-      console.log("Validation failed: missing required fields");
       return res.status(400).json({
         status: "error",
         message: "Full name and phone number are required",
@@ -1074,133 +1073,40 @@ const unifiedAuth = async (req, res) => {
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(" ");
 
-    // Check if user exists by email or phone number
-    let existingUser = null;
+    // 1. Find ALL users with this phone number
+    const usersByPhone = await User.find({ phoneNumber });
 
-    // If email is provided, try to find by email first
-    if (email && email.trim()) {
-      console.log("Searching for user by email:", email);
-      existingUser = await User.findOne({ email }).select("+password");
-      console.log("User found by email:", existingUser ? "Yes" : "No");
-    }
+    // 2. Check if a customer account exists among them
+    const customerUser = usersByPhone.find((u) => u.role === "customer");
 
-    // If not found by email or no email provided, try to find by phone number
-    if (!existingUser) {
-      console.log("Searching for user by phone number:", phoneNumber);
-      existingUser = await User.findOne({ phoneNumber }).select("+password");
-      console.log("User found by phone:", existingUser ? "Yes" : "No");
-    }
-
-    if (existingUser) {
-      console.log("Existing user found:", {
-        id: existingUser._id,
-        email: existingUser.email,
-        phoneNumber: existingUser.phoneNumber,
-        firstName: existingUser.firstName,
-        lastName: existingUser.lastName,
-      });
-
-      // User exists, try to login with phone number as password
-      console.log("Comparing password (phone number):", phoneNumber);
-      const isPasswordCorrect = await existingUser.comparePassword(password);
-      console.log("Password comparison result:", isPasswordCorrect);
-
-      if (!isPasswordCorrect) {
-        console.log("Password comparison failed");
-        return res.status(401).json({
-          status: "error",
-          message: "Invalid credentials. Please check your phone number.",
-        });
-      }
-
-      // Check if user is active
-      if (!existingUser.isActive) {
-        return res.status(403).json({
-          status: "error",
-          message:
-            "Your account is not active. Please contact your administrator.",
-        });
-      }
-
-      // Update email if different and email is provided (user found by phone number but provided different email)
-      if (email && email.trim() && existingUser.email !== email) {
-        // Check if new email is already taken
-        const emailExists = await User.findOne({
-          email,
-          _id: { $ne: existingUser._id },
-        });
-
-        if (emailExists) {
-          return res.status(400).json({
-            status: "error",
-            message: "Email is already registered to another account",
-          });
-        }
-
-        existingUser.email = email;
-        await existingUser.save({ validateBeforeSave: false });
-      }
-
-      // Update phone number if different
-      if (existingUser.phoneNumber !== phoneNumber) {
-        // Check if new phone number is already taken
-        const phoneExists = await User.findOne({
-          phoneNumber,
-          _id: { $ne: existingUser._id },
-        });
-
-        if (phoneExists) {
-          return res.status(400).json({
-            status: "error",
-            message: "Phone number is already registered to another account",
-          });
-        }
-
-        existingUser.phoneNumber = phoneNumber;
-        existingUser.isPhoneVerified = false; // Reset verification
-        await existingUser.save({ validateBeforeSave: false });
-      }
-
-      // Update last login
-      existingUser.lastLogin = Date.now();
-      await existingUser.save({ validateBeforeSave: false });
-
-      // Generate token
-      const token = signToken(existingUser._id, existingUser.role);
-
-      res.status(200).json({
+    if (customerUser) {
+      // Login existing customer
+      const token = signToken(customerUser._id, customerUser.role);
+      return res.status(200).json({
         status: "success",
         message: "Login successful",
         data: {
           user: {
-            _id: existingUser._id,
-            firstName: existingUser.firstName,
-            lastName: existingUser.lastName,
-            email: existingUser.email,
-            phoneNumber: existingUser.phoneNumber,
-            role: existingUser.role,
-            isActive: existingUser.isActive,
+            _id: customerUser._id,
+            firstName: customerUser.firstName,
+            lastName: customerUser.lastName,
+            email: customerUser.email,
+            phoneNumber: customerUser.phoneNumber,
+            role: customerUser.role,
+            isActive: customerUser.isActive,
           },
           token,
         },
       });
-    } else {
-      // User doesn't exist, create new account
+    }
 
-      // Check if phone number is already taken
-      const phoneExists = await User.findOne({ phoneNumber });
-      if (phoneExists) {
-        return res.status(400).json({
-          status: "error",
-          message: "Phone number is already registered",
-        });
-      }
-
-      // Create new user
+    // 3. If no customer account found (either no accounts at all, or only admin/organizer accounts)
+    // Create NEW Customer Account
+    try {
       const newUser = await User.create({
         firstName,
         lastName,
-        email: email || `user_${phoneNumber}@temp.com`, // Use temp email if none provided
+        email: email || `user_${phoneNumber}_${Date.now()}@temp.com`, // Ensure unique email if not provided
         phoneNumber,
         password,
         role: "customer",
@@ -1208,10 +1114,8 @@ const unifiedAuth = async (req, res) => {
         isPhoneVerified: false,
       });
 
-      // Generate token
       const token = signToken(newUser._id, newUser.role);
-
-      res.status(201).json({
+      return res.status(201).json({
         status: "success",
         message: "Account created successfully",
         data: {
@@ -1227,11 +1131,28 @@ const unifiedAuth = async (req, res) => {
           token,
         },
       });
+    } catch (err) {
+      // Handle duplicate email error
+      if (err.code === 11000 && err.keyPattern.email) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "This email is already registered. If you have an organizer account, please use a different email for ticket purchases.",
+        });
+      }
+      // Handle duplicate phone error (if index wasn't dropped yet)
+      if (err.code === 11000 && err.keyPattern.phoneNumber) {
+        return res.status(400).json({
+          status: "error",
+          message:
+            "This phone number is already in use and cannot be duplicated at this time. Please contact support.",
+        });
+      }
+      throw err;
     }
   } catch (error) {
     console.error("Unified auth error:", error);
 
-    // Handle specific MongoDB errors
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({
