@@ -15,6 +15,7 @@ const {
   initiateInvitationPayment,
   checkInvitationPaymentStatus,
   invitationWebhook,
+  cancelInvitationPayment,
 } = require("../controllers/invitationPaymentController");
 
 // Invitation Payment Routes
@@ -23,6 +24,7 @@ router.post(
   protect,
   initiateInvitationPayment
 );
+router.post("/invitations/payment/cancel", protect, cancelInvitationPayment);
 router.get(
   "/invitations/payment/status/:transactionId",
   checkInvitationPaymentStatus

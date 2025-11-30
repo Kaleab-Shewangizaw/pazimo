@@ -16,6 +16,13 @@ import { useAuthStore } from "@/store/authStore";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface EditableTableProps {
   event: Event;
@@ -53,6 +60,10 @@ export default function EditableTable({
     success: unknown[];
     failed: unknown[];
   } | null>(null);
+  const [currentTransactionId, setCurrentTransactionId] = useState<
+    string | null
+  >(null);
+  const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
 
   const displayData = data.length > 1000 ? data.slice(0, 1000) : data;
 
@@ -84,6 +95,35 @@ export default function EditableTable({
       if (pollingInterval) clearInterval(pollingInterval);
     };
   }, [pollingInterval]);
+
+  const handleCancelPayment = async () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+    setIsWaitingForPayment(false);
+    setIsSantimLoading(false);
+
+    if (currentTransactionId) {
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/cancel`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${useAuthStore.getState().token}`,
+            },
+            body: JSON.stringify({ transactionId: currentTransactionId }),
+          }
+        );
+        toast.info("Payment cancelled");
+      } catch (e) {
+        console.error("Error cancelling payment:", e);
+      }
+      setCurrentTransactionId(null);
+    }
+  };
 
   useEffect(() => {
     if (data.length > 1000) setShowDataTrimmed(true);
@@ -365,6 +405,8 @@ export default function EditableTable({
             setPollingInterval(null);
             setShowPayment(false);
             setIsSantimLoading(false);
+            setIsWaitingForPayment(false);
+            setCurrentTransactionId(null);
             toast.success("Payment successful! Invitations are being sent.");
 
             // Since backend handles sending on payment success, we just show success UI
@@ -377,6 +419,8 @@ export default function EditableTable({
             if (interval) clearInterval(interval);
             setPollingInterval(null);
             setIsSantimLoading(false);
+            setIsWaitingForPayment(false);
+            setCurrentTransactionId(null);
             if (data.status === "CANCELLED") {
               toast.info("Payment cancelled.");
             } else {
@@ -390,7 +434,7 @@ export default function EditableTable({
 
       setPollingInterval(interval);
     },
-    [processSending]
+    [processSending, setSelectedFile]
   );
 
   const handleMobilePayment = async () => {
@@ -441,6 +485,11 @@ export default function EditableTable({
         throw new Error(data.message || "Payment initiation failed");
 
       if (data.success && data.transactionId) {
+        setCurrentTransactionId(data.transactionId);
+        setIsSantimLoading(false);
+        setIsWaitingForPayment(true);
+        setShowPayment(false);
+
         toast.success(
           "Payment initiated. Please check your phone to complete the payment."
         );
@@ -786,6 +835,40 @@ export default function EditableTable({
       </div>
 
       {qrRow && <QrModal row={qrRow} onClose={() => setQrRow(null)} />}
+
+      {/* Waiting for Payment Modal */}
+      <Dialog
+        open={isWaitingForPayment}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelPayment();
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-xl p-6 text-center">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold mb-2">
+              Waiting for Payment
+            </DialogTitle>
+            <DialogDescription>
+              Please check your phone and complete the payment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center py-6">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]"></div>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            We are waiting for confirmation from the payment provider...
+          </p>
+          <Button
+            variant="outline"
+            className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+            onClick={handleCancelPayment}
+          >
+            Cancel Payment
+          </Button>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

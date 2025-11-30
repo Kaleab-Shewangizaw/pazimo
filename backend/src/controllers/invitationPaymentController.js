@@ -178,6 +178,38 @@ const invitationWebhook = async (req, res) => {
   }
 };
 
+// Cancel Payment
+const cancelInvitationPayment = async (req, res) => {
+  try {
+    const { transactionId } = req.body;
+
+    const payment = await Payment.findOne({ transactionId });
+    if (!payment) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Payment not found" });
+    }
+
+    if (payment.status === "PAID") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Cannot cancel a paid transaction" });
+    }
+
+    payment.status = "CANCELLED";
+    await payment.save();
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Payment cancelled successfully" });
+  } catch (error) {
+    console.error("Cancel Invitation Payment Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to cancel payment" });
+  }
+};
+
 // Core Success Logic
 const handlePaymentSuccess = async (payment) => {
   try {
@@ -413,4 +445,5 @@ module.exports = {
   initiateInvitationPayment,
   checkInvitationPaymentStatus,
   invitationWebhook,
+  cancelInvitationPayment,
 };

@@ -27,6 +27,13 @@ import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import QRModal from "@/components/QRModal";
 import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import FileUploadComponent from "./DocumentPreview";
 import BulkInvite from "./bulkInviteModel";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -269,6 +276,10 @@ export default function InvitationPage() {
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(
     null
   );
+  const [currentTransactionId, setCurrentTransactionId] = useState<
+    string | null
+  >(null);
+  const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -1148,6 +1159,35 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
     };
   }, [pollingInterval]);
 
+  const handleCancelPayment = async () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+      setPollingInterval(null);
+    }
+    setIsWaitingForPayment(false);
+    setIsSantimLoading(false);
+
+    if (currentTransactionId) {
+      try {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/cancel`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+            body: JSON.stringify({ transactionId: currentTransactionId }),
+          }
+        );
+        toast.info("Payment cancelled");
+      } catch (e) {
+        console.error("Error cancelling payment:", e);
+      }
+      setCurrentTransactionId(null);
+    }
+  };
+
   const pollPaymentStatus = async (transactionId: string) => {
     try {
       const response = await fetch(
@@ -1159,8 +1199,10 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
         if (pollingInterval) clearInterval(pollingInterval);
         setPollingInterval(null);
         setIsSantimLoading(false);
+        setIsWaitingForPayment(false);
         setShowPaymentModal(false);
         setPendingInvitation(null);
+        setCurrentTransactionId(null);
 
         toast.success("Payment successful! Invitations sent.");
         fetchSentInvitations(); // Refresh list
@@ -1168,6 +1210,9 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
         if (pollingInterval) clearInterval(pollingInterval);
         setPollingInterval(null);
         setIsSantimLoading(false);
+        setIsWaitingForPayment(false);
+        setCurrentTransactionId(null);
+
         if (data.status === "CANCELLED") {
           toast.info("Payment cancelled.");
         } else {
@@ -1224,6 +1269,11 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
         throw new Error(data.message || "Payment initiation failed");
 
       if (data.transactionId) {
+        setCurrentTransactionId(data.transactionId);
+        setIsSantimLoading(false);
+        setIsWaitingForPayment(true);
+        setShowPaymentModal(false);
+
         // Start Polling
         const interval = setInterval(() => {
           pollPaymentStatus(data.transactionId);
@@ -2711,44 +2761,39 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           </div>
         )}
 
-        {/* SantimPay Payment Handling */}
-        {mounted && isSantimLoading && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-6 shadow-xl">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Processing Payment...
-                </h3>
-                <button
-                  onClick={() => setIsSantimLoading(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="flex flex-col items-center">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mb-4"></div>
-                <p className="text-sm text-gray-600 text-center">
-                  Please do not close this window. We are processing your
-                  payment securely.
-                </p>
-              </div>
+        {/* Waiting for Payment Modal */}
+        <Dialog
+          open={isWaitingForPayment}
+          onOpenChange={(open) => {
+            if (!open) {
+              handleCancelPayment();
+            }
+          }}
+        >
+          <DialogContent className="max-w-sm rounded-xl p-6 text-center">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold mb-2">
+                Waiting for Payment
+              </DialogTitle>
+              <DialogDescription>
+                Please check your phone and complete the payment.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center py-6">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]"></div>
             </div>
-          </div>
-        )}
+            <p className="text-sm text-gray-500 mb-4">
+              We are waiting for confirmation from the payment provider...
+            </p>
+            <Button
+              variant="outline"
+              className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+              onClick={handleCancelPayment}
+            >
+              Cancel Payment
+            </Button>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
