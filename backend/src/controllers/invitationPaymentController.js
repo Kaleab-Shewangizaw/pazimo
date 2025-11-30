@@ -316,13 +316,35 @@ const handlePaymentSuccess = async (payment) => {
         if (phone.startsWith("0")) phone = "251" + phone.substring(1);
         else if (!phone.startsWith("251")) phone = "251" + phone;
 
-        const smsMessage = `Hi ${payment.guestName}\n\nEvent: ${
-          event.title
-        }\nTime: ${event.startTime}\nLocation: ${
+        // Format Date
+        const eventDateObj = new Date(event.startDate);
+        const dateStr = eventDateObj.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        // Format Time
+        let timeStr = event.startTime || "";
+        if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+          const [hours, minutes] = timeStr.split(":");
+          const h = parseInt(hours, 10);
+          if (!isNaN(h)) {
+            const ampm = h >= 12 ? "PM" : "AM";
+            const h12 = h % 12 || 12;
+            timeStr = `${h12.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+          }
+        }
+        const dateTimeStr = `${dateStr} | ${timeStr}`;
+
+        const smsMessage = `Hi ${payment.guestName}${
+          payment.message ? "\n\n" + payment.message.trim() : ""
+        }\n\nEvent: ${event.title}\nTime: ${dateTimeStr}\nLocation: ${
           typeof event.location === "string"
             ? event.location
             : event.location?.address || "See map"
-        }\n\nRsvp Link: ${rsvpLink}`;
+        }\n\nRSVP Link: ${rsvpLink}`;
 
         console.log(`Sending SMS to ${phone}: ${smsMessage}`);
 
@@ -391,13 +413,35 @@ const handlePaymentSuccess = async (payment) => {
         if (phone.startsWith("0")) phone = "251" + phone.substring(1);
         else if (!phone.startsWith("251")) phone = "251" + phone;
 
-        const smsMessage = `Hi ${payment.guestName}\n\nEvent: ${
-          event.title
-        }\nTime: ${event.startTime}\nLocation: ${
+        // Format Date
+        const eventDateObj = new Date(event.startDate);
+        const dateStr = eventDateObj.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        // Format Time
+        let timeStr = event.startTime || "";
+        if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+          const [hours, minutes] = timeStr.split(":");
+          const h = parseInt(hours, 10);
+          if (!isNaN(h)) {
+            const ampm = h >= 12 ? "PM" : "AM";
+            const h12 = h % 12 || 12;
+            timeStr = `${h12.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+          }
+        }
+        const dateTimeStr = `${dateStr} | ${timeStr}`;
+
+        const smsMessage = `Hi ${payment.guestName}${
+          payment.message ? "\n\n" + payment.message.trim() : ""
+        }\n\nEvent: ${event.title}\nTime: ${dateTimeStr}\nLocation: ${
           typeof event.location === "string"
             ? event.location
             : event.location?.address || "See map"
-        }\n\nRsvp Link: ${eventLink}`;
+        }\n\nRSVP Link: ${eventLink}`;
 
         console.log(`Sending SMS to ${phone}: ${smsMessage}`);
 

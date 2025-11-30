@@ -268,14 +268,38 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
 
       // Send SMS
       if (["sms", "both"].includes(invitation.type) && invitation.guestPhone) {
-        const eventDate = new Date(event.startDate).toLocaleDateString();
-        const eventTime = event.startTime || "";
+        // Format Date
+        const eventDateObj = new Date(event.startDate);
+        const dateStr = eventDateObj.toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+        // Format Time
+        let timeStr = event.startTime || "";
+        if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+          const [hours, minutes] = timeStr.split(":");
+          const h = parseInt(hours, 10);
+          if (!isNaN(h)) {
+            const ampm = h >= 12 ? "PM" : "AM";
+            const h12 = h % 12 || 12;
+            timeStr = `${h12.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+          }
+        }
+        const dateTimeStr = `${dateStr} | ${timeStr}`;
+
         const location =
           typeof event.location === "string"
             ? event.location
             : event.location?.address || "See map";
 
-        const message = `Hi ${invitation.guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+        const message = `Hi ${invitation.guestName}${
+          invitation.message ? "\n\n" + invitation.message.trim() : ""
+        }\n\nEvent: ${
+          event.title
+        }\nTime: ${dateTimeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
         // Call SMS API (GeezSMS)
         let phone = invitation.guestPhone.replace("+", "");
@@ -652,14 +676,38 @@ const createAndSendProfessionalInvitation = async (data) => {
 
     // Send SMS
     if (["sms", "both"].includes(contactType) && guestPhone) {
-      const eventDate = new Date(event.startDate).toLocaleDateString();
-      const eventTime = event.startTime || "";
+      // Format Date
+      const eventDateObj = new Date(event.startDate);
+      const dateStr = eventDateObj.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+
+      // Format Time
+      let timeStr = event.startTime || "";
+      if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+        const [hours, minutes] = timeStr.split(":");
+        const h = parseInt(hours, 10);
+        if (!isNaN(h)) {
+          const ampm = h >= 12 ? "PM" : "AM";
+          const h12 = h % 12 || 12;
+          timeStr = `${h12.toString().padStart(2, "0")}:${minutes} ${ampm}`;
+        }
+      }
+      const dateTimeStr = `${dateStr} | ${timeStr}`;
+
       const location =
         typeof event.location === "string"
           ? event.location
           : event.location?.address || "See map";
 
-      const smsMessage = `Hi ${guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+      const smsMessage = `Hi ${guestName}${
+        message ? "\n\n" + message.trim() : ""
+      }\n\nEvent: ${
+        event.title
+      }\nTime: ${dateTimeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
       // Ensure phone starts with 251

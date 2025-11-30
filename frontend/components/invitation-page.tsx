@@ -631,9 +631,9 @@ export default function InvitationPage() {
 
         const dateTimeStr = `${dateStr} | ${timeStr}`;
 
-        const smsMessage = `Hi ${customerName}\n${
-          message ? "\n" + message + "\n" : ""
-        }\nEvent: ${selectedEvent?.title}\nTime: ${dateTimeStr}\nLocation: ${
+        const smsMessage = `Hi ${customerName}${
+          message ? "\n\n" + message : ""
+        }\n\nEvent: ${selectedEvent?.title}\nTime: ${dateTimeStr}\nLocation: ${
           selectedEvent?.location
         }\n\nRSVP Link: ${qrCodeLink}`;
         success = await sendSMS(formattedPhone, smsMessage);
@@ -996,13 +996,13 @@ export default function InvitationPage() {
 
             const dateTimeStr = `${dateStr} | ${timeStr}`;
 
-            const smsMessage = `Hi ${contact.name}\n${
-              contact.message ? "\n" + contact.message + "\n" : ""
-            }\nEvent: ${
+            const smsMessage = `Hi ${contact.name}${
+              contact.message ? "\n\n" + contact.message : ""
+            }\n\nEvent: ${
               selectedEvent?.title
             }\nTime: ${dateTimeStr}\nLocation: ${
               selectedEvent?.location
-            }\n\nRsvp Link: ${qrCodeLink}`;
+            }\n\nRSVP Link: ${qrCodeLink}`;
             success = await sendSMS(formattedPhone, smsMessage);
           }
 
