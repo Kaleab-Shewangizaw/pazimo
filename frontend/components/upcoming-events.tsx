@@ -121,14 +121,8 @@ export default function UpcomingEvents() {
     const fetchEvents = async () => {
       try {
         setIsLoading(true);
-        const now = new Date();
-        const oneWeekFromNow = new Date(
-          now.getTime() + 7 * 24 * 60 * 60 * 1000
-        );
         const response = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL
-          }/api/events?status=published&isPublic=true&startDate=${oneWeekFromNow.toISOString()}&sort=startDate&limit=10`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=1000`
         );
 
         if (!response.ok) throw new Error("Failed to fetch events");
@@ -174,7 +168,7 @@ export default function UpcomingEvents() {
       }
     });
 
-    setFilteredEvents(list);
+    setFilteredEvents(list.slice(0, 10));
   }, [events, showSoldOut, sortBy]);
 
   // ----------------------- Auto-scroll -----------------------

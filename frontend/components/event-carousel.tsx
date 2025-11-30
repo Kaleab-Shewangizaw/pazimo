@@ -175,7 +175,7 @@ export default function EventCarousel() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=10`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=1000`
       );
       if (!response.ok) {
         throw new Error("Failed to fetch events");
@@ -241,7 +241,7 @@ export default function EventCarousel() {
       }
     });
 
-    setFilteredEvents(filtered);
+    setFilteredEvents(filtered.slice(0, 10));
   };
 
   const fetchWishlist = async () => {
