@@ -247,13 +247,17 @@ export default function EventSearchPage() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&isPublic=true&limit=1000`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events`
       );
       if (!response.ok) throw new Error("Failed to fetch events");
 
       const data = await response.json();
 
-      const publishedEvents = data.data || [];
+      // Filter for published events only and show only public events
+      const publishedEvents = data.data.filter(
+        (event: Event) =>
+          event.status === "published" && event.isPublic === true
+      );
 
       const categories = Array.from(
         new Set(
