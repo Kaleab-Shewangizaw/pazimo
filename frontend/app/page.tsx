@@ -8,13 +8,13 @@ import { Suspense, lazy, useEffect, useState } from "react";
 // Lazy load components
 const EventCarousel = lazy(() => import("@/components/event-carousel"));
 const CategoryIcons = lazy(() => import("@/components/category-icons"));
-const UpcomingEvents = lazy(() => import("@/components/upcoming-events"));
+// const UpcomingEvents = lazy(() => import("@/components/upcoming-events"));
 const TrendingEvents = lazy(() => import("@/components/trending-events"));
 
 // Skeletons
 import EventCarouselSkeleton from "@/components/skeleton/event-carousel-skeleton";
 import CategoryIconsSkeleton from "@/components/skeleton/category-icons-skeleton";
-import UpcomingEventsSkeleton from "@/components/skeleton/upcoming-events-skeleton";
+// import UpcomingEventsSkeleton from "@/components/skeleton/upcoming-events-skeleton";
 import TrendingEventsSkeleton from "@/components/skeleton/trending-events-skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -90,13 +90,13 @@ export default function Page() {
 
       {/* Upcoming Events */}
 
-      {isClient ? (
+      {/* {isClient ? (
         <Suspense fallback={<UpcomingEventsSkeleton />}>
           <UpcomingEvents />
         </Suspense>
       ) : (
         <UpcomingEventsSkeleton />
-      )}
+      )} */}
 
       {/* Newsletter */}
       <section className="py-8 px-4 sm:px-8 md:px-16 bg-gray-50 mt-8"></section>
