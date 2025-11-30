@@ -49,6 +49,7 @@ export default function UpcomingEvents() {
   const [isLoading, setIsLoading] = useState(true);
   const [isWishlistLoading, setIsWishlistLoading] = useState(false);
   const [showSoldOut, setShowSoldOut] = useState<boolean>(true);
+  const [sortBy, setSortBy] = useState<string>("newest");
   const [isHovered, setIsHovered] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
