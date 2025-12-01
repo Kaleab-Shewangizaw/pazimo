@@ -10,7 +10,6 @@ import {
   Users,
   DollarSign,
   Eye,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -111,6 +110,9 @@ const getCurrentTicket = (event: Event) => {
 
 // Function to check if event is sold out
 const isEventSoldOut = (event: Event) => {
+  // Check if event status is not published
+  if (event.status && event.status !== "published") return true;
+
   const now = new Date();
 
   // Check if event end date has passed

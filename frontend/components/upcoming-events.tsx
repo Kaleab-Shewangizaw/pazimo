@@ -2,9 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { ChevronRight, Heart, Eye, EyeOff, ImageIcon } from "lucide-react";
+import { ChevronRight, Heart, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -131,6 +131,9 @@ export default function UpcomingEvents() {
   };
 
   const isEventSoldOut = (event: Event) => {
+    // Check status
+    if (event.status && event.status !== "published") return true;
+
     const now = new Date();
     const end = buildEventEndDate(event);
 
@@ -267,9 +270,47 @@ export default function UpcomingEvents() {
     return `${s} - ${e}`;
   };
 
-  // ----------------------- Wishlist toggle (unchanged) -----------------------
+  // ----------------------- Wishlist toggle -----------------------
   const toggleWishlist = async (eventId: string) => {
-    // ... (your original toggleWishlist implementation – copy it unchanged)
+    try {
+      setIsWishlistLoading(true);
+      const storedAuth = localStorage.getItem("auth-storage");
+      let userId;
+
+      if (storedAuth) {
+        const parsedAuth = JSON.parse(storedAuth);
+        userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
+      }
+
+      const isRemoving = wishlist.includes(eventId);
+      const newWishlist = isRemoving
+        ? wishlist.filter((id) => id !== eventId)
+        : [...wishlist, eventId];
+
+      setWishlist(newWishlist);
+      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
+
+      if (userId) {
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              eventId,
+              action: isRemoving ? "remove" : "add",
+            }),
+          }
+        );
+      }
+
+      toast.success(isRemoving ? "Removed from wishlist" : "Added to wishlist");
+    } catch (error) {
+      console.error("Error updating wishlist:", error);
+      toast.error("Failed to update wishlist");
+    } finally {
+      setIsWishlistLoading(false);
+    }
   };
 
   // ----------------------- Render logic -----------------------

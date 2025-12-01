@@ -249,7 +249,8 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           eventData,
           invitationData,
           qrCodeBase64,
-          eventImage
+          eventImage,
+          invitation.message
         );
 
         await sendInvitationEmail({
@@ -658,7 +659,8 @@ const createAndSendProfessionalInvitation = async (data) => {
         eventData,
         invitationData,
         qrCodeBase64,
-        eventImage
+        eventImage,
+        message
       );
 
       await sendInvitationEmail({

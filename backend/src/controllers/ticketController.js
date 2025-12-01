@@ -393,7 +393,8 @@ const createGuestTicket = async (req, res) => {
         eventData,
         invitationData,
         qrCodeUrl,
-        eventImage
+        eventImage,
+        message
       );
 
       // We need the QR code from the ticket.
@@ -539,7 +540,18 @@ const processGuestInvitation = async (ticketId) => {
     // If qrCode is missing, we might want to generate it or handle it, but it should be there from pre-save.
     const qrCodeUrl = ticket.qrCode;
 
-    const emailHtml = createEmailTemplate(eventData, invitationData, qrCodeUrl);
+    const eventImage =
+      event.coverImages && event.coverImages.length > 0
+        ? event.coverImages[0]
+        : "";
+
+    const emailHtml = createEmailTemplate(
+      eventData,
+      invitationData,
+      qrCodeUrl,
+      eventImage,
+      message
+    );
 
     try {
       await sendInvitationEmail({
@@ -634,9 +646,7 @@ const confirmRSVP = async (req, res) => {
     // The current schema has one QR code per Ticket document, but `ticketCount` field.
     // If we need multiple QR codes, we might need to split this ticket into multiple tickets or return an array of QR codes generated on the fly.
     // However, the schema has `ticketCount` and `qrCode`. The pre-save hook generates one QR code that includes `ticketCount`.
-    // Let's stick to the single QR code representing multiple entries for now, as refactoring to multiple documents is a bigger change.
-    // Or, we can generate multiple QR codes here and return them, but only save one "master" QR on the ticket.
-    // Let's assume the single QR with count is sufficient for the scanner app (which should check count).
+    // Let's stick to the single QR with count is sufficient for the scanner app (which should check count).
 
     await ticket.save();
 
@@ -781,7 +791,8 @@ const createInvitationTicket = async (req, res) => {
         eventData,
         invitationData,
         qrCodeUrl,
-        eventImage
+        eventImage,
+        message
       );
 
       // We need the QR code from the ticket.

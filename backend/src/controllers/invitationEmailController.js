@@ -16,7 +16,13 @@ const createTransporter = () => {
   });
 };
 
-const createEmailTemplate = (event, invitation, qrCodeUrl, eventImage) => {
+const createEmailTemplate = (
+  event,
+  invitation,
+  qrCodeUrl,
+  eventImage,
+  message
+) => {
   // Format date and time
   const eventDate = new Date(event.date).toLocaleDateString("en-US", {
     weekday: "long",
@@ -43,6 +49,15 @@ const createEmailTemplate = (event, invitation, qrCodeUrl, eventImage) => {
     actionText === "Buy Ticket"
       ? "Secure your spot today"
       : "Join us for an amazing event";
+
+  const messageSection = message
+    ? `
+      <div style="background: #fff5f5; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #fc8181;">
+        <h3 style="color: #c53030; margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">💬 Message from Organizer</h3>
+        <p style="color: #2d3748; margin: 0; font-size: 16px; line-height: 1.6; font-style: italic;">"${message}"</p>
+      </div>
+  `
+    : "";
 
   return `
 <!DOCTYPE html>
@@ -83,6 +98,8 @@ const createEmailTemplate = (event, invitation, qrCodeUrl, eventImage) => {
         }</h2>
         <p style="color: #4a5568; margin: 0; font-size: 16px; line-height: 1.5;">We're excited to have you join us!</p>
       </div>
+
+      ${messageSection}
 
       <div style="background: #f7fafc; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #667eea;">
         <h3 style="color: #2d3748; margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">📅 Event Details</h3>

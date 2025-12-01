@@ -131,6 +131,9 @@ export default function EventCarousel() {
 
   // Function to check if event is sold out
   const isEventSoldOut = (event: Event) => {
+    // Check if event status is not published
+    if (event.status && event.status !== "published") return true;
+
     const now = new Date();
 
     // Check if event end date has passed
