@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
+const User = require("./User");
 
 function generateShortId() {
   const chars =
@@ -118,6 +119,27 @@ const TicketSchema = new mongoose.Schema(
 TicketSchema.pre("save", async function (next) {
   if (!this.qrCode) {
     try {
+      let userName = "";
+      let guestName = "";
+      let type = "user";
+
+      if (this.isInvitation) {
+        type = "guest";
+        guestName = this.guestName;
+      } else if (this.user) {
+        // Fetch user details if not already populated
+        if (this.user.firstName && this.user.lastName) {
+          userName = `${this.user.firstName} ${this.user.lastName}`;
+        } else {
+          const user = await User.findById(this.user).select(
+            "firstName lastName"
+          );
+          if (user) {
+            userName = `${user.firstName} ${user.lastName}`;
+          }
+        }
+      }
+
       const qrPayload = {
         _id: this._id,
         ticketId: this.ticketId,
@@ -129,6 +151,9 @@ TicketSchema.pre("save", async function (next) {
         status: this.status,
         paymentReference: this.paymentReference || null,
         ticketCount: this.ticketCount, // Include ticket count in QR code
+        type: type,
+        guest_name: guestName,
+        user_name: userName,
       };
 
       // Generate QR code with better error correction and size

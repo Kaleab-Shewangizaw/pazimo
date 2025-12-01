@@ -587,6 +587,7 @@ const createAndSendProfessionalInvitation = async (data) => {
         invitationId,
         eventId,
         type: "guest_ticket",
+        guest_name: guestName,
       };
       const qrDataString = JSON.stringify(qrPayload);
       qrCodeBase64 = await QRCode.toDataURL(qrDataString);

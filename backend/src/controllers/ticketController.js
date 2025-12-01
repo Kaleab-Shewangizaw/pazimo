@@ -936,19 +936,6 @@ const checkInTicket = async (req, res) => {
       });
     }
 
-    // Verify the user is the event organizer
-    const event = await Event.findOne({
-      _id: ticket.event,
-      organizer: req.user.userId,
-    });
-    if (!event) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({
-        success: false,
-        message: "Not authorized to check in this ticket",
-      });
-    }
-
-    // Check if already fully used
     if (
       ticket.status === "used" ||
       ticket.checkedIn ||
@@ -975,7 +962,6 @@ const checkInTicket = async (req, res) => {
 
     // Decrement count
     ticket.ticketCount -= count;
-
     // If count reaches 0, mark as used/checkedIn
     if (ticket.ticketCount <= 0) {
       ticket.ticketCount = 0; // Safety

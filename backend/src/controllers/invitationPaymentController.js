@@ -236,14 +236,7 @@ const handlePaymentSuccess = async (payment) => {
       // 1. Create Ticket
       const ticketId = "TICKET-" + uuidv4();
 
-      // Generate QR Code for Ticket
-      const qrPayload = {
-        ticketId,
-        eventId: payment.eventId,
-        type: "guest_ticket",
-      };
-      const qrCodeBase64 = await QRCode.toDataURL(JSON.stringify(qrPayload));
-
+      // Let Ticket model generate the QR code (includes guest_name and type: guest)
       const ticket = await Ticket.create({
         ticketId,
         event: payment.eventId,
@@ -257,8 +250,9 @@ const handlePaymentSuccess = async (payment) => {
         status: "active",
         paymentStatus: "completed",
         paymentReference: payment.transactionId,
-        qrCode: qrCodeBase64,
       });
+
+      const qrCodeBase64 = ticket.qrCode;
 
       // 2. Create Invitation
       const invitationId = uuidv4();
