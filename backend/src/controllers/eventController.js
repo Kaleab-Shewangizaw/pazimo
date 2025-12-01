@@ -731,6 +731,21 @@ const getAllEvents = async (req, res) => {
   }
 };
 
+const getPublicEvents = async (req, res) => {
+  try {
+    const events = await Event.find({
+      isPublic: true,
+      status: "published",
+    }).populate("category", "name description");
+
+    res.status(StatusCodes.OK).json({ events, count: events.length });
+  } catch (error) {
+    res
+      .status(StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ error: "Failed to fetch public events" });
+  }
+};
+
 // Publish event
 const publishEvent = async (req, res) => {
   const { id } = req.params;
@@ -966,22 +981,18 @@ const getWishlist = async (req, res) => {
       createdAt: item.createdAt,
     }));
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        data: formattedItems,
-        message: "Wishlist retrieved successfully",
-      });
+    res.status(200).json({
+      success: true,
+      data: formattedItems,
+      message: "Wishlist retrieved successfully",
+    });
   } catch (error) {
     console.error("Detailed error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to retrieve wishlist",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve wishlist",
+      error: error.message,
+    });
   }
 };
 
@@ -1073,6 +1084,7 @@ module.exports = {
   updateTicketTypes,
   getEventDetails,
   buyTicket,
+  getPublicEvents,
   getUserTickets,
   getWishlist,
   updateWishlist,
