@@ -174,6 +174,8 @@ router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
 router.get("/public/details/:id", getPublicTicketDetails);
 router.post("/payment/cancel", cancelPaymentIntent);
+router.patch("/:ticketId/check-in", checkInTicket);
+router.post("/validate-qr", validateQRCode);
 
 // All other routes use authentication
 router.use(authenticateUser);
@@ -187,8 +189,6 @@ router.get("/my-tickets", getUserTickets);
 router.get("/details/:id", getTicketDetails);
 router.get("/:ticketId", getTicket);
 router.patch("/:ticketId/cancel", cancelTicket);
-router.post("/validate-qr", validateQRCode);
-router.patch("/:ticketId/check-in", checkInTicket);
 router.get("/admin/all", getAllTicketsAdmin);
 
 module.exports = router;

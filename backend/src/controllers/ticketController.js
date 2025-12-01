@@ -928,7 +928,11 @@ const checkInTicket = async (req, res) => {
     const { ticketId } = req.params;
     const { count = 1 } = req.body; // Default to 1 if not provided
 
-    const ticket = await Ticket.findById(ticketId);
+    let ticket = await Ticket.findOne({ ticketId });
+    if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
+      ticket = await Ticket.findById(ticketId);
+    }
+
     if (!ticket) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
