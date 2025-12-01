@@ -158,11 +158,10 @@ export default function UpcomingEvents() {
           return dateB - dateA;
         });
 
-        // Take indices [2, 9] (3rd to 10th events)
+        // Take indices [2, 10] (3rd to 11th events)
         // Slice is 0-indexed, so 3rd event is index 2.
-        // slice(2, 10) returns elements at indices 2, 3, 4, 5, 6, 7, 8, 9 (8 events total)
-        const featuredEvents = sortedByNewest.slice(2, 10);
-
+        // slice(2, 11) returns elements at indices 2, 3, 4, 5, 6, 7, 8, 9, 10 (9 events total)
+        const featuredEvents = sortedByNewest.slice(2, 11);
         setEvents(featuredEvents);
       } catch (err) {
         toast.error("Failed to load featured events");

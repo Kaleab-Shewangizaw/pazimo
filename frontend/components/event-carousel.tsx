@@ -181,12 +181,17 @@ export default function EventCarousel() {
       const data = await response.json();
 
       // The API now returns only published and public events
-      // Sort by startDate ascending (soonest first) for "Upcoming"
+      // Sort by createdAt descending (newest first) for "Upcoming"
       const sortedEvents = (data.data || data.events || [])
-        .sort(
-          (a: Event, b: Event) =>
-            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
-        )
+        .sort((a: any, b: any) => {
+          const dateA = a.createdAt
+            ? new Date(a.createdAt).getTime()
+            : new Date(a.startDate).getTime();
+          const dateB = b.createdAt
+            ? new Date(b.createdAt).getTime()
+            : new Date(b.startDate).getTime();
+          return dateB - dateA;
+        })
         .slice(0, 7); // Take top 7
 
       setEvents(sortedEvents);
