@@ -295,8 +295,8 @@
 
 // // // //           {isClient ? (
 // // // //             <Suspense fallback={<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">{Array(6).fill(0).map((_, index) => <EventCardSkeleton key={index} />)}</div>}>
-// // // //               <EventGrid 
-// // // //                 events={currentEvents} 
+// // // //               <EventGrid
+// // // //                 events={currentEvents}
 // // // //                 wishlist={wishlist}
 // // // //                 onToggleWishlist={toggleWishlist}
 // // // //                 isWishlistLoading={isWishlistLoading}
@@ -1598,8 +1598,6 @@
 //     }
 //   }
 
-
-
 //   const filterEvents = () => {
 //     let filtered = [...events]
 
@@ -2191,15 +2189,9 @@
 //   )
 // }
 
-
-
 // event_explore/page.tsx
-import { Suspense } from "react"
-import EventSearchPage from "@/components/EventSearchPage"
+"use client";
+import EventSearchPage from "@/components/EventSearchPage";
 export default function Page() {
-  return (
-    <Suspense fallback={<div>Loading event search page...</div>}>
-      <EventSearchPage />
-    </Suspense>
-  )
+  return <EventSearchPage />;
 }
