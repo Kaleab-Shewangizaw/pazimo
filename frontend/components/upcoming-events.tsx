@@ -290,65 +290,15 @@ export default function UpcomingEvents() {
   }
 
   // There are events but after filtering none remain
-  if (filteredEvents.length === 0 && !showSoldOut) {
-    return (
-      <section className="px-4 sm:px-8 md:px-16 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-[#1a2d5a]">
-            Upcoming <span className="font-bold">Events</span> to look forward
-            to
-          </h3>
-          <div className="flex items-center gap-3">
-            <Checkbox
-              id="show-sold-out"
-              checked={showSoldOut}
-              onCheckedChange={(c) => setShowSoldOut(c === true)}
-            />
-            <label htmlFor="show-sold-out" className="text-sm">
-              Show sold out
-            </label>
-          </div>
-        </div>
-
-        <div className="bg-gray-50 rounded-xl p-12 text-center">
-          <EyeOff className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <h4 className="text-lg font-semibold text-gray-700 mb-2">
-            No available tickets right now
-          </h4>
-          <p className="text-gray-500 mb-6">
-            All upcoming events are currently sold out.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => setShowSoldOut(true)}
-            className="border-[#1a2d5a] text-[#1a2d5a] hover:bg-[#1a2d5a] hover:text-white"
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            Show sold-out events
-          </Button>
-        </div>
-      </section>
-    );
-  }
 
   // Normal render when we have something to show
   return (
     <section className="px-4 sm:px-8 md:px-16 py-8">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-start mb-6">
         <h3 className="text-lg font-semibold text-[#1a2d5a]">
           Featured <span className="font-bold">Events</span>
         </h3>
-        <div className="flex items-center gap-3">
-          <Checkbox
-            id="show-sold-out"
-            checked={showSoldOut}
-            onCheckedChange={(c) => setShowSoldOut(c === true)}
-          />
-          <label htmlFor="show-sold-out" className="text-sm">
-            Show sold out
-          </label>
-        </div>
       </div>
 
       {/* Carousel */}
