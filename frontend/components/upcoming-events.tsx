@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { ChevronRight, Heart, Eye, EyeOff } from "lucide-react";
+import { ChevronRight, Heart, Eye, EyeOff, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -324,30 +324,31 @@ export default function UpcomingEvents() {
                   )}
 
                   {/* Enhanced Image Container */}
-                  <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
-                    <Image
-                      src={
-                        event.coverImages && event.coverImages.length > 0
-                          ? event.coverImages[0].startsWith("http")
+                  <div className="relative aspect-[4/5] overflow-hidden bg-gray-100 flex items-center justify-center">
+                    {/* Fallback Icon */}
+                    <ImageIcon className="w-16 h-16 text-gray-300" />
+
+                    {event.coverImages && event.coverImages.length > 0 && (
+                      <Image
+                        src={
+                          event.coverImages[0].startsWith("http")
                             ? event.coverImages[0]
                             : `${process.env.NEXT_PUBLIC_API_URL}${
                                 event.coverImages[0].startsWith("/")
                                   ? event.coverImages[0]
                                   : `/${event.coverImages[0]}`
                               }`
-                          : "/placeholder.svg?height=400&width=320&text=Event+Poster"
-                      }
-                      alt={event.title}
-                      fill
-                      className="object-cover transition-transform duration-500 group-hover:scale-110"
-                      sizes="320px"
-                      quality={90}
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src =
-                          "/placeholder.svg?height=400&width=320&text=Event+Poster";
-                      }}
-                    />
+                        }
+                        alt={event.title}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-110"
+                        sizes="320px"
+                        quality={90}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
 
                     {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

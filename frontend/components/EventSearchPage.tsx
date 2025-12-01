@@ -784,9 +784,9 @@ export default function EventSearchPage() {
 
         <div className="flex-1">
           {/* Mobile Filter Bar */}
-          <div className="lg:hidden mb-6">
+          <div className="lg:hidden mb-6 mt-4">
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between w-full">
                 <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
                   <SheetTrigger asChild>
                     <Button
