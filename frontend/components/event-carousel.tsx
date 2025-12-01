@@ -175,19 +175,23 @@ export default function EventCarousel() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`
       );
       if (!response.ok) {
         throw new Error("Failed to fetch events");
       }
       const data = await response.json();
 
-      // Filter for published events only and show only public events
-      const publishedEvents = data.data.filter(
-        (event: Event) =>
-          event.status === "published" && event.isPublic === true
-      );
-      setEvents(publishedEvents);
+      // The API now returns only published and public events
+      // Sort by startDate ascending (soonest first) for "Upcoming"
+      const sortedEvents = (data.data || data.events || [])
+        .sort(
+          (a: Event, b: Event) =>
+            new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
+        )
+        .slice(0, 10); // Take top 10
+
+      setEvents(sortedEvents);
     } catch (error) {
       console.error("Error fetching events:", error);
       toast.error("Failed to fetch events");
@@ -406,7 +410,7 @@ export default function EventCarousel() {
       <div className="relative px-4 sm:px-8 md:px-16 py-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-semibold text-[#1a2d5a]">
-            Featured Events
+            Upcoming Events
           </h3>
           <div className="flex items-center gap-4">
             <div className="flex items-center space-x-2">
@@ -449,7 +453,11 @@ export default function EventCarousel() {
 
   return (
     <div className="relative px-4 sm:px-8 md:px-16 py-6">
-      <div className="flex items-center justify-between mb-6"></div>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-semibold text-[#1a2d5a]">
+          Upcoming Events
+        </h3>
+      </div>
 
       <div
         className="overflow-x-auto scrollbar-hide"

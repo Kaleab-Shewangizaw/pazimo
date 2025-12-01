@@ -8,7 +8,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 // Lazy load components
 const EventCarousel = lazy(() => import("@/components/event-carousel"));
 const CategoryIcons = lazy(() => import("@/components/category-icons"));
-// const UpcomingEvents = lazy(() => import("@/components/upcoming-events"));
+const UpcomingEvents = lazy(() => import("@/components/upcoming-events"));
 const TrendingEvents = lazy(() => import("@/components/trending-events"));
 
 // Skeletons
@@ -36,14 +36,7 @@ export default function Page() {
         <TrendingEventsSkeleton />
       )}
 
-      {/* Featured Events Header */}
-      <div className="px-4 sm:px-8 md:px-16 py-4 flex justify-between items-center border-b">
-        <h3 className="text-lg text-[#1a2d5a] font-semibold">
-          Featured Events
-        </h3>
-      </div>
-
-      {/* Carousel */}
+      {/* Upcoming Events (Carousel) */}
       {isClient ? (
         <Suspense fallback={<EventCarouselSkeleton />}>
           <EventCarousel />
@@ -71,6 +64,7 @@ export default function Page() {
               flex 
               items-center 
               gap-1
+              backdrop-blur-md bg-white/30
             "
           >
             View All Events
@@ -88,15 +82,18 @@ export default function Page() {
         <CategoryIconsSkeleton />
       )}
 
-      {/* Upcoming Events */}
-
-      {/* {isClient ? (
-        <Suspense fallback={<UpcomingEventsSkeleton />}>
+      {/* Featured Events (List Layout) */}
+      {isClient ? (
+        <Suspense
+          fallback={
+            <div className="h-96 bg-gray-100 animate-pulse rounded-lg mx-4 sm:mx-8 md:mx-16 my-8" />
+          }
+        >
           <UpcomingEvents />
         </Suspense>
       ) : (
-        <UpcomingEventsSkeleton />
-      )} */}
+        <div className="h-96 bg-gray-100 animate-pulse rounded-lg mx-4 sm:mx-8 md:mx-16 my-8" />
+      )}
 
       {/* Newsletter */}
       <section className="py-8 px-4 sm:px-8 md:px-16 bg-gray-50 mt-8"></section>
