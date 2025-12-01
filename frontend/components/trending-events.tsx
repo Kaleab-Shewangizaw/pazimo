@@ -477,9 +477,6 @@ export default function LargeEventCarousel() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">
-            Loading featured events...
-          </p>
         </div>
       </div>
     );

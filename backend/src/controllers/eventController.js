@@ -731,15 +731,32 @@ const getAllEvents = async (req, res) => {
   }
 };
 
+// Get public events
+
 const getPublicEvents = async (req, res) => {
   try {
+    // Match events that are published AND (isPublic is true OR isPublic is missing/null)
+    // Since default is true, missing field implies public
     const events = await Event.find({
-      isPublic: true,
       status: "published",
-    }).populate("category", "name description");
+      //below line added to handle isPublic filtering first it checks if isPublic is true then checks if isPublic field is missing or null then it includes those events as well
+      $or: [
+        { isPublic: true },
+        { isPublic: { $exists: false } },
+        { isPublic: null },
+      ],
+    })
+      .populate("category", "name description")
+      .populate("organizer", "firstName lastName email") // Added organizer population for consistency
+      .sort("-createdAt"); // Sort by newest first
 
-    res.status(StatusCodes.OK).json({ events, count: events.length });
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: events,
+      count: events.length,
+    });
   } catch (error) {
+    console.error("Error fetching public events:", error);
     res
       .status(StatusCodes.INTERNAL_SERVER_ERROR)
       .json({ error: "Failed to fetch public events" });
