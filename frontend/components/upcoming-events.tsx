@@ -81,12 +81,27 @@ export default function UpcomingEvents() {
     return "23:59";
   };
 
+  // Build end datetime with safe fallbacks
   const buildEventEndDate = (event: Event): Date | null => {
     const dateStr = event?.endDate || event?.startDate;
     if (!dateStr) return null;
     const time24 = normalizeTimeTo24h(event?.endTime);
-    const d = new Date(`${dateStr}T${time24}:00`);
-    return isNaN(d.getTime()) ? null : d;
+
+    // Try constructing ISO string first (works if dateStr is YYYY-MM-DD)
+    const isoCandidate = `${dateStr}T${time24}:00`;
+    const d = new Date(isoCandidate);
+    if (!isNaN(d.getTime())) return d;
+
+    // Fallback: if dateStr is already a full ISO string or other format
+    const d2 = new Date(dateStr);
+    if (!isNaN(d2.getTime())) {
+      // If we have a valid date but couldn't append time, just use the date
+      // and set time to the parsed time or end of day
+      const [h, m] = time24.split(":").map(Number);
+      d2.setHours(h || 23, m || 59, 0, 0);
+      return d2;
+    }
+    return null;
   };
 
   const isTicketTypeAvailable = (ticket: any) => {

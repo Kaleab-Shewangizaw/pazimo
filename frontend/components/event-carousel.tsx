@@ -618,6 +618,34 @@ export default function EventCarousel() {
           ))}
         </div>
       </div>
+
+      {/* View All Button */}
+      <div className="w-full flex justify-center mt-6">
+        <Link href="/event_explore">
+          <Button
+            variant="outline"
+            className="
+              border-[#1a2d5a] 
+              text-[#1a2d5a] 
+              hover:bg-[#1a2d5a] 
+              hover:text-white
+              transition 
+              px-6 
+              py-2 
+              rounded-lg 
+              text-sm 
+              sm:text-base 
+              flex 
+              items-center 
+              gap-1
+              backdrop-blur-md bg-white/30
+            "
+          >
+            View All Events
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 }

@@ -45,34 +45,6 @@ export default function Page() {
         <EventCarouselSkeleton />
       )}
 
-      {/* View All Button Under Carousel */}
-      <div className="w-full flex justify-center mt-3 mb-6">
-        <Link href="/event_explore">
-          <Button
-            variant="outline"
-            className="
-              border-blue-700 
-              text-blue-700 
-              hover:bg-blue-700 
-              hover:text-white
-              transition 
-              px-6 
-              py-2 
-              rounded-lg 
-              text-sm 
-              sm:text-base 
-              flex 
-              items-center 
-              gap-1
-              backdrop-blur-md bg-white/30
-            "
-          >
-            View All Events
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </Link>
-      </div>
-
       {/* Category Icons */}
       {isClient ? (
         <Suspense fallback={<CategoryIconsSkeleton />}>
