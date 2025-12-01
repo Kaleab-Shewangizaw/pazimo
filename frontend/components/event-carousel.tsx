@@ -398,7 +398,6 @@ export default function EventCarousel() {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a] mx-auto"></div>
-          <p className="mt-2 text-[#1a2d5a]">Loading events...</p>
         </div>
       </div>
     );
@@ -632,9 +631,9 @@ export default function EventCarousel() {
           <Button
             variant="outline"
             className="
-              border-[#1a2d5a] 
-              text-[#1a2d5a] 
-              hover:bg-[#1a2d5a] 
+              border-[#0d47a1] 
+              text-[#0d47a1]
+              hover:bg-[#0d47a1]/90
               hover:text-white
               transition 
               px-6 

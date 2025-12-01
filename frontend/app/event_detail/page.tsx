@@ -598,7 +598,6 @@ function EventDetailContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D47A1] mx-auto"></div>
-          <p className="mt-2 text-[#0D47A1]">Loading event details...</p>
         </div>
       </div>
     );

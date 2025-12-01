@@ -58,7 +58,7 @@ export default function Page() {
       {isClient ? (
         <Suspense
           fallback={
-            <div className="h-96 bg-gray-100 animate-pulse rounded-lg mx-4 sm:mx-8 md:mx-16 my-8" />
+            <div className="h-96 bg-gray-100 animate-pulse rounded-lg mx-4 sm:mx-8 md:mx-16  my-8 mt-4" />
           }
         >
           <UpcomingEvents />

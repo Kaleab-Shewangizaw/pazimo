@@ -721,8 +721,7 @@ export default function EventSearchPage() {
       <div className="container mx-auto px-4 sm:px-6 lg:py-8">
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-[#0D47A1]" />
-            <p className="text-gray-600">Loading events...</p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a] mx-auto"></div>
           </div>
         </div>
       </div>
@@ -785,8 +784,61 @@ export default function EventSearchPage() {
 
         <div className="flex-1">
           {/* Mobile Filter Bar */}
-          <div className="lg:hidden lg:mb-6 sm:mb-0">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="lg:hidden mb-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 whitespace-nowrap bg-transparent"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
+                      Filters
+                      {activeFiltersCount > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                        >
+                          {activeFiltersCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-[350px] sm:w-[400px]">
+                    <SheetHeader className="mb-4">
+                      <SheetTitle className="flex items-center gap-2 text-lg">
+                        <Filter className="h-4 w-4" />
+                        Filter Events
+                      </SheetTitle>
+                      <SheetDescription className="text-sm">
+                        Refine your search to find the perfect events
+                      </SheetDescription>
+                    </SheetHeader>
+                    <MobileFilterContent />
+                  </SheetContent>
+                </Sheet>
+
+                <div className="w-[180px]">
+                  <Select value={sortBy} onValueChange={setSortBy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="availability">Availability</SelectItem>
+                      <SelectItem value="price-low">
+                        Price: Low to High
+                      </SelectItem>
+                      <SelectItem value="price-high">
+                        Price: High to Low
+                      </SelectItem>
+                      <SelectItem value="newest">Newest First</SelectItem>
+                      <SelectItem value="popular">Most Popular</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 {selectedCategories.map((category) => (
                   <Badge
@@ -818,43 +870,11 @@ export default function EventSearchPage() {
                   </Badge>
                 )}
               </div>
-
-              <Sheet open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-                <SheetTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="flex items-center gap-2 whitespace-nowrap bg-transparent"
-                  >
-                    <SlidersHorizontal className="h-4 w-4" />
-                    Filters
-                    {activeFiltersCount > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
-                      >
-                        {activeFiltersCount}
-                      </Badge>
-                    )}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-[350px] sm:w-[400px]">
-                  <SheetHeader className="mb-4">
-                    <SheetTitle className="flex items-center gap-2 text-lg">
-                      <Filter className="h-4 w-4" />
-                      Filter Events
-                    </SheetTitle>
-                    <SheetDescription className="text-sm">
-                      Refine your search to find the perfect events
-                    </SheetDescription>
-                  </SheetHeader>
-                  <MobileFilterContent />
-                </SheetContent>
-              </Sheet>
             </div>
           </div>
 
-          {/* Results Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+          {/* Results Header - Desktop Only */}
+          <div className="hidden lg:flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
             <p className="text-gray-600 text-sm sm:text-base">
               {/* Showing {indexOfFirstEvent + 1}-{Math.min(indexOfLastEvent, filteredEvents.length)} of{" "}
               {filteredEvents.length} Results

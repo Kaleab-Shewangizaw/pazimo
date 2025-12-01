@@ -276,10 +276,7 @@ export default function UpcomingEvents() {
   if (isLoading) {
     return (
       <div className="px-4 sm:px-8 md:px-16 py-12">
-        <div className="animate-pulseite-spin rounded-full h-10 w-10 border-b-2 border-[#1a2d5a] mx-auto"></div>
-        <p className="text-center mt-4 text-[#1a2d5a]">
-          Loading upcoming events...
-        </p>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a] mx-auto"></div>
       </div>
     );
   }
@@ -465,9 +462,9 @@ export default function UpcomingEvents() {
           <Button
             variant="outline"
             className="
-              border-blue-700 
-              text-blue-700 
-              hover:bg-blue-700 
+              border-[#0d47a1] 
+              text-[#0d47a1] 
+              hover:bg-[#0d47a1]/90 
               hover:text-white
               transition 
               px-6 
