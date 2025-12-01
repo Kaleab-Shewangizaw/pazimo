@@ -80,10 +80,42 @@ const buildEventEndDate = (event: any): Date | null => {
   return null;
 };
 
-// Function to check if event is sold out (ONLY when end date/time passed)
+// Function to check if a ticket type is currently available
+const isTicketTypeAvailable = (ticket: any) => {
+  const now = new Date();
+
+  // Check if ticket is marked as available
+  if (ticket.available === false) return false;
+
+  // Check if ticket has quantity
+  if (ticket.quantity <= 0) return false;
+
+  // Check ticket-specific date range if exists
+  if (ticket.startDate && ticket.endDate) {
+    const ticketStart = new Date(ticket.startDate);
+    const ticketEnd = new Date(ticket.endDate);
+    if (now < ticketStart || now > ticketEnd) return false;
+  }
+
+  return true;
+};
+
+// Function to check if event is sold out
 const isEventSoldOut = (event: any) => {
-  const endDate = buildEventEndDate(event);
-  return !!(endDate && endDate.getTime() <= Date.now());
+  const now = new Date();
+
+  // Check if event end date has passed
+  const eventEndDate = buildEventEndDate(event);
+  if (eventEndDate && eventEndDate.getTime() <= now.getTime()) return true;
+
+  // Check if all tickets are unavailable (sold out, unavailable, or out of date range)
+  if (event.ticketTypes && Array.isArray(event.ticketTypes)) {
+    return event.ticketTypes.every(
+      (ticket: any) => !isTicketTypeAvailable(ticket)
+    );
+  }
+
+  return false;
 };
 
 export default function LargeEventCarousel() {

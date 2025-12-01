@@ -91,10 +91,16 @@ export default function UpcomingEvents() {
 
   const isTicketTypeAvailable = (ticket: any) => {
     const now = new Date();
+    // Check if ticket is explicitly unavailable or quantity is 0
     if (ticket.available === false || ticket.quantity <= 0) return false;
+
+    // Check date ranges if they exist
     if (ticket.startDate && ticket.endDate) {
       const start = new Date(ticket.startDate);
       const end = new Date(ticket.endDate);
+      // Set end date to end of day to be inclusive
+      end.setHours(23, 59, 59, 999);
+
       if (now < start || now > end) return false;
     }
     return true;
@@ -112,8 +118,13 @@ export default function UpcomingEvents() {
   const isEventSoldOut = (event: Event) => {
     const now = new Date();
     const end = buildEventEndDate(event);
+
+    // If event has ended, it's sold out/unavailable
     if (end && end.getTime() <= now.getTime()) return true;
-    return !event.ticketTypes.some(isTicketTypeAvailable);
+
+    // If no tickets are available, it's sold out
+    const hasAvailableTickets = event.ticketTypes.some(isTicketTypeAvailable);
+    return !hasAvailableTickets;
   };
 
   // ----------------------- Data fetching -----------------------
@@ -127,9 +138,32 @@ export default function UpcomingEvents() {
 
         if (!response.ok) throw new Error("Failed to fetch events");
         const data = await response.json();
-        // Use all public events, maybe filter for "featured" if logic existed,
-        // but for now we just show them.
-        setEvents(data.data || data.events || []);
+
+        // Sort by published date (createdAt) descending (newest first)
+        // Note: The API might not return createdAt if not selected, but usually it does.
+        // If createdAt is missing, fallback to startDate or _id (which contains timestamp)
+        const allEvents = data.data || data.events || [];
+
+        // Sort by creation date (newest first) to find "Featured" candidates
+        // We assume "Featured" here means "Recently Published" but skipping the very newest ones
+        // which are shown in the top carousel.
+        // If createdAt is not available, we'll use _id timestamp or startDate as proxy
+        const sortedByNewest = [...allEvents].sort((a: any, b: any) => {
+          const dateA = a.createdAt
+            ? new Date(a.createdAt).getTime()
+            : new Date(a.startDate).getTime();
+          const dateB = b.createdAt
+            ? new Date(b.createdAt).getTime()
+            : new Date(b.startDate).getTime();
+          return dateB - dateA;
+        });
+
+        // Take indices [2, 9] (3rd to 10th events)
+        // Slice is 0-indexed, so 3rd event is index 2.
+        // slice(2, 10) returns elements at indices 2, 3, 4, 5, 6, 7, 8, 9 (8 events total)
+        const featuredEvents = sortedByNewest.slice(2, 10);
+
+        setEvents(featuredEvents);
       } catch (err) {
         toast.error("Failed to load featured events");
       } finally {
@@ -149,28 +183,36 @@ export default function UpcomingEvents() {
   // ----------------------- Filtering & Sorting -----------------------
   useEffect(() => {
     let list = [...events];
+    // Note: We already sliced the list in fetchEvents, so 'events' contains only the featured ones.
+    // We just need to apply the sold-out filter if needed.
+
     if (!showSoldOut) {
       list = list.filter((e) => !isEventSoldOut(e));
     }
 
-    list.sort((a, b) => {
-      const priceA = getCurrentTicket(a)?.price ?? Infinity;
-      const priceB = getCurrentTicket(b)?.price ?? Infinity;
+    // We don't re-sort by price/date here because the "Featured" order (by publication date)
+    // is the primary sort. However, if the user explicitly changes the sort dropdown (if we had one),
+    // we would re-sort. The current UI doesn't seem to have a sort dropdown visible in the code provided,
+    // but 'sortBy' state exists. We'll keep the sort logic but default to preserving the "Featured" order
+    // unless 'sortBy' is changed from default.
 
-      switch (true) {
-        case sortBy === "price-low":
-          return priceA - priceB;
-        case sortBy === "price-high":
-          return priceB - priceA;
-        case sortBy === "newest":
-        default:
-          return (
-            new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
-          );
-      }
-    });
+    if (sortBy !== "newest") {
+      list.sort((a, b) => {
+        const priceA = getCurrentTicket(a)?.price ?? Infinity;
+        const priceB = getCurrentTicket(b)?.price ?? Infinity;
 
-    setFilteredEvents(list.slice(0, 10));
+        switch (true) {
+          case sortBy === "price-low":
+            return priceA - priceB;
+          case sortBy === "price-high":
+            return priceB - priceA;
+          default:
+            return 0;
+        }
+      });
+    }
+
+    setFilteredEvents(list);
   }, [events, showSoldOut, sortBy]);
 
   // ----------------------- Auto-scroll -----------------------

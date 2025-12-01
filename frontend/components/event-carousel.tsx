@@ -131,10 +131,8 @@ export default function EventCarousel() {
     const eventEndDate = buildEventEndDate(event);
     if (eventEndDate && eventEndDate.getTime() <= now.getTime()) return true;
 
-    // Check if all tickets have quantity 0 or are marked unavailable
-    return event.ticketTypes.every(
-      (ticket) => ticket.quantity === 0 || ticket.available === false
-    );
+    // Check if all tickets are unavailable (sold out, unavailable, or out of date range)
+    return event.ticketTypes.every((ticket) => !isTicketTypeAvailable(ticket));
   };
 
   useEffect(() => {
@@ -189,7 +187,7 @@ export default function EventCarousel() {
           (a: Event, b: Event) =>
             new Date(a.startDate).getTime() - new Date(b.startDate).getTime()
         )
-        .slice(0, 10); // Take top 10
+        .slice(0, 7); // Take top 7
 
       setEvents(sortedEvents);
     } catch (error) {
