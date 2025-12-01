@@ -59,9 +59,9 @@
 //   return (
 //     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 //       {events.map((event) => (
-//         <Link 
-//           href={`/event_detail?id=${event._id}`} 
-//           key={event._id} 
+//         <Link
+//           href={`/event_detail?id=${event._id}`}
+//           key={event._id}
 //           className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group"
 //         >
 //           <div className="relative">
@@ -69,8 +69,8 @@
 //               {event.category?.name || 'Uncategorized'}
 //             </div>
 //             <Image
-//               src={event.coverImages && event.coverImages.length > 0 ? 
-//                 (event.coverImages[0].startsWith('http') ? event.coverImages[0] : `${process.env.NEXT_PUBLIC_API_URL}${event.coverImages[0].startsWith('/') ? event.coverImages[0] : `/${event.coverImages[0]}`}`) 
+//               src={event.coverImages && event.coverImages.length > 0 ?
+//                 (event.coverImages[0].startsWith('http') ? event.coverImages[0] : `${process.env.NEXT_PUBLIC_API_URL}${event.coverImages[0].startsWith('/') ? event.coverImages[0] : `/${event.coverImages[0]}`}`)
 //                 : "/events/eventimg.png"}
 //               alt={event.title}
 //               width={400}
@@ -116,51 +116,51 @@
 //   )
 // }
 
-"use client"
-import Image from "next/image"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Heart, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { useState } from "react"
+"use client";
+import Image from "next/image";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Heart, ImageIcon, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 type Event = {
-  _id: string
-  title: string
-  description: string
-  startDate: string
-  endDate: string
+  _id: string;
+  title: string;
+  description: string;
+  startDate: string;
+  endDate: string;
   location: {
-    address: string
-    city: string
-    country: string
-  }
+    address: string;
+    city: string;
+    country: string;
+  };
   category: {
-    _id: string
-    name: string
-    description: string
-  }
-  coverImages: string[]
+    _id: string;
+    name: string;
+    description: string;
+  };
+  coverImages: string[];
   ticketTypes: Array<{
-    name: string
-    price: number
-    quantity: number
-    available?: boolean
-    description?: string
-    startDate?: string
-    endDate?: string
-  }>
-  status: string
-  ageLimit?: string
-  capacity?: number
-}
+    name: string;
+    price: number;
+    quantity: number;
+    available?: boolean;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+  }>;
+  status: string;
+  ageLimit?: string;
+  capacity?: number;
+};
 
 interface EventGridProps {
-  events: Event[]
-  wishlist: string[]
-  onToggleWishlist: (eventId: string) => void
-  isWishlistLoading: boolean
-  isEventSoldOut: (event: Event) => boolean
+  events: Event[];
+  wishlist: string[];
+  onToggleWishlist: (eventId: string) => void;
+  isWishlistLoading: boolean;
+  isEventSoldOut: (event: Event) => boolean;
 }
 
 export default function EventGrid({
@@ -170,17 +170,22 @@ export default function EventGrid({
   isWishlistLoading,
   isEventSoldOut,
 }: EventGridProps) {
-  const [loadingEventId, setLoadingEventId] = useState<string | null>(null)
+  const [loadingEventId, setLoadingEventId] = useState<string | null>(null);
 
   const handleEventClick = (eventId: string) => {
-    setLoadingEventId(eventId)
-  }
+    setLoadingEventId(eventId);
+  };
   if (events.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="max-w-md mx-auto">
           <div className="w-24 h-24 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className="w-12 h-12 text-gray-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -189,39 +194,48 @@ export default function EventGrid({
               />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-gray-700 mb-2">No Events Found</h3>
-          <p className="text-gray-500">Try adjusting your filters to find more events</p>
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">
+            No Events Found
+          </h3>
+          <p className="text-gray-500">
+            Try adjusting your filters to find more events
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
       {events.map((event) => {
-        const isSoldOut = isEventSoldOut(event)
-        const now = new Date()
+        const isSoldOut = isEventSoldOut(event);
+        const now = new Date();
         const hasWave = (t: Event["ticketTypes"][number]) =>
-          !!(t.startDate && t.endDate) || (t.description || "").toLowerCase().includes("wave")
+          !!(t.startDate && t.endDate) ||
+          (t.description || "").toLowerCase().includes("wave");
 
         // If any ticket is a wave ticket, show only current active wave's price; otherwise keep original
-        const anyWave = (event.ticketTypes || []).some(hasWave)
-        let currentTicketPrice = event.ticketTypes[0]?.price || 0
+        const anyWave = (event.ticketTypes || []).some(hasWave);
+        let currentTicketPrice = event.ticketTypes[0]?.price || 0;
         if (anyWave) {
           const activeWaveTickets = (event.ticketTypes || []).filter((t) => {
-            if (!hasWave(t)) return false
-            if (t.available === false) return false
+            if (!hasWave(t)) return false;
+            if (t.available === false) return false;
             if (t.startDate && t.endDate) {
-              const s = new Date(t.startDate)
-              const e = new Date(t.endDate)
-              return now >= s && now <= e
+              const s = new Date(t.startDate);
+              const e = new Date(t.endDate);
+              return now >= s && now <= e;
             }
-            return false
-          })
+            return false;
+          });
           if (activeWaveTickets.length > 0) {
             // If multiple are active, pick the one with latest startDate (most recent wave)
-            activeWaveTickets.sort((a, b) => new Date(b.startDate as string).getTime() - new Date(a.startDate as string).getTime())
-            currentTicketPrice = activeWaveTickets[0].price
+            activeWaveTickets.sort(
+              (a, b) =>
+                new Date(b.startDate as string).getTime() -
+                new Date(a.startDate as string).getTime()
+            );
+            currentTicketPrice = activeWaveTickets[0].price;
           }
         }
 
@@ -244,25 +258,31 @@ export default function EventGrid({
               )}
 
               {/* Enhanced Image Container */}
-              <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
-                <Image
-                  src={
-                    event.coverImages && event.coverImages.length > 0
-                      ? event.coverImages[0].startsWith("http")
+              <div className="relative aspect-[4/5] overflow-hidden bg-gray-100 flex items-center justify-center">
+                {/* Fallback Icon */}
+                <ImageIcon className="w-16 h-16 text-gray-300" />
+
+                {event.coverImages && event.coverImages.length > 0 && (
+                  <Image
+                    src={
+                      event.coverImages[0].startsWith("http")
                         ? event.coverImages[0]
-                        : `${process.env.NEXT_PUBLIC_API_URL}${event.coverImages[0].startsWith("/") ? event.coverImages[0] : `/${event.coverImages[0]}`}`
-                      : "/placeholder.svg?height=400&width=320&text=Event+Poster"
-                  }
-                  alt={event.title}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-110"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  quality={90}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement
-                    target.src = "/placeholder.svg?height=400&width=320&text=Event+Poster"
-                  }}
-                />
+                        : `${process.env.NEXT_PUBLIC_API_URL}${
+                            event.coverImages[0].startsWith("/")
+                              ? event.coverImages[0]
+                              : `/${event.coverImages[0]}`
+                          }`
+                    }
+                    alt={event.title}
+                    fill
+                    className="object-cover transition-transform duration-500 group-hover:scale-110"
+                    sizes="320px"
+                    quality={90}
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                )}
 
                 {/* Gradient Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -272,19 +292,30 @@ export default function EventGrid({
               <button
                 className={cn(
                   "absolute bottom-3 right-3 p-2.5 rounded-full bg-white/90 backdrop-blur-sm transition-all duration-300 shadow-lg hover:shadow-xl",
-                  wishlist.includes(event._id) ? "text-red-500 bg-red-50" : "text-gray-600 hover:text-red-500",
-                  isWishlistLoading ? "opacity-50 cursor-not-allowed" : "hover:scale-110",
-                  isSoldOut ? "opacity-60" : "",
+                  wishlist.includes(event._id)
+                    ? "text-red-500 bg-red-50"
+                    : "text-gray-600 hover:text-red-500",
+                  isWishlistLoading
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:scale-110",
+                  isSoldOut ? "opacity-60" : ""
                 )}
                 onClick={(e) => {
-                  e.preventDefault() // Prevent navigation when clicking wishlist
-                  onToggleWishlist(event._id)
+                  e.preventDefault(); // Prevent navigation when clicking wishlist
+                  onToggleWishlist(event._id);
                 }}
                 disabled={isWishlistLoading}
-                aria-label={wishlist.includes(event._id) ? "Remove from wishlist" : "Add to wishlist"}
+                aria-label={
+                  wishlist.includes(event._id)
+                    ? "Remove from wishlist"
+                    : "Add to wishlist"
+                }
               >
                 <Heart
-                  className={cn("h-5 w-5", isWishlistLoading ? "animate-pulse" : "")}
+                  className={cn(
+                    "h-5 w-5",
+                    isWishlistLoading ? "animate-pulse" : ""
+                  )}
                   fill={wishlist.includes(event._id) ? "currentColor" : "none"}
                 />
               </button>
@@ -338,10 +369,15 @@ export default function EventGrid({
               )}
             </div>
           </div>
-        )
+        );
 
-        return isSoldOut ? cardContent : (
-          <Link href={`/event_detail?id=${event._id}`} onClick={() => handleEventClick(event._id)}>
+        return isSoldOut ? (
+          cardContent
+        ) : (
+          <Link
+            href={`/event_detail?id=${event._id}`}
+            onClick={() => handleEventClick(event._id)}
+          >
             <div className="relative">
               {cardContent}
               {loadingEventId === event._id && (
@@ -354,8 +390,8 @@ export default function EventGrid({
               )}
             </div>
           </Link>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
