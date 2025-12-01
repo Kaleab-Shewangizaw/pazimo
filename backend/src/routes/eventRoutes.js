@@ -5,11 +5,12 @@ const upload = require('../middlewares/upload');
 const { authenticateUser } = require('../middlewares/auth');
 
 // Public routes
+router.get('/public-events', eventController.getPublicEvents);
 router.get('/', eventController.getAllEvents);
 router.get('/details/:id', eventController.getEventDetails);
 
 // Protected routes
-// router.use(authenticateUser);
+router.use(authenticateUser);
 router.post('/', upload.array('coverImages', 5), eventController.createEvent);
 router.get('/organizer/:id', eventController.getOrganizerEvents);
 router.get('/:id', eventController.getEvent);
