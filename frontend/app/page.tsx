@@ -1,8 +1,5 @@
 "use client";
 
-import { ChevronRight } from "lucide-react";
-import Link from "next/link";
-
 import { Suspense, lazy, useEffect, useState } from "react";
 
 // Lazy load components
@@ -16,7 +13,6 @@ import EventCarouselSkeleton from "@/components/skeleton/event-carousel-skeleton
 import CategoryIconsSkeleton from "@/components/skeleton/category-icons-skeleton";
 // import UpcomingEventsSkeleton from "@/components/skeleton/upcoming-events-skeleton";
 import TrendingEventsSkeleton from "@/components/skeleton/trending-events-skeleton";
-import { Button } from "@/components/ui/button";
 
 export default function Page() {
   const [isClient, setIsClient] = useState(false);

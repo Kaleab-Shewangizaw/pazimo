@@ -290,7 +290,7 @@ export default function UpcomingEvents() {
 
   // Normal render when we have something to show
   return (
-    <section className="px-4 sm:px-8 md:px-16 py-8">
+    <section className="px-4 sm:px-8 md:px-16 py-8 pt-4">
       {/* Header */}
       <div className="flex items-center justify-start mb-6">
         <h3 className="text-lg font-semibold text-[#1a2d5a]">
