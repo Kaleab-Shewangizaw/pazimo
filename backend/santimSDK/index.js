@@ -56,7 +56,7 @@ module.exports = class SantimpaySdk {
 
     const payload = {
       id,
-      merchantId: this.merchantId,
+      merId: this.merchantId,
       generated: time,
     };
 
