@@ -560,71 +560,9 @@ export function useInvitationPage() {
     setShowBulkModal(true);
   };
 
-  const handleViewAttendees = async (event: Event) => {
+  const handleViewAttendees = (event: Event) => {
     setShowAttendeesModal(true);
-    setAttendeesLoading(true);
     setSelectedEventAttendees(event);
-
-    try {
-      const userId = localStorage.getItem("userId");
-      const token = localStorage.getItem("token");
-
-      if (!userId || !token) {
-        setAttendees([]);
-        setAttendeesLoading(false);
-        return;
-      }
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        const tickets = data.tickets || [];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const formattedAttendees = tickets.map((ticket: any) => {
-          const name = ticket.user
-            ? `${ticket.user.firstName} ${ticket.user.lastName}`
-            : ticket.guestName || "Unknown Guest";
-
-          const contact = ticket.user
-            ? ticket.user.email
-            : ticket.guestEmail || ticket.guestPhone || "No Contact";
-
-          return {
-            id: ticket._id,
-            customerName: name,
-            contact: contact,
-            guestType: ticket.isInvitation
-              ? "Guest"
-              : ticket.ticketType || "Paid",
-            confirmedAt:
-              ticket.status === "pending" || ticket.status === "cancelled"
-                ? "Pending"
-                : ticket.createdAt
-                ? new Date(ticket.createdAt).toLocaleDateString()
-                : "Unknown",
-            status: ticket.status || "active",
-          };
-        });
-        setAttendees(formattedAttendees);
-        setAttendeesLoading(false);
-      } else {
-        setAttendees([]);
-        setAttendeesLoading(false);
-      }
-    } catch (error) {
-      console.error("Error fetching attendees:", error);
-      setAttendees([]);
-      setAttendeesLoading(false);
-    }
   };
 
   const handleViewEventDetails = async (event: Event) => {
