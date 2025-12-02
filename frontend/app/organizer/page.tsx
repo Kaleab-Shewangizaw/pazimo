@@ -830,8 +830,10 @@ export default function OrganizerDashboard() {
             const data = await res.json();
             const rawTickets = data.tickets || [];
 
-            // Filter out invitations
-            const allTickets = rawTickets.filter((t: any) => !t.isInvitation);
+            // Filter out invitations and zero-price tickets
+            const allTickets = rawTickets.filter(
+              (t: any) => !t.isInvitation && t.price > 0
+            );
 
             console.log(`Event ${event.title} tickets:`, allTickets);
 

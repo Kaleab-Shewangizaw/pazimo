@@ -144,8 +144,8 @@ export default function CustomersPage() {
 
   // Filter tickets based on search
   const filteredTickets = tickets.filter((ticket) => {
-    // Exclude invitations (only show bought tickets)
-    if (ticket.isInvitation) return false;
+    // Exclude invitations and zero-price tickets (only show bought tickets with price > 0)
+    if (ticket.isInvitation || !ticket.price || ticket.price <= 0) return false;
 
     const searchLower = searchQuery.toLowerCase();
     const name = ticket.user

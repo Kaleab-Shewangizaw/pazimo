@@ -10,8 +10,8 @@ import {
   LogOut,
   Wallet,
   X,
-  QrCode,
   Mail,
+  UsersIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
@@ -126,7 +126,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
               }`}
             >
-              <User className="h-5 w-5 flex-shrink-0" />
+              <UsersIcon className="h-5 w-5 flex-shrink-0" />
               <span className="font-medium text-sm sm:text-base">
                 Customers
               </span>
