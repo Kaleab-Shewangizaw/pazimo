@@ -733,8 +733,11 @@ export default function InvitationPage() {
   const handleViewAttendees = (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
-    // Call fetch immediately
-    fetchEventAttendees(event);
+    // Use setTimeout to ensure the modal state update is processed and rendered
+    // before the heavy fetch operation starts. This fixes the "modal not showing" issue.
+    setTimeout(() => {
+      fetchEventAttendees(event);
+    }, 10);
   };
 
   const fetchEventAttendees = async (event: Event) => {
@@ -797,6 +800,7 @@ export default function InvitationPage() {
       }
 
       // 2. Get Invitations (Pending/Sent/Delivered)
+      // Ensure we match both string and number IDs
       const eventInvitations = sentInvitations.filter(
         (inv) =>
           String(inv.eventId) === String(event.id) ||
@@ -2196,8 +2200,8 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           />
         )}
 
-        {mounted && showAttendeesModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+        {mounted && showAttendeesModal && selectedEventAttendees && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
             <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full p-6 shadow-xl">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-900">
