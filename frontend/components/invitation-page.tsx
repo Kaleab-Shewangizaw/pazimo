@@ -733,7 +733,6 @@ export default function InvitationPage() {
   const handleViewAttendees = (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
-    fetchEventAttendees(event);
   };
 
   const fetchEventAttendees = async (event: Event) => {
@@ -827,6 +826,12 @@ export default function InvitationPage() {
       setIsLoadingAttendees(false);
     }
   };
+
+  useEffect(() => {
+    if (showAttendeesModal && selectedEventAttendees) {
+      fetchEventAttendees(selectedEventAttendees);
+    }
+  }, [showAttendeesModal, selectedEventAttendees, sentInvitations]);
 
   const handleViewEventDetails = async (event: any) => {
     try {
@@ -2194,7 +2199,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
         )}
 
         {mounted && showAttendeesModal && selectedEventAttendees && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
             <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full p-6 shadow-xl">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg md:text-xl font-semibold text-gray-900">
