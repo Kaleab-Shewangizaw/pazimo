@@ -39,6 +39,7 @@ export default function InvitationsPage() {
     filteredInvitations,
     totalPages,
     isLoading,
+    attendeesLoading,
 
     // Modal States
     showInviteModal,
