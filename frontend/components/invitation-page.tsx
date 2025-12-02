@@ -1148,10 +1148,10 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
       ? Math.round((deliveredInvitations / totalInvitations) * 100)
       : 0;
   const publicEvents = events.filter(
-    (event) => event.eventType === "public"
+    (event) => event.isPublic !== false
   ).length;
   const privateEvents = events.filter(
-    (event) => event.eventType === "private"
+    (event) => event.isPublic === false
   ).length;
 
   const emailCost = emailInvitations * pricing.email;
