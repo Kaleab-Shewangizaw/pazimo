@@ -797,6 +797,27 @@ const createPendingInvitation = async (req, res) => {
   }
 };
 
+// Get invitations by event ID
+const getInvitationsByEvent = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    const invitations = await Invitation.find({
+      eventId: eventId,
+    })
+      .sort({ createdAt: -1 })
+      .populate("eventId", "title startDate startTime location");
+
+    res.status(StatusCodes.OK).json({ success: true, data: invitations });
+  } catch (error) {
+    console.error("Get invitations by event error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createBulkInvitations,
   processPaidInvitations,
@@ -807,4 +828,5 @@ module.exports = {
   updateInvitationStatus,
   createAndSendProfessionalInvitation,
   createPendingInvitation,
+  getInvitationsByEvent,
 };

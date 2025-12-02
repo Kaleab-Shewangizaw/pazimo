@@ -9,6 +9,7 @@ const {
   getInvitationById,
   updateInvitationStatus,
   createPendingInvitation,
+  getInvitationsByEvent,
 } = require("../controllers/invitationController");
 
 const {
@@ -101,16 +102,6 @@ router.get("/invitations/organizer/:organizerId", protect, async (req, res) => {
 });
 
 // Get invitations by event ID
-router.get("/invitations/event/:eventId", protect, async (req, res) => {
-  try {
-    const invitations = await Invitation.find({
-      eventId: req.params.eventId,
-    }).sort({ createdAt: -1 });
-
-    res.json({ success: true, data: invitations });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+router.get("/invitations/event/:eventId", protect, getInvitationsByEvent);
 
 module.exports = router;

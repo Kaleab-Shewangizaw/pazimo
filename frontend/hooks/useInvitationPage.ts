@@ -573,7 +573,7 @@ export function useInvitationPage() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/event/${event.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -584,19 +584,28 @@ export function useInvitationPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const invitations = data.data || data.invitations || [];
+        const tickets = data.tickets || [];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const formattedAttendees = invitations.map((inv: any) => ({
-          id: inv._id,
-          customerName: inv.guestName || inv.customerName || "Unknown Guest",
-          contact:
-            inv.guestEmail || inv.guestPhone || inv.contact || "No Contact",
-          guestType: inv.guestType || "guest",
-          confirmedAt: inv.rsvpConfirmedAt
-            ? new Date(inv.rsvpConfirmedAt).toLocaleDateString()
-            : "Not confirmed",
-          status: inv.rsvpStatus || inv.status || "pending",
-        }));
+        const formattedAttendees = tickets.map((ticket: any) => {
+          const name = ticket.user
+            ? `${ticket.user.firstName} ${ticket.user.lastName}`
+            : ticket.guestName || "Unknown Guest";
+
+          const contact = ticket.user
+            ? ticket.user.email
+            : ticket.guestEmail || ticket.guestPhone || "No Contact";
+
+          return {
+            id: ticket._id,
+            customerName: name,
+            contact: contact,
+            guestType: ticket.ticketType || "General",
+            confirmedAt: ticket.createdAt
+              ? new Date(ticket.createdAt).toLocaleDateString()
+              : "Unknown",
+            status: ticket.status || "active",
+          };
+        });
         setAttendees(formattedAttendees);
       } else {
         setAttendees([]);
