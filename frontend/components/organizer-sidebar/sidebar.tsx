@@ -1,33 +1,44 @@
-"use client"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { Home, CalendarDays, User, Bell, HelpCircle, LogOut, Wallet, X, QrCode, Mail } from "lucide-react"
-import { useAuthStore } from "@/store/authStore"
-import { useRouter } from "next/navigation"
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  Home,
+  CalendarDays,
+  User,
+  Bell,
+  HelpCircle,
+  LogOut,
+  Wallet,
+  X,
+  QrCode,
+  Mail,
+} from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
+import { useRouter } from "next/navigation";
 
 interface SidebarProps {
-  open: boolean
-  onClose: () => void
+  open: boolean;
+  onClose: () => void;
 }
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
-  const pathname = usePathname()
-  const { user, logout } = useAuthStore()
-  const router = useRouter()
+  const pathname = usePathname();
+  const { user, logout } = useAuthStore();
+  const router = useRouter();
 
   const isActive = (path: string) => {
-    return pathname === path
-  }
+    return pathname === path;
+  };
 
   const handleLogout = () => {
-    logout()
-    router.push("/sign-in")
-    onClose() // Close sidebar on logout
-  }
+    logout();
+    router.push("/sign-in");
+    onClose(); // Close sidebar on logout
+  };
 
   const handleLinkClick = () => {
-    onClose() // Close sidebar when a link is clicked
-  }
+    onClose(); // Close sidebar when a link is clicked
+  };
 
   return (
     <>
@@ -51,9 +62,6 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   </h2>
                   {/* <p className="text-sm text-gray-500">{user?.email}</p> */}
                 </div>
-
-             
-         
               </div>
               {/* Close button for mobile */}
               <button
@@ -79,7 +87,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               }`}
             >
               <Home className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Dashboard</span>
+              <span className="font-medium text-sm sm:text-base">
+                Dashboard
+              </span>
             </Link>
             <Link
               href="/organizer/events"
@@ -103,7 +113,23 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               }`}
             >
               <Mail className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Invitations</span>
+              <span className="font-medium text-sm sm:text-base">
+                Invitations
+              </span>
+            </Link>
+            <Link
+              href="/organizer/customers"
+              onClick={handleLinkClick}
+              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                isActive("/organizer/customers")
+                  ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              <User className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium text-sm sm:text-base">
+                Customers
+              </span>
             </Link>
             {/* <Link
               href="/organizer/qr-scanner"
@@ -127,7 +153,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               }`}
             >
               <Wallet className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Withdrawals</span>
+              <span className="font-medium text-sm sm:text-base">
+                Withdrawals
+              </span>
             </Link>
             <Link
               href="/organizer/account"
@@ -156,7 +184,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 }`}
               >
                 <Bell className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">Notifications</span>
+                <span className="font-medium text-sm sm:text-base">
+                  Notifications
+                </span>
               </Link>
               <Link
                 href="/organizer/help"
@@ -168,7 +198,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 }`}
               >
                 <HelpCircle className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">Help Center</span>
+                <span className="font-medium text-sm sm:text-base">
+                  Help Center
+                </span>
               </Link>
               <button
                 onClick={handleLogout}
@@ -189,5 +221,5 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         />
       )}
     </>
-  )
+  );
 }

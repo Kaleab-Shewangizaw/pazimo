@@ -828,7 +828,10 @@ export default function OrganizerDashboard() {
           );
           if (res.ok) {
             const data = await res.json();
-            const allTickets = data.tickets || [];
+            const rawTickets = data.tickets || [];
+
+            // Filter out invitations
+            const allTickets = rawTickets.filter((t: any) => !t.isInvitation);
 
             console.log(`Event ${event.title} tickets:`, allTickets);
 
@@ -1159,38 +1162,27 @@ export default function OrganizerDashboard() {
     0
   );
 
-  // Total revenue: use balance data from backend for accurate calculations
-  const totalRevenue = balance?.totalRevenue || 0;
+  // Total revenue: calculate from filtered tickets
+  const totalRevenue = Object.values(allTicketsByEvent).reduce(
+    (sum, tickets) => sum + tickets.reduce((s, t) => s + (t.price || 0), 0),
+    0
+  );
 
   // --- Chart Data Preparation ---
 
-  // Revenue trend data (last 6 months) - use balance breakdown if available
-  const revenueData =
-    balance?.revenueBreakdown?.slice(0, 6).map((eventRevenue) => {
-      const event = events.find((e) => e._id === eventRevenue.eventId);
-      return {
-        month: event
-          ? new Date(event.startDate).toLocaleDateString("en-US", {
-              month: "short",
-            })
-          : "N/A",
-        revenue: eventRevenue.totalRevenue,
-        tickets: eventRevenue.totalTicketsSold,
-        event: eventRevenue.eventTitle.substring(0, 15) + "...",
-      };
-    }) ||
-    events.slice(0, 6).map((event) => {
-      const allTickets = allTicketsByEvent[event._id] || [];
-      const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
-      return {
-        month: new Date(event.startDate).toLocaleDateString("en-US", {
-          month: "short",
-        }),
-        revenue: revenue,
-        tickets: allTickets.length,
-        event: event.title.substring(0, 15) + "...",
-      };
-    });
+  // Revenue trend data (last 6 months)
+  const revenueData = events.slice(0, 6).map((event) => {
+    const allTickets = allTicketsByEvent[event._id] || [];
+    const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    return {
+      month: new Date(event.startDate).toLocaleDateString("en-US", {
+        month: "short",
+      }),
+      revenue: revenue,
+      tickets: allTickets.length,
+      event: event.title.substring(0, 15) + "...",
+    };
+  });
 
   // Event status distribution for pie chart
   const statusData = [
@@ -1215,32 +1207,20 @@ export default function OrganizerDashboard() {
     };
   });
 
-  // Top performing events - use balance breakdown if available
-  const topEvents =
-    balance?.revenueBreakdown
-      ?.map((eventRevenue) => ({
-        name: eventRevenue.eventTitle.substring(0, 20) + "...",
-        revenue: eventRevenue.totalRevenue,
-        tickets: eventRevenue.totalTicketsSold,
-        status:
-          events.find((e) => e._id === eventRevenue.eventId)?.status ||
-          "unknown",
-      }))
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5) ||
-    events
-      .map((event) => {
-        const allTickets = allTicketsByEvent[event._id] || [];
-        const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
-        return {
-          name: event.title.substring(0, 20) + "...",
-          revenue: revenue,
-          tickets: allTickets.length,
-          status: event.status,
-        };
-      })
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5);
+  // Top performing events
+  const topEvents = events
+    .map((event) => {
+      const allTickets = allTicketsByEvent[event._id] || [];
+      const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+      return {
+        name: event.title.substring(0, 20) + "...",
+        revenue: revenue,
+        tickets: allTickets.length,
+        status: event.status,
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
 
   // Commission calculations - use backend balance data
   const organizerRevenue = balance?.availableBalance || 0;
