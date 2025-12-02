@@ -197,6 +197,7 @@ export default function InvitationPage() {
         const invitations = data.data || data.invitations || [];
         const formattedInvitations = invitations.map((inv: any) => ({
           id: inv._id,
+          eventId: inv.eventId?._id || inv.eventId,
           eventTitle: inv.eventTitle || inv.eventId?.title || "Unknown Event",
           customerName: inv.customerName,
           contact: inv.contact,
@@ -229,6 +230,7 @@ export default function InvitationPage() {
   const [sentInvitations, setSentInvitations] = useState<
     Array<{
       id: number;
+      eventId: string;
       eventTitle: string;
       customerName: string;
       contact: string;
@@ -728,9 +730,13 @@ export default function InvitationPage() {
     setShowBulkModal(true);
   };
 
-  const handleViewAttendees = async (event: Event) => {
+  const handleViewAttendees = (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
+    fetchEventAttendees(event);
+  };
+
+  const fetchEventAttendees = async (event: Event) => {
     setIsLoadingAttendees(true);
 
     try {
@@ -739,51 +745,81 @@ export default function InvitationPage() {
 
       if (!userId || !token) {
         setAttendees([]);
+        setIsLoadingAttendees(false);
         return;
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+      // Fetch tickets
+      let ticketAttendees: any[] = [];
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          const tickets = data.tickets || [];
+          ticketAttendees = tickets.map((ticket: any) => {
+            const name = ticket.user
+              ? `${ticket.user.firstName} ${ticket.user.lastName}`
+              : ticket.guestName || "Unknown Guest";
+
+            const contact = ticket.user
+              ? ticket.user.email
+              : ticket.guestEmail || ticket.guestPhone || "No Contact";
+
+            return {
+              id: ticket._id,
+              customerName: name,
+              contact: contact,
+              guestType: ticket.isInvitation
+                ? "Guest"
+                : ticket.ticketType || "Paid",
+              confirmedAt:
+                ticket.status === "pending" || ticket.status === "cancelled"
+                  ? "Pending"
+                  : ticket.createdAt
+                  ? new Date(ticket.createdAt).toLocaleDateString()
+                  : "Unknown",
+              status: ticket.status || "active",
+            };
+          });
         }
+      } catch (error) {
+        console.error("Error fetching tickets:", error);
+      }
+
+      // Get invitations for this event from state
+      // Note: sentInvitations must be populated for this to work
+      const eventInvitations = sentInvitations.filter(
+        (inv) =>
+          inv.eventId === String(event.id) || inv.eventId === String(event._id)
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        const tickets = data.tickets || [];
-        const formattedAttendees = tickets.map((ticket: any) => {
-          const name = ticket.user
-            ? `${ticket.user.firstName} ${ticket.user.lastName}`
-            : ticket.guestName || "Unknown Guest";
+      const invitationAttendees = eventInvitations.map((inv) => ({
+        id: `inv-${inv.id}`,
+        customerName: inv.customerName,
+        contact: inv.contact,
+        guestType: inv.guestType === "paid" ? "Paid" : "Guest",
+        confirmedAt: inv.sentAt
+          ? new Date(inv.sentAt).toLocaleDateString()
+          : "Unknown",
+        status: inv.status === "delivered" ? "invited" : inv.status,
+      }));
 
-          const contact = ticket.user
-            ? ticket.user.email
-            : ticket.guestEmail || ticket.guestPhone || "No Contact";
+      // Merge lists: prefer tickets over invitations for same contact
+      const ticketContacts = new Set(ticketAttendees.map((t) => t.contact));
+      const uniqueInvitations = invitationAttendees.filter(
+        (inv) => !ticketContacts.has(inv.contact)
+      );
 
-          return {
-            id: ticket._id,
-            customerName: name,
-            contact: contact,
-            guestType: ticket.isInvitation
-              ? "Guest"
-              : ticket.ticketType || "Paid",
-            confirmedAt:
-              ticket.status === "pending" || ticket.status === "cancelled"
-                ? "Pending"
-                : ticket.createdAt
-                ? new Date(ticket.createdAt).toLocaleDateString()
-                : "Unknown",
-            status: ticket.status || "active",
-          };
-        });
-        setAttendees(formattedAttendees);
-      } else {
-        setAttendees([]);
-      }
+      setAttendees([...ticketAttendees, ...uniqueInvitations]);
     } catch (error) {
       console.error("Error fetching attendees:", error);
       setAttendees([]);
