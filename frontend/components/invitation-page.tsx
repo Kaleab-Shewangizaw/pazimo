@@ -2195,35 +2195,15 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           />
         )}
 
-        {showAttendeesModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-            <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full p-6 shadow-xl">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg md:text-xl font-semibold text-gray-900">
-                  Event Attendees
-                </h3>
-                <button
-                  onClick={() => setShowAttendeesModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <Dialog open={showAttendeesModal} onOpenChange={setShowAttendeesModal}>
+          <DialogContent className="max-w-2xl w-full p-6 rounded-xl bg-white z-[100]">
+            <DialogHeader>
+              <DialogTitle className="text-lg md:text-xl font-semibold text-gray-900">
+                Event Attendees
+              </DialogTitle>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
 
         {mounted && showDetailsModal && selectedInvitation && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
