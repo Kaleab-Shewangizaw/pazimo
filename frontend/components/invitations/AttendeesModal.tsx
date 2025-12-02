@@ -3,10 +3,6 @@ import { Event, Attendee } from "@/types/invitation";
 
 interface AttendeesModalProps {
   selectedEvent: Event | null;
-  attendees: Attendee[];
-  attendeesPage: number;
-  setAttendeesPage: (page: number) => void;
-  attendeesPerPage: number;
   onClose: () => void;
 }
 

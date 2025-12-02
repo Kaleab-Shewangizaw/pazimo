@@ -59,6 +59,7 @@ export default function InvitationsPage() {
     // Selected Items
     selectedEvent,
     selectedInvitation,
+    selectedEventAttendees,
 
     // Form State
     contact,
@@ -276,13 +277,9 @@ export default function InvitationsPage() {
         />
       )}
 
-      {showAttendeesModal && selectedEvent && (
+      {showAttendeesModal && selectedEventAttendees && (
         <AttendeesModal
-          selectedEvent={selectedEvent}
-          attendees={attendees}
-          attendeesPage={attendeesPage}
-          setAttendeesPage={setAttendeesPage}
-          attendeesPerPage={attendeesPerPage}
+          selectedEvent={selectedEventAttendees}
           onClose={() => setShowAttendeesModal(false)}
         />
       )}
