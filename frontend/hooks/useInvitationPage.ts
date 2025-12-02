@@ -559,9 +559,9 @@ export function useInvitationPage() {
     setShowBulkModal(true);
   };
 
-  const handleViewAttendees = async (event: Event) => {
-    setSelectedEventAttendees(event);
+  const handleViewAttendees = (event: Event) => {
     setShowAttendeesModal(true);
+    setSelectedEventAttendees(event);
 
     try {
       const userId = localStorage.getItem("userId");
