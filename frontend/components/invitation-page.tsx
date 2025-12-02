@@ -733,22 +733,24 @@ export default function InvitationPage() {
   const handleViewAttendees = (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
+    // Call fetch immediately
+    fetchEventAttendees(event);
   };
 
   const fetchEventAttendees = async (event: Event) => {
     setIsLoadingAttendees(true);
+    setAttendees([]); // Clear previous data
 
     try {
       const userId = localStorage.getItem("userId");
       const token = localStorage.getItem("token");
 
       if (!userId || !token) {
-        setAttendees([]);
         setIsLoadingAttendees(false);
         return;
       }
 
-      // Fetch tickets
+      // 1. Fetch Tickets (Confirmed Attendees)
       let ticketAttendees: any[] = [];
       try {
         const response = await fetch(
@@ -794,11 +796,11 @@ export default function InvitationPage() {
         console.error("Error fetching tickets:", error);
       }
 
-      // Get invitations for this event from state
-      // Note: sentInvitations must be populated for this to work
+      // 2. Get Invitations (Pending/Sent/Delivered)
       const eventInvitations = sentInvitations.filter(
         (inv) =>
-          inv.eventId === String(event.id) || inv.eventId === String(event._id)
+          String(inv.eventId) === String(event.id) ||
+          String(inv.eventId) === String(event._id)
       );
 
       const invitationAttendees = eventInvitations.map((inv) => ({
@@ -812,7 +814,7 @@ export default function InvitationPage() {
         status: inv.status === "delivered" ? "invited" : inv.status,
       }));
 
-      // Merge lists: prefer tickets over invitations for same contact
+      // 3. Merge lists: prefer tickets over invitations for same contact
       const ticketContacts = new Set(ticketAttendees.map((t) => t.contact));
       const uniqueInvitations = invitationAttendees.filter(
         (inv) => !ticketContacts.has(inv.contact)
@@ -827,11 +829,7 @@ export default function InvitationPage() {
     }
   };
 
-  useEffect(() => {
-    if (showAttendeesModal && selectedEventAttendees) {
-      fetchEventAttendees(selectedEventAttendees);
-    }
-  }, [showAttendeesModal, selectedEventAttendees, sentInvitations]);
+  // Removed useEffect that was causing issues
 
   const handleViewEventDetails = async (event: any) => {
     try {
@@ -2198,7 +2196,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           />
         )}
 
-        {mounted && showAttendeesModal && selectedEventAttendees && (
+        {mounted && showAttendeesModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
             <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full p-6 shadow-xl">
               <div className="flex justify-between items-center mb-6">

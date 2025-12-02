@@ -38,6 +38,7 @@ export function useInvitationPage() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showAttendeesModal, setShowAttendeesModal] = useState(false);
+  const [attendeesLoading, setAttendeesLoading] = useState(false);
   const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
@@ -559,8 +560,9 @@ export function useInvitationPage() {
     setShowBulkModal(true);
   };
 
-  const handleViewAttendees = (event: Event) => {
+  const handleViewAttendees = async (event: Event) => {
     setShowAttendeesModal(true);
+    setAttendeesLoading(true);
     setSelectedEventAttendees(event);
 
     try {
@@ -569,6 +571,7 @@ export function useInvitationPage() {
 
       if (!userId || !token) {
         setAttendees([]);
+        setAttendeesLoading(false);
         return;
       }
 
@@ -612,12 +615,15 @@ export function useInvitationPage() {
           };
         });
         setAttendees(formattedAttendees);
+        setAttendeesLoading(false);
       } else {
         setAttendees([]);
+        setAttendeesLoading(false);
       }
     } catch (error) {
       console.error("Error fetching attendees:", error);
       setAttendees([]);
+      setAttendeesLoading(false);
     }
   };
 
@@ -1034,6 +1040,7 @@ export function useInvitationPage() {
     setAttendeesPage,
     attendeesPerPage,
     isLoading,
+    attendeesLoading,
 
     // Data
     events,
