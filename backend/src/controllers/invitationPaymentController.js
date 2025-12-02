@@ -103,10 +103,15 @@ const checkInvitationPaymentStatus = async (req, res) => {
     const santimStatus = await SantimPayService.checkTransactionStatus(
       transactionId
     );
+    console.log(
+      `SantimPay Invitation Status Response for ${transactionId}:`,
+      JSON.stringify(santimStatus, null, 2)
+    );
 
     // Update status based on SantimPay response
     // Note: Adjust based on actual SantimPay response structure
-    const status = santimStatus.status || santimStatus.paymentStatus;
+    let status = santimStatus.status || santimStatus.paymentStatus;
+    if (status) status = status.toUpperCase();
 
     if (status === "COMPLETED" || status === "SUCCESS") {
       // Atomic update to prevent race condition

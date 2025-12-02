@@ -29,8 +29,14 @@ class PaymentController {
       if (payment.status === "PENDING") {
         try {
           const statusData = await SantimPayService.checkTransactionStatus(txn);
+          console.log(
+            `SantimPay Status Response for ${txn}:`,
+            JSON.stringify(statusData, null, 2)
+          );
+
           // Check status from SantimPay response
-          const remoteStatus = statusData.status || statusData.paymentStatus;
+          let remoteStatus = statusData.status || statusData.paymentStatus;
+          if (remoteStatus) remoteStatus = remoteStatus.toUpperCase();
 
           if (remoteStatus === "COMPLETED" || remoteStatus === "SUCCESS") {
             payment.status = "PAID";
@@ -38,13 +44,14 @@ class PaymentController {
             await processSuccessfulPayment(payment);
           } else if (
             remoteStatus === "FAILED" ||
-            remoteStatus === "CANCELLED"
+            remoteStatus === "CANCELLED" ||
+            remoteStatus === "EXPIRED"
           ) {
             payment.status = "FAILED";
             await payment.save();
           }
         } catch (err) {
-          console.error("Error checking SantimPay status:", err.message);
+          console.error("Error checking SantimPay status:", err.message || err);
           // Ignore error and return current DB status
         }
       }

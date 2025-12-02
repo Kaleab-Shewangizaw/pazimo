@@ -743,7 +743,7 @@ export default function InvitationPage() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/event/${event.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -754,17 +754,32 @@ export default function InvitationPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const invitations = data.data || data.invitations || [];
-        const formattedAttendees = invitations.map((inv: any) => ({
-          id: inv._id,
-          customerName: inv.customerName,
-          contact: inv.contact,
-          guestType: inv.guestType || "guest",
-          confirmedAt: inv.rsvpConfirmedAt
-            ? new Date(inv.rsvpConfirmedAt).toLocaleDateString()
-            : "Not confirmed",
-          status: inv.rsvpStatus || "pending",
-        }));
+        const tickets = data.tickets || [];
+        const formattedAttendees = tickets.map((ticket: any) => {
+          const name = ticket.user
+            ? `${ticket.user.firstName} ${ticket.user.lastName}`
+            : ticket.guestName || "Unknown Guest";
+
+          const contact = ticket.user
+            ? ticket.user.email
+            : ticket.guestEmail || ticket.guestPhone || "No Contact";
+
+          return {
+            id: ticket._id,
+            customerName: name,
+            contact: contact,
+            guestType: ticket.isInvitation
+              ? "Guest"
+              : ticket.ticketType || "Paid",
+            confirmedAt:
+              ticket.status === "pending" || ticket.status === "cancelled"
+                ? "Pending"
+                : ticket.createdAt
+                ? new Date(ticket.createdAt).toLocaleDateString()
+                : "Unknown",
+            status: ticket.status || "active",
+          };
+        });
         setAttendees(formattedAttendees);
       } else {
         setAttendees([]);

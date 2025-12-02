@@ -599,10 +599,15 @@ export function useInvitationPage() {
             id: ticket._id,
             customerName: name,
             contact: contact,
-            guestType: ticket.ticketType || "General",
-            confirmedAt: ticket.createdAt
-              ? new Date(ticket.createdAt).toLocaleDateString()
-              : "Unknown",
+            guestType: ticket.isInvitation
+              ? "Guest"
+              : ticket.ticketType || "Paid",
+            confirmedAt:
+              ticket.status === "pending" || ticket.status === "cancelled"
+                ? "Pending"
+                : ticket.createdAt
+                ? new Date(ticket.createdAt).toLocaleDateString()
+                : "Unknown",
             status: ticket.status || "active",
           };
         });
