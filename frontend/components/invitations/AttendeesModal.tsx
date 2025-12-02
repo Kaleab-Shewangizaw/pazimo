@@ -22,9 +22,19 @@ export default function AttendeesModal({
 }: AttendeesModalProps) {
   if (!selectedEvent) return null;
 
-  const totalPages = Math.ceil(attendees.length / attendeesPerPage) || 1;
+  // Filter attendees to only show invitation tickets (pending, confirmed, declined)
+  // Exclude "active" which usually denotes bought tickets, unless it's explicitly an invitation
+  const filteredAttendees = attendees.filter((attendee) => {
+    const status = attendee.status.toLowerCase();
+    return (
+      status === "pending" || status === "confirmed" || status === "declined"
+    );
+  });
+
+  const totalPages =
+    Math.ceil(filteredAttendees.length / attendeesPerPage) || 1;
   const startIndex = (attendeesPage - 1) * attendeesPerPage;
-  const paginatedAttendees = attendees.slice(
+  const paginatedAttendees = filteredAttendees.slice(
     startIndex,
     startIndex + attendeesPerPage
   );
@@ -139,7 +149,8 @@ export default function AttendeesModal({
 
             <div className="mt-4 flex justify-between items-center">
               <div className="text-sm text-gray-600">
-                Total: {attendees.length} | Page {attendeesPage} of {totalPages}
+                Total: {filteredAttendees.length} | Page {attendeesPage} of{" "}
+                {totalPages}
               </div>
               <div className="flex gap-2">
                 {totalPages > 1 && (
