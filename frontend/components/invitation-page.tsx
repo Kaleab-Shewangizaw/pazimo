@@ -149,7 +149,12 @@ export default function InvitationPage() {
           organizer: "Current User",
           description: event.description,
           status: event.status,
-          eventType: event.eventType || "public",
+          eventType:
+            typeof event.isPublic === "boolean"
+              ? event.isPublic
+                ? "public"
+                : "private"
+              : event.eventType || "public",
           isPublic: event.isPublic,
           startDate: event.startDate,
           endDate: event.endDate,
