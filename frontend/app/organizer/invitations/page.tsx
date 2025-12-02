@@ -280,6 +280,11 @@ export default function InvitationsPage() {
       {showAttendeesModal && selectedEventAttendees && (
         <AttendeesModal
           selectedEvent={selectedEventAttendees}
+          attendees={attendees}
+          isLoading={attendeesLoading}
+          attendeesPage={attendeesPage}
+          setAttendeesPage={setAttendeesPage}
+          attendeesPerPage={attendeesPerPage}
           onClose={() => setShowAttendeesModal(false)}
         />
       )}
