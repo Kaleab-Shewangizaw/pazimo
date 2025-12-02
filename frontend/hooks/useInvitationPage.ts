@@ -102,8 +102,8 @@ export function useInvitationPage() {
     deliveredInvitations: sentInvitations.filter(
       (i) => i.status === "delivered"
     ).length,
-    publicEvents: events.filter((e) => e.eventType === "public").length,
-    privateEvents: events.filter((e) => e.eventType === "private").length,
+    publicEvents: events.filter((e) => e.isPublic !== false).length,
+    privateEvents: events.filter((e) => e.isPublic === false).length,
   };
 
   useEffect(() => {
@@ -232,7 +232,12 @@ export function useInvitationPage() {
           organizer: "Current User",
           description: event.description,
           status: event.status,
-          eventType: event.eventType || "public",
+          eventType:
+            typeof event.isPublic === "boolean"
+              ? event.isPublic
+                ? "public"
+                : "private"
+              : event.eventType || "public",
           isPublic: event.isPublic,
           startDate: event.startDate,
           endDate: event.endDate,
