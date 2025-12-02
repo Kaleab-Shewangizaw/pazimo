@@ -733,11 +733,6 @@ export default function InvitationPage() {
   const handleViewAttendees = (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
-    // Use setTimeout to ensure the modal state update is processed and rendered
-    // before the heavy fetch operation starts. This fixes the "modal not showing" issue.
-    setTimeout(() => {
-      fetchEventAttendees(event);
-    }, 10);
   };
 
   const fetchEventAttendees = async (event: Event) => {
@@ -2200,7 +2195,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           />
         )}
 
-        {mounted && showAttendeesModal && selectedEventAttendees && (
+        {showAttendeesModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
             <div className="bg-white border border-gray-200 rounded-xl max-w-2xl w-full p-6 shadow-xl">
               <div className="flex justify-between items-center mb-6">
@@ -2226,145 +2221,6 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                   </svg>
                 </button>
               </div>
-
-              <div className="mb-4">
-                <h4 className="font-medium text-gray-900">
-                  {selectedEventAttendees.title}
-                </h4>
-                <p className="text-sm text-gray-600">
-                  {selectedEventAttendees.date} at {selectedEventAttendees.time}
-                </p>
-              </div>
-
-              {isLoadingAttendees ? (
-                <div className="flex justify-center items-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                              Name
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                              Contact
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                              Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {attendees.length === 0 ? (
-                            <tr>
-                              <td
-                                colSpan={3}
-                                className="px-3 py-6 text-center text-gray-500"
-                              >
-                                No attendees found
-                              </td>
-                            </tr>
-                          ) : (
-                            attendees
-                              .slice(
-                                (attendeesPage - 1) * attendeesPerPage,
-                                attendeesPage * attendeesPerPage
-                              )
-                              .map((attendee) => (
-                                <tr
-                                  key={attendee.id}
-                                  className="hover:bg-gray-50"
-                                >
-                                  <td className="px-3 py-3">
-                                    <div className="text-sm font-medium text-gray-900">
-                                      {attendee.customerName}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {attendee.guestType === "paid"
-                                        ? "Paid"
-                                        : "Guest"}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-3">
-                                    <div className="text-sm text-gray-900">
-                                      {attendee.contact}
-                                    </div>
-                                    <div className="text-xs text-gray-500">
-                                      {attendee.confirmedAt}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-3">
-                                    <span
-                                      className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                        attendee.status === "confirmed"
-                                          ? "bg-green-100 text-green-800"
-                                          : attendee.status === "declined"
-                                          ? "bg-red-100 text-red-800"
-                                          : "bg-yellow-100 text-yellow-800"
-                                      }`}
-                                    >
-                                      {attendee.status.charAt(0).toUpperCase() +
-                                        attendee.status.slice(1)}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex justify-between items-center">
-                    <div className="text-sm text-gray-600">
-                      Total: {attendees.length} | Page {attendeesPage} of{" "}
-                      {Math.ceil(attendees.length / attendeesPerPage) || 1}
-                    </div>
-                    <div className="flex gap-2">
-                      {Math.ceil(attendees.length / attendeesPerPage) > 1 && (
-                        <>
-                          <button
-                            onClick={() =>
-                              setAttendeesPage((prev) => Math.max(prev - 1, 1))
-                            }
-                            disabled={attendeesPage === 1}
-                            className="px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
-                          >
-                            Prev
-                          </button>
-                          <button
-                            onClick={() =>
-                              setAttendeesPage((prev) =>
-                                Math.min(
-                                  prev + 1,
-                                  Math.ceil(attendees.length / attendeesPerPage)
-                                )
-                              )
-                            }
-                            disabled={
-                              attendeesPage ===
-                              Math.ceil(attendees.length / attendeesPerPage)
-                            }
-                            className="px-2 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 hover:bg-gray-50"
-                          >
-                            Next
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={() => setShowAttendeesModal(false)}
-                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-sm"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           </div>
         )}
