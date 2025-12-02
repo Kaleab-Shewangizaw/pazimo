@@ -2,7 +2,21 @@
 
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Search, Calendar, DollarSign } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  DollarSign,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 interface Event {
   _id: string;
@@ -38,6 +52,8 @@ export default function CustomersPage() {
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Fetch Events
   useEffect(() => {
@@ -121,6 +137,11 @@ export default function CustomersPage() {
     fetchTickets();
   }, [selectedEventId]);
 
+  // Reset pagination when event or search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedEventId, searchQuery]);
+
   // Filter tickets based on search
   const filteredTickets = tickets.filter((ticket) => {
     // Exclude invitations (only show bought tickets)
@@ -145,6 +166,12 @@ export default function CustomersPage() {
     0
   );
 
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
+  const paginatedTickets = filteredTickets.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   return (
     <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
       {/* Header */}
@@ -164,27 +191,32 @@ export default function CustomersPage() {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Select Event
           </label>
-          <div className="relative">
-            <select
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none"
-              disabled={isLoadingEvents}
-            >
+          <Select
+            value={selectedEventId}
+            onValueChange={(value) => setSelectedEventId(value)}
+            disabled={isLoadingEvents}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select an event" />
+            </SelectTrigger>
+            <SelectContent>
               {isLoadingEvents ? (
-                <option>Loading events...</option>
+                <SelectItem value="loading" disabled>
+                  Loading events...
+                </SelectItem>
               ) : events.length === 0 ? (
-                <option>No events found</option>
+                <SelectItem value="no-events" disabled>
+                  No events found
+                </SelectItem>
               ) : (
                 events.map((event) => (
-                  <option key={event._id} value={event._id}>
+                  <SelectItem key={event._id} value={event._id}>
                     {event.title}
-                  </option>
+                  </SelectItem>
                 ))
               )}
-            </select>
-            <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 pointer-events-none" />
-          </div>
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Revenue Card */}
@@ -270,7 +302,7 @@ export default function CustomersPage() {
                   </td>
                 </tr>
               ) : (
-                filteredTickets.map((ticket) => (
+                paginatedTickets.map((ticket) => (
                   <tr key={ticket._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -301,7 +333,7 @@ export default function CustomersPage() {
                         {ticket.ticketType}
                       </div>
                       <div className="text-xs text-gray-500">
-                        Qty: {ticket.ticketCount} • ID: {ticket.ticketId}
+                        Qty: {ticket.ticketCount}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -341,6 +373,39 @@ export default function CustomersPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {filteredTickets.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-500">
+              Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+              {Math.min(currentPage * itemsPerPage, filteredTickets.length)} of{" "}
+              {filteredTickets.length} results
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
