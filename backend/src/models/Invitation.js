@@ -9,7 +9,8 @@ const invitationSchema = new mongoose.Schema(
       default: uuidv4,
     },
     eventId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Event",
       required: true,
     },
     organizerId: {

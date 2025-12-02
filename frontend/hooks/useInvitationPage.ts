@@ -26,6 +26,7 @@ export function useInvitationPage() {
 
   // Data States
   const [events, setEvents] = useState<Event[]>([]);
+  const [rawInvitations, setRawInvitations] = useState<any[]>([]);
   const [sentInvitations, setSentInvitations] = useState<Invitation[]>([]);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [pricing, setPricing] = useState<Pricing>({ email: 2.5, sms: 7.5 });
@@ -289,54 +290,56 @@ export function useInvitationPage() {
         }
 
         console.log("Fetched invitations:", invitations);
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const formattedInvitations = invitations.map((inv: any) => {
-          // Try to find event title from loaded events if not populated
-          const eventId = inv.eventId?._id || inv.eventId;
-          const loadedEvent = events.find(
-            (e) => e.id === eventId || e._id === eventId
-          );
-          const eventTitle =
-            inv.eventId?.title ||
-            inv.eventTitle ||
-            loadedEvent?.title ||
-            "Unknown Event";
-
-          return {
-            id: inv._id || inv.id || Math.random().toString(36).substr(2, 9),
-            eventTitle: eventTitle,
-            customerName: inv.guestName || inv.customerName || "Unknown Guest",
-            contact:
-              inv.type === "email"
-                ? inv.guestEmail
-                : inv.type === "phone" || inv.type === "sms"
-                ? inv.guestPhone
-                : inv.contact || "",
-            contactType: (inv.type === "sms"
-              ? "phone"
-              : inv.type || inv.contactType || "email"
-            ).toLowerCase(),
-            guestType: inv.paymentStatus === "paid" ? "paid" : "guest",
-            paymentStatus: inv.paymentStatus || "free",
-            qrCodeCount: inv.amount || inv.qrCodeCount || 1,
-            message: inv.message || "",
-            sentAt: inv.createdAt
-              ? new Date(inv.createdAt).toLocaleString()
-              : "Just now",
-            status: inv.status || "sent",
-            rsvpStatus: inv.rsvpStatus || "pending",
-            qrCode: inv.qrCodeData || inv.qrCode || "",
-            rsvpLink: inv.rsvpLink || "",
-            eventId: eventId,
-          };
-        });
-        setSentInvitations(formattedInvitations);
+        setRawInvitations(invitations);
       }
     } catch (error) {
       console.error("Error fetching sent invitations:", error);
     }
   };
+
+  useEffect(() => {
+    const formattedInvitations = rawInvitations.map((inv: any) => {
+      // Try to find event title from loaded events if not populated
+      const eventId = inv.eventId?._id || inv.eventId;
+      const loadedEvent = events.find(
+        (e) => e.id === eventId || e._id === eventId
+      );
+      const eventTitle =
+        inv.eventId?.title ||
+        inv.eventTitle ||
+        loadedEvent?.title ||
+        "Unknown Event";
+
+      return {
+        id: inv._id || inv.id || Math.random().toString(36).substr(2, 9),
+        eventTitle: eventTitle,
+        customerName: inv.guestName || inv.customerName || "Unknown Guest",
+        contact:
+          inv.type === "email"
+            ? inv.guestEmail
+            : inv.type === "phone" || inv.type === "sms"
+            ? inv.guestPhone
+            : inv.contact || "",
+        contactType: (inv.type === "sms"
+          ? "phone"
+          : inv.type || inv.contactType || "email"
+        ).toLowerCase(),
+        guestType: inv.paymentStatus === "paid" ? "paid" : "guest",
+        paymentStatus: inv.paymentStatus || "free",
+        qrCodeCount: inv.amount || inv.qrCodeCount || 1,
+        message: inv.message || "",
+        sentAt: inv.createdAt
+          ? new Date(inv.createdAt).toLocaleString()
+          : "Just now",
+        status: inv.status || "sent",
+        rsvpStatus: inv.rsvpStatus || "pending",
+        qrCode: inv.qrCodeData || inv.qrCode || "",
+        rsvpLink: inv.rsvpLink || "",
+        eventId: eventId,
+      };
+    });
+    setSentInvitations(formattedInvitations);
+  }, [rawInvitations, events]);
 
   const generateQRCode = async (
     eventId: number | string,
@@ -715,7 +718,7 @@ export function useInvitationPage() {
             eventId: selectedEvent?.id,
             rsvpLink: "",
           };
-          setSentInvitations((prev) => [newInvitation, ...prev]);
+          setRawInvitations((prev) => [newInvitation, ...prev]);
           setQrCodeUsage((prev) => ({
             ...prev,
             [contact]: (prev[contact] || 0) + qrCodeCount,
@@ -837,7 +840,7 @@ export function useInvitationPage() {
         console.error("Error saving invitation to database:", error);
       }
 
-      setSentInvitations((prev) => [newInvitation, ...prev]);
+      setRawInvitations((prev) => [newInvitation, ...prev]);
       setQrCodeUsage((prev) => ({
         ...prev,
         [contact]: (prev[contact] || 0) + qrCodeCount,

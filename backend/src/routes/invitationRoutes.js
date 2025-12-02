@@ -90,7 +90,9 @@ router.get("/invitations/organizer/:organizerId", protect, async (req, res) => {
   try {
     const invitations = await Invitation.find({
       organizerId: req.params.organizerId,
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .populate("eventId", "title");
 
     res.json({ success: true, data: invitations });
   } catch (error) {
