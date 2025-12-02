@@ -831,9 +831,12 @@ export default function OrganizerDashboard() {
             const rawTickets = data.tickets || [];
 
             // Filter out invitations and zero-price tickets
-            const allTickets = rawTickets.filter(
-              (t: any) => !t.isInvitation && t.price > 0
-            );
+            // Strict filter: exclude if isInvitation is true OR price is <= 0
+            const allTickets = rawTickets.filter((t: any) => {
+              if (t.isInvitation === true) return false;
+              if (!t.price || t.price <= 0) return false;
+              return true;
+            });
 
             console.log(`Event ${event.title} tickets:`, allTickets);
 
