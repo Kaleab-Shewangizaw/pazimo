@@ -145,7 +145,9 @@ export default function CustomersPage() {
   // Filter tickets based on search
   const filteredTickets = tickets.filter((ticket) => {
     // Exclude invitations and zero-price tickets (only show bought tickets with price > 0)
-    if (ticket.isInvitation || !ticket.price || ticket.price <= 0) return false;
+    // We strictly check for isInvitation === true OR price <= 0
+    if (ticket.isInvitation === true) return false;
+    if (!ticket.price || ticket.price <= 0) return false;
 
     const searchLower = searchQuery.toLowerCase();
     const name = ticket.user
@@ -304,9 +306,9 @@ export default function CustomersPage() {
               ) : (
                 paginatedTickets.map((ticket) => (
                   <tr key={ticket._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3 text-xs">
                           {(
                             ticket.user?.firstName?.[0] ||
                             ticket.guestName?.[0] ||
@@ -319,7 +321,7 @@ export default function CustomersPage() {
                               ? `${ticket.user.firstName} ${ticket.user.lastName}`
                               : ticket.guestName || "Guest"}
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-xs text-gray-500">
                             {ticket.user?.email ||
                               ticket.guestEmail ||
                               ticket.guestPhone ||
@@ -328,7 +330,7 @@ export default function CustomersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {ticket.ticketType}
                       </div>
@@ -336,7 +338,7 @@ export default function CustomersPage() {
                         Qty: {ticket.ticketCount}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         ETB {ticket.price?.toLocaleString() || "0"}
                       </div>
@@ -344,7 +346,7 @@ export default function CustomersPage() {
                         {ticket.paymentStatus}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {new Date(ticket.createdAt).toLocaleDateString()}
                       </div>
@@ -352,7 +354,7 @@ export default function CustomersPage() {
                         {new Date(ticket.createdAt).toLocaleTimeString()}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-2 whitespace-nowrap">
                       <span
                         className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           ticket.status === "active" ||
