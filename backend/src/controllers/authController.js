@@ -748,7 +748,7 @@ const login = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     if (!req.user || !req.user._id) {
-      throw new UnauthorizedError('User not authenticated');
+      throw new UnauthorizedError("User not authenticated");
     }
     const user = await User.findById(req.user._id).select("-password");
     res.status(StatusCodes.OK).json({
@@ -767,9 +767,9 @@ const getMe = async (req, res) => {
 const updatePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    
+
     if (!req.user || !req.user._id) {
-      throw new UnauthorizedError('User not authenticated');
+      throw new UnauthorizedError("User not authenticated");
     }
 
     const user = await User.findById(req.user._id);
@@ -864,11 +864,11 @@ const updateProfile = async (req, res) => {
 const updatePhoneNumber = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
-    
+
     if (!req.user || !req.user.id) {
-       return res.status(401).json({
-        status: 'error',
-        message: 'User not authenticated'
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
       });
     }
 
@@ -911,11 +911,11 @@ const updatePhoneNumber = async (req, res) => {
 const verifyPhoneNumber = async (req, res) => {
   try {
     const { verificationCode } = req.body;
-    
+
     if (!req.user || !req.user.id) {
-       return res.status(401).json({
-        status: 'error',
-        message: 'User not authenticated'
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
       });
     }
 
@@ -1028,9 +1028,9 @@ const adminLogin = async (req, res) => {
 const isAdmin = async (req, res, next) => {
   try {
     if (!req.user || !req.user.role) {
-       return res.status(401).json({
-        status: 'error',
-        message: 'User not authenticated'
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
       });
     }
 
