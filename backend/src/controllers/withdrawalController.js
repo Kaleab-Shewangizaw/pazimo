@@ -1,8 +1,12 @@
-const Withdrawal = require('../models/Withdrawal');
-const Event = require('../models/Event');
-const Ticket = require('../models/Ticket');
-const { StatusCodes } = require('http-status-codes');
-const { BadRequestError, NotFoundError, UnauthorizedError } = require('../errors');
+const Withdrawal = require("../models/Withdrawal");
+const Event = require("../models/Event");
+const Ticket = require("../models/Ticket");
+const { StatusCodes } = require("http-status-codes");
+const {
+  BadRequestError,
+  NotFoundError,
+  UnauthorizedError,
+} = require("../errors");
 const Notification = require("../models/Notification");
 
 // Get organizer's available balance
@@ -12,7 +16,7 @@ const getOrganizerBalance = async (req, res) => {
 
     // Get all events by this organizer
     const events = await Event.find({ organizer: organizerId });
-    const eventIds = events.map(event => event._id);
+    const eventIds = events.map((event) => event._id);
 
     // Calculate revenue from tickets
     // Count all tickets that represent actual revenue (active, used, etc.) excluding cancelled/expired
@@ -20,27 +24,32 @@ const getOrganizerBalance = async (req, res) => {
     const tickets = await Ticket.find({
       event: { $in: eventIds },
       status: { $nin: ["cancelled", "expired"] }, // Include all statuses except cancelled/expired
-    }).populate('event', 'title ticketTypes');
+    }).populate("event", "title ticketTypes");
 
     // Calculate total revenue and breakdown by event
-    const revenueBreakdown = events.map(event => {
-      const eventTickets = tickets.filter(ticket => 
-        ticket.event._id.toString() === event._id.toString()
+    const revenueBreakdown = events.map((event) => {
+      const eventTickets = tickets.filter(
+        (ticket) => ticket.event._id.toString() === event._id.toString()
       );
-      
-      const eventRevenue = eventTickets.reduce((sum, ticket) => sum + ticket.price, 0);
-      
+
+      const eventRevenue = eventTickets.reduce(
+        (sum, ticket) => sum + ticket.price,
+        0
+      );
+
       // Get ticket type breakdown
-      const ticketTypeBreakdown = event.ticketTypes.map(ticketType => {
-        const typeTickets = eventTickets.filter(t => t.ticketType === ticketType.name);
+      const ticketTypeBreakdown = event.ticketTypes.map((ticketType) => {
+        const typeTickets = eventTickets.filter(
+          (t) => t.ticketType === ticketType.name
+        );
         const typeRevenue = typeTickets.reduce((sum, t) => sum + t.price, 0);
         const quantitySold = typeTickets.length;
-        
+
         return {
           name: ticketType.name,
           price: ticketType.price,
           quantitySold,
-          revenue: typeRevenue
+          revenue: typeRevenue,
         };
       });
 
@@ -49,20 +58,29 @@ const getOrganizerBalance = async (req, res) => {
         eventTitle: event.title,
         totalRevenue: eventRevenue,
         ticketTypeBreakdown,
-        totalTicketsSold: eventTickets.length
+        totalTicketsSold: eventTickets.length,
       };
     });
 
     // Calculate total revenue across all events
-    const totalRevenue = revenueBreakdown.reduce((sum, event) => sum + event.totalRevenue, 0);
-    
+    const totalRevenue = revenueBreakdown.reduce(
+      (sum, event) => sum + event.totalRevenue,
+      0
+    );
+
     // Calculate revenue breakdown by ticket status
     const statusBreakdown = {
-      active: tickets.filter(t => t.status === 'active').reduce((sum, t) => sum + t.price, 0),
-      used: tickets.filter(t => t.status === 'used').reduce((sum, t) => sum + t.price, 0),
-      confirmed: tickets.filter(t => t.status === 'confirmed').reduce((sum, t) => sum + t.price, 0),
+      active: tickets
+        .filter((t) => t.status === "active")
+        .reduce((sum, t) => sum + t.price, 0),
+      used: tickets
+        .filter((t) => t.status === "used")
+        .reduce((sum, t) => sum + t.price, 0),
+      confirmed: tickets
+        .filter((t) => t.status === "confirmed")
+        .reduce((sum, t) => sum + t.price, 0),
     };
-    
+
     // Calculate organizer revenue after 3% Pazimo commission
     const pazimoCommission = totalRevenue * 0.03;
     const organizerRevenue = totalRevenue * 0.97;
@@ -70,19 +88,26 @@ const getOrganizerBalance = async (req, res) => {
     // Get pending and approved withdrawals
     const pendingWithdrawals = await Withdrawal.find({
       organizer: organizerId,
-      status: 'pending'
+      status: "pending",
     });
 
     const approvedWithdrawals = await Withdrawal.find({
       organizer: organizerId,
-      status: 'approved'
+      status: "approved",
     });
 
-    const pendingAmount = pendingWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-    const approvedAmount = approvedWithdrawals.reduce((sum, w) => sum + w.amount, 0);
+    const pendingAmount = pendingWithdrawals.reduce(
+      (sum, w) => sum + w.amount,
+      0
+    );
+    const approvedAmount = approvedWithdrawals.reduce(
+      (sum, w) => sum + w.amount,
+      0
+    );
 
     // Available balance = organizer revenue - (pending + approved withdrawals)
-    const availableBalance = organizerRevenue - (pendingAmount + approvedAmount);
+    const availableBalance =
+      organizerRevenue - (pendingAmount + approvedAmount);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -98,16 +123,17 @@ const getOrganizerBalance = async (req, res) => {
         summary: {
           totalEvents: events.length,
           totalTicketsSold: tickets.length,
-          averageTicketPrice: tickets.length > 0 ? totalRevenue / tickets.length : 0
-        }
-      }
+          averageTicketPrice:
+            tickets.length > 0 ? totalRevenue / tickets.length : 0,
+        },
+      },
     });
   } catch (error) {
-    console.error('Error getting organizer balance:', error);
+    console.error("Error getting organizer balance:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to get organizer balance',
-      error: error.message
+      message: "Failed to get organizer balance",
+      error: error.message,
     });
   }
 };
@@ -115,47 +141,62 @@ const getOrganizerBalance = async (req, res) => {
 // Create withdrawal request
 const createWithdrawal = async (req, res) => {
   try {
+    if (!req.user) {
+      throw new UnauthorizedError("User not authenticated");
+    }
+
     let organizerId;
     const { amount, notes, bankDetails } = req.body;
 
-    if (req.user.role === 'admin') {
+    if (req.user.role === "admin") {
       organizerId = req.body.organizerId;
       if (!organizerId) {
-        throw new BadRequestError('Organizer ID is required for admin withdrawal creation');
+        throw new BadRequestError(
+          "Organizer ID is required for admin withdrawal creation"
+        );
       }
-    } else if (req.user.role === 'organizer') {
+    } else if (req.user.role === "organizer") {
       organizerId = req.user.userId;
     } else {
-      throw new UnauthorizedError('Only admins or organizers can create withdrawals');
+      throw new UnauthorizedError(
+        "Only admins or organizers can create withdrawals"
+      );
     }
 
     // Get available balance (match the calculation in getOrganizerBalance)
     const events = await Event.find({ organizer: organizerId });
-    const eventIds = events.map(event => event._id);
+    const eventIds = events.map((event) => event._id);
     const tickets = await Ticket.find({
       event: { $in: eventIds },
-      status: { $nin: ["cancelled", "expired"] }
+      status: { $nin: ["cancelled", "expired"] },
     });
     const totalRevenue = tickets.reduce((sum, ticket) => sum + ticket.price, 0);
     // Calculate organizer revenue after 3% Pazimo commission
     const organizerRevenue = totalRevenue * 0.97;
-    
+
     const pendingWithdrawals = await Withdrawal.find({
       organizer: organizerId,
-      status: 'pending'
+      status: "pending",
     });
     const approvedWithdrawals = await Withdrawal.find({
       organizer: organizerId,
-      status: 'approved'
+      status: "approved",
     });
-    
-    const pendingAmount = pendingWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-    const approvedAmount = approvedWithdrawals.reduce((sum, w) => sum + w.amount, 0);
-    const availableBalance = organizerRevenue - (pendingAmount + approvedAmount);
+
+    const pendingAmount = pendingWithdrawals.reduce(
+      (sum, w) => sum + w.amount,
+      0
+    );
+    const approvedAmount = approvedWithdrawals.reduce(
+      (sum, w) => sum + w.amount,
+      0
+    );
+    const availableBalance =
+      organizerRevenue - (pendingAmount + approvedAmount);
 
     // Validate amount
     if (amount > availableBalance) {
-      throw new BadRequestError('Withdrawal amount exceeds available balance');
+      throw new BadRequestError("Withdrawal amount exceeds available balance");
     }
 
     // Create withdrawal request
@@ -164,20 +205,20 @@ const createWithdrawal = async (req, res) => {
       amount,
       notes,
       bankDetails,
-      processedBy: req.user.role === 'admin' ? req.user.userId : undefined,
-      status: 'pending'
+      processedBy: req.user.role === "admin" ? req.user.userId : undefined,
+      status: "pending",
     });
 
     res.status(StatusCodes.CREATED).json({
       success: true,
-      data: withdrawal
+      data: withdrawal,
     });
   } catch (error) {
-    console.error('Error creating withdrawal:', error);
+    console.error("Error creating withdrawal:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to create withdrawal request',
-      error: error.message
+      message: "Failed to create withdrawal request",
+      error: error.message,
     });
   }
 };
@@ -188,24 +229,33 @@ const updateWithdrawalStatus = async (req, res) => {
     const { withdrawalId } = req.params;
     const { status, notes, transactionId } = req.body;
 
-    console.log('Updating withdrawal status:', { withdrawalId, status, notes, transactionId });
+    console.log("Updating withdrawal status:", {
+      withdrawalId,
+      status,
+      notes,
+      transactionId,
+    });
+
+    if (!req.user) {
+      throw new UnauthorizedError("User not authenticated");
+    }
 
     // Verify admin role
-    if (req.user.role !== 'admin') {
-      throw new UnauthorizedError('Only admins can update withdrawal status');
+    if (req.user.role !== "admin") {
+      throw new UnauthorizedError("Only admins can update withdrawal status");
     }
 
     const withdrawal = await Withdrawal.findById(withdrawalId);
     if (!withdrawal) {
-      throw new NotFoundError('Withdrawal request not found');
+      throw new NotFoundError("Withdrawal request not found");
     }
 
-    console.log('Found withdrawal:', { 
-      id: withdrawal._id, 
-      organizer: withdrawal.organizer, 
+    console.log("Found withdrawal:", {
+      id: withdrawal._id,
+      organizer: withdrawal.organizer,
       amount: withdrawal.amount,
       currentStatus: withdrawal.status,
-      newStatus: status 
+      newStatus: status,
     });
 
     // Update withdrawal
@@ -216,7 +266,7 @@ const updateWithdrawalStatus = async (req, res) => {
     withdrawal.processedAt = new Date();
 
     await withdrawal.save();
-    console.log('Withdrawal updated successfully');
+    console.log("Withdrawal updated successfully");
 
     // Emit notification
     const notification = await Notification.create({
@@ -228,33 +278,33 @@ const updateWithdrawalStatus = async (req, res) => {
       status: withdrawal.status,
       read: false,
     });
-    console.log('Notification created:', notification._id);
+    console.log("Notification created:", notification._id);
 
     // Emit socket event to the organizer's room
-    const io = req.app.get('io');
+    const io = req.app.get("io");
     if (io) {
       const roomName = `organizer_${withdrawal.organizer}`;
-      console.log('Emitting to room:', roomName);
-      io.to(roomName).emit('withdrawalStatusUpdated', {
+      console.log("Emitting to room:", roomName);
+      io.to(roomName).emit("withdrawalStatusUpdated", {
         withdrawalId: withdrawal._id,
         amount: withdrawal.amount,
         status: withdrawal.status,
       });
-      console.log('Socket event emitted');
+      console.log("Socket event emitted");
     } else {
-      console.log('Socket.IO not available');
+      console.log("Socket.IO not available");
     }
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: withdrawal
+      data: withdrawal,
     });
   } catch (error) {
-    console.error('Error updating withdrawal status:', error);
+    console.error("Error updating withdrawal status:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to update withdrawal status',
-      error: error.message
+      message: "Failed to update withdrawal status",
+      error: error.message,
     });
   }
 };
@@ -267,14 +317,14 @@ const getAllWithdrawals = async (req, res) => {
 
     // Build query
     const query = {};
-    if (status && status !== 'all') query.status = status;
+    if (status && status !== "all") query.status = status;
     if (organizerId) query.organizer = organizerId;
 
     // Get withdrawals with pagination
     const withdrawals = await Withdrawal.find(query)
-      .populate('organizer', 'firstName lastName email')
-      .populate('processedBy', 'firstName lastName email')
-      .sort('-createdAt')
+      .populate("organizer", "firstName lastName email")
+      .populate("processedBy", "firstName lastName email")
+      .sort("-createdAt")
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -282,20 +332,20 @@ const getAllWithdrawals = async (req, res) => {
     const total = await Withdrawal.countDocuments(query);
 
     res.status(StatusCodes.OK).json({
-      status: 'success',
+      status: "success",
       data: withdrawals,
       pagination: {
         total,
         page: parseInt(page),
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
-    console.error('Error getting withdrawals:', error);
+    console.error("Error getting withdrawals:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      status: 'error',
-      message: 'Failed to get withdrawals',
-      error: error.message
+      status: "error",
+      message: "Failed to get withdrawals",
+      error: error.message,
     });
   }
 };
@@ -303,9 +353,13 @@ const getAllWithdrawals = async (req, res) => {
 // Get organizer's withdrawals
 const getOrganizerWithdrawals = async (req, res) => {
   try {
+    if (!req.user) {
+      throw new UnauthorizedError("User not authenticated");
+    }
+
     let organizerId = req.params.organizerId;
     // Only allow admin to view any organizer, organizers can only view their own
-    if (req.user.role === 'organizer') {
+    if (req.user.role === "organizer") {
       organizerId = req.user.userId;
     }
     const { status, page = 1, limit = 10 } = req.query;
@@ -313,12 +367,12 @@ const getOrganizerWithdrawals = async (req, res) => {
 
     // Build query
     const query = { organizer: organizerId };
-    if (status && status !== 'all') query.status = status;
+    if (status && status !== "all") query.status = status;
 
     // Get withdrawals with pagination
     const withdrawals = await Withdrawal.find(query)
-      .populate('processedBy', 'firstName lastName email')
-      .sort('-createdAt')
+      .populate("processedBy", "firstName lastName email")
+      .sort("-createdAt")
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -331,15 +385,15 @@ const getOrganizerWithdrawals = async (req, res) => {
       pagination: {
         total,
         page: parseInt(page),
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
-    console.error('Error getting organizer withdrawals:', error);
+    console.error("Error getting organizer withdrawals:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to get organizer withdrawals',
-      error: error.message
+      message: "Failed to get organizer withdrawals",
+      error: error.message,
     });
   }
 };
@@ -349,5 +403,5 @@ module.exports = {
   createWithdrawal,
   updateWithdrawalStatus,
   getAllWithdrawals,
-  getOrganizerWithdrawals
-}; 
+  getOrganizerWithdrawals,
+};
