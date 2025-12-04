@@ -1014,70 +1014,92 @@ const checkInTicket = async (req, res) => {
 
 // Cancel a ticket
 const cancelTicket = async (req, res) => {
-  const { ticketId } = req.params;
+  try {
+    const { ticketId } = req.params;
 
-  const ticket = await Ticket.findById(ticketId);
-  if (!ticket) {
-    throw new NotFoundError("Ticket not found");
+    const ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    if (!req.user || !req.user.userId) {
+      throw new UnauthorizedError("User not authenticated");
+    }
+
+    // Verify the user owns the ticket
+    if (ticket.user.toString() !== req.user.userId) {
+      throw new UnauthorizedError("Not authorized to cancel this ticket");
+    }
+
+    if (ticket.status !== "active") {
+      throw new BadRequestError("Ticket cannot be cancelled");
+    }
+
+    ticket.status = "cancelled";
+    await ticket.save();
+
+    // Update event ticket quantity
+    const event = await Event.findById(ticket.event);
+    const ticketType = event.ticketTypes.find(
+      (type) => type.name === ticket.ticketType
+    );
+    if (ticketType) {
+      ticketType.quantity += 1;
+      await event.save();
+    }
+
+    res.status(StatusCodes.OK).json({ ticket });
+  } catch (error) {
+    console.error("Cancel ticket error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to cancel ticket",
+      error: error.message,
+    });
   }
-
-  // Verify the user owns the ticket
-  if (ticket.user.toString() !== req.user.userId) {
-    throw new UnauthorizedError("Not authorized to cancel this ticket");
-  }
-
-  if (ticket.status !== "active") {
-    throw new BadRequestError("Ticket cannot be cancelled");
-  }
-
-  ticket.status = "cancelled";
-  await ticket.save();
-
-  // Update event ticket quantity
-  const event = await Event.findById(ticket.event);
-  const ticketType = event.ticketTypes.find(
-    (type) => type.name === ticket.ticketType
-  );
-  if (ticketType) {
-    ticketType.quantity += 1;
-    await event.save();
-  }
-
-  res.status(StatusCodes.OK).json({ ticket });
 };
 
 // Get ticket by ID
 const getTicket = async (req, res) => {
-  const { ticketId } = req.params;
+  try {
+    const { ticketId } = req.params;
 
-  const ticket = await Ticket.findById(ticketId)
-    .populate("event", "title startDate endDate location organizer")
-    .populate("user", "firstName lastName email");
+    const ticket = await Ticket.findById(ticketId)
+      .populate("event", "title startDate endDate location organizer")
+      .populate("user", "firstName lastName email");
 
-  if (!ticket) {
-    throw new NotFoundError("Ticket not found");
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    // Verify the user owns the ticket or is the event organizer
+    const event = await Event.findById(ticket.event);
+    if (!event) {
+      throw new NotFoundError("Event not found");
+    }
+
+    // Check if user and organizer IDs exist before comparing
+    const userId = ticket.user?._id?.toString();
+    const organizerId = event.organizer?.toString();
+    const requestUserId = req.user?.userId;
+
+    if (!userId || !organizerId || !requestUserId) {
+      throw new UnauthorizedError("Invalid ticket or user data");
+    }
+
+    if (userId !== requestUserId && organizerId !== requestUserId) {
+      throw new UnauthorizedError("Not authorized to view this ticket");
+    }
+
+    res.status(StatusCodes.OK).json({ ticket });
+  } catch (error) {
+    console.error("Get ticket error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to get ticket",
+      error: error.message,
+    });
   }
-
-  // Verify the user owns the ticket or is the event organizer
-  const event = await Event.findById(ticket.event);
-  if (!event) {
-    throw new NotFoundError("Event not found");
-  }
-
-  // Check if user and organizer IDs exist before comparing
-  const userId = ticket.user?._id?.toString();
-  const organizerId = event.organizer?.toString();
-  const requestUserId = req.user?.userId;
-
-  if (!userId || !organizerId || !requestUserId) {
-    throw new UnauthorizedError("Invalid ticket or user data");
-  }
-
-  if (userId !== requestUserId && organizerId !== requestUserId) {
-    throw new UnauthorizedError("Not authorized to view this ticket");
-  }
-
-  res.status(StatusCodes.OK).json({ ticket });
 };
 
 // Validate QR code and get ticket information
@@ -1229,158 +1251,185 @@ const getPublicTicketDetails = async (req, res) => {
 
 // Get ticket details by ID or Transaction Reference
 const getTicketDetails = async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  if (!req.user || !req.user.userId) {
-    throw new UnauthorizedError("User not authenticated");
-  }
+    if (!req.user || !req.user.userId) {
+      throw new UnauthorizedError("User not authenticated");
+    }
 
-  const userId = req.user.userId;
+    const userId = req.user.userId;
 
-  let tickets = [];
+    let tickets = [];
 
-  // 1. Try finding by ticketId (string)
-  const ticketById = await Ticket.findOne({ ticketId: id })
-    .populate("event", "title startDate endDate location organizer")
-    .populate("user", "firstName lastName email");
-
-  if (ticketById) {
-    tickets.push(ticketById);
-  }
-
-  // 2. If not found, check if id is a valid ObjectId (for _id lookup)
-  if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
-    const ticket = await Ticket.findById(id)
+    // 1. Try finding by ticketId (string)
+    const ticketById = await Ticket.findOne({ ticketId: id })
       .populate("event", "title startDate endDate location organizer")
       .populate("user", "firstName lastName email");
 
-    if (ticket) {
-      tickets.push(ticket);
+    if (ticketById) {
+      tickets.push(ticketById);
     }
-  }
 
-  // 3. If still not found, try finding by paymentReference
-  if (tickets.length === 0) {
-    const txTickets = await Ticket.find({ paymentReference: id })
-      .populate("event", "title startDate endDate location organizer")
-      .populate("user", "firstName lastName email");
+    // 2. If not found, check if id is a valid ObjectId (for _id lookup)
+    if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
+      const ticket = await Ticket.findById(id)
+        .populate("event", "title startDate endDate location organizer")
+        .populate("user", "firstName lastName email");
 
-    if (txTickets && txTickets.length > 0) {
-      tickets = txTickets;
+      if (ticket) {
+        tickets.push(ticket);
+      }
     }
-  }
 
-  // Filter tickets to ensure they belong to the requesting user
-  // We allow checking if the user is the owner OR the organizer of the event
-  // For simplicity in this specific endpoint which is for "my-account", we enforce user ownership strictly
-  // unless we want to allow organizers to view via this endpoint too.
-  // The user requirement says: "if the current user is not the same as the user on the ticket then don't show the ticket."
+    // 3. If still not found, try finding by paymentReference
+    if (tickets.length === 0) {
+      const txTickets = await Ticket.find({ paymentReference: id })
+        .populate("event", "title startDate endDate location organizer")
+        .populate("user", "firstName lastName email");
 
-  const authorizedTickets = tickets.filter((ticket) => {
-    const ticketOwnerId =
-      ticket.user?._id?.toString() || ticket.user?.toString();
-    return ticketOwnerId === userId;
-  });
-
-  if (authorizedTickets.length === 0) {
-    // If we found tickets but none belong to the user, it's a 403/404
-    // If we found no tickets at all, it's a 404
-    if (tickets.length > 0) {
-      throw new UnauthorizedError("Not authorized to view these tickets");
+      if (txTickets && txTickets.length > 0) {
+        tickets = txTickets;
+      }
     }
-    throw new NotFoundError("Ticket not found");
-  }
 
-  res
-    .status(StatusCodes.OK)
-    .json({ success: true, tickets: authorizedTickets });
+    // Filter tickets to ensure they belong to the requesting user
+    // We allow checking if the user is the owner OR the organizer of the event
+    // For simplicity in this specific endpoint which is for "my-account", we enforce user ownership strictly
+    // unless we want to allow organizers to view via this endpoint too.
+    // The user requirement says: "if the current user is not the same as the user on the ticket then don't show the ticket."
+
+    const authorizedTickets = tickets.filter((ticket) => {
+      const ticketOwnerId =
+        ticket.user?._id?.toString() || ticket.user?.toString();
+      return ticketOwnerId === userId;
+    });
+
+    if (authorizedTickets.length === 0) {
+      // If we found tickets but none belong to the user, it's a 403/404
+      // If we found no tickets at all, it's a 404
+      if (tickets.length > 0) {
+        throw new UnauthorizedError("Not authorized to view these tickets");
+      }
+      throw new NotFoundError("Ticket not found");
+    }
+
+    res
+      .status(StatusCodes.OK)
+      .json({ success: true, tickets: authorizedTickets });
+  } catch (error) {
+    console.error("Get ticket details error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to get ticket details",
+      error: error.message,
+    });
+  }
 };
 
 // Get invitation ticket (Public)
 const getInvitationTicket = async (req, res) => {
-  const { ticketId } = req.params;
+  try {
+    const { ticketId } = req.params;
 
-  // Find by ticketId (string) or _id
-  let ticket = await Ticket.findOne({ ticketId }).populate({
-    path: "event",
-    populate: { path: "organizer", select: "name" },
-  });
-
-  if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
-    ticket = await Ticket.findById(ticketId).populate({
+    // Find by ticketId (string) or _id
+    let ticket = await Ticket.findOne({ ticketId }).populate({
       path: "event",
       populate: { path: "organizer", select: "name" },
     });
-  }
 
-  if (!ticket) {
-    throw new NotFoundError("Ticket not found");
-  }
+    if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
+      ticket = await Ticket.findById(ticketId).populate({
+        path: "event",
+        populate: { path: "organizer", select: "name" },
+      });
+    }
 
-  if (!ticket.isInvitation) {
-    throw new UnauthorizedError("Not an invitation ticket");
-  }
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
 
-  res.status(StatusCodes.OK).json({ success: true, data: ticket });
+    if (!ticket.isInvitation) {
+      throw new UnauthorizedError("Not an invitation ticket");
+    }
+
+    res.status(StatusCodes.OK).json({ success: true, data: ticket });
+  } catch (error) {
+    console.error("Get invitation ticket error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to get invitation ticket",
+      error: error.message,
+    });
+  }
 };
 
 // Update invitation status (Public)
 const updateInvitationTicketStatus = async (req, res) => {
-  const { ticketId } = req.params;
-  const { status } = req.body;
-
-  if (!["confirmed", "declined"].includes(status)) {
-    throw new BadRequestError("Invalid status");
-  }
-
-  let ticket = await Ticket.findOne({ ticketId });
-  if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
-    ticket = await Ticket.findById(ticketId);
-  }
-
-  if (!ticket) {
-    throw new NotFoundError("Ticket not found");
-  }
-
-  if (!ticket.isInvitation) {
-    throw new UnauthorizedError("Not an invitation ticket");
-  }
-
-  ticket.status = status;
-  await ticket.save();
-
-  // Sync with Invitation model
   try {
-    const query = {
-      eventId: ticket.event.toString(),
-      $or: [],
-    };
+    const { ticketId } = req.params;
+    const { status } = req.body;
 
-    if (ticket.guestEmail) query.$or.push({ guestEmail: ticket.guestEmail });
-    if (ticket.guestPhone) query.$or.push({ guestPhone: ticket.guestPhone });
-
-    if (query.$or.length > 0) {
-      const invitation = await Invitation.findOne(query).sort({
-        createdAt: -1,
-      });
-      if (invitation) {
-        invitation.rsvpStatus = status;
-        if (status === "confirmed") {
-          invitation.rsvpConfirmedAt = new Date();
-        }
-        await invitation.save();
-        console.log(
-          `Synced Invitation status to ${status} for ticket ${ticketId}`
-        );
-      }
+    if (!["confirmed", "declined"].includes(status)) {
+      throw new BadRequestError("Invalid status");
     }
-  } catch (error) {
-    console.error("Error syncing Invitation status:", error);
-  }
 
-  res
-    .status(StatusCodes.OK)
-    .json({ success: true, message: `Invitation ${status}` });
+    let ticket = await Ticket.findOne({ ticketId });
+    if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
+      ticket = await Ticket.findById(ticketId);
+    }
+
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    if (!ticket.isInvitation) {
+      throw new UnauthorizedError("Not an invitation ticket");
+    }
+
+    ticket.status = status;
+    await ticket.save();
+
+    // Sync with Invitation model
+    try {
+      const query = {
+        eventId: ticket.event.toString(),
+        $or: [],
+      };
+
+      if (ticket.guestEmail) query.$or.push({ guestEmail: ticket.guestEmail });
+      if (ticket.guestPhone) query.$or.push({ guestPhone: ticket.guestPhone });
+
+      if (query.$or.length > 0) {
+        const invitation = await Invitation.findOne(query).sort({
+          createdAt: -1,
+        });
+        if (invitation) {
+          invitation.rsvpStatus = status;
+          if (status === "confirmed") {
+            invitation.rsvpConfirmedAt = new Date();
+          }
+          await invitation.save();
+          console.log(
+            `Synced Invitation status to ${status} for ticket ${ticketId}`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error syncing Invitation status:", error);
+    }
+
+    res
+      .status(StatusCodes.OK)
+      .json({ success: true, message: `Invitation ${status}` });
+  } catch (error) {
+    console.error("Update invitation status error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to update invitation status",
+      error: error.message,
+    });
+  }
 };
 
 // Cancel a pending payment
