@@ -620,7 +620,76 @@ export function useInvitationPage() {
         setAttendees([]);
         setAttendeesLoading(false);
       }
-    } catch (error) {
+        // Also fetch invitation records for this event so we show pending/confirmed/declined invitations
+        try {
+          const invRes = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/event/${event.id}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (invRes.ok) {
+            const invData = await invRes.json();
+            const invitations = invData.data || [];
+
+            const invitationAttendees = invitations
+              .filter((inv: any) => {
+                // Include invitations that are relevant for attendee view: RSVP pending/confirmed/declined or pending_payment
+                const rsvp = (inv.rsvpStatus || "").toLowerCase();
+                const st = (inv.status || "").toLowerCase();
+                return (
+                  ["pending", "confirmed", "declined"].includes(rsvp) ||
+                  st === "pending_payment" ||
+                  st === "sent" ||
+                  st === "delivered"
+                );
+              })
+              .map((inv: any) => ({
+                id: inv._id || inv.invitationId,
+                customerName: inv.guestName || "Guest",
+                contact: inv.guestEmail || inv.guestPhone || "No Contact",
+                guestType: inv.guestType === "paid" ? "Paid" : "Guest",
+                confirmedAt:
+                  inv.rsvpStatus === "pending"
+                    ? "Pending"
+                    : inv.rsvpConfirmedAt
+                    ? new Date(inv.rsvpConfirmedAt).toLocaleDateString()
+                    : inv.createdAt
+                    ? new Date(inv.createdAt).toLocaleDateString()
+                    : "Unknown",
+                status:
+                  (inv.rsvpStatus && inv.rsvpStatus.toLowerCase()) ||
+                  (inv.status && inv.status.toLowerCase()) ||
+                  "pending",
+              }));
+
+            // Merge tickets and invitations, preferring invitations when duplicates exist
+            const merged = [...formattedAttendees];
+            // Append invitation-only entries (no ticket created yet)
+            invitationAttendees.forEach((invAtt: any) => {
+              // Avoid duplicates by contact + guest name
+              const exists = merged.some(
+                (m) =>
+                  (m.contact && invAtt.contact && m.contact === invAtt.contact) ||
+                  (m.customerName === invAtt.customerName && m.contact === invAtt.contact)
+              );
+              if (!exists) merged.push(invAtt);
+            });
+
+            setAttendees(merged);
+          } else {
+            setAttendees(formattedAttendees);
+          }
+        } catch (invErr) {
+          console.error("Error fetching invitations:", invErr);
+          setAttendees(formattedAttendees);
+        }
+
+        setAttendeesLoading(false);
       console.error("Error fetching attendees:", error);
       setAttendees([]);
       setAttendeesLoading(false);

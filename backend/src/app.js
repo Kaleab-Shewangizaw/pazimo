@@ -43,6 +43,8 @@ const corsOptions = {
     "http://localhost:3001",
     "https://pazimo.com",
     "https://www.pazimo.com",
+    "https://organizer.pazimo.com",
+    "https://www.organizer.pazimo.com",
     process.env.FRONTEND_URL,
   ].filter(Boolean), // Allow both frontend URLs and filter out undefined
   credentials: true,
@@ -159,7 +161,8 @@ app.use((req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error("Error:", err.stack);
-  res.status(500).json({
+  const statusCode = err.statusCode || 500;
+  res.status(statusCode).json({
     status: "error",
     message: err.message || "Something went wrong!",
   });

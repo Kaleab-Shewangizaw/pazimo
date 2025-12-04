@@ -50,6 +50,9 @@ const validateBulkRows = (rows, eventId) => {
       return;
     }
 
+    // Preserve any organizer message provided per-row (case-insensitive keys)
+    corrected.message = row.message || row.Message || row.MessageText || "";
+
     corrected.eventId = eventId;
     correctedRows.push(corrected);
   });
