@@ -3,6 +3,13 @@ const User = require('../models/User');
 // Get store statistics (for organizers)
 exports.getStoreStats = async (req, res) => {
   try {
+    if (!req.user || !req.user.role) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+    }
+
     if (req.user.role !== 'organizer') {
       return res.status(403).json({
         status: 'error',
@@ -33,6 +40,13 @@ exports.getStoreStats = async (req, res) => {
 // Get user's store profile
 exports.getStoreProfile = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+    }
+
     const user = await User.findById(req.user.id);
     user.password = undefined;
 
@@ -62,6 +76,13 @@ exports.getStoreProfile = async (req, res) => {
 exports.updateStorePreferences = async (req, res) => {
   try {
     const { preferences } = req.body;
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+    }
     
     // Update user's store preferences
     const user = await User.findByIdAndUpdate(

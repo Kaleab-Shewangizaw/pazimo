@@ -34,6 +34,11 @@ exports.markNotificationsRead = async (req, res) => {
 exports.deleteNotification = async (req, res) => {
   try {
     const { notificationId } = req.params;
+    
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: "User not authenticated" });
+    }
+    
     const userId = req.user._id; // Use _id from the full user object
 
     console.log('Deleting notification:', { notificationId, userId });
@@ -63,6 +68,11 @@ exports.deleteNotification = async (req, res) => {
 exports.deleteMultipleNotifications = async (req, res) => {
   try {
     const { notificationIds } = req.body;
+    
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ success: false, message: "User not authenticated" });
+    }
+    
     const userId = req.user._id; // Use _id from the full user object
 
     console.log('Deleting multiple notifications:', { notificationIds, userId });

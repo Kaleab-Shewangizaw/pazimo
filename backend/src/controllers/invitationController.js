@@ -64,6 +64,14 @@ const validateBulkRows = (rows, eventId) => {
 const createBulkInvitations = async (req, res) => {
   try {
     const { rows, eventId } = req.body;
+    
+    if (!req.user || !req.user._id) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+    
     const organizerId = req.user._id;
 
     if (!eventId) {
@@ -755,6 +763,14 @@ const createPendingInvitation = async (req, res) => {
       message,
       guestType,
     } = req.body;
+    
+    if (!req.user || !req.user._id) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+    
     const organizerId = req.user._id;
 
     const event = await Event.findOne({ _id: eventId, organizer: organizerId });

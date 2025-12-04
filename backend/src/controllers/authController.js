@@ -747,6 +747,9 @@ const login = async (req, res) => {
 // Get current user
 const getMe = async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      throw new UnauthorizedError('User not authenticated');
+    }
     const user = await User.findById(req.user._id).select("-password");
     res.status(StatusCodes.OK).json({
       status: "success",
@@ -764,6 +767,11 @@ const getMe = async (req, res) => {
 const updatePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
+    
+    if (!req.user || !req.user._id) {
+      throw new UnauthorizedError('User not authenticated');
+    }
+
     const user = await User.findById(req.user._id);
 
     // Check current password
@@ -814,6 +822,13 @@ const updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, email, phoneNumber } = req.body;
 
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
     // Check if email is already taken by another user
     const existingUser = await User.findOne({
       email,
@@ -849,6 +864,14 @@ const updateProfile = async (req, res) => {
 const updatePhoneNumber = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
+    
+    if (!req.user || !req.user.id) {
+       return res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+    }
+
     const userId = req.user.id;
 
     // Check if phone number is already registered
@@ -888,6 +911,14 @@ const updatePhoneNumber = async (req, res) => {
 const verifyPhoneNumber = async (req, res) => {
   try {
     const { verificationCode } = req.body;
+    
+    if (!req.user || !req.user.id) {
+       return res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+    }
+
     const userId = req.user.id;
 
     // Here you would typically verify the code against what was sent to the user
@@ -996,6 +1027,13 @@ const adminLogin = async (req, res) => {
 // Add admin middleware
 const isAdmin = async (req, res, next) => {
   try {
+    if (!req.user || !req.user.role) {
+       return res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+    }
+
     if (req.user.role !== "admin" && req.user.role !== "partner") {
       return res.status(403).json({
         status: "error",
@@ -1171,6 +1209,13 @@ const unifiedAuth = async (req, res) => {
 // Delete account
 const deleteAccount = async (req, res) => {
   try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
     const userId = req.user._id;
 
     // Find and delete the user
