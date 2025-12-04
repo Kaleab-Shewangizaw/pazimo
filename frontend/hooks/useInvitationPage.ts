@@ -614,12 +614,7 @@ export function useInvitationPage() {
             status: ticket.status || "active",
           };
         });
-        setAttendees(formattedAttendees);
-        setAttendeesLoading(false);
-      } else {
-        setAttendees([]);
-        setAttendeesLoading(false);
-      }
+
         // Also fetch invitation records for this event so we show pending/confirmed/declined invitations
         try {
           const invRes = await fetch(
@@ -674,8 +669,11 @@ export function useInvitationPage() {
               // Avoid duplicates by contact + guest name
               const exists = merged.some(
                 (m) =>
-                  (m.contact && invAtt.contact && m.contact === invAtt.contact) ||
-                  (m.customerName === invAtt.customerName && m.contact === invAtt.contact)
+                  (m.contact &&
+                    invAtt.contact &&
+                    m.contact === invAtt.contact) ||
+                  (m.customerName === invAtt.customerName &&
+                    m.contact === invAtt.contact)
               );
               if (!exists) merged.push(invAtt);
             });
@@ -688,10 +686,13 @@ export function useInvitationPage() {
           console.error("Error fetching invitations:", invErr);
           setAttendees(formattedAttendees);
         }
-
-        setAttendeesLoading(false);
+      } else {
+        setAttendees([]);
+      }
+    } catch (error) {
       console.error("Error fetching attendees:", error);
       setAttendees([]);
+    } finally {
       setAttendeesLoading(false);
     }
   };

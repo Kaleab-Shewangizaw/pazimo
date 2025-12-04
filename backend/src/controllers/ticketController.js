@@ -863,6 +863,10 @@ const createInvitationTicket = async (req, res) => {
 // Get user's tickets
 const getUserTickets = async (req, res) => {
   try {
+    if (!req.user || !req.user.userId) {
+      throw new UnauthorizedError("User not authenticated");
+    }
+
     console.log(`Fetching tickets for user: ${req.user.userId}`);
 
     // Fetch full user details to get email and phone
@@ -1226,6 +1230,11 @@ const getPublicTicketDetails = async (req, res) => {
 // Get ticket details by ID or Transaction Reference
 const getTicketDetails = async (req, res) => {
   const { id } = req.params;
+
+  if (!req.user || !req.user.userId) {
+    throw new UnauthorizedError("User not authenticated");
+  }
+
   const userId = req.user.userId;
 
   let tickets = [];

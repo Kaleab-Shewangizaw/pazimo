@@ -1,7 +1,7 @@
-const User = require('../models/User');
-const OrganizerRegistration = require('../models/OrganizerRegistration');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const User = require("../models/User");
+const OrganizerRegistration = require("../models/OrganizerRegistration");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 // Sign up organizer
 exports.signUp = async (req, res) => {
@@ -35,35 +35,38 @@ exports.signUp = async (req, res) => {
       digitalSignature,
       eventDetails,
       additionalServices = {},
-      nationalIdNumber
+      nationalIdNumber,
     } = req.body;
 
-    const businessLicenseUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const businessLicenseUrl = req.file
+      ? `/uploads/${req.file.filename}`
+      : null;
 
     // Validate required fields
     if (!name || !email || !phone || !organization) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields'
+        message: "Missing required fields",
       });
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ 
-      $or: [{ email }, { phoneNumber: phone }]
+    const existingUser = await User.findOne({
+      $or: [{ email }, { phoneNumber: phone }],
     });
 
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User with this email or phone number already exists'
+        message: "User with this email or phone number already exists",
       });
     }
 
     // Split name into firstName and lastName
     const nameParts = name.trim().split(/\s+/);
     const firstName = nameParts[0];
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
+    const lastName =
+      nameParts.length > 1 ? nameParts.slice(1).join(" ") : firstName;
 
     // Create new user with organizer role
     const user = await User.create({
@@ -72,23 +75,35 @@ exports.signUp = async (req, res) => {
       email,
       phoneNumber: phone,
       password,
-      role: 'organizer',
+      role: "organizer",
       isActive: false, // Set organizer as inactive by default
-      isPhoneVerified: false // Set phone as unverified by default
+      isPhoneVerified: false, // Set phone as unverified by default
     });
 
     // Parse arrays/booleans from req.body if needed
     let parsedEventKinds = eventKinds;
-    if (typeof eventKinds === 'string') {
-      try { parsedEventKinds = JSON.parse(eventKinds); } catch { parsedEventKinds = [eventKinds]; }
+    if (typeof eventKinds === "string") {
+      try {
+        parsedEventKinds = JSON.parse(eventKinds);
+      } catch {
+        parsedEventKinds = [eventKinds];
+      }
     }
     let parsedEventDetails = eventDetails;
-    if (typeof eventDetails === 'string') {
-      try { parsedEventDetails = JSON.parse(eventDetails); } catch { parsedEventDetails = {}; }
+    if (typeof eventDetails === "string") {
+      try {
+        parsedEventDetails = JSON.parse(eventDetails);
+      } catch {
+        parsedEventDetails = {};
+      }
     }
     let parsedAdditionalServices = additionalServices;
-    if (typeof additionalServices === 'string') {
-      try { parsedAdditionalServices = JSON.parse(additionalServices); } catch { parsedAdditionalServices = {}; }
+    if (typeof additionalServices === "string") {
+      try {
+        parsedAdditionalServices = JSON.parse(additionalServices);
+      } catch {
+        parsedAdditionalServices = {};
+      }
     }
 
     // Create organizer registration with all fields
@@ -116,30 +131,32 @@ exports.signUp = async (req, res) => {
       payoutMethod,
       needSupport,
       useQrScanner,
-      agreeTerms: agreeTerms === 'true' || agreeTerms === true,
-      agreeFee: agreeFee === 'true' || agreeFee === true,
-      digitalSignature: digitalSignature === 'true' || digitalSignature === true,
+      agreeTerms: agreeTerms === "true" || agreeTerms === true,
+      agreeFee: agreeFee === "true" || agreeFee === true,
+      digitalSignature:
+        digitalSignature === "true" || digitalSignature === true,
       eventDetails: parsedEventDetails,
       additionalServices: parsedAdditionalServices,
-      status: 'pending',
-      nationalIdNumber
+      status: "pending",
+      nationalIdNumber,
     });
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
+      {
         userId: user._id,
         email: user.email,
-        role: user.role
+        role: user.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: "7d" }
     );
 
     // Return success response
     res.status(201).json({
       success: true,
-      message: 'Organizer registered successfully. Please wait for admin approval.',
+      message:
+        "Organizer registered successfully. Please wait for admin approval.",
       token,
       organizer: {
         _id: user._id,
@@ -153,27 +170,26 @@ exports.signUp = async (req, res) => {
           _id: organizerRegistration._id,
           status: organizerRegistration.status,
           eventDetails: organizerRegistration.eventDetails,
-          additionalServices: organizerRegistration.additionalServices
-        }
-      }
+          additionalServices: organizerRegistration.additionalServices,
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Organizer registration error:', error);
-    if (error.name === 'ValidationError') {
+    console.error("Organizer registration error:", error);
+    if (error.name === "ValidationError") {
       const errors = {};
       for (let field in error.errors) {
         errors[field] = { message: error.errors[field].message };
       }
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
-        errors
+        message: "Validation failed",
+        errors,
       });
     }
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to register organizer'
+      message: error.message || "Failed to register organizer",
     });
   }
 };
@@ -181,23 +197,30 @@ exports.signUp = async (req, res) => {
 // Get organizer profile
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('-password');
-    
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    const user = await User.findById(req.user.userId).select("-password");
+
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: user
+      data: user,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -206,32 +229,40 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, email, phoneNumber } = req.body;
+
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
     const userId = req.user.userId;
 
     // Check if email is already used by another user
     if (email) {
-      const existingEmail = await User.findOne({ 
-        email, 
-        _id: { $ne: userId } 
+      const existingEmail = await User.findOne({
+        email,
+        _id: { $ne: userId },
       });
       if (existingEmail) {
         return res.status(400).json({
           success: false,
-          message: 'Email already registered'
+          message: "Email already registered",
         });
       }
     }
 
     // Check if phone number is already used by another user
     if (phoneNumber) {
-      const existingPhone = await User.findOne({ 
-        phoneNumber, 
-        _id: { $ne: userId } 
+      const existingPhone = await User.findOne({
+        phoneNumber,
+        _id: { $ne: userId },
       });
       if (existingPhone) {
         return res.status(400).json({
           success: false,
-          message: 'Phone number already registered'
+          message: "Phone number already registered",
         });
       }
     }
@@ -239,30 +270,30 @@ exports.updateProfile = async (req, res) => {
     // Update user
     const user = await User.findByIdAndUpdate(
       userId,
-      { 
-        firstName, 
-        lastName, 
-        email, 
-        phoneNumber
+      {
+        firstName,
+        lastName,
+        email,
+        phoneNumber,
       },
       { new: true, runValidators: true }
-    ).select('-password');
+    ).select("-password");
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: user
+      data: user,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -270,10 +301,17 @@ exports.updateProfile = async (req, res) => {
 // Update password
 exports.updatePassword = async (req, res) => {
   try {
-    console.log('Password update request received:', {
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    console.log("Password update request received:", {
       userId: req.user.userId,
       hasCurrentPassword: !!req.body.currentPassword,
-      hasNewPassword: !!req.body.newPassword
+      hasNewPassword: !!req.body.newPassword,
     });
 
     const { currentPassword, newPassword } = req.body;
@@ -283,36 +321,36 @@ exports.updatePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Current password and new password are required'
+        message: "Current password and new password are required",
       });
     }
 
     if (newPassword.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters long'
+        message: "New password must be at least 6 characters long",
       });
     }
 
     // Get user with password
-    const user = await User.findById(userId).select('+password');
-    console.log('User found:', !!user);
+    const user = await User.findById(userId).select("+password");
+    console.log("User found:", !!user);
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: "User not found",
       });
     }
 
     // Check current password using the model's method
     const isPasswordCorrect = await user.comparePassword(currentPassword);
-    console.log('Password check result:', isPasswordCorrect);
+    console.log("Password check result:", isPasswordCorrect);
 
     if (!isPasswordCorrect) {
       return res.status(400).json({
         success: false,
-        message: 'Current password is incorrect'
+        message: "Current password is incorrect",
       });
     }
 
@@ -321,24 +359,24 @@ exports.updatePassword = async (req, res) => {
     if (isSamePassword) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be different from current password'
+        message: "New password must be different from current password",
       });
     }
 
     // Update password (the pre-save hook will hash it)
     user.password = newPassword;
     await user.save();
-    console.log('Password updated successfully');
+    console.log("Password updated successfully");
 
     res.status(200).json({
       success: true,
-      message: 'Password updated successfully'
+      message: "Password updated successfully",
     });
   } catch (error) {
-    console.error('Password update error:', error);
+    console.error("Password update error:", error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update password'
+      message: error.message || "Failed to update password",
     });
   }
 };
@@ -356,7 +394,7 @@ exports.getRegistrations = async (req, res) => {
 
     // Fetch registrations with populated user data
     const registrations = await OrganizerRegistration.find()
-      .populate('userId', 'firstName lastName email phoneNumber')
+      .populate("userId", "firstName lastName email phoneNumber")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -368,14 +406,14 @@ exports.getRegistrations = async (req, res) => {
         currentPage: page,
         totalPages,
         total,
-        limit
-      }
+        limit,
+      },
     });
   } catch (error) {
-    console.error('Error fetching organizer registrations:', error);
+    console.error("Error fetching organizer registrations:", error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to fetch organizer registrations'
+      message: error.message || "Failed to fetch organizer registrations",
     });
   }
 };
@@ -386,10 +424,10 @@ exports.updateRegistrationStatus = async (req, res) => {
     const { id } = req.params;
     const { status, adminNotes } = req.body;
 
-    if (!['approved', 'rejected'].includes(status)) {
+    if (!["approved", "rejected"].includes(status)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid status. Must be either "approved" or "rejected"'
+        message: 'Invalid status. Must be either "approved" or "rejected"',
       });
     }
 
@@ -397,7 +435,7 @@ exports.updateRegistrationStatus = async (req, res) => {
     if (!registration) {
       return res.status(404).json({
         success: false,
-        message: 'Registration not found'
+        message: "Registration not found",
       });
     }
 
@@ -408,10 +446,10 @@ exports.updateRegistrationStatus = async (req, res) => {
     }
 
     // If approved, activate the user and update their status
-    if (status === 'approved') {
+    if (status === "approved") {
       await User.findByIdAndUpdate(registration.userId, {
         isActive: true,
-        status: 'active'
+        status: "active",
       });
     }
 
@@ -420,13 +458,13 @@ exports.updateRegistrationStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       message: `Registration ${status} successfully`,
-      data: registration
+      data: registration,
     });
   } catch (error) {
-    console.error('Error updating registration status:', error);
+    console.error("Error updating registration status:", error);
     res.status(500).json({
       success: false,
-      message: error.message || 'Failed to update registration status'
+      message: error.message || "Failed to update registration status",
     });
   }
-}; 
+};
