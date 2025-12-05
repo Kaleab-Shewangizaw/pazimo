@@ -864,7 +864,10 @@ const createInvitationTicket = async (req, res) => {
 const getUserTickets = async (req, res) => {
   try {
     if (!req.user || !req.user.userId) {
-      throw new UnauthorizedError("User not authenticated");
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
     }
 
     console.log(`Fetching tickets for user: ${req.user.userId}`);
@@ -1023,7 +1026,10 @@ const cancelTicket = async (req, res) => {
     }
 
     if (!req.user || !req.user.userId) {
-      throw new UnauthorizedError("User not authenticated");
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
     }
 
     // Verify the user owns the ticket
@@ -1255,7 +1261,10 @@ const getTicketDetails = async (req, res) => {
     const { id } = req.params;
 
     if (!req.user || !req.user.userId) {
-      throw new UnauthorizedError("User not authenticated");
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
     }
 
     const userId = req.user.userId;

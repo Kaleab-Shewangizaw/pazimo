@@ -2,7 +2,7 @@
 import type React from "react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
+import { useAuthStore } from "@/store/authStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +57,7 @@ const WAVE_TICKET_TYPES = [
 
 export default function CreateEventPage() {
   const router = useRouter();
-  const { token } = useOrganizerAuthStore();
+  const { token, user } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
@@ -465,8 +465,8 @@ export default function CreateEventPage() {
         return;
       }
 
-      // Get user ID from local storage
-      const userId = localStorage.getItem("userId");
+      // Get user ID from auth store
+      const userId = user?._id || user?.id;
       if (!userId) {
         throw new Error("User ID not found. Please sign in again.");
       }

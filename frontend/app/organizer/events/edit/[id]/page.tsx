@@ -1,19 +1,35 @@
-"use client"
-import type React from "react"
-import { useState, useEffect } from "react"
-import { useRouter, useParams } from "next/navigation"
-import { useOrganizerAuthStore } from "@/store/organizerAuthStore"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { toast } from "sonner"
-import { ArrowLeft, Info, AlertCircle, DollarSign, Waves, MapPin, Loader2, Plus, Trash2 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
+"use client";
+import type React from "react";
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { useAuthStore } from "@/store/authStore";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import {
+  ArrowLeft,
+  Info,
+  AlertCircle,
+  DollarSign,
+  Waves,
+  MapPin,
+  Loader2,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -21,35 +37,41 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import Image from "next/image"
+} from "@/components/ui/dialog";
+import Image from "next/image";
 
 interface Category {
-  _id: string
-  name: string
-  description: string
-  isPublished: boolean
+  _id: string;
+  name: string;
+  description: string;
+  isPublished: boolean;
 }
 
 // Predefined ticket types
-const TICKET_TYPES = ["Regular", "VIP", "VVIP", "Group"]
+const TICKET_TYPES = ["Regular", "VIP", "VVIP", "Group"];
 
 // Wave-based ticket types that need date ranges
-const WAVE_TICKET_TYPES = ["Regular - First Wave", "Regular - Second Wave", "Regular - Final Wave"]
+const WAVE_TICKET_TYPES = [
+  "Regular - First Wave",
+  "Regular - Second Wave",
+  "Regular - Final Wave",
+];
 
 export default function EditEventPage() {
-  const router = useRouter()
-  const params = useParams()
-  const eventId = params.id as string
-  const { token } = useOrganizerAuthStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
-  const [currentDate] = useState(new Date().toISOString().split("T")[0])
-  const [waveValidationError, setWaveValidationError] = useState("")
-  const [waveDialogOpen, setWaveDialogOpen] = useState(false)
-  const [selectedRegularTicketIndex, setSelectedRegularTicketIndex] = useState<number | null>(null)
+  const router = useRouter();
+  const params = useParams();
+  const eventId = params.id as string;
+  const { token } = useAuthStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [currentDate] = useState(new Date().toISOString().split("T")[0]);
+  const [waveValidationError, setWaveValidationError] = useState("");
+  const [waveDialogOpen, setWaveDialogOpen] = useState(false);
+  const [selectedRegularTicketIndex, setSelectedRegularTicketIndex] = useState<
+    number | null
+  >(null);
   const [waveFormData, setWaveFormData] = useState({
     basePrice: "",
     firstWaveStartDate: "",
@@ -59,7 +81,7 @@ export default function EditEventPage() {
     finalWaveStartDate: "",
     finalWaveEndDate: "",
     priceIncreasePercentage: "10",
-  })
+  });
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -94,33 +116,39 @@ export default function EditEventPage() {
     capacity: "",
     tags: "",
     coverImages: [] as File[],
-  })
+  });
 
   useEffect(() => {
-    fetchCategories()
-    fetchEventData()
-  }, [eventId])
+    fetchCategories();
+    fetchEventData();
+  }, [eventId]);
 
   const fetchEventData = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`)
-      if (!response.ok) throw new Error("Failed to fetch event")
-      
-      const data = await response.json()
-      const event = data.data
-      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`
+      );
+      if (!response.ok) throw new Error("Failed to fetch event");
+
+      const data = await response.json();
+      const event = data.data;
+
       setFormData({
         title: event.title || "",
         description: event.description || "",
-        startDate: event.startDate ? new Date(event.startDate).toISOString().split('T')[0] : "",
-        endDate: event.endDate ? new Date(event.endDate).toISOString().split('T')[0] : "",
+        startDate: event.startDate
+          ? new Date(event.startDate).toISOString().split("T")[0]
+          : "",
+        endDate: event.endDate
+          ? new Date(event.endDate).toISOString().split("T")[0]
+          : "",
         startTime: event.startTime || "",
         endTime: event.endTime || "",
         location: {
           address: event.location?.address || "",
           city: event.location?.city || "",
           country: event.location?.country || "",
-          coordinates: event.location?.coordinates || [] as number[],
+          coordinates: event.location?.coordinates || ([] as number[]),
         },
         category: event.category?._id || "",
         capacity: event.capacity?.toString() || "",
@@ -130,89 +158,109 @@ export default function EditEventPage() {
           maxAge: event.ageRestriction?.maxAge?.toString() || "",
           hasRestriction: event.ageRestriction?.hasRestriction || false,
         },
-        ticketTypes: event.ticketTypes?.length > 0 ? event.ticketTypes.map((ticket: any) => ({
-          name: ticket.name || "Regular",
-          price: ticket.price?.toString() || "",
-          quantity: ticket.quantity?.toString() || "",
-          description: ticket.description || "",
-          saleStartDate: ticket.startDate ? new Date(ticket.startDate).toISOString().split('T')[0] : "",
-          saleEndDate: ticket.endDate ? new Date(ticket.endDate).toISOString().split('T')[0] : "",
-          isActive: ticket.available !== undefined ? ticket.available : true,
-          hasDateRange: !!(ticket.startDate && ticket.endDate),
-        })) : [{
-          name: "Regular",
-          price: "",
-          quantity: "",
-          description: "",
-          saleStartDate: "",
-          saleEndDate: "",
-          isActive: true,
-          hasDateRange: false,
-        }],
+        ticketTypes:
+          event.ticketTypes?.length > 0
+            ? event.ticketTypes.map((ticket: any) => ({
+                name: ticket.name || "Regular",
+                price: ticket.price?.toString() || "",
+                quantity: ticket.quantity?.toString() || "",
+                description: ticket.description || "",
+                saleStartDate: ticket.startDate
+                  ? new Date(ticket.startDate).toISOString().split("T")[0]
+                  : "",
+                saleEndDate: ticket.endDate
+                  ? new Date(ticket.endDate).toISOString().split("T")[0]
+                  : "",
+                isActive:
+                  ticket.available !== undefined ? ticket.available : true,
+                hasDateRange: !!(ticket.startDate && ticket.endDate),
+              }))
+            : [
+                {
+                  name: "Regular",
+                  price: "",
+                  quantity: "",
+                  description: "",
+                  saleStartDate: "",
+                  saleEndDate: "",
+                  isActive: true,
+                  hasDateRange: false,
+                },
+              ],
         coverImages: [] as File[],
-      })
+      });
     } catch (error) {
-      console.error("Error fetching event:", error)
-      toast.error("Failed to load event data")
-      router.push("/organizer/events")
+      console.error("Error fetching event:", error);
+      toast.error("Failed to load event data");
+      router.push("/organizer/events");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories`)
-      if (!response.ok) throw new Error("Failed to fetch categories")
-      
-      const data = await response.json()
-      const publishedCategories = data.data.filter((cat: Category) => cat.isPublished)
-      setCategories(publishedCategories)
-    } catch (error) {
-      console.error("Error fetching categories:", error)
-      toast.error("Failed to fetch categories")
-    }
-  }
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/categories`
+      );
+      if (!response.ok) throw new Error("Failed to fetch categories");
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
+      const data = await response.json();
+      const publishedCategories = data.data.filter(
+        (cat: Category) => cat.isPublished
+      );
+      setCategories(publishedCategories);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      toast.error("Failed to fetch categories");
+    }
+  };
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
     if (name.startsWith("location.")) {
-      const locationField = name.split(".")[1]
+      const locationField = name.split(".")[1];
       setFormData((prev) => ({
         ...prev,
         location: {
           ...prev.location,
           [locationField]: value,
         },
-      }))
+      }));
     } else if (name.startsWith("ageRestriction.")) {
-      const ageField = name.split(".")[1]
+      const ageField = name.split(".")[1];
       setFormData((prev) => ({
         ...prev,
         ageRestriction: {
           ...prev.ageRestriction,
           [ageField]: value,
         },
-      }))
+      }));
     } else {
       setFormData((prev) => ({
         ...prev,
         [name]: value,
-      }))
+      }));
     }
-  }
+  };
 
-  const handleTicketTypeChange = (index: number, field: string, value: string | boolean) => {
-    const newTicketTypes = [...formData.ticketTypes]
+  const handleTicketTypeChange = (
+    index: number,
+    field: string,
+    value: string | boolean
+  ) => {
+    const newTicketTypes = [...formData.ticketTypes];
     newTicketTypes[index] = {
       ...newTicketTypes[index],
       [field]: value,
-    }
+    };
     setFormData((prev) => ({
       ...prev,
       ticketTypes: newTicketTypes,
-    }))
-  }
+    }));
+  };
 
   const addTicketType = () => {
     setFormData((prev) => ({
@@ -230,56 +278,61 @@ export default function EditEventPage() {
           hasDateRange: false,
         },
       ],
-    }))
-  }
+    }));
+  };
 
   const removeTicketType = (index: number) => {
     setFormData((prev) => ({
       ...prev,
       ticketTypes: prev.ticketTypes.filter((_, i) => i !== index),
-    }))
-  }
+    }));
+  };
 
   const validateTicketTypes = (): boolean => {
     if (formData.ticketTypes.length === 0) {
-      toast.error("Please add at least one ticket type")
-      return false
+      toast.error("Please add at least one ticket type");
+      return false;
     }
 
     for (const ticket of formData.ticketTypes) {
       if (!ticket.name || !ticket.price || !ticket.quantity) {
-        toast.error("Please fill in all ticket type fields")
-        return false
+        toast.error("Please fill in all ticket type fields");
+        return false;
       }
       if (parseFloat(ticket.price) <= 0) {
-        toast.error("Ticket price must be greater than 0")
-        return false
+        toast.error("Ticket price must be greater than 0");
+        return false;
       }
       if (parseInt(ticket.quantity) <= 0) {
-        toast.error("Ticket quantity must be greater than 0")
-        return false
+        toast.error("Ticket quantity must be greater than 0");
+        return false;
       }
     }
-    return true
-  }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+    e.preventDefault();
+    setIsSubmitting(true);
 
     try {
       if (!formData.category) {
-        toast.error("Please select a category")
-        return
+        toast.error("Please select a category");
+        return;
       }
 
-      if (!formData.startDate || !formData.endDate || !formData.startTime || !formData.endTime) {
-        toast.error("Please fill in all event date and time fields")
-        return
+      if (
+        !formData.startDate ||
+        !formData.endDate ||
+        !formData.startTime ||
+        !formData.endTime
+      ) {
+        toast.error("Please fill in all event date and time fields");
+        return;
       }
 
       if (!validateTicketTypes()) {
-        return
+        return;
       }
 
       const updateData = {
@@ -292,48 +345,64 @@ export default function EditEventPage() {
         location: formData.location,
         category: formData.category,
         capacity: parseInt(formData.capacity),
-        tags: formData.tags.split(',').map(tag => tag.trim()).filter(Boolean),
-        ageRestriction: formData.ageRestriction.hasRestriction ? {
-          hasRestriction: true,
-          minAge: formData.ageRestriction.minAge ? parseInt(formData.ageRestriction.minAge) : undefined,
-          maxAge: formData.ageRestriction.maxAge ? parseInt(formData.ageRestriction.maxAge) : undefined,
-        } : { hasRestriction: false },
-        ticketTypes: formData.ticketTypes.map(ticket => ({
+        tags: formData.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        ageRestriction: formData.ageRestriction.hasRestriction
+          ? {
+              hasRestriction: true,
+              minAge: formData.ageRestriction.minAge
+                ? parseInt(formData.ageRestriction.minAge)
+                : undefined,
+              maxAge: formData.ageRestriction.maxAge
+                ? parseInt(formData.ageRestriction.maxAge)
+                : undefined,
+            }
+          : { hasRestriction: false },
+        ticketTypes: formData.ticketTypes.map((ticket) => ({
           name: ticket.name,
           price: parseFloat(ticket.price),
           quantity: parseInt(ticket.quantity),
           description: ticket.description,
           available: ticket.isActive,
-          ...(ticket.hasDateRange && ticket.saleStartDate && ticket.saleEndDate ? {
-            startDate: ticket.saleStartDate,
-            endDate: ticket.saleEndDate,
-          } : {}),
+          ...(ticket.hasDateRange && ticket.saleStartDate && ticket.saleEndDate
+            ? {
+                startDate: ticket.saleStartDate,
+                endDate: ticket.saleEndDate,
+              }
+            : {}),
         })),
-      }
+      };
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/${eventId}`, {
-        method: "PATCH",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updateData),
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/${eventId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updateData),
+        }
+      );
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to update event")
+        const error = await response.json();
+        throw new Error(error.message || "Failed to update event");
       }
 
-      toast.success("Event updated successfully")
-      router.push("/organizer/events")
+      toast.success("Event updated successfully");
+      router.push("/organizer/events");
     } catch (error) {
-      console.error("Error updating event:", error)
-      toast.error(error instanceof Error ? error.message : "Failed to update event")
+      console.error("Error updating event:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update event"
+      );
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   if (isLoading) {
     return (
@@ -343,7 +412,7 @@ export default function EditEventPage() {
           <p className="text-gray-600">Loading event data...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -353,8 +422,12 @@ export default function EditEventPage() {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Events
         </Button>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Edit Event</h1>
-        <p className="text-sm sm:text-base text-gray-600 mt-1">Update your event information</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">
+          Edit Event
+        </h1>
+        <p className="text-sm sm:text-base text-gray-600 mt-1">
+          Update your event information
+        </p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -475,7 +548,9 @@ export default function EditEventPage() {
               <Label htmlFor="category">Category</Label>
               <Select
                 value={formData.category}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, category: value }))
+                }
                 required
               >
                 <SelectTrigger>
@@ -531,7 +606,10 @@ export default function EditEventPage() {
                     }))
                   }
                 />
-                <Label htmlFor="age-restriction-toggle" className="cursor-pointer">
+                <Label
+                  htmlFor="age-restriction-toggle"
+                  className="cursor-pointer"
+                >
                   <div className="flex items-center gap-1">
                     <Info className="h-4 w-4 text-gray-500" />
                     <span>Enable age restriction</span>
@@ -605,7 +683,9 @@ export default function EditEventPage() {
                       <Label>Name</Label>
                       <Input
                         value={ticket.name}
-                        onChange={(e) => handleTicketTypeChange(index, "name", e.target.value)}
+                        onChange={(e) =>
+                          handleTicketTypeChange(index, "name", e.target.value)
+                        }
                         placeholder="Ticket name"
                         required
                       />
@@ -618,7 +698,13 @@ export default function EditEventPage() {
                           min="0"
                           step="0.01"
                           value={ticket.price}
-                          onChange={(e) => handleTicketTypeChange(index, "price", e.target.value)}
+                          onChange={(e) =>
+                            handleTicketTypeChange(
+                              index,
+                              "price",
+                              e.target.value
+                            )
+                          }
                           placeholder="0.00"
                           required
                         />
@@ -629,7 +715,13 @@ export default function EditEventPage() {
                           type="number"
                           min="0"
                           value={ticket.quantity}
-                          onChange={(e) => handleTicketTypeChange(index, "quantity", e.target.value)}
+                          onChange={(e) =>
+                            handleTicketTypeChange(
+                              index,
+                              "quantity",
+                              e.target.value
+                            )
+                          }
                           placeholder="0"
                           required
                         />
@@ -639,7 +731,13 @@ export default function EditEventPage() {
                       <Label>Description</Label>
                       <Input
                         value={ticket.description || ""}
-                        onChange={(e) => handleTicketTypeChange(index, "description", e.target.value)}
+                        onChange={(e) =>
+                          handleTicketTypeChange(
+                            index,
+                            "description",
+                            e.target.value
+                          )
+                        }
                         placeholder="Ticket description (optional)"
                       />
                     </div>
@@ -649,7 +747,11 @@ export default function EditEventPage() {
             </div>
 
             <div className="flex justify-end gap-4">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.back()}
+              >
                 Cancel
               </Button>
               <Button
@@ -664,5 +766,5 @@ export default function EditEventPage() {
         </Card>
       </form>
     </div>
-  )
+  );
 }

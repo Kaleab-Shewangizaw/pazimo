@@ -372,7 +372,10 @@ const getEvent = async (req, res) => {
     const { id: eventId } = req.params;
 
     if (!req.user || !req.user.userId) {
-      throw new UnauthorizedError("User not authenticated");
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
     }
 
     const event = await Event.findOne({
@@ -461,9 +464,19 @@ const updateEvent = async (req, res) => {
     throw new NotFoundError(`No event with id ${eventId}`);
   }
 
-  // Check ownership (if user auth is available)
-  if (req.user && event.organizer.toString() !== req.user.userId) {
-    throw new UnauthorizedError("Not authorized to update this event");
+  if (!req.user || !req.user.userId) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "User not authenticated",
+    });
+  }
+
+  // Check ownership
+  if (event.organizer.toString() !== req.user.userId) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "Not authorized to update this event",
+    });
   }
 
   // Validate required fields
@@ -855,14 +868,20 @@ const cancelEvent = async (req, res) => {
   });
 
   if (!req.user || !req.user.userId) {
-    throw new UnauthorizedError("User not authenticated");
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "User not authenticated",
+    });
   }
 
   // Use req.user.userId instead of req.user.id (which might be undefined depending on auth middleware)
   const userId = req.user.userId;
 
   if (event.organizer.toString() !== userId && req.user.role !== "admin") {
-    throw new BadRequestError("Not authorized to cancel this event");
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      message: "Not authorized to cancel this event",
+    });
   }
 
   event.status = "cancelled";
@@ -911,15 +930,19 @@ const updateTicketTypes = async (req, res) => {
   }
 
   if (!req.user || !req.user.userId) {
-    throw new UnauthorizedError("User not authenticated");
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "User not authenticated",
+    });
   }
 
   const userId = req.user.userId;
 
   if (event.organizer.toString() !== userId && req.user.role !== "admin") {
-    throw new BadRequestError(
-      "Not authorized to update tickets for this event"
-    );
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      message: "Not authorized to update tickets for this event",
+    });
   }
 
   // Validate ticket types
