@@ -378,10 +378,17 @@ const getEvent = async (req, res) => {
       });
     }
 
-    const event = await Event.findOne({
-      _id: eventId,
-      organizer: req.user.userId,
-    }).populate("category", "name description");
+    let query = { _id: eventId };
+
+    // If not admin, restrict to organizer's events
+    if (req.user.role !== "admin") {
+      query.organizer = req.user.userId;
+    }
+
+    const event = await Event.findOne(query).populate(
+      "category",
+      "name description"
+    );
 
     if (!event) {
       throw new NotFoundError(`No event with id ${eventId}`);
@@ -471,8 +478,11 @@ const updateEvent = async (req, res) => {
     });
   }
 
-  // Check ownership
-  if (event.organizer.toString() !== req.user.userId) {
+  // Check ownership or admin role
+  if (
+    event.organizer.toString() !== req.user.userId &&
+    req.user.role !== "admin"
+  ) {
     return res.status(StatusCodes.UNAUTHORIZED).json({
       success: false,
       message: "Not authorized to update this event",
@@ -611,9 +621,16 @@ const deleteEvent = async (req, res) => {
     throw new NotFoundError(`No event with id: ${eventId}`);
   }
 
-  // In a real-world scenario, you might want to add more checks here.
-  // For example, ensuring that only the event organizer or an admin can delete it.
-  // await checkPermissions(req.user, event.organizer);
+  // Check ownership or admin role
+  if (
+    event.organizer.toString() !== req.user.userId &&
+    req.user.role !== "admin"
+  ) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "Not authorized to delete this event",
+    });
+  }
 
   await Event.deleteOne({ _id: eventId });
 
@@ -802,6 +819,17 @@ const publishEvent = async (req, res) => {
 
   if (!event) {
     throw new NotFoundError("Event not found");
+  }
+
+  // Check ownership or admin role
+  if (
+    event.organizer.toString() !== req.user.userId &&
+    req.user.role !== "admin"
+  ) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "Not authorized to publish this event",
+    });
   }
 
   console.log("Found event:", {
