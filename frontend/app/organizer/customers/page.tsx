@@ -194,9 +194,9 @@ export default function CustomersPage() {
       </div>
 
       {/* Filters & Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="flex flex-col md:flex-row gap-6 items-start">
         {/* Event Selector */}
-        <div className="md:col-span-2 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex-1 w-full bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Select Event
           </label>
@@ -229,7 +229,7 @@ export default function CustomersPage() {
         </div>
 
         {/* Revenue Card */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4 min-w-[250px]">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
             <h3 className="text-2xl font-bold text-gray-900">
@@ -239,13 +239,13 @@ export default function CustomersPage() {
               From {filteredTickets.length} tickets
             </p>
           </div>
-          <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
+          <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center shrink-0">
             <DollarSign className="h-6 w-6 text-green-600" />
           </div>
         </div>
 
         {/* On-Door Revenue Card */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4 min-w-[250px]">
           <div>
             <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
             <h3 className="text-2xl font-bold text-gray-900">
@@ -255,7 +255,7 @@ export default function CustomersPage() {
               From {onDoorTickets.length} tickets
             </p>
           </div>
-          <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+          <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
             <DollarSign className="h-6 w-6 text-blue-600" />
           </div>
         </div>
