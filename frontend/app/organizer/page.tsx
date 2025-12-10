@@ -835,6 +835,7 @@ export default function OrganizerDashboard() {
             const allTickets = rawTickets.filter((t: any) => {
               if (t.isInvitation === true) return false;
               if (!t.price || t.price <= 0) return false;
+              if (t.paymentStatus !== "completed") return false;
               return true;
             });
 

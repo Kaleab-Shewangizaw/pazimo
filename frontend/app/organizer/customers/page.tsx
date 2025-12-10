@@ -149,6 +149,7 @@ export default function CustomersPage() {
     // We strictly check for isInvitation === true OR price <= 0
     if (ticket.isInvitation === true) return false;
     if (!ticket.price || ticket.price <= 0) return false;
+    if (ticket.paymentStatus !== "completed") return false;
 
     const searchLower = searchQuery.toLowerCase();
     const name = ticket.user
