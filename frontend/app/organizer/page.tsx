@@ -1899,6 +1899,7 @@ export default function OrganizerDashboard() {
                     <TableHead className="text-xs">Total</TableHead>
                     <TableHead className="text-xs">Active</TableHead>
                     <TableHead className="text-xs">Used</TableHead>
+                    <TableHead className="text-xs">On-Door</TableHead>
                     <TableHead className="text-xs">Revenue</TableHead>
                     <TableHead className="text-xs">Attendees</TableHead>
                   </TableRow>
@@ -1919,10 +1920,14 @@ export default function OrganizerDashboard() {
                       const usedTickets = allTickets.filter(
                         (t: any) => t.status === "used"
                       );
+                      const onDoorTickets = allTickets.filter(
+                        (t: any) => t.isOnDoor === true
+                      );
 
                       const totalTickets = allTickets.length;
                       const activeTicketsCount = activeTickets.length;
                       const usedTicketsCount = usedTickets.length;
+                      const onDoorCount = onDoorTickets.length;
                       const totalRevenue = allTickets.reduce(
                         (sum, t) => sum + (t.price || 0),
                         0
@@ -1942,6 +1947,9 @@ export default function OrganizerDashboard() {
                           </TableCell>
                           <TableCell className="text-xs">
                             {usedTicketsCount}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {onDoorCount}
                           </TableCell>
                           <TableCell className="text-xs">
                             {totalRevenue.toFixed(0)} Birr

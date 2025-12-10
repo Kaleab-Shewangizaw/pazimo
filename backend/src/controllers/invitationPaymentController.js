@@ -130,10 +130,34 @@ const checkInvitationPaymentStatus = async (req, res) => {
     } else if (status === "FAILED") {
       payment.status = "FAILED";
       await payment.save();
+
+      // Cleanup pending invitations
+      if (
+        payment.ticketDetails &&
+        payment.ticketDetails.pendingInvitationIds &&
+        Array.isArray(payment.ticketDetails.pendingInvitationIds)
+      ) {
+        await Invitation.deleteMany({
+          invitationId: { $in: payment.ticketDetails.pendingInvitationIds },
+        });
+      }
+
       return res.status(200).json({ success: true, status: "FAILED" });
     } else if (status === "CANCELLED" || status === "EXPIRED") {
-      payment.status = "FAILED";
+      payment.status = "CANCELLED";
       await payment.save();
+
+      // Cleanup pending invitations
+      if (
+        payment.ticketDetails &&
+        payment.ticketDetails.pendingInvitationIds &&
+        Array.isArray(payment.ticketDetails.pendingInvitationIds)
+      ) {
+        await Invitation.deleteMany({
+          invitationId: { $in: payment.ticketDetails.pendingInvitationIds },
+        });
+      }
+
       return res.status(200).json({ success: true, status: "CANCELLED" });
     }
 
@@ -174,6 +198,17 @@ const invitationWebhook = async (req, res) => {
     } else {
       payment.status = "FAILED";
       await payment.save();
+
+      // Cleanup pending invitations
+      if (
+        payment.ticketDetails &&
+        payment.ticketDetails.pendingInvitationIds &&
+        Array.isArray(payment.ticketDetails.pendingInvitationIds)
+      ) {
+        await Invitation.deleteMany({
+          invitationId: { $in: payment.ticketDetails.pendingInvitationIds },
+        });
+      }
     }
 
     res.status(200).send("OK");
@@ -203,6 +238,19 @@ const cancelInvitationPayment = async (req, res) => {
 
     payment.status = "CANCELLED";
     await payment.save();
+
+    // Delete pending invitations associated with this cancelled payment
+    if (
+      payment.ticketDetails &&
+      payment.ticketDetails.pendingInvitationIds &&
+      Array.isArray(payment.ticketDetails.pendingInvitationIds)
+    ) {
+      const pendingIds = payment.ticketDetails.pendingInvitationIds;
+      await Invitation.deleteMany({ invitationId: { $in: pendingIds } });
+      console.log(
+        `Deleted ${pendingIds.length} pending invitations for cancelled payment ${transactionId}`
+      );
+    }
 
     return res
       .status(200)

@@ -12,7 +12,10 @@ export interface ValidationResult {
   readyToGenerate: boolean;
 }
 
-export const validateAndCorrectRows = (rows: Row[]): ValidationResult => {
+export const validateAndCorrectRows = (
+  rows: Row[],
+  pricing: { email: number; sms: number } = { email: 2, sms: 5 }
+): ValidationResult => {
   const correctedRows: Row[] = [];
   const errors: Row[] = [];
   let totalEmails = 0;
@@ -26,9 +29,10 @@ export const validateAndCorrectRows = (rows: Row[]): ValidationResult => {
           ? Number(row.Amount)
           : 1;
 
-      if (row.Type === "Both") return total + 7 * amount;
-      if (row.Type === "Phone") return total + 5 * amount;
-      if (row.Type === "Email") return total + 2 * amount;
+      if (row.Type === "Both")
+        return total + (pricing.email + pricing.sms) * amount;
+      if (row.Type === "Phone") return total + pricing.sms * amount;
+      if (row.Type === "Email") return total + pricing.email * amount;
 
       return total;
     }, 0);

@@ -4,8 +4,9 @@ import {
   FileSpreadsheet,
   Mail,
   Phone,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import * as XLSX from "xlsx";
 import EditableTable from "./BulkTableView";
@@ -23,12 +24,49 @@ export default function BulkInvite({
 }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [data, setData] = useState<Row[]>([]);
+  const [missingColumns, setMissingColumns] = useState<string[]>([]);
+  const [pricing, setPricing] = useState({ email: 2, sms: 5 });
+
+  useEffect(() => {
+    const fetchPricing = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/invitation-pricing`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            const isPublic = event?.isPublic !== false;
+            const type = isPublic ? "public" : "private";
+            const typePricing = data.data[type];
+            if (typePricing) {
+              setPricing({
+                email: typePricing.emailPrice,
+                sms: typePricing.smsPrice,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch pricing:", error);
+      }
+    };
+
+    fetchPricing();
+  }, [event]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files ? event.target.files[0] : null;
     if (!file) return;
 
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File size exceeds 5MB limit. Please upload a smaller file.");
+      return;
+    }
+
     setSelectedFile(file);
+    setMissingColumns([]); // Reset missing columns on new file
 
     const reader = new FileReader();
 
@@ -53,7 +91,18 @@ export default function BulkInvite({
   };
 
   const processData = (rawData: unknown[]) => {
-    const { correctedRows, summary } = validateAndCorrectRows(rawData as Row[]);
+    if (Array.isArray(rawData) && rawData.length > 1000) {
+      toast.error(
+        "File contains more than 1000 rows. Please split into smaller files."
+      );
+      setSelectedFile(null);
+      return;
+    }
+
+    const { correctedRows, summary } = validateAndCorrectRows(
+      rawData as Row[],
+      pricing
+    );
 
     setData(correctedRows as never[]);
 
@@ -66,11 +115,29 @@ export default function BulkInvite({
     }
   };
 
+  const normalizeHeader = (header: string): string => {
+    const h = header.trim().toLowerCase();
+    if (h === "name" || h === "guestname" || h === "guest name") return "Name";
+    if (h === "email" || h === "guestemail" || h === "guest email")
+      return "Email";
+    if (
+      h === "phone" ||
+      h === "phonenumber" ||
+      h === "mobile" ||
+      h === "guestphone"
+    )
+      return "Phone";
+    if (h === "type" || h === "contacttype") return "Type";
+    if (h === "amount" || h === "quantity" || h === "count") return "Amount";
+    if (h === "message" || h === "note") return "Message";
+    return header.trim(); // Return original if no match
+  };
+
   const parseCsv = (arrayBuffer: ArrayBuffer) => {
     // csv-parser works with streams/strings. We decode the ArrayBuffer to a string.
     const textDecoder = new TextDecoder("utf-8");
     const csvString = textDecoder.decode(arrayBuffer);
-    const results = [];
+    const results: any[] = [];
 
     // Simulate a stream behavior for the parser with a simple split/forEach approach
     // For a true stream in the browser, you might use different utility libraries,
@@ -78,13 +145,31 @@ export default function BulkInvite({
 
     // Using a utility funct{ title: "Sample Event" };ion might be cleaner if needed. For simplicity:
     const lines = csvString.split("\n");
-    const headers = lines[0].split(",");
+    if (lines.length < 1) return;
+
+    const headers = lines[0].split(",").map(normalizeHeader);
+
+    // Check for missing required columns
+    const hasName = headers.includes("Name");
+    const hasContact = headers.includes("Email") || headers.includes("Phone");
+
+    const missing = [];
+    if (!hasName) missing.push("Name");
+    if (!hasContact) missing.push("Email or Phone");
+
+    if (missing.length > 0) {
+      setMissingColumns(missing);
+      toast.error(`Missing columns: ${missing.join(", ")}`);
+    }
+
     for (let i = 1; i < lines.length; i++) {
-      if (!lines[i]) continue;
+      if (!lines[i].trim()) continue;
       const values = lines[i].split(",");
       const obj: Record<string, string> = {};
       headers.forEach((header, index) => {
-        obj[header.trim()] = values[index].trim();
+        if (values[index]) {
+          obj[header] = values[index].trim();
+        }
       });
       results.push(obj);
     }
@@ -97,23 +182,51 @@ export default function BulkInvite({
     const workbook = XLSX.read(arrayBuffer, { type: "array" });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const json_data = XLSX.utils.sheet_to_json(worksheet);
 
-    processData(json_data);
+    // Get headers first to normalize
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+    }) as any[][];
+    if (jsonData.length === 0) return;
+
+    const originalHeaders = jsonData[0] as string[];
+    const headers = originalHeaders.map((h) => normalizeHeader(String(h)));
+
+    // Check for missing required columns
+    const hasName = headers.includes("Name");
+    const hasContact = headers.includes("Email") || headers.includes("Phone");
+
+    const missing = [];
+    if (!hasName) missing.push("Name");
+    if (!hasContact) missing.push("Email or Phone");
+
+    if (missing.length > 0) {
+      setMissingColumns(missing);
+      toast.error(`Missing columns: ${missing.join(", ")}`);
+    }
+
+    const results = jsonData.slice(1).map((row) => {
+      const obj: Record<string, any> = {};
+      headers.forEach((header, index) => {
+        if (row[index] !== undefined) {
+          obj[header] = row[index];
+        }
+      });
+      return obj;
+    });
+
+    processData(results);
   };
 
-  const selectedEvent = event || { title: "Unnamed Event", id: 0 };
-  const pricing = { email: 2, sms: 5 };
-
   const downloadTemplate = (type: string) => {
-    let csvContent = "Customer Name,Contact,Contact Type,Amount,Message\n";
+    let csvContent = "Name,Email,Phone,Type,Amount,Message\n";
     if (type === "email") {
-      csvContent += "John Doe,johndoe@example.com,email,1,Hello John!\n";
+      csvContent += "John Doe,johndoe@example.com,,Email,1,Hello John!\n";
     } else if (type === "phone") {
-      csvContent += "Jane Doe,+1234567890,phone,1,Hello Jane!\n";
+      csvContent += "Jane Doe,,+251911223344,Phone,1,Hello Jane!\n";
     } else if (type === "mixed") {
       csvContent +=
-        "John Doe,johndoe@example.com,email,1,Hello John!\nJane Doe,+1234567890,phone,2,Hello Jane!\n";
+        "John Doe,johndoe@example.com,,Email,1,Hello John!\nJane Doe,,+251911223344,Phone,2,Hello Jane!\n";
     }
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -149,8 +262,44 @@ export default function BulkInvite({
         </h3>
         <p className="text-sm text-gray-600 mb-6">
           Upload CSV/Excel file for:{" "}
-          <strong className="text-gray-900">{selectedEvent?.title}</strong>
+          <strong className="text-gray-900">{event?.title}</strong>
         </p>
+
+        {missingColumns.length > 0 && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+            <div className="p-1 bg-red-100 rounded-full">
+              <svg
+                className="w-4 h-4 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-red-800">
+                Missing Required Columns
+              </h4>
+              <p className="text-sm text-red-700 mt-1">
+                The uploaded file is missing the following required columns:{" "}
+                <strong>{missingColumns.join(", ")}</strong>. Please ensure your
+                file has these headers in the first row.
+              </p>
+            </div>
+            <button
+              onClick={() => setMissingColumns([])}
+              className="text-red-400 hover:text-red-600 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        )}
 
         <div className="space-y-4">
           {!selectedFile && (

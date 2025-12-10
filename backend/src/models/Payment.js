@@ -4,7 +4,7 @@ const Payment = new mongoose.Schema({
   transactionId: String,
   status: {
     type: String,
-    enum: ["PENDING", "PAID", "FAILED"],
+    enum: ["PENDING", "PAID", "FAILED", "CANCELLED"],
     default: "PENDING",
   },
   guestName: String,

@@ -17,6 +17,7 @@ const axios = require("axios");
 const Payment = require("../models/Payment");
 const SantimPayService = require("../services/santimPayService");
 const { v4: uuidv4 } = require("uuid");
+const QRCode = require("qrcode");
 
 const validateSignature = (signature, payload) => {
   try {
@@ -1486,6 +1487,114 @@ const cancelPaymentIntent = async (req, res) => {
   }
 };
 
+// Create On-Door Ticket (Admin/Organizer)
+const createOnDoorTicket = async (req, res) => {
+  try {
+    const { eventId, ticketTypeId, quantity, paymentMethod } = req.body;
+    const userId = req.user ? req.user._id : null; // Admin/Organizer ID who created it
+
+    if (!eventId || !ticketTypeId || !quantity) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Event ID, Ticket Type ID, and Quantity are required",
+      });
+    }
+
+    const event = await Event.findById(eventId);
+    if (!event) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Event not found",
+      });
+    }
+
+    // Find ticket type
+    const ticketType = event.ticketTypes.find(
+      (t) => t._id.toString() === ticketTypeId || t.name === ticketTypeId
+    );
+
+    if (!ticketType) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid ticket type",
+      });
+    }
+
+    // Check availability
+    if (ticketType.quantity < quantity) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Not enough tickets available. Only ${ticketType.quantity} left.`,
+      });
+    }
+
+    // Deduct quantity
+    ticketType.quantity -= quantity;
+    await event.save();
+
+    const totalPrice = ticketType.price * quantity;
+    const transactionId = `ONDOOR-${uuidv4()}`;
+
+    // Create Payment Record
+    const payment = await Payment.create({
+      transactionId,
+      status: "PAID",
+      method: paymentMethod || "CASH",
+      price: totalPrice,
+      eventId,
+      userId, // The admin/organizer who processed it
+      ticketDetails: {
+        eventId,
+        ticketTypeId: ticketType.name,
+        ticketCount: quantity,
+        price: totalPrice,
+      },
+      invitationType: "on-door",
+    });
+
+    // Create Ticket
+    const ticketId = `TICKET-${uuidv4()}`;
+    const ticket = await Ticket.create({
+      ticketId,
+      event: eventId,
+      ticketType: ticketType.name,
+      ticketCount: quantity,
+      price: totalPrice,
+      status: "active",
+      paymentStatus: "completed",
+      paymentReference: transactionId,
+      isOnDoor: true,
+      isInvitation: false,
+    });
+
+    // Generate QR
+    const qrData = JSON.stringify({
+      ticketId: ticket.ticketId,
+      eventId: eventId,
+      type: "on-door",
+      count: quantity,
+    });
+    ticket.qrCode = await QRCode.toDataURL(qrData);
+    await ticket.save();
+
+    res.status(StatusCodes.CREATED).json({
+      success: true,
+      message: "On-door ticket created successfully",
+      data: {
+        ticket,
+        payment,
+      },
+    });
+  } catch (error) {
+    console.error("Create On-Door Ticket Error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to create on-door ticket",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createTicket,
   createInvitationTicket,
@@ -1506,4 +1615,5 @@ module.exports = {
   confirmRSVP,
   processSuccessfulPayment,
   cancelPaymentIntent,
+  createOnDoorTicket,
 };

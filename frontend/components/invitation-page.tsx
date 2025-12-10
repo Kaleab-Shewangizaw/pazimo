@@ -207,6 +207,7 @@ export default function InvitationPage() {
           message: inv.message,
           sentAt: new Date(inv.createdAt).toLocaleString(),
           status: inv.status,
+          rsvpStatus: inv.rsvpStatus,
           qrCode: inv.qrCode,
         }));
         setSentInvitations(formattedInvitations);
@@ -241,6 +242,7 @@ export default function InvitationPage() {
       sentAt: string;
       status: "sent" | "delivered" | "failed";
       qrCode: string;
+      rsvpStatus?: string;
     }>
   >([]);
   const [showQRModal, setShowQRModal] = useState(false);
@@ -810,16 +812,36 @@ export default function InvitationPage() {
         confirmedAt: inv.sentAt
           ? new Date(inv.sentAt).toLocaleDateString()
           : "Unknown",
-        status: inv.status === "delivered" ? "invited" : inv.status,
+        status:
+          inv.rsvpStatus === "confirmed"
+            ? "Confirmed"
+            : inv.rsvpStatus === "declined"
+            ? "Declined"
+            : inv.status === "delivered"
+            ? "Invited"
+            : inv.status,
       }));
 
       // 3. Merge lists: prefer tickets over invitations for same contact
-      const ticketContacts = new Set(ticketAttendees.map((t) => t.contact));
-      const uniqueInvitations = invitationAttendees.filter(
-        (inv) => !ticketContacts.has(inv.contact)
-      );
+      // But user wants "every invitation ticket sent, not purchased"
+      // So we prioritize showing the invitation list, enriched with ticket status if available.
+      
+      // If we have a ticket for this contact, it means they are confirmed.
+      const ticketMap = new Map(ticketAttendees.map(t => [t.contact, t]));
+      
+      const mergedAttendees = invitationAttendees.map(inv => {
+        if (ticketMap.has(inv.contact)) {
+           // If they have a ticket, they are confirmed
+           return { ...inv, status: "Confirmed" };
+        }
+        return inv;
+      });
 
-      setAttendees([...ticketAttendees, ...uniqueInvitations]);
+      // If the user wants ONLY invitations sent, we just use mergedAttendees.
+      // If they want to see organic tickets too, we would add remaining tickets.
+      // "every invitation ticket sent, not purchased" -> implies showing the invitation list.
+      
+      setAttendees(mergedAttendees);
     } catch (error) {
       console.error("Error fetching attendees:", error);
       setAttendees([]);
@@ -1196,9 +1218,15 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
   const deliveredInvitations = sentInvitations.filter(
     (inv) => inv.status === "delivered"
   ).length;
+  
+  // Calculate success rate based on confirmed RSVPs or Tickets
+  const confirmedInvitationsCount = sentInvitations.filter(
+    (inv) => inv.rsvpStatus === "confirmed"
+  ).length;
+
   const deliveryRate =
     totalInvitations > 0
-      ? Math.round((deliveredInvitations / totalInvitations) * 100)
+      ? Math.round((confirmedInvitationsCount / totalInvitations) * 100)
       : 0;
   const publicEvents = events.filter(
     (event) => event.isPublic !== false

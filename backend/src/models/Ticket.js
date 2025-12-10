@@ -27,6 +27,10 @@ const TicketSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    isOnDoor: {
+      type: Boolean,
+      default: false,
+    },
     event: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Event",
@@ -36,7 +40,7 @@ const TicketSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: function () {
-        return !this.isInvitation;
+        return !this.isInvitation && !this.isOnDoor;
       },
     },
     guestName: {

@@ -261,7 +261,7 @@ export default function EditableTable({
   };
 
   const handleSend = async () => {
-    const { summary, readyToGenerate } = validateAndCorrectRows(data);
+    const { summary, readyToGenerate } = validateAndCorrectRows(data, pricing);
 
     console.log("summary is here: ", summary);
 
@@ -287,6 +287,7 @@ export default function EditableTable({
           type: row.Type.toLowerCase(),
           amount: row.Amount,
           qrCodecount: row.Amount,
+          message: row.Message,
         })),
         eventId: event._id,
       };

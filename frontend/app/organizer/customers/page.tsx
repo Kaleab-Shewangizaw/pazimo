@@ -43,6 +43,7 @@ interface Ticket {
   createdAt: string;
   paymentStatus: string;
   isInvitation?: boolean;
+  isOnDoor?: boolean;
 }
 
 export default function CustomersPage() {
@@ -163,6 +164,12 @@ export default function CustomersPage() {
     );
   });
 
+  const onDoorTickets = filteredTickets.filter((t) => t.isOnDoor === true);
+  const onDoorRevenue = onDoorTickets.reduce(
+    (sum, t) => sum + (t.price || 0),
+    0
+  );
+
   const totalRevenue = filteredTickets.reduce(
     (sum, ticket) => sum + (ticket.price || 0),
     0
@@ -234,6 +241,22 @@ export default function CustomersPage() {
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
             <DollarSign className="h-6 w-6 text-green-600" />
+          </div>
+        </div>
+
+        {/* On-Door Revenue Card */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
+            <h3 className="text-2xl font-bold text-gray-900">
+              ETB {onDoorRevenue.toLocaleString()}
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              From {onDoorTickets.length} tickets
+            </p>
+          </div>
+          <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+            <DollarSign className="h-6 w-6 text-blue-600" />
           </div>
         </div>
       </div>
@@ -317,15 +340,19 @@ export default function CustomersPage() {
                         </div>
                         <div>
                           <div className="text-sm font-medium text-gray-900">
-                            {ticket.user
+                            {ticket.isOnDoor
+                              ? "On-Door Purchase"
+                              : ticket.user
                               ? `${ticket.user.firstName} ${ticket.user.lastName}`
                               : ticket.guestName || "Guest"}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {ticket.user?.email ||
-                              ticket.guestEmail ||
-                              ticket.guestPhone ||
-                              "No contact info"}
+                            {ticket.isOnDoor
+                              ? "Walk-in"
+                              : ticket.user?.email ||
+                                ticket.guestEmail ||
+                                ticket.guestPhone ||
+                                "No contact info"}
                           </div>
                         </div>
                       </div>

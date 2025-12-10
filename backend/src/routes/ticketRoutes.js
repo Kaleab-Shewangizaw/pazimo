@@ -20,6 +20,7 @@ const {
   confirmRSVP,
   getPublicTicketDetails,
   cancelPaymentIntent,
+  createOnDoorTicket,
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
@@ -182,6 +183,7 @@ router.use(authenticateUser);
 
 // Protected routes
 router.post("/", createTicket);
+router.post("/on-door", createOnDoorTicket);
 router.post("/invite", createInvitationTicket);
 router.post("/guest-ticket", createGuestTicket);
 router.post("/guest-ticket/send", sendGuestInvitation);
