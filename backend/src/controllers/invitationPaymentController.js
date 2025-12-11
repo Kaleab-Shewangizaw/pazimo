@@ -270,8 +270,7 @@ const handlePaymentSuccess = async (payment) => {
     if (!event) throw new Error("Event not found");
 
     const { invitationType, ticketDetails } = payment;
-    const frontendUrl =
-      process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.vercel.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
 
     if (invitationType === "guest") {
       // Check if already processed

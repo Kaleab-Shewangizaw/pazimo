@@ -339,7 +339,7 @@ const createGuestTicket = async (req, res) => {
     });
 
     // Generate RSVP Link
-    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
     const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
     // Create Invitation Record to track it
@@ -488,10 +488,10 @@ const processGuestInvitation = async (ticketId) => {
   console.log(`Ticket ${ticketId} payment status updated to completed`);
 
   const event = ticket.event;
-  const message = ticket.paymentReference;
+  const message = ticket.message;
 
   // Generate RSVP Link
-  const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+  const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
   const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
   // Create Invitation Record
@@ -757,10 +757,11 @@ const createInvitationTicket = async (req, res) => {
       price: 0, // Free for guest
       status: "pending",
       paymentStatus: "completed", // Organizer handles payment
+      message,
     });
 
     // Generate RSVP Link
-    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
     const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
 
     // Send Email

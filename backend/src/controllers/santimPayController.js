@@ -126,7 +126,7 @@ const initiatePayment = async (req, res) => {
     }
 
     // Define redirect URLs
-    const baseUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+    const baseUrl = process.env.FRONTEND_URL || "https://pazimo.com";
     const backendUrl =
       process.env.BACKEND_URL || "https://pazimoapp.testserveret.com";
 

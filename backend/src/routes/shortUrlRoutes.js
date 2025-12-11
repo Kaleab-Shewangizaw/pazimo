@@ -29,9 +29,9 @@ router.post("/shorten", async (req, res) => {
       return res.json({
         success: true,
         shortCode: shortUrl.shortCode,
-        shortUrl: `${
-          process.env.FRONTEND_URL || "https://pazimo.vercel.app"
-        }/s/${shortUrl.shortCode}`,
+        shortUrl: `${process.env.FRONTEND_URL || "https://pazimo.com"}/s/${
+          shortUrl.shortCode
+        }`,
       });
     }
 
@@ -56,7 +56,7 @@ router.post("/shorten", async (req, res) => {
       success: true,
       shortCode,
       shortUrl: `${
-        process.env.FRONTEND_URL || "https://pazimo.vercel.app"
+        process.env.FRONTEND_URL || "https://pazimo.com"
       }/s/${shortCode}`,
     });
   } catch (error) {

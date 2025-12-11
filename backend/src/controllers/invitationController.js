@@ -201,8 +201,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       }
 
       // Generate RSVP/Guest Link
-      const frontendUrl =
-        process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+      const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
 
       let actionLink;
       let actionText;
@@ -606,7 +605,7 @@ const createAndSendProfessionalInvitation = async (data) => {
     }
 
     // Generate RSVP Link
-    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+    const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
 
     let actionLink;
     let actionText;

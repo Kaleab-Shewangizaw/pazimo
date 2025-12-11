@@ -36,7 +36,7 @@ const createEmailTemplate = (
     minute: "2-digit",
   });
 
-  const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.vercel.app";
+  const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
   const actionLink =
     invitation.actionLink ||
     `${frontendUrl}/guest-invitation?inv=${invitation.uniqueId}`;

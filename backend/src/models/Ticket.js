@@ -98,20 +98,18 @@ const TicketSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    paymentReference: {
+      type: String,
+    },
     checkedIn: {
       type: Boolean,
       default: false,
     },
-    checkedInAt: {
+    checkedAt: {
       type: Date,
     },
-    seatNumber: {
+    message: {
       type: String,
-    },
-    paymentReference: {
-      type: String,
-      required: false,
-      index: true,
     },
   },
   {

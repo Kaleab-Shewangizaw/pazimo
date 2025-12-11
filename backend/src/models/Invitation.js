@@ -79,6 +79,9 @@ const invitationSchema = new mongoose.Schema(
     rsvpConfirmedAt: {
       type: Date,
     },
+    message: {
+      type: String,
+    },
   },
   {
     timestamps: true,
