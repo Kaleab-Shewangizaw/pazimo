@@ -19,11 +19,13 @@ const getOrganizerBalance = async (req, res) => {
     const eventIds = events.map((event) => event._id);
 
     // Calculate revenue from tickets
-    // Count all tickets that represent actual revenue (active, used, etc.) excluding cancelled/expired
-    // Business logic: All paid tickets contribute to revenue regardless of usage status
+    // Count all tickets that represent actual revenue (active, used, etc.) excluding cancelled/expired/pending
+    // Also exclude invitations as they are free and shouldn't count as purchased
     const tickets = await Ticket.find({
       event: { $in: eventIds },
-      status: { $nin: ["cancelled", "expired"] }, // Include all statuses except cancelled/expired
+      status: { $nin: ["cancelled", "expired", "pending"] },
+      paymentStatus: "completed",
+      isInvitation: false,
     }).populate("event", "title ticketTypes");
 
     // Calculate total revenue and breakdown by event
@@ -43,7 +45,10 @@ const getOrganizerBalance = async (req, res) => {
           (t) => t.ticketType === ticketType.name
         );
         const typeRevenue = typeTickets.reduce((sum, t) => sum + t.price, 0);
-        const quantitySold = typeTickets.length;
+        const quantitySold = typeTickets.reduce(
+          (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
+          0
+        );
 
         return {
           name: ticketType.name,
@@ -53,12 +58,17 @@ const getOrganizerBalance = async (req, res) => {
         };
       });
 
+      const totalTicketsSold = eventTickets.reduce(
+        (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
+        0
+      );
+
       return {
         eventId: event._id,
         eventTitle: event.title,
         totalRevenue: eventRevenue,
         ticketTypeBreakdown,
-        totalTicketsSold: eventTickets.length,
+        totalTicketsSold,
       };
     });
 

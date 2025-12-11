@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -15,43 +15,49 @@ import {
   Building2,
   CreditCard,
   X,
-} from "lucide-react"
-import { useAdminAuthStore } from "@/store/adminAuthStore"
+} from "lucide-react";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
 
-export default function AdminSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const pathname = usePathname()
-  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
-  const { admin } = useAdminAuthStore()
-  const isPartner = admin?.role === 'partner'
+export default function AdminSidebar({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const pathname = usePathname();
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+  const { admin } = useAdminAuthStore();
+  const isPartner = admin?.role === "partner";
 
   // Close mobile menu when route changes
   useEffect(() => {
     if (open) {
       // Only close if it's currently open
-      onClose()
+      onClose();
     }
-  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close mobile menu on window resize to desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 1024 && open) {
         // Only close if it's currently open and desktop size
-        onClose()
+        onClose();
       }
-    }
+    };
 
-    window.addEventListener("resize", handleResize)
-    return () => window.removeEventListener("resize", handleResize)
-  }, [open, onClose])
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [open, onClose]);
 
   const isActive = (path: string) => {
-    return pathname === path
-  }
+    return pathname === path;
+  };
 
   const toggleSubmenu = (menu: string) => {
-    setOpenSubmenu(openSubmenu === menu ? null : menu)
-  }
+    setOpenSubmenu(openSubmenu === menu ? null : menu);
+  };
 
   return (
     <>
@@ -70,8 +76,12 @@ export default function AdminSidebar({ open, onClose }: { open: boolean; onClose
                   <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-lg sm:text-xl text-gray-900">Pazimo Admin</h2>
-                  <p className="text-xs sm:text-sm text-gray-600">Management Panel</p>
+                  <h2 className="font-bold text-lg sm:text-xl text-gray-900">
+                    Pazimo Admin
+                  </h2>
+                  <p className="text-xs sm:text-sm text-gray-600">
+                    Management Panel
+                  </p>
                 </div>
               </div>
 
@@ -99,47 +109,51 @@ export default function AdminSidebar({ open, onClose }: { open: boolean; onClose
                 }`}
               >
                 <LayoutDashboard className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">Dashboard</span>
+                <span className="font-medium text-sm sm:text-base">
+                  Dashboard
+                </span>
               </Link>
             )}
 
             {/* Users Section */}
             {!isPartner && (
-            <div>
-              <button
-                onClick={() => toggleSubmenu("users")}
-                className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
-                  pathname.startsWith("/admin/users")
-                    ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
-                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Users className="h-5 w-5 flex-shrink-0" />
-                  <span className="font-medium text-sm sm:text-base">Users</span>
-                </div>
-                {openSubmenu === "users" ? (
-                  <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+              <div>
+                <button
+                  onClick={() => toggleSubmenu("users")}
+                  className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
+                    pathname.startsWith("/admin/users")
+                      ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                      : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Users className="h-5 w-5 flex-shrink-0" />
+                    <span className="font-medium text-sm sm:text-base">
+                      Users
+                    </span>
+                  </div>
+                  {openSubmenu === "users" ? (
+                    <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  )}
+                </button>
+                {openSubmenu === "users" && (
+                  <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                    <Link
+                      href="/admin/users"
+                      onClick={onClose}
+                      className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
+                        isActive("/admin/users")
+                          ? "text-blue-600 bg-blue-50"
+                          : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                      }`}
+                    >
+                      All Users
+                    </Link>
+                  </div>
                 )}
-              </button>
-              {openSubmenu === "users" && (
-                <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                  <Link
-                    href="/admin/users"
-                    onClick={onClose}
-                    className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
-                      isActive("/admin/users")
-                        ? "text-blue-600 bg-blue-50"
-                        : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-                    }`}
-                  >
-                    All Users
-                  </Link>
-                </div>
-              )}
-            </div>
+              </div>
             )}
 
             {/* Organizers Section */}
@@ -154,7 +168,9 @@ export default function AdminSidebar({ open, onClose }: { open: boolean; onClose
               >
                 <div className="flex items-center gap-3">
                   <Building2 className="h-5 w-5 flex-shrink-0" />
-                  <span className="font-medium text-sm sm:text-base">Organizers</span>
+                  <span className="font-medium text-sm sm:text-base">
+                    Organizers
+                  </span>
                 </div>
                 {openSubmenu === "organizers" ? (
                   <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
@@ -204,7 +220,9 @@ export default function AdminSidebar({ open, onClose }: { open: boolean; onClose
               >
                 <div className="flex items-center gap-3">
                   <Calendar className="h-5 w-5 flex-shrink-0" />
-                  <span className="font-medium text-sm sm:text-base">Events</span>
+                  <span className="font-medium text-sm sm:text-base">
+                    Events
+                  </span>
                 </div>
                 {openSubmenu === "events" ? (
                   <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
@@ -251,87 +269,108 @@ export default function AdminSidebar({ open, onClose }: { open: boolean; onClose
                       Invitation Pricing
                     </Link>
                   )}
-                
                 </div>
               )}
             </div>
 
-            {/* Tickets Section */}
+            {/* Invitations Section */}
             {!isPartner && (
-            <div>
-              <button
-                onClick={() => toggleSubmenu("tickets")}
-                className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
-                  pathname.startsWith("/admin/tickets")
+              <Link
+                href="/admin/invitations"
+                onClick={onClose}
+                className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
+                  isActive("/admin/invitations")
                     ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
                     : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Ticket className="h-5 w-5 flex-shrink-0" />
-                  <span className="font-medium text-sm sm:text-base">Tickets</span>
-                </div>
-                {openSubmenu === "tickets" ? (
-                  <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                <Users className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">
+                  Invitations
+                </span>
+              </Link>
+            )}
+
+            {/* Tickets Section */}
+            {!isPartner && (
+              <div>
+                <button
+                  onClick={() => toggleSubmenu("tickets")}
+                  className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
+                    pathname.startsWith("/admin/tickets")
+                      ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                      : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Ticket className="h-5 w-5 flex-shrink-0" />
+                    <span className="font-medium text-sm sm:text-base">
+                      Tickets
+                    </span>
+                  </div>
+                  {openSubmenu === "tickets" ? (
+                    <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  )}
+                </button>
+                {openSubmenu === "tickets" && (
+                  <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                    <Link
+                      href="/admin/tickets"
+                      onClick={onClose}
+                      className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
+                        isActive("/admin/tickets")
+                          ? "text-blue-600 bg-blue-50"
+                          : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                      }`}
+                    >
+                      All Tickets
+                    </Link>
+                  </div>
                 )}
-              </button>
-              {openSubmenu === "tickets" && (
-                <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                  <Link
-                    href="/admin/tickets"
-                    onClick={onClose}
-                    className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
-                      isActive("/admin/tickets")
-                        ? "text-blue-600 bg-blue-50"
-                        : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-                    }`}
-                  >
-                    All Tickets
-                  </Link>
-                </div>
-              )}
-            </div>
+              </div>
             )}
 
             {/* Withdrawals Section */}
             {!isPartner && (
-            <div>
-              <button
-                onClick={() => toggleSubmenu("withdrawals")}
-                className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
-                  pathname.startsWith("/admin/withdrawals")
-                    ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
-                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <CreditCard className="h-5 w-5 flex-shrink-0" />
-                  <span className="font-medium text-sm sm:text-base">Withdrawals</span>
-                </div>
-                {openSubmenu === "withdrawals" ? (
-                  <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                ) : (
-                  <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+              <div>
+                <button
+                  onClick={() => toggleSubmenu("withdrawals")}
+                  className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
+                    pathname.startsWith("/admin/withdrawals")
+                      ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                      : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="h-5 w-5 flex-shrink-0" />
+                    <span className="font-medium text-sm sm:text-base">
+                      Withdrawals
+                    </span>
+                  </div>
+                  {openSubmenu === "withdrawals" ? (
+                    <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
+                  )}
+                </button>
+                {openSubmenu === "withdrawals" && (
+                  <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                    <Link
+                      href="/admin/withdrawals"
+                      onClick={onClose}
+                      className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
+                        isActive("/admin/withdrawals")
+                          ? "text-blue-600 bg-blue-50"
+                          : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                      }`}
+                    >
+                      Withdrawal Requests
+                    </Link>
+                  </div>
                 )}
-              </button>
-              {openSubmenu === "withdrawals" && (
-                <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                  <Link
-                    href="/admin/withdrawals"
-                    onClick={onClose}
-                    className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
-                      isActive("/admin/withdrawals")
-                        ? "text-blue-600 bg-blue-50"
-                        : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-                    }`}
-                  >
-                    Withdrawal Requests
-                  </Link>
-                </div>
-              )}
-            </div>
+              </div>
             )}
 
             {/* System Section */}
@@ -361,5 +400,5 @@ export default function AdminSidebar({ open, onClose }: { open: boolean; onClose
         />
       )}
     </>
-  )
+  );
 }

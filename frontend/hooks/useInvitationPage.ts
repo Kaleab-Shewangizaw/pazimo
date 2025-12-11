@@ -106,6 +106,20 @@ export function useInvitationPage() {
     ).length,
     publicEvents: events.filter((e) => e.isPublic !== false).length,
     privateEvents: events.filter((e) => e.isPublic === false).length,
+    totalExpense: sentInvitations.reduce((sum, inv) => {
+      // Only count if paymentStatus is 'paid' (meaning organizer paid for it)
+      if (inv.paymentStatus === "paid") {
+        // @ts-ignore
+        const type = inv.originalType || "email";
+        const amount = inv.qrCodeCount || 1;
+        let cost = 0;
+        if (type === "email") cost = pricing.email;
+        else if (type === "sms" || type === "phone") cost = pricing.sms;
+        else if (type === "both") cost = pricing.email + pricing.sms;
+        return sum + cost * amount;
+      }
+      return sum;
+    }, 0),
   };
 
   useEffect(() => {
@@ -325,6 +339,7 @@ export function useInvitationPage() {
           ? "phone"
           : inv.type || inv.contactType || "email"
         ).toLowerCase(),
+        originalType: inv.type,
         guestType: inv.paymentStatus === "paid" ? "paid" : "guest",
         paymentStatus: inv.paymentStatus || "free",
         qrCodeCount: inv.amount || inv.qrCodeCount || 1,

@@ -10,6 +10,7 @@ const {
   createEmailTemplate,
 } = require("./invitationEmailController");
 const axios = require("axios");
+const mongoose = require("mongoose");
 
 // Helper to validate and fix rows
 const validateBulkRows = (rows, eventId) => {
@@ -191,6 +192,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           guestPhone: invitation.guestPhone,
           ticketType: "Guest Ticket",
           ticketCount: invitation.amount, // Use amount from bulk data
+          purchaseQuantity: invitation.amount,
           price: 0, // Free ticket
           status: "active",
           paymentStatus: "completed",
@@ -586,6 +588,7 @@ const createAndSendProfessionalInvitation = async (data) => {
         guestPhone,
         ticketType: "Guest Ticket",
         ticketCount: parseInt(amount) || 1,
+        purchaseQuantity: parseInt(amount) || 1,
         price: 0,
         status: "active",
         paymentStatus: "completed",
@@ -836,6 +839,153 @@ const getInvitationsByEvent = async (req, res) => {
   }
 };
 
+// Get all invitations (Admin)
+const getAllInvitations = async (req, res) => {
+  try {
+    const { search, eventId, organizerId, type } = req.query;
+
+    const query = {};
+
+    // Search logic
+    if (search) {
+      query.$or = [
+        { guestName: { $regex: search, $options: "i" } },
+        { guestEmail: { $regex: search, $options: "i" } },
+        { guestPhone: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Event ID logic
+    if (eventId) {
+      if (mongoose.Types.ObjectId.isValid(eventId)) {
+        query.eventId = new mongoose.Types.ObjectId(eventId);
+      } else {
+        // Invalid ID provided, return empty result
+        return res.status(StatusCodes.OK).json({
+          success: true,
+          data: [],
+          totalExpense: 0,
+          pagination: { total: 0, page: 1, pages: 1 },
+        });
+      }
+    }
+
+    if (organizerId) query.organizerId = organizerId;
+    if (type) query.type = type;
+
+    console.log("getAllInvitations Query:", JSON.stringify(query));
+
+    const invitations = await Invitation.find(query)
+      .populate("eventId", "title startDate startTime location")
+      .populate("organizerId", "firstName lastName email")
+      .sort({ createdAt: -1 });
+
+    const total = await Invitation.countDocuments(query);
+
+    // Calculate estimated expense
+    const pricing = await InvitationPricing.findOne({ eventType: "public" });
+    const emailPrice = pricing ? pricing.emailPrice : 2.5;
+    const smsPrice = pricing ? pricing.smsPrice : 7.5;
+
+    // Calculate total expense
+    const totalExpenseResult = await Invitation.aggregate([
+      { $match: { ...query, paymentStatus: "paid" } },
+      {
+        $project: {
+          amount: 1,
+          type: 1,
+          costPerUnit: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$type", "email"] }, then: emailPrice },
+                { case: { $eq: ["$type", "sms"] }, then: smsPrice },
+                {
+                  case: { $eq: ["$type", "both"] },
+                  then: emailPrice + smsPrice,
+                },
+              ],
+              default: 0,
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $multiply: ["$costPerUnit", "$amount"] } },
+        },
+      },
+    ]);
+    const totalExpense =
+      totalExpenseResult.length > 0 ? totalExpenseResult[0].total : 0;
+
+    const invitationsWithCost = invitations.map((inv) => {
+      let cost = 0;
+      if (inv.paymentStatus === "paid") {
+        if (inv.type === "email") cost = emailPrice;
+        else if (inv.type === "sms") cost = smsPrice;
+        else if (inv.type === "both") cost = emailPrice + smsPrice;
+
+        cost = cost * inv.amount;
+      }
+
+      return {
+        ...inv.toJSON(),
+        estimatedCost: cost,
+      };
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: invitationsWithCost,
+      totalExpense,
+      pagination: {
+        total,
+        page: 1,
+        pages: 1,
+      },
+    });
+  } catch (error) {
+    console.error("Get all invitations error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to fetch invitations",
+    });
+  }
+};
+
+// Delete invitation (Admin)
+const deleteInvitation = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const invitation = await Invitation.findById(id);
+    if (!invitation) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Invitation not found",
+      });
+    }
+
+    // If it has a QR code, try to find and delete the associated ticket
+    if (invitation.qrCodeData) {
+      await Ticket.findOneAndDelete({ qrCode: invitation.qrCodeData });
+    }
+
+    await Invitation.findByIdAndDelete(id);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Invitation and associated ticket deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete invitation error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to delete invitation",
+    });
+  }
+};
+
 module.exports = {
   createBulkInvitations,
   processPaidInvitations,
@@ -847,4 +997,6 @@ module.exports = {
   createAndSendProfessionalInvitation,
   createPendingInvitation,
   getInvitationsByEvent,
+  getAllInvitations,
+  deleteInvitation,
 };

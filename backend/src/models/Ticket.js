@@ -98,6 +98,10 @@ const TicketSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    purchaseQuantity: {
+      type: Number,
+      default: 1,
+    },
     paymentReference: {
       type: String,
     },

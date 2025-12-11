@@ -296,38 +296,41 @@ const buyTicket = async (req, res) => {
 
   // Create tickets with pending status for webhook verification
   const tickets = [];
-  for (let i = 0; i < quantity; i++) {
-    const ticket = new Ticket({
-      event: event._id,
-      user: userId,
-      ticketType: selectedType.name,
-      price: selectedType.price,
-      paymentReference:
-        paymentReference ||
-        `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      status: paymentReference ? "pending" : "active",
-      paymentStatus: paymentReference ? "pending" : "completed",
-    });
+  // Create ONE ticket for the entire quantity
+  const ticket = new Ticket({
+    event: event._id,
+    user: userId,
+    ticketType: selectedType.name,
+    price: selectedType.price * quantity, // Total price
+    ticketCount: quantity, // Total quantity
+    purchaseQuantity: quantity, // Original purchase quantity
+    paymentReference:
+      paymentReference ||
+      `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    status: paymentReference ? "pending" : "active",
+    paymentStatus: paymentReference ? "pending" : "completed",
+    isInvitation: false,
+  });
 
-    // Save ticket to generate QR code
-    await ticket.save();
+  // Save ticket to generate QR code
+  await ticket.save();
 
-    // Format ticket data for response
-    const ticketData = {
-      _id: ticket._id,
-      ticketId: ticket.ticketId,
-      event: event._id,
-      user: userId,
-      ticketType: ticket.ticketType,
-      price: ticket.price,
-      qrCode: ticket.qrCode,
-      purchaseDate: ticket.purchaseDate,
-      status: ticket.status,
-      checkedIn: ticket.checkedIn,
-    };
+  // Format ticket data for response
+  const ticketData = {
+    _id: ticket._id,
+    ticketId: ticket.ticketId,
+    event: event._id,
+    user: userId,
+    ticketType: ticket.ticketType,
+    price: ticket.price,
+    qrCode: ticket.qrCode,
+    purchaseDate: ticket.purchaseDate,
+    status: ticket.status,
+    checkedIn: ticket.checkedIn,
+    ticketCount: ticket.ticketCount,
+  };
 
-    tickets.push(ticketData);
-  }
+  tickets.push(ticketData);
 
   res.status(StatusCodes.CREATED).json({
     success: true,

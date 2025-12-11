@@ -70,6 +70,7 @@ const processSuccessfulPayment = async (payment) => {
     event: eventId,
     ticketType: ticketTypeInfo.name, // Ensure we store the name
     ticketCount: ticketCount || 1,
+    purchaseQuantity: ticketCount || 1,
     price: ticketTypeInfo.price * (ticketCount || 1),
     seatNumber,
     paymentReference: payment.transactionId,
@@ -232,7 +233,12 @@ const getAllTicketsAdmin = async (req, res) => {
     }));
 
     // ✅ Calculate total sold and revenue
-    const totalSold = tickets.length;
+    // Filter out invitations for sold count
+    const purchasedTickets = tickets.filter((t) => !t.isInvitation);
+    const totalSold = purchasedTickets.reduce(
+      (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
+      0
+    );
     const totalRevenue = tickets.reduce((sum, t) => sum + (t.price || 0), 0);
 
     res.status(StatusCodes.OK).json({
@@ -332,6 +338,7 @@ const createGuestTicket = async (req, res) => {
       guestPhone,
       ticketType: ticketType || "General",
       ticketCount: ticketCount || 1,
+      purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
       status: "pending",
       paymentStatus: "pending", // Organizer handles payment
@@ -754,6 +761,7 @@ const createInvitationTicket = async (req, res) => {
       guestPhone,
       ticketType: ticketType || "General", // Default or from body
       ticketCount: ticketCount || 1,
+      purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
       status: "pending",
       paymentStatus: "completed", // Organizer handles payment
@@ -931,7 +939,15 @@ const getEventTickets = async (req, res) => {
       .populate("user", "firstName lastName email")
       .sort("-createdAt");
 
-    res.status(StatusCodes.OK).json({ tickets, count: tickets.length });
+    const totalTicketsSold = tickets.reduce(
+      (sum, t) =>
+        sum + (!t.isInvitation ? t.purchaseQuantity || t.ticketCount || 1 : 0),
+      0
+    );
+
+    res
+      .status(StatusCodes.OK)
+      .json({ tickets, count: tickets.length, totalTicketsSold });
   } catch (error) {
     console.error("Get event tickets error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -1560,6 +1576,7 @@ const createOnDoorTicket = async (req, res) => {
       event: eventId,
       ticketType: ticketType.name,
       ticketCount: quantity,
+      purchaseQuantity: quantity,
       price: totalPrice,
       status: "active",
       paymentStatus: "completed",

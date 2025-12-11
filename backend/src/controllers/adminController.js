@@ -17,9 +17,17 @@ const getDashboardStats = async (req, res) => {
     const activeEvents = await Event.countDocuments({ status: "published" });
 
     // Get total revenue from tickets
-    const tickets = await Ticket.find({ paymentStatus: "completed" });
+    const tickets = await Ticket.find({
+      paymentStatus: "completed",
+      isInvitation: false,
+    });
     const totalRevenue = tickets.reduce(
       (sum, ticket) => sum + (ticket.price || 0),
+      0
+    );
+    const totalTicketsSold = tickets.reduce(
+      (sum, ticket) =>
+        sum + (ticket.purchaseQuantity || ticket.ticketCount || 1),
       0
     );
 
@@ -37,6 +45,7 @@ const getDashboardStats = async (req, res) => {
         totalUsers,
         totalEvents,
         totalRevenue,
+        totalTicketsSold,
         activeOrganizers,
         activeEvents,
         pendingWithdrawals,

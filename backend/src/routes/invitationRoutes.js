@@ -10,6 +10,8 @@ const {
   updateInvitationStatus,
   createPendingInvitation,
   getInvitationsByEvent,
+  getAllInvitations,
+  deleteInvitation,
 } = require("../controllers/invitationController");
 
 const {
@@ -103,5 +105,27 @@ router.get("/invitations/organizer/:organizerId", protect, async (req, res) => {
 
 // Get invitations by event ID
 router.get("/invitations/event/:eventId", protect, getInvitationsByEvent);
+
+// Get all invitations (Admin or specific organizer)
+router.get("/invitations", protect, async (req, res) => {
+  try {
+    // Admins can see all invitations, others can see only theirs
+    const query =
+      req.user.role === "admin" ? {} : { organizerId: req.user._id };
+    const invitations = await Invitation.find(query)
+      .sort({ createdAt: -1 })
+      .populate("eventId", "title");
+
+    res.json({ success: true, data: invitations });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all invitations (Admin)
+router.get("/invitations/admin/all", protect, getAllInvitations);
+
+// Delete invitation (Admin/Organizer)
+router.delete("/invitations/:id", protect, deleteInvitation);
 
 module.exports = router;
