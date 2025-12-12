@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
@@ -8,7 +8,7 @@ import SealedEnvelope from "./components/SealedEnvelope";
 import OpenedEnvelope from "./components/OpenedEnvelope";
 import InvitationContent from "./components/InvitationContent";
 
-export default function InvitationPage() {
+function InvitationPageContent() {
   const [isOpened, setIsOpened] = useState(false);
   const [showContent, setShowContent] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -174,5 +174,13 @@ export default function InvitationPage() {
         </AnimatePresence>
       </div>
     </>
+  );
+}
+
+export default function InvitationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <InvitationPageContent />
+    </Suspense>
   );
 }
