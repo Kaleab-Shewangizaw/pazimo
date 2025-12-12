@@ -45,7 +45,7 @@
 //   const handleUserClick = () => {
 //     if (user?.role === "organizer") {
 //       router.push("/organizer")
-//     } 
+//     }
 //     else {
 //       router.push("/my-account")
 //     }
@@ -271,174 +271,226 @@
 // }
 
 // export default Header
-"use client"
+"use client";
 
-import type React from "react"
-import Link from "next/link"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Search, User, Menu, X } from "lucide-react"
-import { useAuthStore } from "@/store/authStore"
-import { useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTrigger } from "@/components/ui/drawer"
+import type React from "react";
+import Link from "next/link";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Search, User, Menu, X } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 
-const Header = () => {
-  const router = useRouter()
-  const { user, logout } = useAuthStore()
-  const [searchTerm, setSearchTerm] = useState("")
-  const [categories, setCategories] = useState<string[]>([])
-  const [selectedCategory, setSelectedCategory] = useState<string>("")
-  const [isFocused, setIsFocused] = useState(false)
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [showMobileSearch, setShowMobileSearch] = useState(false)
+interface HeaderProps {
+  variant?: "default" | "signature";
+}
+
+const Header = ({ variant = "default" }: HeaderProps) => {
+  const router = useRouter();
+  const { user, logout } = useAuthStore();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [isFocused, setIsFocused] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
+
+  const isSignature = variant === "signature";
 
   useEffect(() => {
     async function fetchCategories() {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events`)
-        if (!response.ok) throw new Error("Failed to fetch events")
-        const data = await response.json()
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events`
+        );
+        if (!response.ok) throw new Error("Failed to fetch events");
+        const data = await response.json();
         const cats = Array.from(
-          new Set(data.data.map((event: any) => event.category?.name || "Uncategorized")),
-        ) as string[]
-        setCategories(cats)
+          new Set(
+            data.data.map(
+              (event: any) => event.category?.name || "Uncategorized"
+            )
+          )
+        ) as string[];
+        setCategories(cats);
       } catch (e) {
-        setCategories([])
+        setCategories([]);
       }
     }
-    fetchCategories()
-  }, [])
+    fetchCategories();
+  }, []);
 
   const handleLogout = () => {
-    logout()
-    router.push("/sign-in")
-  }
+    logout();
+    router.push("/sign-in");
+  };
 
   const handleUserClick = () => {
     if (user?.role === "organizer") {
-      router.push("/organizer")
-    } 
-    else {
-      router.push("/my-account")
+      router.push("/organizer");
+    } else {
+      router.push("/my-account");
     }
-  }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    const params = []
-    if (searchTerm.trim()) params.push(`search=${encodeURIComponent(searchTerm.trim())}`)
-    if (selectedCategory && selectedCategory !== "all") params.push(`category=${encodeURIComponent(selectedCategory)}`)
-    const query = params.length ? `?${params.join("&")}` : ""
-    router.push(`/event_explore${query}`)
-    setShowMobileSearch(false)
-  }
+    e.preventDefault();
+    const params = [];
+    if (searchTerm.trim())
+      params.push(`search=${encodeURIComponent(searchTerm.trim())}`);
+    if (selectedCategory && selectedCategory !== "all")
+      params.push(`category=${encodeURIComponent(selectedCategory)}`);
+    const query = params.length ? `?${params.join("&")}` : "";
+    router.push(`/event_explore${query}`);
+    setShowMobileSearch(false);
+  };
 
   return (
     <>
       {/* Fixed header for mobile, normal for desktop */}
-      <header className="md:relative fixed top-0 left-0 right-0 z-50 py-3 px-4 sm:px-8 md:px-16 border-b border-gray-300 md:border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm shadow-sm md:shadow-none transition-all duration-300 ease-out">
+      <header
+        className={`md:relative fixed top-0 left-0 right-0 z-50 py-3 px-4 sm:px-8 md:px-16 border-b transition-all duration-300 ease-out
+        ${
+          isSignature
+            ? "bg-[#fdfbf7] border-yellow-600/30 shadow-md shadow-yellow-900/5"
+            : "border-gray-300 md:border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm shadow-sm md:shadow-none"
+        }`}
+      >
         <div className="flex items-center justify-between gap-3 md:gap-6">
           {/* Mobile: Logo, Search Icon/Bar, Hamburger */}
           {/* Mobile: Logo, Search Icon/Bar, Hamburger */}
-<div className="flex md:hidden items-center justify-between w-full gap-3">
-  {/* Logo - hide when search is active */}
-  <Link href="/" className={`flex items-center group flex-shrink-0 transition-all duration-300 ${showMobileSearch ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'}`}>
-    <img
-      src="/logo.png"
-      alt="Pazimo"
-      className="w-16 transition-transform duration-200 group-hover:scale-105"
-    />
-  </Link>
+          <div className="flex md:hidden items-center justify-between w-full gap-3">
+            {/* Logo - hide when search is active */}
+            <Link
+              href="/"
+              className={`flex items-center group flex-shrink-0 transition-all duration-300 ${
+                showMobileSearch
+                  ? "opacity-0 w-0 overflow-hidden"
+                  : "opacity-100"
+              }`}
+            >
+              <img
+                src="/logo.png"
+                alt="Pazimo"
+                className="w-16 transition-transform duration-200 group-hover:scale-105"
+              />
+            </Link>
 
-  {/* Mobile Search - show when active */}
-  {showMobileSearch && (
-    <div className="flex-1 animate-in slide-in-from-right-5 duration-300">
-      <form
-        className={`relative flex items-center rounded-lg border overflow-hidden bg-white transition-all duration-300 ease-out ${
-          isFocused
-            ? "border-[#FFC107] shadow-lg"
-            : "border-gray-300 hover:border-yellow-400 shadow-sm"
-        }`}
-        onSubmit={handleSearch}
-      >
-        <div className="flex items-center pl-2 pr-1 border-r border-gray-200">
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="rounded-none border-0 bg-transparent h-8 min-w-[80px] text-gray-600 font-medium text-xs">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="relative flex-1 group">
-          <Input
-            id="search-input-mobile"
-            type="text"
-            className="relative border-0 focus:ring-0 focus:outline-none h-8 bg-transparent px-2 text-gray-800 text-sm font-medium placeholder:text-gray-400"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            autoComplete="off"
-            placeholder="Search events..."
-            autoFocus
-          />
-        </div>
-        <Button
-          type="submit"
-          size="icon"
-          className="h-8 w-8 bg-[#FFC107] hover:bg-[#FFC101] rounded-l-none rounded-r-lg"
-        >
-          <Search className="h-3 w-3 text-white" />
-        </Button>
-      </form>
-    </div>
-  )}
+            {/* Mobile Search - show when active */}
+            {showMobileSearch && (
+              <div className="flex-1 animate-in slide-in-from-right-5 duration-300">
+                <form
+                  className={`relative flex items-center rounded-lg border overflow-hidden bg-white transition-all duration-300 ease-out ${
+                    isFocused
+                      ? "border-[#FFC107] shadow-lg"
+                      : "border-gray-300 hover:border-yellow-400 shadow-sm"
+                  }`}
+                  onSubmit={handleSearch}
+                >
+                  <div className="flex items-center pl-2 pr-1 border-r border-gray-200">
+                    <Select
+                      value={selectedCategory}
+                      onValueChange={setSelectedCategory}
+                    >
+                      <SelectTrigger className="rounded-none border-0 bg-transparent h-8 min-w-[80px] text-gray-600 font-medium text-xs">
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>
+                            {cat}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="relative flex-1 group">
+                    <Input
+                      id="search-input-mobile"
+                      type="text"
+                      className="relative border-0 focus:ring-0 focus:outline-none h-8 bg-transparent px-2 text-gray-800 text-sm font-medium placeholder:text-gray-400"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onFocus={() => setIsFocused(true)}
+                      onBlur={() => setIsFocused(false)}
+                      autoComplete="off"
+                      placeholder="Search events..."
+                      autoFocus
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="h-8 w-8 bg-[#FFC107] hover:bg-[#FFC101] rounded-l-none rounded-r-lg"
+                  >
+                    <Search className="h-3 w-3 text-white" />
+                  </Button>
+                </form>
+              </div>
+            )}
 
-  {/* Right side: Search Icon and Hamburger/Close */}
-  <div className="flex items-center gap-1 flex-shrink-0">
-    {!showMobileSearch && (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="p-2 text-gray-700 hover:text-[#115db1]"
-        onClick={() => setShowMobileSearch(true)}
-      >
-        <Search className="h-5 w-5" />
-      </Button>
-    )}
+            {/* Right side: Search Icon and Hamburger/Close */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {!showMobileSearch && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="p-2 text-gray-700 hover:text-[#115db1]"
+                  onClick={() => setShowMobileSearch(true)}
+                >
+                  <Search className="h-5 w-5" />
+                </Button>
+              )}
 
-    {showMobileSearch ? (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="p-2 text-gray-700 hover:text-[#115db1]"
-        onClick={() => setShowMobileSearch(false)}
-      >
-        <X className="h-5 w-5" />
-      </Button>
-    ) : (
-      <Drawer direction="right" open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <DrawerTrigger asChild>
-          <button
-            className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-        </DrawerTrigger>
-        {/* Rest of drawer content remains the same */}
+              {showMobileSearch ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="p-2 text-gray-700 hover:text-[#115db1]"
+                  onClick={() => setShowMobileSearch(false)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              ) : (
+                <Drawer
+                  direction="right"
+                  open={drawerOpen}
+                  onOpenChange={setDrawerOpen}
+                >
+                  <DrawerTrigger asChild>
+                    <button
+                      className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
+                      aria-label="Open menu"
+                    >
+                      <Menu className="h-5 w-5" />
+                    </button>
+                  </DrawerTrigger>
+                  {/* Rest of drawer content remains the same */}
 
                   <DrawerContent className="w-72 max-w-[85vw] ml-auto rounded-l-xl p-0">
                     <DrawerHeader className="border-b border-gray-100">
                       <div className="w-full flex justify-center items-center py-4">
-                        <img src="/logo.png" alt="Pazimo" className="w-24 sm:w-28 mx-auto" />
+                        <img
+                          src="/logo.png"
+                          alt="Pazimo"
+                          className="w-24 sm:w-28 mx-auto"
+                        />
                       </div>
                     </DrawerHeader>
                     <nav className="flex flex-col gap-2 px-4 py-6">
@@ -461,8 +513,8 @@ const Header = () => {
                           <button
                             className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
                             onClick={() => {
-                              setDrawerOpen(false)
-                              handleUserClick()
+                              setDrawerOpen(false);
+                              handleUserClick();
                             }}
                           >
                             My Account
@@ -470,8 +522,8 @@ const Header = () => {
                           <button
                             className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
                             onClick={() => {
-                              setDrawerOpen(false)
-                              handleLogout()
+                              setDrawerOpen(false);
+                              handleLogout();
                             }}
                           >
                             Log out
@@ -482,8 +534,8 @@ const Header = () => {
                           <button
                             className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
                             onClick={() => {
-                              setDrawerOpen(false)
-                              router.push("/sign-in")
+                              setDrawerOpen(false);
+                              router.push("/sign-in");
                             }}
                           >
                             Sign In
@@ -514,7 +566,10 @@ const Header = () => {
           </div>
 
           {/* Desktop: Logo */}
-          <Link href="/" className="hidden md:flex items-center group flex-shrink-0">
+          <Link
+            href="/"
+            className="hidden md:flex items-center group flex-shrink-0"
+          >
             <img
               src="/logo.png"
               alt="Pazimo"
@@ -534,16 +589,26 @@ const Header = () => {
                 onSubmit={handleSearch}
               >
                 <div className="flex items-center pl-3 pr-2 border-r border-gray-200 transition-all duration-300 ease-out">
-                  <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={setSelectedCategory}
+                  >
                     <SelectTrigger className="rounded-none border-0 bg-transparent h-9 min-w-[110px] text-gray-600 font-medium text-sm transition-all duration-200 ease-out hover:text-gray-800">
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border shadow-xl animate-in fade-in-0 zoom-in-95 duration-200">
-                      <SelectItem value="all" className="text-sm transition-colors duration-150 ease-out">
+                      <SelectItem
+                        value="all"
+                        className="text-sm transition-colors duration-150 ease-out"
+                      >
                         All Categories
                       </SelectItem>
                       {categories.map((cat) => (
-                        <SelectItem key={cat} value={cat} className="text-sm transition-colors duration-150 ease-out">
+                        <SelectItem
+                          key={cat}
+                          value={cat}
+                          className="text-sm transition-colors duration-150 ease-out"
+                        >
                           {cat}
                         </SelectItem>
                       ))}
@@ -601,13 +666,11 @@ const Header = () => {
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  
                   <Button
                     className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white border-0 transition-all duration-200 rounded-xl font-medium shadow-lg hover:shadow-xl"
                     onClick={() => router.push("/sign-in")}
-
                   >
-                     Sign In
+                    Sign In
                   </Button>
                 </div>
               )}
@@ -619,7 +682,7 @@ const Header = () => {
       {/* Spacer div to prevent content from being hidden behind fixed header on mobile */}
       <div className="md:hidden h-16" />
     </>
-  )
-}
+  );
+};
 
-export default Header
+export default Header;

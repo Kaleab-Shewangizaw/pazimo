@@ -44,6 +44,7 @@ interface Ticket {
   paymentStatus: string;
   isInvitation?: boolean;
   isOnDoor?: boolean;
+  purchaseQuantity?: number;
 }
 
 export default function CustomersPage() {
@@ -287,10 +288,13 @@ export default function CustomersPage() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
+                  Buyer & Ticket ID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ticket Info
+                  Type
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Usage (Used/Total)
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Price
@@ -307,7 +311,7 @@ export default function CustomersPage() {
               {isLoadingTickets ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-6 py-12 text-center text-gray-500"
                   >
                     <div className="flex flex-col items-center justify-center gap-2">
@@ -319,7 +323,7 @@ export default function CustomersPage() {
               ) : filteredTickets.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-6 py-8 text-center text-gray-500"
                   >
                     {selectedEventId
@@ -328,77 +332,83 @@ export default function CustomersPage() {
                   </td>
                 </tr>
               ) : (
-                paginatedTickets.map((ticket) => (
-                  <tr key={ticket._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3 text-xs">
-                          {(
-                            ticket.user?.firstName?.[0] ||
-                            ticket.guestName?.[0] ||
-                            "G"
-                          ).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {ticket.isOnDoor
-                              ? "On-Door Purchase"
-                              : ticket.user
-                              ? `${ticket.user.firstName} ${ticket.user.lastName}`
-                              : ticket.guestName || "Guest"}
+                paginatedTickets.map((ticket) => {
+                  const total =
+                    ticket.purchaseQuantity || ticket.ticketCount || 1;
+                  const remaining =
+                    ticket.ticketCount !== undefined ? ticket.ticketCount : 1;
+                  const used = total - remaining;
+
+                  return (
+                    <tr key={ticket._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3 text-xs">
+                            {(
+                              ticket.user?.firstName?.[0] ||
+                              ticket.guestName?.[0] ||
+                              "G"
+                            ).toUpperCase()}
                           </div>
-                          <div className="text-xs text-gray-500">
-                            {ticket.isOnDoor
-                              ? "Walk-in"
-                              : ticket.user?.email ||
-                                ticket.guestEmail ||
-                                ticket.guestPhone ||
-                                "No contact info"}
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              {ticket.isOnDoor
+                                ? "On-Door Purchase"
+                                : ticket.user
+                                ? `${ticket.user.firstName} ${ticket.user.lastName}`
+                                : ticket.guestName || "Guest"}
+                            </div>
+                            <div className="text-xs text-gray-500 font-mono">
+                              ID: {ticket.ticketId}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {ticket.ticketType}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Qty: {ticket.ticketCount}
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        ETB {ticket.price?.toLocaleString() || "0"}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {ticket.paymentStatus}
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {new Date(ticket.createdAt).toLocaleDateString()}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {new Date(ticket.createdAt).toLocaleTimeString()}
-                      </div>
-                    </td>
-                    <td className="px-6 py-2 whitespace-nowrap">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          ticket.status === "active" ||
-                          ticket.status === "confirmed"
-                            ? "bg-green-100 text-green-800"
-                            : ticket.status === "used"
-                            ? "bg-gray-100 text-gray-800"
-                            : "bg-red-100 text-red-800"
-                        }`}
-                      >
-                        {ticket.status.charAt(0).toUpperCase() +
-                          ticket.status.slice(1)}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {ticket.ticketType}
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 font-medium">
+                          {used} <span className="text-gray-400">/</span>{" "}
+                          {total}
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          ETB {ticket.price?.toLocaleString() || "0"}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {ticket.paymentStatus}
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {new Date(ticket.createdAt).toLocaleDateString()}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {new Date(ticket.createdAt).toLocaleTimeString()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-2 whitespace-nowrap">
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            ticket.status === "active" ||
+                            ticket.status === "confirmed"
+                              ? "bg-green-100 text-green-800"
+                              : ticket.status === "used"
+                              ? "bg-gray-100 text-gray-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
+                          {ticket.status.charAt(0).toUpperCase() +
+                            ticket.status.slice(1)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

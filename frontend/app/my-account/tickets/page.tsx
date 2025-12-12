@@ -492,6 +492,13 @@ export default function TicketsPage() {
                                 (acc: number, t: TicketType) =>
                                   acc + (t.ticketCount || 1),
                                 0
+                              )}{" "}
+                              /{" "}
+                              {group.tickets.reduce(
+                                (acc: number, t: TicketType) =>
+                                  acc +
+                                  (t.purchaseQuantity || t.ticketCount || 1),
+                                0
                               )}
                             </p>
                           </div>
@@ -570,10 +577,18 @@ export default function TicketsPage() {
                                           {selectedGroup.tickets[
                                             currentTicketIndex
                                           ].ticketCount || 1}{" "}
+                                          /{" "}
+                                          {selectedGroup.tickets[
+                                            currentTicketIndex
+                                          ].purchaseQuantity ||
+                                            selectedGroup.tickets[
+                                              currentTicketIndex
+                                            ].ticketCount ||
+                                            1}{" "}
                                           Person
                                           {(selectedGroup.tickets[
                                             currentTicketIndex
-                                          ].ticketCount || 1) > 1
+                                          ].purchaseQuantity || 1) > 1
                                             ? "s"
                                             : ""}
                                         </p>

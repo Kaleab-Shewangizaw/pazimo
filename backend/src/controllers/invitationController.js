@@ -135,6 +135,9 @@ const createBulkInvitations = async (req, res) => {
       };
     });
 
+    // Add 3% service fee
+    totalCost = totalCost * 1.03;
+
     // Create invitations
     const invitations = await Invitation.insertMany(invitationsToCreate);
     const invitationIds = invitations.map((inv) => inv.invitationId);
@@ -212,7 +215,12 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
         actionLink = `${frontendUrl}/event_detail?id=${event._id}`;
         actionText = "Buy Ticket";
       } else {
-        actionLink = `${frontendUrl}/guest-invitation?inv=${uniqueId}`;
+        // Check if event title contains "signature" (case-insensitive)
+        if (event.title && event.title.toLowerCase().includes("signature")) {
+          actionLink = `${frontendUrl}/guest-invitation/signature?inv=${uniqueId}`;
+        } else {
+          actionLink = `${frontendUrl}/guest-invitation?inv=${uniqueId}`;
+        }
         actionText = "Confirm Attendance";
       }
 
@@ -238,6 +246,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
         const eventData = {
           title: event.title,
           date: event.startDate,
+          time: event.startTime,
           location:
             typeof event.location === "string"
               ? event.location
@@ -915,6 +924,11 @@ const getAllInvitations = async (req, res) => {
           total: { $sum: { $multiply: ["$costPerUnit", "$amount"] } },
         },
       },
+      {
+        $project: {
+          total: { $multiply: ["$total", 1.03] }, // Add 3% service fee
+        },
+      },
     ]);
     const totalExpense =
       totalExpenseResult.length > 0 ? totalExpenseResult[0].total : 0;
@@ -926,7 +940,7 @@ const getAllInvitations = async (req, res) => {
         else if (inv.type === "sms") cost = smsPrice;
         else if (inv.type === "both") cost = emailPrice + smsPrice;
 
-        cost = cost * inv.amount;
+        cost = cost * inv.amount * 1.03; // Add 3% service fee
       }
 
       return {

@@ -12,6 +12,7 @@ export interface TicketType {
   startDate?: string;
   endDate?: string;
   ticketCount?: number;
+  purchaseQuantity?: number;
   status?: string;
   eventTitle?: string;
 }

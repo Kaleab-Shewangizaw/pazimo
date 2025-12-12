@@ -786,7 +786,7 @@ export function useInvitationPage() {
         const isPhone = validatePhoneNumber(contact);
 
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invite`,
           {
             method: "POST",
             headers: {
