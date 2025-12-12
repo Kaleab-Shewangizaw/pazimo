@@ -530,6 +530,7 @@ const processGuestInvitation = async (ticketId) => {
     const eventData = {
       title: event.title,
       date: event.startDate,
+      time: event.startTime,
       location:
         typeof event.location === "string"
           ? event.location
@@ -777,6 +778,7 @@ const createInvitationTicket = async (req, res) => {
       const eventData = {
         title: event.title,
         date: event.startDate,
+        time: event.startTime,
         location:
           typeof event.location === "string"
             ? event.location
