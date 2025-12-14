@@ -317,11 +317,11 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
             ? event.location
             : event.location?.address || "See map";
 
-        const message = `Hi ${invitation.guestName}${
-          invitation.message ? "\n\n" + invitation.message.trim() : ""
-        }\n\nEvent: ${
+        const message = `Hello, ${invitation.guestName}\n\n${
+          invitation.message ? invitation.message.trim() + "\n\n" : ""
+        }Event: ${
           event.title
-        }\nTime: ${dateTimeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+        }\nDate: ${dateTimeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
         // Call SMS API (GeezSMS)
         let phone = invitation.guestPhone.replace("+", "");

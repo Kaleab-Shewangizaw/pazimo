@@ -426,14 +426,34 @@ const createGuestTicket = async (req, res) => {
 
     // Send SMS
     if (guestPhone) {
-      const eventDate = new Date(event.startDate).toLocaleDateString();
-      const eventTime = event.startTime || "";
+      const eventDate = new Date(event.startDate).toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
+      let timeStr = event.startTime || "";
+      if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+        const [hours, minutes] = timeStr.split(":");
+        const h = parseInt(hours, 10);
+        if (!isNaN(h)) {
+          const ampm = h >= 12 ? "PM" : "AM";
+          const h12 = h % 12 || 12;
+          timeStr = `${h12}:${minutes} ${ampm}`;
+        }
+      }
+
       const location =
         typeof event.location === "string"
           ? event.location
           : event.location?.address || "See map";
 
-      const smsMessage = `Hi ${guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+      const smsMessage = `Hello, ${guestName}\n\n${
+        message ? message + "\n\n" : ""
+      }Event: ${
+        event.title
+      }\nDate: ${eventDate} | ${timeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
       // Ensure phone starts with 251
@@ -582,7 +602,12 @@ const processGuestInvitation = async (ticketId) => {
   // Send SMS
   if (ticket.guestPhone) {
     console.log(`Sending SMS to ${ticket.guestPhone}`);
-    const eventDate = new Date(event.startDate).toLocaleDateString();
+    const eventDate = new Date(event.startDate).toLocaleDateString("en-US", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
     const eventTime = event.startTime || "";
     const location =
       typeof event.location === "string"
@@ -828,14 +853,34 @@ const createInvitationTicket = async (req, res) => {
 
     // Send SMS
     if (guestPhone) {
-      const eventDate = new Date(event.startDate).toLocaleDateString();
-      const eventTime = event.startTime || "";
+      const eventDate = new Date(event.startDate).toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
+      let timeStr = event.startTime || "";
+      if (timeStr && timeStr !== "TBD" && timeStr.includes(":")) {
+        const [hours, minutes] = timeStr.split(":");
+        const h = parseInt(hours, 10);
+        if (!isNaN(h)) {
+          const ampm = h >= 12 ? "PM" : "AM";
+          const h12 = h % 12 || 12;
+          timeStr = `${h12}:${minutes} ${ampm}`;
+        }
+      }
+
       const location =
         typeof event.location === "string"
           ? event.location
           : event.location?.address || "See map";
 
-      const smsMessage = `Hi ${guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+      const smsMessage = `Hello, ${guestName}\n\n${
+        message ? message + "\n\n" : ""
+      }Event: ${
+        event.title
+      }\nDate: ${eventDate} | ${timeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
       let phone = guestPhone.replace("+", "");
       // Ensure phone starts with 251

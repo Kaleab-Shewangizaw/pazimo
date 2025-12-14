@@ -263,7 +263,7 @@ export const processInvitation = async (invitationData: any) => {
       selectedEvent?.location
     );
     const qrCodeLink = qrCodeData.url;
-    const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
+    const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date} ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
     const inviteMessage = message
       ? `${message}\n\n${eventDetails}`
       : `You're invited to ${selectedEvent?.title}!\n\n${eventDetails}`;
@@ -287,7 +287,7 @@ export const processInvitation = async (invitationData: any) => {
         formattedPhone = "+251" + formattedPhone;
       }
 
-      const smsMessage = `Hi ${customerName}\n\n${inviteMessage}`;
+      const smsMessage = `Hello, ${customerName}\n\n${inviteMessage}`;
       success = await sendSMS(formattedPhone, smsMessage);
     }
 

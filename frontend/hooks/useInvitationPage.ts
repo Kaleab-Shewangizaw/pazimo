@@ -867,10 +867,10 @@ export function useInvitationPage() {
         color: { dark: "#0D47A1", light: "#FFFFFF" },
       });
 
-      const eventDetails = `Event: ${selectedEvent?.title}\nDate and Time: ${selectedEvent?.date} ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
+      const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date} ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
       const smsInviteMessage = message
         ? `${message}\n\n${eventDetails}`
-        : `\n\n${eventDetails}`;
+        : `${eventDetails}`;
 
       let success = false;
 
@@ -893,7 +893,7 @@ export function useInvitationPage() {
           formattedPhone = "+251" + formattedPhone;
         }
 
-        const smsMessage = `Hi ${customerName}, ${smsInviteMessage}`;
+        const smsMessage = `Hello, ${customerName}\n\n${smsInviteMessage}`;
         success = await sendSMS(formattedPhone, smsMessage);
       }
 

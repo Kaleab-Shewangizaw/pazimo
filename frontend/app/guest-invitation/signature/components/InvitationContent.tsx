@@ -15,26 +15,64 @@ export default function InvitationContent({
   initialData,
 }: InvitationContentProps) {
   const containerVariants: Variants = {
-    hidden: { opacity: 0, y: 30 },
+    hidden: { opacity: 0, scale: 0.9, y: 30 },
     visible: {
       opacity: 1,
+      scale: 1,
       y: 0,
       transition: {
-        duration: 0.8,
-        ease: [0.22, 1, 0.36, 1],
-        staggerChildren: 0.2,
+        type: "spring",
+        duration: 1,
+        bounce: 0.3,
+        staggerChildren: 0.15,
+        delayChildren: 0.2,
       },
     },
   };
 
   const itemVariants: Variants = {
-    hidden: { opacity: 0, y: 15 },
+    hidden: { opacity: 0, y: 20, filter: "blur(8px)" },
     visible: {
       opacity: 1,
       y: 0,
+      filter: "blur(0px)",
       transition: {
-        duration: 0.6,
-        ease: "easeOut",
+        type: "spring",
+        bounce: 0.4,
+        duration: 0.8,
+      },
+    },
+  };
+
+  const logoVariants: Variants = {
+    hidden: { opacity: 0, scale: 0.5, rotate: -10 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      rotate: 0,
+      transition: {
+        type: "spring",
+        bounce: 0.5,
+        duration: 1,
+      },
+    },
+    hover: {
+      scale: 1.1,
+      rotate: 5,
+      transition: { type: "spring", stiffness: 300 },
+    },
+  };
+
+  const cornerVariants: Variants = {
+    hidden: { scale: 0, opacity: 0 },
+    visible: {
+      scale: 1,
+      opacity: 1,
+      transition: {
+        type: "spring",
+        stiffness: 260,
+        damping: 20,
+        delay: 0.5,
       },
     },
   };
@@ -44,18 +82,32 @@ export default function InvitationContent({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
+      whileHover={{ scale: 1.005, transition: { duration: 0.3 } }}
       className="relative bg-neutral-900/95 backdrop-blur-sm border border-yellow-500/20 rounded-xl 
         p-6 md:p-12 w-[100%] md:w-full max-w-3xl mx-auto shadow-2xl my-8"
     >
       {/* cornors outside that border giving fancy look */}
-      <div className="absolute rounded-tl-xl -top-3 -left-3 w-6 h-6 border-t-4 border-l-4 border-yellow-500/30 rounded-br-lg" />
-      <div className="absolute rounded-tr-xl -top-3 -right-3 w-6 h-6 border-t-4 border-r-4 border-yellow-500/30 rounded-bl-lg" />
-      <div className="absolute rounded-bl-xl -bottom-3 -left-3 w-6 h-6 border-b-4 border-l-4 border-yellow-500/30 rounded-tr-lg" />
-      <div className="absolute rounded-br-xl -bottom-3 -right-3 w-6 h-6 border-b-4 border-r-4 border-yellow-500/30 rounded-tl-lg" />
+      <motion.div
+        variants={cornerVariants}
+        className="absolute rounded-tl-xl -top-3 -left-3 w-6 h-6 border-t-4 border-l-4 border-yellow-500/30 rounded-br-lg"
+      />
+      <motion.div
+        variants={cornerVariants}
+        className="absolute rounded-tr-xl -top-3 -right-3 w-6 h-6 border-t-4 border-r-4 border-yellow-500/30 rounded-bl-lg"
+      />
+      <motion.div
+        variants={cornerVariants}
+        className="absolute rounded-bl-xl -bottom-3 -left-3 w-6 h-6 border-b-4 border-l-4 border-yellow-500/30 rounded-tr-lg"
+      />
+      <motion.div
+        variants={cornerVariants}
+        className="absolute rounded-br-xl -bottom-3 -right-3 w-6 h-6 border-b-4 border-r-4 border-yellow-500/30 rounded-tl-lg"
+      />
 
       {/* Company Logo */}
       <motion.div
-        variants={itemVariants}
+        variants={logoVariants}
+        whileHover="hover"
         className="flex justify-center mb-6 md:mb-8"
       >
         <div className="relative w-20 h-20 md:w-28 md:h-28 opacity-90">
@@ -118,9 +170,9 @@ export default function InvitationContent({
                   ? new Date(initialData.event.startDate).toLocaleDateString(
                       "en-US",
                       {
-                        weekday: "long",
+                        weekday: "short",
                         year: "numeric",
-                        month: "long",
+                        month: "short",
                         day: "numeric",
                       }
                     )
@@ -136,7 +188,22 @@ export default function InvitationContent({
                 Time
               </span>
               <p className="text-neutral-200 text-base md:text-lg">
-                {initialData?.event?.startTime || "Time TBD"}
+                {initialData?.event?.startTime
+                  ? (() => {
+                      const time = initialData.event.startTime;
+                      // If time is already in AM/PM format, return it
+                      if (time.toLowerCase().includes("m")) return time;
+                      // If time is in HH:mm format, convert to AM/PM
+                      const [hours, minutes] = time.split(":");
+                      const h = parseInt(hours, 10);
+                      if (!isNaN(h)) {
+                        const ampm = h >= 12 ? "PM" : "AM";
+                        const h12 = h % 12 || 12;
+                        return `${h12}:${minutes} ${ampm}`;
+                      }
+                      return time;
+                    })()
+                  : "Time TBD"}
               </p>
             </div>
           </div>

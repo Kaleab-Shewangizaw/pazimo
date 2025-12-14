@@ -640,9 +640,9 @@ export default function InvitationPage() {
 
         const dateTimeStr = `${dateStr} | ${timeStr}`;
 
-        const smsMessage = `Hi ${customerName}${
-          message ? "\n\n" + message : ""
-        }\n\nEvent: ${selectedEvent?.title}\nTime: ${dateTimeStr}\nLocation: ${
+        const smsMessage = `Hello, ${customerName}\n\n${
+          message ? message + "\n\n" : ""
+        }Event: ${selectedEvent?.title}\nDate: ${dateTimeStr}\nLocation: ${
           selectedEvent?.location
         }\n\nRSVP Link: ${qrCodeLink}`;
         success = await sendSMS(formattedPhone, smsMessage);
@@ -825,14 +825,14 @@ export default function InvitationPage() {
       // 3. Merge lists: prefer tickets over invitations for same contact
       // But user wants "every invitation ticket sent, not purchased"
       // So we prioritize showing the invitation list, enriched with ticket status if available.
-      
+
       // If we have a ticket for this contact, it means they are confirmed.
-      const ticketMap = new Map(ticketAttendees.map(t => [t.contact, t]));
-      
-      const mergedAttendees = invitationAttendees.map(inv => {
+      const ticketMap = new Map(ticketAttendees.map((t) => [t.contact, t]));
+
+      const mergedAttendees = invitationAttendees.map((inv) => {
         if (ticketMap.has(inv.contact)) {
-           // If they have a ticket, they are confirmed
-           return { ...inv, status: "Confirmed" };
+          // If they have a ticket, they are confirmed
+          return { ...inv, status: "Confirmed" };
         }
         return inv;
       });
@@ -840,7 +840,7 @@ export default function InvitationPage() {
       // If the user wants ONLY invitations sent, we just use mergedAttendees.
       // If they want to see organic tickets too, we would add remaining tickets.
       // "every invitation ticket sent, not purchased" -> implies showing the invitation list.
-      
+
       setAttendees(mergedAttendees);
     } catch (error) {
       console.error("Error fetching attendees:", error);
@@ -1076,11 +1076,9 @@ export default function InvitationPage() {
 
             const dateTimeStr = `${dateStr} | ${timeStr}`;
 
-            const smsMessage = `Hi ${contact.name}${
-              contact.message ? "\n\n" + contact.message : ""
-            }\n\nEvent: ${
-              selectedEvent?.title
-            }\nTime: ${dateTimeStr}\nLocation: ${
+            const smsMessage = `Hello, ${contact.name}\n\n${
+              contact.message ? contact.message + "\n\n" : ""
+            }Event: ${selectedEvent?.title}\nDate: ${dateTimeStr}\nLocation: ${
               selectedEvent?.location
             }\n\nRSVP Link: ${qrCodeLink}`;
             success = await sendSMS(formattedPhone, smsMessage);
@@ -1218,7 +1216,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
   const deliveredInvitations = sentInvitations.filter(
     (inv) => inv.status === "delivered"
   ).length;
-  
+
   // Calculate success rate based on confirmed RSVPs or Tickets
   const confirmedInvitationsCount = sentInvitations.filter(
     (inv) => inv.rsvpStatus === "confirmed"

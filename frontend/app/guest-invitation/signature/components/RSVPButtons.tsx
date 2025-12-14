@@ -122,13 +122,15 @@ export default function RSVPButtons({
           </p>
         </div>
 
-        <button
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           onClick={downloadTicket}
           className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-full transition-all shadow-lg hover:shadow-yellow-600/20"
         >
           <Download className="w-4 h-4" />
           <span>Download Ticket</span>
-        </button>
+        </motion.button>
       </motion.div>
     );
   }
@@ -136,8 +138,8 @@ export default function RSVPButtons({
   if (status === "declined") {
     return (
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
         className="text-center p-6 bg-neutral-800/50 rounded-xl border border-neutral-700"
       >
         <p className="text-neutral-300">
@@ -149,7 +151,9 @@ export default function RSVPButtons({
 
   return (
     <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md mx-auto">
-      <button
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => handleRSVP(true)}
         disabled={isSubmitting}
         className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-full transition-all shadow-lg hover:shadow-yellow-600/20 disabled:opacity-50 disabled:cursor-not-allowed group"
@@ -159,15 +163,17 @@ export default function RSVPButtons({
         ) : (
           <span>Confirm Attendance</span>
         )}
-      </button>
+      </motion.button>
 
-      <button
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         onClick={() => handleRSVP(false)}
         disabled={isSubmitting}
         className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-transparent border border-neutral-600 hover:border-neutral-400 text-neutral-300 hover:text-white rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
       >
         <span>Decline</span>
-      </button>
+      </motion.button>
     </div>
   );
 }
