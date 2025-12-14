@@ -1554,7 +1554,7 @@ const cancelPaymentIntent = async (req, res) => {
 // Create On-Door Ticket (Admin/Organizer)
 const createOnDoorTicket = async (req, res) => {
   try {
-    const { eventId, ticketTypeId, quantity, paymentMethod } = req.body;
+    const { eventId, ticketTypeId, quantity, paymentMethod, status } = req.body;
     const userId = req.user ? req.user._id : null; // Admin/Organizer ID who created it
 
     if (!eventId || !ticketTypeId || !quantity) {
@@ -1625,7 +1625,7 @@ const createOnDoorTicket = async (req, res) => {
       ticketCount: quantity,
       purchaseQuantity: quantity,
       price: totalPrice,
-      status: "active",
+      status: status || "active",
       paymentStatus: "completed",
       paymentReference: transactionId,
       isOnDoor: true,
