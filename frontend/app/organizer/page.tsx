@@ -1,678 +1,3 @@
-// "use client";
-// import { useEffect, useState } from "react";
-// import { useRouter } from "next/navigation";
-// import { useEventStore } from "@/store/eventStore";
-// import { Button } from "@/components/ui/button";
-// import { Card, CardHeader, CardTitle, CardDescription, CardFooter, CardContent } from "@/components/ui/card";
-// import { Badge } from "@/components/ui/badge";
-// import {
-//   Users,
-//   Calendar,
-//   DollarSign,
-//   Ticket,
-//   FileText,
-//   CheckCircle,
-//   XCircle,
-//   Eye,
-//   EyeOff,
-//   ChevronLeft,
-//   ChevronRight,
-//   ChevronsLeft,
-//   ChevronsRight,
-// } from "lucide-react";
-// import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-// import {
-//   Select,
-//   SelectContent,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select";
-
-// export default function OrganizerDashboard() {
-//   const router = useRouter();
-//   const { events, isLoading, error, fetchEvents } = useEventStore();
-//   const [user, setUser] = useState<any>(null);
-//   const [checkedAuth, setCheckedAuth] = useState(false);
-//   const [activeTicketsByEvent, setActiveTicketsByEvent] = useState<{ [eventId: string]: any[] }>({});
-//   const [withdrawals, setWithdrawals] = useState<any[]>([]);
-//   const [balance, setBalance] = useState<any>(null);
-//   const [withdrawalsLoading, setWithdrawalsLoading] = useState(true);
-//   const [showEarnings, setShowEarnings] = useState(true);
-
-//   // Pagination states
-//   const [eventsPage, setEventsPage] = useState(1);
-//   const [withdrawalsPage, setWithdrawalsPage] = useState(1);
-//   const [analyticsPage, setAnalyticsPage] = useState(1);
-//   const [itemsPerPage, setItemsPerPage] = useState(5);
-
-//   useEffect(() => {
-//     const authState = localStorage.getItem("auth-storage");
-//     if (!authState) {
-//       setCheckedAuth(true);
-//       return;
-//     }
-//     try {
-//       const { state } = JSON.parse(authState);
-//       const { user, token, isAuthenticated } = state;
-//       if (!isAuthenticated || !token || user.role !== "organizer") {
-//         setCheckedAuth(true);
-//         return;
-//       }
-//       setUser(user);
-//       localStorage.setItem("userId", user._id);
-//       localStorage.setItem("userRole", user.role);
-//       localStorage.setItem("token", token);
-//       fetchEvents(user._id);
-//       setCheckedAuth(true);
-//     } catch (error) {
-//       setCheckedAuth(true);
-//     }
-//   }, [fetchEvents]);
-
-//   useEffect(() => {
-//     const fetchActiveTickets = async () => {
-//       if (!user || !events.length) return;
-//       const token = localStorage.getItem("token");
-//       const ticketsMap: { [eventId: string]: any[] } = {};
-//       for (const event of events) {
-//         try {
-//           const res = await fetch(
-//             `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event._id}?status=active`,
-//             {
-//               headers: {
-//                 Authorization: `Bearer ${token}`,
-//                 "Content-Type": "application/json",
-//               },
-//             }
-//           );
-//           if (res.ok) {
-//             const data = await res.json();
-//             // If backend does NOT support filtering, filter here:
-//             const activeTickets = (data.tickets || []).filter((t: any) => t.status === "active");
-//             ticketsMap[event._id] = activeTickets;
-//           } else {
-//             ticketsMap[event._id] = [];
-//           }
-//         } catch {
-//           ticketsMap[event._id] = [];
-//         }
-//       }
-//       setActiveTicketsByEvent(ticketsMap);
-//     };
-//     fetchActiveTickets();
-//   }, [user, events]);
-
-//   useEffect(() => {
-//     const fetchWithdrawals = async () => {
-//       setWithdrawalsLoading(true);
-//       const storedAuth = localStorage.getItem("auth-storage");
-//       let token = "";
-//       let userId = "";
-//       if (storedAuth) {
-//         try {
-//           const parsedAuth = JSON.parse(storedAuth);
-//           token = parsedAuth.state?.token;
-//           userId = parsedAuth.state?.user?._id;
-//         } catch {}
-//       }
-//       if (!token || !userId) {
-//         setWithdrawals([]);
-//         setBalance(null);
-//         setWithdrawalsLoading(false);
-//         return;
-//       }
-//       // Fetch withdrawals
-//       try {
-//         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals`, {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//             "Content-Type": "application/json",
-//           },
-//           credentials: "include",
-//         });
-//         if (res.ok) {
-//           const data = await res.json();
-//           setWithdrawals(data.data || []);
-//         } else {
-//           setWithdrawals([]);
-//         }
-//       } catch {
-//         setWithdrawals([]);
-//       }
-//       // Fetch balance
-//       try {
-//         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`, {
-//           headers: {
-//             Authorization: `Bearer ${token}`,
-//             "Content-Type": "application/json",
-//           },
-//           credentials: "include",
-//         });
-//         if (res.ok) {
-//           const data = await res.json();
-//           setBalance(data.data || null);
-//         } else {
-//           setBalance(null);
-//         }
-//       } catch {
-//         setBalance(null);
-//       }
-//       setWithdrawalsLoading(false);
-//     };
-//     fetchWithdrawals();
-//   }, [user]);
-
-//   // Pagination helper functions
-//   const getPaginatedData = (data: any[], page: number, itemsPerPage: number) => {
-//     const startIndex = (page - 1) * itemsPerPage;
-//     const endIndex = startIndex + itemsPerPage;
-//     return data.slice(startIndex, endIndex);
-//   };
-
-//   const getTotalPages = (data: any[], itemsPerPage: number) => {
-//     return Math.ceil(data.length / itemsPerPage);
-//   };
-
-//   const PaginationControls = ({
-//     currentPage,
-//     totalPages,
-//     onPageChange,
-//     itemsPerPage,
-//     onItemsPerPageChange,
-//     totalItems
-//   }: {
-//     currentPage: number;
-//     totalPages: number;
-//     onPageChange: (page: number) => void;
-//     itemsPerPage: number;
-//     onItemsPerPageChange: (items: number) => void;
-//     totalItems: number;
-//   }) => {
-//     const startItem = (currentPage - 1) * itemsPerPage + 1;
-//     const endItem = Math.min(currentPage * itemsPerPage, totalItems);
-
-//     return (
-//       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 p-4 bg-gray-50 rounded-lg">
-//         <div className="flex items-center gap-2 text-sm text-gray-600">
-//           <span>Showing {startItem} to {endItem} of {totalItems} results</span>
-//         </div>
-
-//         <div className="flex items-center gap-4">
-//           <div className="flex items-center gap-2">
-//             <span className="text-sm text-gray-600">Items per page:</span>
-//             <Select value={itemsPerPage.toString()} onValueChange={(value) => onItemsPerPageChange(Number(value))}>
-//               <SelectTrigger className="w-20 h-8">
-//                 <SelectValue />
-//               </SelectTrigger>
-//               <SelectContent>
-//                 <SelectItem value="5">5</SelectItem>
-//                 <SelectItem value="10">10</SelectItem>
-//                 <SelectItem value="20">20</SelectItem>
-//                 <SelectItem value="50">50</SelectItem>
-//               </SelectContent>
-//             </Select>
-//           </div>
-
-//           <div className="flex items-center gap-1">
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={() => onPageChange(1)}
-//               disabled={currentPage === 1}
-//               className="h-8 w-8 p-0"
-//             >
-//               <ChevronsLeft className="h-4 w-4" />
-//             </Button>
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={() => onPageChange(currentPage - 1)}
-//               disabled={currentPage === 1}
-//               className="h-8 w-8 p-0"
-//             >
-//               <ChevronLeft className="h-4 w-4" />
-//             </Button>
-
-//             <div className="flex items-center gap-1 mx-2">
-//               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-//                 let pageNum;
-//                 if (totalPages <= 5) {
-//                   pageNum = i + 1;
-//                 } else if (currentPage <= 3) {
-//                   pageNum = i + 1;
-//                 } else if (currentPage >= totalPages - 2) {
-//                   pageNum = totalPages - 4 + i;
-//                 } else {
-//                   pageNum = currentPage - 2 + i;
-//                 }
-
-//                 return (
-//                   <Button
-//                     key={pageNum}
-//                     variant={currentPage === pageNum ? "default" : "outline"}
-//                     size="sm"
-//                     onClick={() => onPageChange(pageNum)}
-//                     className="h-8 w-8 p-0"
-//                   >
-//                     {pageNum}
-//                   </Button>
-//                 );
-//               })}
-//             </div>
-
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={() => onPageChange(currentPage + 1)}
-//               disabled={currentPage === totalPages}
-//               className="h-8 w-8 p-0"
-//             >
-//               <ChevronRight className="h-4 w-4" />
-//             </Button>
-//             <Button
-//               variant="outline"
-//               size="sm"
-//               onClick={() => onPageChange(totalPages)}
-//               disabled={currentPage === totalPages}
-//               className="h-8 w-8 p-0"
-//             >
-//               <ChevronsRight className="h-4 w-4" />
-//             </Button>
-//           </div>
-//         </div>
-//       </div>
-//     );
-//   };
-
-//   if (!checkedAuth) {
-//     return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-//   }
-
-//   if (!user) {
-//     return (
-//       <div className="flex items-center justify-center min-h-screen">
-//         <Card className="w-[350px]">
-//           <CardHeader>
-//             <CardTitle>Authentication Required</CardTitle>
-//             <CardDescription>Please sign in as an organizer to view your dashboard</CardDescription>
-//           </CardHeader>
-//           <CardFooter>
-//             <Button onClick={() => router.push("/organizer/sign-in")} className="w-full">
-//               Sign In
-//             </Button>
-//           </CardFooter>
-//         </Card>
-//       </div>
-//     );
-//   }
-
-//   if (isLoading) {
-//     return (
-//       <div className="flex items-center justify-center min-h-screen">
-//         <div className="text-center">
-//           <h2 className="text-2xl font-semibold mb-4">Loading events...</h2>
-//           <p className="text-gray-500">Please wait while we fetch your events</p>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   if (error) {
-//     return (
-//       <div className="flex items-center justify-center min-h-screen">
-//         <Card className="w-[350px]">
-//           <CardHeader>
-//             <CardTitle>Error</CardTitle>
-//             <CardDescription>{error}</CardDescription>
-//           </CardHeader>
-//           <CardFooter>
-//             <Button
-//               onClick={() => {
-//                 const userId = localStorage.getItem('userId');
-//                 if (userId) {
-//                   fetchEvents(userId);
-//                 }
-//               }}
-//               className="w-full"
-//             >
-//               Try Again
-//             </Button>
-//           </CardFooter>
-//         </Card>
-//       </div>
-//     );
-//   }
-
-//   // --- Stat Calculations ---
-//   const totalEvents = events.length;
-//   const publishedEvents = events.filter(e => e.status === "published").length;
-//   const draftEvents = events.filter(e => e.status === "draft").length;
-//   const cancelledEvents = events.filter(e => e.status === "cancelled").length;
-//   const completedEvents = events.filter(e => e.status === "completed").length;
-//   // Total tickets sold: sum of all active tickets for all events
-//   const totalTicketsSold = Object.values(activeTicketsByEvent).reduce((sum, tickets) => sum + tickets.length, 0);
-//   // Total revenue: sum of all active ticket prices for all events
-//   const totalRevenue = Object.values(activeTicketsByEvent).reduce((sum, tickets) => sum + tickets.reduce((s, t) => s + (t.price || 0), 0), 0);
-
-//   // --- Stat Cards Data (Top Row) ---
-//   const statCards = [
-//     {
-//       id: "revenue",
-//       title: "Total Revenue",
-//       value: totalRevenue,
-//       icon: DollarSign,
-//       iconBg: "bg-green-100",
-//       iconColor: "text-green-600",
-//       borderColor: "border-l-green-600",
-//       isMoney: true,
-//     },
-//     {
-//       id: "tickets",
-//       title: "Total Tickets Sold",
-//       value: totalTicketsSold,
-//       icon: Ticket,
-//       iconBg: "bg-blue-100",
-//       iconColor: "text-blue-600",
-//       borderColor: "border-l-blue-600",
-//       isMoney: false,
-//     },
-//     {
-//       id: "events",
-//       title: "Total Events",
-//       value: totalEvents,
-//       icon: Calendar,
-//       iconBg: "bg-orange-100",
-//       iconColor: "text-orange-600",
-//       borderColor: "border-l-orange-600",
-//       isMoney: false,
-//     },
-//   ];
-
-//   // --- Event Status Cards (Second Row) ---
-//   const statusCards = [
-//     {
-//       id: "published",
-//       title: "Published Events",
-//       value: publishedEvents,
-//       icon: CheckCircle,
-//       iconBg: "bg-green-50",
-//       iconColor: "text-green-400",
-//     },
-//     {
-//       id: "draft",
-//       title: "Draft Events",
-//       value: draftEvents,
-//       icon: FileText,
-//       iconBg: "bg-yellow-50",
-//       iconColor: "text-yellow-400",
-//     },
-//     {
-//       id: "cancelled",
-//       title: "Cancelled Events",
-//       value: cancelledEvents,
-//       icon: XCircle,
-//       iconBg: "bg-red-50",
-//       iconColor: "text-red-400",
-//     },
-//     {
-//       id: "completed",
-//       title: "Completed Events",
-//       value: completedEvents,
-//       icon: Calendar,
-//       iconBg: "bg-blue-50",
-//       iconColor: "text-blue-400",
-//     },
-//   ];
-
-//   // Paginated data
-//   const paginatedEvents = getPaginatedData(events, eventsPage, itemsPerPage);
-//   const paginatedWithdrawals = getPaginatedData(withdrawals, withdrawalsPage, itemsPerPage);
-//   const paginatedAnalytics = getPaginatedData(events, analyticsPage, itemsPerPage);
-
-//   return (
-//     <div className="p-2 sm:p-4 bg-gradient-to-br from-blue-50 to-white min-h-screen">
-//       <div className="flex flex-col gap-6 sm:gap-8 max-w-full sm:max-w-6xl mx-auto">
-//         {/* Stat Cards (Top Row) */}
-//         <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-4">
-//           {statCards.map((stat) => (
-//             <Card
-//               key={stat.id}
-//               className={`overflow-hidden border-none shadow-lg hover:shadow-2xl transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white`}
-//             >
-//               <CardContent className="p-4 sm:p-6">
-//                 <div className="flex items-center justify-between">
-//                   <div>
-//                     <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-1">{stat.title}</h3>
-//                     <div className="flex items-baseline gap-2">
-//                       {stat.id === "revenue" ? (
-//                         <>
-//                           <p className="text-xl sm:text-2xl font-bold text-gray-800">
-//                             {showEarnings ? `${stat.value.toFixed(2)} Birr` : "••••••"}
-//                           </p>
-//                           <button
-//                             onClick={() => setShowEarnings(!showEarnings)}
-//                             className="text-gray-400 hover:text-gray-600 transition-colors"
-//                             aria-label={showEarnings ? "Hide earnings" : "Show earnings"}
-//                           >
-//                             {showEarnings ? (
-//                               <EyeOff className="h-4 w-4" />
-//                             ) : (
-//                               <Eye className="h-4 w-4" />
-//                             )}
-//                           </button>
-//                         </>
-//                       ) : (
-//                         <p className="text-xl sm:text-2xl font-bold text-gray-800">{stat.value}</p>
-//                       )}
-//                     </div>
-//                   </div>
-//                   <div className={`${stat.iconBg} p-3 rounded-xl shadow-md`}>
-//                     <stat.icon className={`h-6 w-6 ${stat.iconColor}`} />
-//                   </div>
-//                 </div>
-//               </CardContent>
-//             </Card>
-//           ))}
-//         </div>
-//         {/* Event Status Cards (Second Row) */}
-//         <div className="grid grid-cols-2 xs:grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-//           {statusCards.map((stat) => (
-//             <Card
-//               key={stat.id}
-//               className="overflow-hidden border-none shadow-lg hover:shadow-2xl transition-shadow bg-white"
-//             >
-//               <CardContent className="p-4 sm:p-6">
-//                 <div className="flex items-center justify-between">
-//                   <div>
-//                     <h3 className="text-xs sm:text-sm font-medium text-gray-500 mb-1">{stat.title}</h3>
-//                     <p className="text-xl sm:text-2xl font-bold text-gray-800">{stat.value}</p>
-//                   </div>
-//                   <div className={`${stat.iconBg} p-3 rounded-xl shadow-md`}>
-//                     <stat.icon className={`h-6 w-6 ${stat.iconColor}`} />
-//                   </div>
-//                 </div>
-//               </CardContent>
-//             </Card>
-//           ))}
-//         </div>
-//         {/* Live Event Analytics Table */}
-//         <Card className="border border-gray-200 shadow-lg hover:shadow-xl mb-6 sm:mb-8">
-//           <CardHeader className="p-4 sm:p-6 pb-0">
-//             <CardTitle className="text-base sm:text-lg md:text-xl">Live Event Analytics</CardTitle>
-//           </CardHeader>
-//           <CardContent className="p-4 sm:p-6 pt-0">
-//             <div className="overflow-x-auto">
-//               <Table>
-//                 <TableHeader>
-//                   <TableRow>
-//                     <TableHead className="text-xs sm:text-sm">Event</TableHead>
-//                     <TableHead className="text-xs sm:text-sm">Tickets Sold</TableHead>
-//                     <TableHead className="text-xs sm:text-sm">Revenue</TableHead>
-//                     <TableHead className="text-xs sm:text-sm">Attendees</TableHead>
-//                   </TableRow>
-//                 </TableHeader>
-//                 <TableBody>
-//                   {paginatedAnalytics.length === 0 ? (
-//                     <TableRow>
-//                       <TableCell colSpan={4} className="text-center text-xs sm:text-sm">No events found.</TableCell>
-//                     </TableRow>
-//                   ) : (
-//                     paginatedAnalytics.map((event) => {
-//                       const tickets = activeTicketsByEvent[event._id] || [];
-//                       const ticketsSold = tickets.length;
-//                       const revenue = tickets.reduce((sum, t) => sum + (t.price || 0), 0);
-//                       const attendees = tickets.length;
-//                       return (
-//                         <TableRow key={event._id}>
-//                           <TableCell className="text-xs sm:text-sm">{event.title}</TableCell>
-//                           <TableCell className="text-xs sm:text-sm">{ticketsSold}</TableCell>
-//                           <TableCell className="text-xs sm:text-sm">{revenue.toFixed(2)} Birr</TableCell>
-//                           <TableCell className="text-xs sm:text-sm">{attendees}</TableCell>
-//                         </TableRow>
-//                       );
-//                     })
-//                   )}
-//                 </TableBody>
-//               </Table>
-//             </div>
-//             {events.length > 0 && (
-//               <PaginationControls
-//                 currentPage={analyticsPage}
-//                 totalPages={getTotalPages(events, itemsPerPage)}
-//                 onPageChange={setAnalyticsPage}
-//                 itemsPerPage={itemsPerPage}
-//                 onItemsPerPageChange={setItemsPerPage}
-//                 totalItems={events.length}
-//               />
-//             )}
-//           </CardContent>
-//         </Card>
-//         {/* Withdrawal History Table */}
-//         <Card className="border border-gray-200 shadow-lg hover:shadow-xl mb-6 sm:mb-8">
-//           <CardHeader className="p-4 sm:p-6 pb-0">
-//             <CardTitle className="text-base sm:text-lg md:text-xl">Withdrawal History</CardTitle>
-//           </CardHeader>
-//           <CardContent className="p-4 sm:p-6 pt-0">
-//             {withdrawalsLoading ? (
-//               <div>Loading withdrawals...</div>
-//             ) : withdrawals.length === 0 ? (
-//               <div>No withdrawal requests found.</div>
-//             ) : (
-//               <>
-//                 <div className="overflow-x-auto">
-//                   <Table>
-//                     <TableHeader>
-//                       <TableRow>
-//                         <TableHead className="text-xs sm:text-sm">Date</TableHead>
-//                         <TableHead className="text-xs sm:text-sm">Amount</TableHead>
-//                         <TableHead className="text-xs sm:text-sm">Status</TableHead>
-//                         <TableHead className="text-xs sm:text-sm">Notes</TableHead>
-//                       </TableRow>
-//                     </TableHeader>
-//                     <TableBody>
-//                       {paginatedWithdrawals.map((w) => (
-//                         <TableRow key={w._id} className="border-b">
-//                           <TableCell className="text-xs sm:text-sm">{new Date(w.createdAt).toLocaleDateString()}</TableCell>
-//                           <TableCell className="text-xs sm:text-sm font-medium">{w.amount.toFixed(2)} Birr</TableCell>
-//                           <TableCell className="text-xs sm:text-sm">
-//                             <Badge
-//                               variant="outline"
-//                               className={
-//                                 w.status === "processed"
-//                                   ? "bg-green-100 text-green-700"
-//                                   : w.status === "pending"
-//                                   ? "bg-yellow-100 text-yellow-700"
-//                                   : "bg-red-100 text-red-700"
-//                               }
-//                             >
-//                               {w.status}
-//                             </Badge>
-//                           </TableCell>
-//                           <TableCell className="text-xs sm:text-sm max-w-[120px] truncate">{w.notes}</TableCell>
-//                         </TableRow>
-//                       ))}
-//                     </TableBody>
-//                   </Table>
-//                 </div>
-//                 <PaginationControls
-//                   currentPage={withdrawalsPage}
-//                   totalPages={getTotalPages(withdrawals, itemsPerPage)}
-//                   onPageChange={setWithdrawalsPage}
-//                   itemsPerPage={itemsPerPage}
-//                   onItemsPerPageChange={setItemsPerPage}
-//                   totalItems={withdrawals.length}
-//                 />
-//               </>
-//             )}
-//           </CardContent>
-//         </Card>
-//         {/* My Events Table */}
-//         <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
-//           <CardHeader className="p-4 sm:p-6 pb-0">
-//             <CardTitle className="text-base sm:text-lg md:text-xl">My Events</CardTitle>
-//           </CardHeader>
-//           <CardContent className="p-4 sm:p-6 pt-0">
-//             {events.length === 0 ? (
-//               <div>No events found.</div>
-//             ) : (
-//               <>
-//                 <div className="overflow-x-auto">
-//                   <Table>
-//                     <TableHeader>
-//                       <TableRow>
-//                         <TableHead className="text-xs sm:text-sm">Event Title</TableHead>
-//                         <TableHead className="text-xs sm:text-sm">Status</TableHead>
-//                         <TableHead className="text-xs sm:text-sm">Start Date</TableHead>
-//                         <TableHead className="text-xs sm:text-sm">End Date</TableHead>
-//                       </TableRow>
-//                     </TableHeader>
-//                     <TableBody>
-//                       {paginatedEvents.map((event) => (
-//                         <TableRow key={event._id} className="border-b">
-//                           <TableCell className="text-xs sm:text-sm font-medium">{event.title}</TableCell>
-//                           <TableCell className="text-xs sm:text-sm">
-//                             <Badge
-//                               variant="outline"
-//                               className={
-//                                 event.status === "published"
-//                                   ? "bg-green-100 text-green-700"
-//                                   : event.status === "draft"
-//                                   ? "bg-yellow-100 text-yellow-700"
-//                                   : "bg-red-100 text-red-700"
-//                               }
-//                             >
-//                               {event.status}
-//                             </Badge>
-//                           </TableCell>
-//                           <TableCell className="text-xs sm:text-sm">
-//                             {event.startDate ? new Date(event.startDate).toLocaleDateString() : "N/A"}
-//                           </TableCell>
-//                           <TableCell className="text-xs sm:text-sm">
-//                             {event.endDate ? new Date(event.endDate).toLocaleDateString() : "N/A"}
-//                           </TableCell>
-//                         </TableRow>
-//                       ))}
-//                     </TableBody>
-//                   </Table>
-//                 </div>
-//                 <PaginationControls
-//                   currentPage={eventsPage}
-//                   totalPages={getTotalPages(events, itemsPerPage)}
-//                   onPageChange={setEventsPage}
-//                   itemsPerPage={itemsPerPage}
-//                   onItemsPerPageChange={setItemsPerPage}
-//                   totalItems={events.length}
-//                 />
-//               </>
-//             )}
-//           </CardContent>
-//         </Card>
-//       </div>
-//     </div>
-//   );
-// }
-
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -833,9 +158,18 @@ export default function OrganizerDashboard() {
             // Filter out invitations and zero-price tickets
             // Strict filter: exclude if isInvitation is true OR price is <= 0
             const allTickets = rawTickets.filter((t: any) => {
+              // Always include on-door tickets (unless cancelled)
+              if (t.isOnDoor) {
+                if (["cancelled", "expired", "pending"].includes(t.status))
+                  return false;
+                return true;
+              }
+
               if (t.isInvitation === true) return false;
               if (!t.price || t.price <= 0) return false;
               if (t.paymentStatus !== "completed") return false;
+              if (["cancelled", "expired", "pending"].includes(t.status))
+                return false;
               return true;
             });
 
@@ -1148,18 +482,48 @@ export default function OrganizerDashboard() {
   const cancelledEvents = events.filter((e) => e.status === "cancelled").length;
   const completedEvents = events.filter((e) => e.status === "completed").length;
 
+  // Helper to calculate quantity for a ticket (reused for totals)
+  const getTicketQuantity = (t: any, eventId: string) => {
+    if (t.purchaseQuantity) return t.purchaseQuantity;
+    if (t.ticketCount) return t.ticketCount;
+    // Fallback: calculate from price
+    const event = events.find((e) => e._id === eventId);
+    if (t.price && event && event.ticketTypes) {
+      const type = event.ticketTypes.find(
+        (type: any) => type.name === t.ticketType || type._id === t.ticketType
+      );
+      if (type && type.price > 0) {
+        return Math.round(t.price / type.price);
+      }
+    }
+    return 1;
+  };
+
   // Calculate totals from actual ticket data
-  const totalTicketsSold = Object.values(allTicketsByEvent).reduce(
-    (sum, tickets) => sum + tickets.length,
+  const totalTicketsSold = Object.entries(allTicketsByEvent).reduce(
+    (sum, [eventId, tickets]) =>
+      sum +
+      tickets.reduce(
+        (s: number, t: any) => s + getTicketQuantity(t, eventId),
+        0
+      ),
     0
   );
-  const totalUsedTickets = Object.values(allTicketsByEvent).reduce(
-    (sum, tickets) =>
-      sum + tickets.filter((t: any) => t.status === "used").length,
+  const totalUsedTickets = Object.entries(allTicketsByEvent).reduce(
+    (sum, [eventId, tickets]) =>
+      sum +
+      tickets
+        .filter((t: any) => t.status === "used")
+        .reduce((s: number, t: any) => s + getTicketQuantity(t, eventId), 0),
     0
   );
-  const totalActiveTickets = Object.values(activeTicketsByEvent).reduce(
-    (sum, tickets) => sum + tickets.length,
+  const totalActiveTickets = Object.entries(activeTicketsByEvent).reduce(
+    (sum, [eventId, tickets]) =>
+      sum +
+      tickets.reduce(
+        (s: number, t: any) => s + getTicketQuantity(t, eventId),
+        0
+      ),
     0
   );
   const totalConfirmedTickets = Object.values(allTicketsByEvent).reduce(
@@ -1897,43 +1261,63 @@ export default function OrganizerDashboard() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="text-xs">Event</TableHead>
-                    <TableHead className="text-xs">Total</TableHead>
+                    <TableHead className="text-xs">Online Sales</TableHead>
+                    <TableHead className="text-xs">On-Door</TableHead>
                     <TableHead className="text-xs">Active</TableHead>
                     <TableHead className="text-xs">Used</TableHead>
-                    <TableHead className="text-xs">On-Door</TableHead>
+                    <TableHead className="text-xs">Total</TableHead>
                     <TableHead className="text-xs">Revenue</TableHead>
-                    <TableHead className="text-xs">Attendees</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedAnalytics.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-xs">
+                      <TableCell colSpan={7} className="text-center text-xs">
                         No events found.
                       </TableCell>
                     </TableRow>
                   ) : (
                     paginatedAnalytics.map((event) => {
-                      // Use actual ticket data for accurate counts
-                      const allTickets = allTicketsByEvent[event._id] || [];
-                      const activeTickets =
-                        activeTicketsByEvent[event._id] || [];
-                      const usedTickets = allTickets.filter(
-                        (t: any) => t.status === "used"
-                      );
-                      const onDoorTickets = allTickets.filter(
-                        (t: any) => t.isOnDoor === true
-                      );
+                      const tickets = allTicketsByEvent[event._id] || [];
 
-                      const totalTickets = allTickets.length;
-                      const activeTicketsCount = activeTickets.length;
-                      const usedTicketsCount = usedTickets.length;
-                      const onDoorCount = onDoorTickets.length;
-                      const totalRevenue = allTickets.reduce(
+                      // Helper to calculate quantity for a ticket
+                      const getQuantity = (t: any) => {
+                        if (t.purchaseQuantity) return t.purchaseQuantity;
+                        if (t.ticketCount) return t.ticketCount;
+                        // Fallback: calculate from price
+                        if (t.price && event.ticketTypes) {
+                          const type = event.ticketTypes.find(
+                            (type: any) =>
+                              type.name === t.ticketType ||
+                              type._id === t.ticketType
+                          );
+                          if (type && type.price > 0) {
+                            return Math.round(t.price / type.price);
+                          }
+                        }
+                        return 1;
+                      };
+
+                      const totalTickets = tickets.reduce(
+                        (sum, t) => sum + getQuantity(t),
+                        0
+                      );
+                      const activeTickets = tickets
+                        .filter((t: any) => t.status === "active")
+                        .reduce((sum, t) => sum + getQuantity(t), 0);
+                      const usedTickets = tickets
+                        .filter((t: any) => t.status === "used")
+                        .reduce((sum, t) => sum + getQuantity(t), 0);
+                      const onDoorTickets = tickets
+                        .filter((t: any) => t.isOnDoor === true)
+                        .reduce((sum, t) => sum + getQuantity(t), 0);
+
+                      const onlineTickets = totalTickets - onDoorTickets;
+
+                      const revenue = tickets.reduce(
                         (sum, t) => sum + (t.price || 0),
                         0
                       );
-                      const attendees = usedTicketsCount;
 
                       return (
                         <TableRow key={event._id}>
@@ -1941,21 +1325,23 @@ export default function OrganizerDashboard() {
                             {event.title}
                           </TableCell>
                           <TableCell className="text-xs">
+                            {onlineTickets}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {onDoorTickets}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {activeTickets}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {usedTickets}
+                          </TableCell>
+                          <TableCell className="text-xs">
                             {totalTickets}
                           </TableCell>
                           <TableCell className="text-xs">
-                            {activeTicketsCount}
+                            {revenue.toFixed(2)} Birr
                           </TableCell>
-                          <TableCell className="text-xs">
-                            {usedTicketsCount}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {onDoorCount}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {totalRevenue.toFixed(0)} Birr
-                          </TableCell>
-                          <TableCell className="text-xs">{attendees}</TableCell>
                         </TableRow>
                       );
                     })

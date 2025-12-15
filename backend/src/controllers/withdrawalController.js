@@ -21,12 +21,41 @@ const getOrganizerBalance = async (req, res) => {
     // Calculate revenue from tickets
     // Count all tickets that represent actual revenue (active, used, etc.) excluding cancelled/expired/pending
     // Also exclude invitations as they are free and shouldn't count as purchased
+    // Match frontend logic: Include ALL On-Door tickets (regardless of payment status), but restrict Online tickets
     const tickets = await Ticket.find({
       event: { $in: eventIds },
       status: { $nin: ["cancelled", "expired", "pending"] },
-      paymentStatus: "completed",
-      isInvitation: false,
+      $or: [
+        { isOnDoor: true },
+        {
+          paymentStatus: "completed",
+          isInvitation: { $ne: true }, // Handle cases where isInvitation is false or undefined
+          price: { $gt: 0 }, // Ensure price is greater than 0 for online tickets
+        },
+      ],
     }).populate("event", "title ticketTypes");
+
+    // Helper to calculate ticket quantity
+    const getQuantity = (ticket, event) => {
+      if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+      if (ticket.ticketCount) return ticket.ticketCount;
+
+      // Fallback: calculate from price
+      if (event && event.ticketTypes) {
+        const type = event.ticketTypes.find(
+          (tt) =>
+            tt.name === ticket.ticketType ||
+            tt._id.toString() === ticket.ticketType
+        );
+        // If we found the type and both prices are valid
+        if (type && type.price > 0 && ticket.price > 0) {
+          // Calculate quantity based on total price paid vs unit price
+          const calculatedQty = Math.round(ticket.price / type.price);
+          return calculatedQty > 0 ? calculatedQty : 1;
+        }
+      }
+      return 1;
+    };
 
     // Calculate total revenue and breakdown by event
     const revenueBreakdown = events.map((event) => {
@@ -42,11 +71,13 @@ const getOrganizerBalance = async (req, res) => {
       // Get ticket type breakdown
       const ticketTypeBreakdown = event.ticketTypes.map((ticketType) => {
         const typeTickets = eventTickets.filter(
-          (t) => t.ticketType === ticketType.name
+          (t) =>
+            t.ticketType === ticketType.name ||
+            t.ticketType === ticketType._id.toString()
         );
         const typeRevenue = typeTickets.reduce((sum, t) => sum + t.price, 0);
         const quantitySold = typeTickets.reduce(
-          (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
+          (sum, t) => sum + getQuantity(t, event),
           0
         );
 
@@ -59,9 +90,25 @@ const getOrganizerBalance = async (req, res) => {
       });
 
       const totalTicketsSold = eventTickets.reduce(
-        (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
+        (sum, t) => sum + getQuantity(t, event),
         0
       );
+
+      // Calculate On-Door vs Online stats
+      const onDoorTickets = eventTickets.filter((t) => t.isOnDoor);
+      const onlineTickets = eventTickets.filter((t) => !t.isOnDoor);
+
+      const onDoorTicketsSold = onDoorTickets.reduce(
+        (sum, t) => sum + getQuantity(t, event),
+        0
+      );
+      const onDoorRevenue = onDoorTickets.reduce((sum, t) => sum + t.price, 0);
+
+      const onlineTicketsSold = onlineTickets.reduce(
+        (sum, t) => sum + getQuantity(t, event),
+        0
+      );
+      const onlineRevenue = onlineTickets.reduce((sum, t) => sum + t.price, 0);
 
       return {
         eventId: event._id,
@@ -69,6 +116,10 @@ const getOrganizerBalance = async (req, res) => {
         totalRevenue: eventRevenue,
         ticketTypeBreakdown,
         totalTicketsSold,
+        onDoorTicketsSold,
+        onDoorRevenue,
+        onlineTicketsSold,
+        onlineRevenue,
       };
     });
 
@@ -119,6 +170,12 @@ const getOrganizerBalance = async (req, res) => {
     const availableBalance =
       organizerRevenue - (pendingAmount + approvedAmount);
 
+    // Calculate total tickets sold across all events (sum of quantities)
+    const totalTicketsSold = tickets.reduce(
+      (sum, t) => sum + getQuantity(t, t.event),
+      0
+    );
+
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
@@ -132,9 +189,9 @@ const getOrganizerBalance = async (req, res) => {
         statusBreakdown,
         summary: {
           totalEvents: events.length,
-          totalTicketsSold: tickets.length,
+          totalTicketsSold,
           averageTicketPrice:
-            tickets.length > 0 ? totalRevenue / tickets.length : 0,
+            totalTicketsSold > 0 ? totalRevenue / totalTicketsSold : 0,
         },
       },
     });
@@ -178,7 +235,9 @@ const createWithdrawal = async (req, res) => {
     const eventIds = events.map((event) => event._id);
     const tickets = await Ticket.find({
       event: { $in: eventIds },
-      status: { $nin: ["cancelled", "expired"] },
+      status: { $nin: ["cancelled", "expired", "pending"] },
+      paymentStatus: "completed",
+      isInvitation: false,
     });
     const totalRevenue = tickets.reduce((sum, ticket) => sum + ticket.price, 0);
     // Calculate organizer revenue after 3% Pazimo commission

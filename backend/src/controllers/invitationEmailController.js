@@ -6,12 +6,10 @@ const createTransporter = () => {
     throw new Error("EMAIL_USER/EMAIL_PASS env vars are required");
   }
   return nodemailer.createTransport({
-    host: "smtp.zoho.com",
-    port: 587,
-    secure: false, // Use TLS
+    service: "gmail",
     auth: {
-      user: process.env.EMAIL_USER_ZOHO,
-      pass: process.env.EMAIL_PASS_ZOHO,
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
   });
 };

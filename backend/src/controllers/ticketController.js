@@ -234,12 +234,20 @@ const getAllTicketsAdmin = async (req, res) => {
 
     // ✅ Calculate total sold and revenue
     // Filter out invitations for sold count
-    const purchasedTickets = tickets.filter((t) => !t.isInvitation);
+    const purchasedTickets = tickets.filter(
+      (t) =>
+        !t.isInvitation &&
+        t.paymentStatus === "completed" &&
+        !["cancelled", "expired", "pending"].includes(t.status)
+    );
     const totalSold = purchasedTickets.reduce(
       (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
       0
     );
-    const totalRevenue = tickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    const totalRevenue = purchasedTickets.reduce(
+      (sum, t) => sum + (t.price || 0),
+      0
+    );
 
     res.status(StatusCodes.OK).json({
       success: true,
