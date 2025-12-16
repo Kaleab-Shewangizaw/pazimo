@@ -755,14 +755,13 @@ export default function EditableTable({
                         <input
                           type="number"
                           min={1}
-                          max={10}
                           value={row.Amount}
                           defaultValue={1}
                           onChange={(e) =>
                             handleChange(
                               i,
                               "Amount",
-                              Math.max(1, Math.min(10, Number(e.target.value)))
+                              Math.max(1, Number(e.target.value))
                             )
                           }
                           className="border border-gray-300 px-2 py-1 rounded w-full"
