@@ -78,6 +78,35 @@ import {
 import QRCode from "qrcode";
 import { toast } from "sonner";
 
+const SkeletonCard = () => (
+  <Card className="overflow-hidden border-none shadow-md bg-white relative">
+    <style jsx global>{`
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+      .animate-shimmer {
+        animation: shimmer 2s infinite;
+      }
+    `}</style>
+    <CardContent className="p-2 sm:p-3 lg:p-4 relative overflow-hidden">
+      <div className="flex items-center justify-between">
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="h-3 w-24 bg-gray-200 rounded" />
+          <div className="h-6 w-32 bg-gray-200 rounded" />
+        </div>
+        <div className="h-10 w-10 bg-gray-200 rounded-lg" />
+      </div>
+      {/* Shimmer overlay */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-shimmer" />
+    </CardContent>
+  </Card>
+);
+
 export default function OrganizerDashboard() {
   const router = useRouter();
   const { events, isLoading, error, fetchEvents } = useEventStore();
@@ -92,6 +121,7 @@ export default function OrganizerDashboard() {
   const [withdrawals, setWithdrawals] = useState<any[]>([]);
   const [balance, setBalance] = useState<any>(null);
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(true);
+  const [ticketsLoading, setTicketsLoading] = useState(true);
   const [showEarnings, setShowEarnings] = useState<{ [key: string]: boolean }>({
     revenue: true,
     "organizer-revenue": true,
@@ -133,7 +163,15 @@ export default function OrganizerDashboard() {
 
   useEffect(() => {
     const fetchTickets = async () => {
-      if (!user || !events.length) return;
+      if (isLoading) return;
+      if (!user) return;
+
+      if (events.length === 0) {
+        setTicketsLoading(false);
+        return;
+      }
+
+      setTicketsLoading(true);
       const token = localStorage.getItem("token");
       const ticketsMap: { [eventId: string]: any[] } = {};
       const allTicketsMap: { [eventId: string]: any[] } = {};
@@ -230,10 +268,11 @@ export default function OrganizerDashboard() {
       }
       setActiveTicketsByEvent(ticketsMap);
       setAllTicketsByEvent(allTicketsMap);
+      setTicketsLoading(false);
     };
 
     fetchTickets();
-  }, [user, events]);
+  }, [user, events, isLoading]);
 
   useEffect(() => {
     const fetchWithdrawals = async () => {
@@ -887,64 +926,68 @@ export default function OrganizerDashboard() {
         </Card>
         {/* Stat Cards (Top Row) */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 lg:gap-6 mb-4">
-          {statCards.map((stat) => (
-            <Card
-              key={stat.id}
-              className={`overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white`}
-            >
-              <CardContent className="p-2 sm:p-3 lg:p-4">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">
-                      {stat.title}
-                    </h3>
-                    <div className="flex items-baseline gap-1 sm:gap-2">
-                      {stat.isMoney ? (
-                        <>
-                          <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 truncate">
-                            {showEarnings[stat.id]
-                              ? `${stat.value.toFixed(2)} Birr`
-                              : "••••••"}
-                          </p>
-                          <button
-                            onClick={() =>
-                              setShowEarnings((prev) => ({
-                                ...prev,
-                                [stat.id]: !prev[stat.id],
-                              }))
-                            }
-                            className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                            aria-label={
-                              showEarnings[stat.id]
-                                ? "Hide earnings"
-                                : "Show earnings"
-                            }
-                          >
-                            {showEarnings[stat.id] ? (
-                              <EyeOff className="h-3 w-3" />
-                            ) : (
-                              <Eye className="h-3 w-3" />
-                            )}
-                          </button>
-                        </>
-                      ) : (
-                        <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">
-                          {stat.value}
-                        </p>
-                      )}
+          {isLoading || withdrawalsLoading || ticketsLoading
+            ? Array(5)
+                .fill(0)
+                .map((_, i) => <SkeletonCard key={i} />)
+            : statCards.map((stat) => (
+                <Card
+                  key={stat.id}
+                  className={`overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white`}
+                >
+                  <CardContent className="p-2 sm:p-3 lg:p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">
+                          {stat.title}
+                        </h3>
+                        <div className="flex items-baseline gap-1 sm:gap-2">
+                          {stat.isMoney ? (
+                            <>
+                              <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 truncate">
+                                {showEarnings[stat.id]
+                                  ? `${stat.value.toFixed(2)} Birr`
+                                  : "••••••"}
+                              </p>
+                              <button
+                                onClick={() =>
+                                  setShowEarnings((prev) => ({
+                                    ...prev,
+                                    [stat.id]: !prev[stat.id],
+                                  }))
+                                }
+                                className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                                aria-label={
+                                  showEarnings[stat.id]
+                                    ? "Hide earnings"
+                                    : "Show earnings"
+                                }
+                              >
+                                {showEarnings[stat.id] ? (
+                                  <EyeOff className="h-3 w-3" />
+                                ) : (
+                                  <Eye className="h-3 w-3" />
+                                )}
+                              </button>
+                            </>
+                          ) : (
+                            <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">
+                              {stat.value}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}
+                      >
+                        <stat.icon
+                          className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`}
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div
-                    className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}
-                  >
-                    <stat.icon
-                      className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  </CardContent>
+                </Card>
+              ))}
         </div>
 
         {/* Event Status Cards (Second Row) */}

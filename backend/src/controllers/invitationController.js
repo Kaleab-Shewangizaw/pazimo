@@ -23,7 +23,6 @@ const validateBulkRows = (rows, eventId) => {
     // Fix amount
     let amount = parseInt(row.amount || row.Amount || row.qrCodecount, 10);
     if (isNaN(amount) || amount < 1) amount = 1;
-    if (amount > 10) amount = 10;
     corrected.amount = amount;
 
     // Normalize keys
@@ -212,7 +211,12 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       let actionText;
 
       if (invitation.guestType === "paid") {
-        actionLink = `${frontendUrl}/event_detail?id=${event._id}`;
+        // Check if event title contains "signature" (case-insensitive)
+        if (event.title && event.title.toLowerCase().includes("signature")) {
+          actionLink = `${frontendUrl}/guest-invitation/signature?inv=${uniqueId}`;
+        } else {
+          actionLink = `${frontendUrl}/event_detail?id=${event._id}`;
+        }
         actionText = "Buy Ticket";
       } else {
         // Check if event title contains "signature" (case-insensitive)

@@ -5,11 +5,14 @@ const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     throw new Error("EMAIL_USER/EMAIL_PASS env vars are required");
   }
+
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.zoho.com",
+    port: 587,
+    secure: false, // Use TLS
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: process.env.EMAIL_USER_ZOHO,
+      pass: process.env.EMAIL_PASS_ZOHO,
     },
   });
 };
@@ -44,7 +47,8 @@ const createEmailTemplate = (
 
   let actionLink = invitation.actionLink;
   if (!actionLink) {
-    if (isSignatureEvent && invitation.guestType !== "paid") {
+    if (isSignatureEvent) {
+      // For Signature event, use the custom link for both paid and guest
       actionLink = `${frontendUrl}/guest-invitation/signature?inv=${invitation.uniqueId}`;
     } else {
       actionLink = `${frontendUrl}/guest-invitation?inv=${invitation.uniqueId}`;

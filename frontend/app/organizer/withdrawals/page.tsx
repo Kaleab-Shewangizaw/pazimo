@@ -987,24 +987,6 @@ export default function WithdrawalsPage() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
-                  Total Revenue
-                </div>
-                <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                  {balance?.totalRevenue.toFixed(2) || "0.00"} birr
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 rounded-lg bg-blue-100 shadow-sm">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-orange-100 hover:from-orange-100 hover:to-white">
           <CardContent className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
@@ -1036,24 +1018,6 @@ export default function WithdrawalsPage() {
               </div>
               <div className="p-2 sm:p-3 rounded-lg bg-green-100 shadow-sm">
                 <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-yellow-100 hover:from-yellow-100 hover:to-white">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
-                  Pending Withdrawals
-                </div>
-                <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                  {balance?.pendingWithdrawals.toFixed(2) || "0.00"} birr
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 rounded-lg bg-yellow-100 shadow-sm">
-                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
               </div>
             </div>
           </CardContent>
@@ -1131,6 +1095,8 @@ export default function WithdrawalsPage() {
                           variant="outline"
                           className={`px-2 py-0.5 sm:px-3 sm:py-1 text-xs ${
                             withdrawal.status === "completed"
+                              ? "bg-green-500 text-white"
+                              : withdrawal.status === "approved"
                               ? "bg-green-500 text-white"
                               : withdrawal.status === "pending"
                               ? "bg-yellow-500 text-white"

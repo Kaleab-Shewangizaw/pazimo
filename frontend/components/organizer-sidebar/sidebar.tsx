@@ -46,7 +46,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`bg-white w-full max-w-[280px] fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
-        } lg:relative shadow-lg lg:shadow-md border-r border-gray-200`}
+        } lg:relative shadow-lg lg:shadow-md border-r border-gray-200 flex-shrink-0`}
       >
         <div className="flex flex-col h-full">
           {/* Profile / Header Section */}

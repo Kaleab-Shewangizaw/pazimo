@@ -463,7 +463,6 @@ export default function BulkInvite({
                   </h4>
                   <ul className="text-xs text-gray-600 space-y-1">
                     <li>• Maximum 1000 contacts per upload</li>
-                    <li>• File size limit: 5MB</li>
                     <li>• Invalid rows will be skipped</li>
                     <li>• Duplicate contacts will be ignored</li>
                   </ul>
