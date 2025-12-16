@@ -151,11 +151,9 @@ export default function CustomersPage() {
 
   // Filter tickets based on search
   const filteredTickets = tickets.filter((ticket) => {
-    // Exclude invitations and zero-price tickets (only show bought tickets with price > 0)
-    // We strictly check for isInvitation === true OR price <= 0
-    if (ticket.isInvitation === true) return false;
+    // Match admin/tickets page logic: Include all tickets with price > 0
+    // This aligns with the Gross Revenue calculation
     if (!ticket.price || ticket.price <= 0) return false;
-    if (ticket.paymentStatus !== "completed") return false;
 
     const searchLower = searchQuery.toLowerCase();
     const name = ticket.user
