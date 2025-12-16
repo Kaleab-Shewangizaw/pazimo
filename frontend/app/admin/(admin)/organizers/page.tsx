@@ -138,6 +138,41 @@ interface OrganizerBalance {
 // Add payment method type
 type PaymentMethod = "telebirr" | "mpesa" | "bank";
 
+// Helper function to calculate ticket quantity
+const getTicketQuantity = (ticket: TicketData, event: EventData) => {
+  let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+  // Check if ticket was bought before Dec 14, 2025
+  const cutoffDate = new Date("2025-12-14");
+  const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate || "");
+
+  if (ticketDate < cutoffDate) {
+    // Validate quantity against price if possible
+    if (event && event.ticketTypes) {
+      const type = event.ticketTypes.find(
+        (tt) =>
+          tt.name === ticket.ticketType ||
+          (tt._id && tt._id === ticket.ticketType) ||
+          (tt.name &&
+            ticket.ticketType &&
+            tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+      );
+
+      // If we found the type and both prices are valid
+      if (type && type.price > 0 && ticket.price > 0) {
+        const expectedPrice = quantity * type.price;
+        // If mismatch (allowing for small float diff), recalculate
+        // This handles legacy data where quantity might be 1 but price is for multiple
+        if (Math.abs(expectedPrice - ticket.price) > 1) {
+          const calculatedQty = Math.round(ticket.price / type.price);
+          if (calculatedQty > 0) return calculatedQty;
+        }
+      }
+    }
+  }
+  return quantity;
+};
+
 const EventCardWithStats = ({
   event,
   token,
@@ -174,41 +209,6 @@ const EventCardWithStats = ({
     fetchTickets();
   }, [event._id, token]);
 
-  // Helper function to calculate ticket quantity
-  const getTicketQuantity = (ticket: TicketData, event: EventData) => {
-    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
-
-    // Check if ticket was bought before Dec 14, 2025
-    const cutoffDate = new Date("2025-12-14");
-    const ticketDate = new Date(ticket.createdAt || "");
-
-    if (ticketDate < cutoffDate) {
-      // Validate quantity against price if possible
-      if (event && event.ticketTypes) {
-        const type = event.ticketTypes.find(
-          (tt) =>
-            tt.name === ticket.ticketType ||
-            (tt._id && tt._id === ticket.ticketType) ||
-            (tt.name &&
-              ticket.ticketType &&
-              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
-        );
-
-        // If we found the type and both prices are valid
-        if (type && type.price > 0 && ticket.price > 0) {
-          const expectedPrice = quantity * type.price;
-          // If mismatch (allowing for small float diff), recalculate
-          // This handles legacy data where quantity might be 1 but price is for multiple
-          if (Math.abs(expectedPrice - ticket.price) > 1) {
-            const calculatedQty = Math.round(ticket.price / type.price);
-            if (calculatedQty > 0) return calculatedQty;
-          }
-        }
-      }
-    }
-    return quantity;
-  };
-
   const calculateRevenue = (tickets: TicketData[]) => {
     return tickets.reduce((sum, t) => sum + (t.price || 0), 0);
   };
@@ -244,9 +244,9 @@ const EventCardWithStats = ({
         </div>
         <div className="text-right">
           {loading ? (
-            <div className="flex items-center justify-end gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-              <span className="text-xs text-gray-500">Loading...</span>
+            <div className="flex items-center justify-end gap-2 text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-xs">Loading...</span>
             </div>
           ) : (
             <>
@@ -546,41 +546,6 @@ export default function OrganizersPage() {
   const handleViewOrganizerDetails = (organizer: OrganizerData) => {
     setSelectedOrganizer(organizer);
     setOrganizerDetailsDialogOpen(true);
-  };
-
-  // Helper function to calculate ticket quantity
-  const getTicketQuantity = (ticket: TicketData, event: EventData) => {
-    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
-
-    // Check if ticket was bought before Dec 14, 2025
-    const cutoffDate = new Date("2025-12-14");
-    const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate || "");
-
-    if (ticketDate < cutoffDate) {
-      // Validate quantity against price if possible
-      if (event && event.ticketTypes) {
-        const type = event.ticketTypes.find(
-          (tt) =>
-            tt.name === ticket.ticketType ||
-            (tt._id && tt._id === ticket.ticketType) ||
-            (tt.name &&
-              ticket.ticketType &&
-              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
-        );
-
-        // If we found the type and both prices are valid
-        if (type && type.price > 0 && ticket.price > 0) {
-          const expectedPrice = quantity * type.price;
-          // If mismatch (allowing for small float diff), recalculate
-          // This handles legacy data where quantity might be 1 but price is for multiple
-          if (Math.abs(expectedPrice - ticket.price) > 1) {
-            const calculatedQty = Math.round(ticket.price / type.price);
-            if (calculatedQty > 0) return calculatedQty;
-          }
-        }
-      }
-    }
-    return quantity;
   };
 
   // Helper function to calculate revenue from all tickets (active, used, etc.)

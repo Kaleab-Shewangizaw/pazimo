@@ -203,9 +203,9 @@ export default function CustomersPage() {
     return quantity;
   };
 
-  const onDoorTickets = filteredTickets.filter((t) => t.isOnDoor === true);
+  const onDoorTickets = filteredTickets.filter((t) => !!t.isOnDoor);
   const onDoorRevenue = onDoorTickets.reduce(
-    (sum, t) => sum + (t.price || 0),
+    (sum, t) => sum + (Number(t.price) || 0),
     0
   );
   const onDoorTicketsCount = onDoorTickets.reduce(
@@ -214,7 +214,7 @@ export default function CustomersPage() {
   );
 
   const totalRevenue = filteredTickets.reduce(
-    (sum, ticket) => sum + (ticket.price || 0),
+    (sum, ticket) => sum + (Number(ticket.price) || 0),
     0
   );
   const totalTicketsCount = filteredTickets.reduce(
@@ -379,8 +379,14 @@ export default function CustomersPage() {
               ) : (
                 paginatedTickets.map((ticket) => {
                   const total = getTicketQuantity(ticket);
+                  // If status is 'used', assume fully used regardless of ticketCount
+                  // Otherwise use ticketCount as remaining
                   const remaining =
-                    ticket.ticketCount !== undefined ? ticket.ticketCount : 1;
+                    ticket.status === "used"
+                      ? 0
+                      : ticket.ticketCount !== undefined
+                      ? ticket.ticketCount
+                      : 1;
                   const used = total - remaining;
 
                   return (
