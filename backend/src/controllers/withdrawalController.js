@@ -18,22 +18,30 @@ const getOrganizerBalance = async (req, res) => {
     const events = await Event.find({ organizer: organizerId });
     const eventIds = events.map((event) => event._id);
 
-    // Calculate revenue from tickets
-    // Count all tickets that represent actual revenue (active, used, etc.) excluding cancelled/expired/pending
-    // Also exclude invitations as they are free and shouldn't count as purchased
-    // Match frontend logic: Include ALL On-Door tickets (regardless of payment status), but restrict Online tickets
-    const tickets = await Ticket.find({
+    // Get all tickets for these events
+    const allTickets = await Ticket.find({
       event: { $in: eventIds },
-      status: { $nin: ["cancelled", "expired", "pending"] },
-      $or: [
-        { isOnDoor: true },
-        {
-          paymentStatus: "completed",
-          isInvitation: { $ne: true }, // Handle cases where isInvitation is false or undefined
-          price: { $gt: 0 }, // Ensure price is greater than 0 for online tickets
-        },
-      ],
     }).populate("event", "title ticketTypes");
+
+    // Filter for Net Revenue (Withdrawal Calculation) - Strict
+    // This determines what the organizer can actually withdraw
+    const validTickets = allTickets.filter((t) => {
+      if (["cancelled", "expired", "pending"].includes(t.status)) return false;
+      if (t.isOnDoor) return true;
+      if (t.isInvitation === true) return false;
+      if (!t.price || t.price <= 0) return false;
+      if (t.paymentStatus !== "completed") return false;
+      return true;
+    });
+
+    // Filter for Gross Revenue (Display) - Loose
+    // This matches admin/tickets page logic to show total volume
+    const grossTickets = allTickets.filter((t) => {
+      return t.price && t.price > 0;
+    });
+
+    // Use grossTickets for display purposes (revenue breakdown)
+    const tickets = grossTickets;
 
     // Helper to calculate ticket quantity
     const getQuantity = (ticket, event) => {
@@ -156,9 +164,13 @@ const getOrganizerBalance = async (req, res) => {
         .reduce((sum, t) => sum + t.price, 0),
     };
 
-    // Calculate organizer revenue after 3% Pazimo commission
-    const pazimoCommission = totalRevenue * 0.03;
-    const organizerRevenue = totalRevenue * 0.97;
+    // Calculate Net Revenue from valid tickets (for withdrawal)
+    const netRevenue = validTickets.reduce((sum, t) => sum + t.price, 0);
+
+    // Calculate organizer revenue after 3% Pazimo commission (based on Net Revenue)
+    // Note: totalRevenue is Gross (includes cancelled/pending), so these won't sum up to totalRevenue
+    const pazimoCommission = netRevenue * 0.03;
+    const organizerRevenue = netRevenue * 0.97;
 
     // Get pending and approved withdrawals
     const pendingWithdrawals = await Withdrawal.find({

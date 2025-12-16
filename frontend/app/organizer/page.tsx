@@ -96,6 +96,7 @@ export default function OrganizerDashboard() {
     revenue: true,
     "organizer-revenue": true,
     "pazimo-commission": true,
+    "total-withdrawn": true,
   });
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
@@ -155,22 +156,10 @@ export default function OrganizerDashboard() {
             const data = await res.json();
             const rawTickets = data.tickets || [];
 
-            // Filter out invitations and zero-price tickets
-            // Strict filter: exclude if isInvitation is true OR price is <= 0
+            // Filter to match admin/tickets page logic
+            // Include all tickets that have a price > 0, regardless of status
             const allTickets = rawTickets.filter((t: any) => {
-              // Always include on-door tickets (unless cancelled)
-              if (t.isOnDoor) {
-                if (["cancelled", "expired", "pending"].includes(t.status))
-                  return false;
-                return true;
-              }
-
-              if (t.isInvitation === true) return false;
-              if (!t.price || t.price <= 0) return false;
-              if (t.paymentStatus !== "completed") return false;
-              if (["cancelled", "expired", "pending"].includes(t.status))
-                return false;
-              return true;
+              return t.price && t.price > 0;
             });
 
             // Helper to calculate ticket quantity
@@ -690,7 +679,16 @@ export default function OrganizerDashboard() {
       borderColor: "border-l-emerald-600",
       isMoney: true,
     },
-
+    {
+      id: "total-withdrawn",
+      title: "Total Withdrawn",
+      value: balance?.approvedWithdrawals || 0,
+      icon: CreditCard,
+      iconBg: "bg-orange-100",
+      iconColor: "text-orange-600",
+      borderColor: "border-l-orange-600",
+      isMoney: true,
+    },
     {
       id: "tickets",
       title: "Total Tickets Sold",
@@ -870,7 +868,7 @@ export default function OrganizerDashboard() {
           </CardContent>
         </Card>
         {/* Stat Cards (Top Row) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-2 sm:gap-4 lg:gap-6 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 lg:gap-6 mb-4">
           {statCards.map((stat) => (
             <Card
               key={stat.id}
