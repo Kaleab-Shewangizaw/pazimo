@@ -126,6 +126,7 @@ interface OrganizerBalance {
   organizerRevenue: number;
   pazimoCommission: number;
   pendingWithdrawals: number;
+  approvedWithdrawals: number;
   availableBalance: number;
   revenueBreakdown: RevenueBreakdown[];
   summary: {
@@ -1154,7 +1155,7 @@ export default function OrganizersPage() {
 
         {/* Balance Dialog */}
         <Dialog open={balanceDialogOpen} onOpenChange={setBalanceDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-7xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-gray-900">
                 Revenue Details for {selectedOrganizerForBalance?.firstName}{" "}
@@ -1165,7 +1166,7 @@ export default function OrganizersPage() {
             {organizerBalance && (
               <div className="space-y-6">
                 {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <Card className="border border-gray-200 shadow-md">
                     <CardContent className="p-4">
                       <div className="text-sm font-medium text-gray-600">
@@ -1200,6 +1201,17 @@ export default function OrganizersPage() {
                           organizerBalance.pazimoCommission ||
                           organizerBalance.totalRevenue * 0.03
                         ).toFixed(2)}{" "}
+                        Birr
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card className="border border-gray-200 shadow-md">
+                    <CardContent className="p-4">
+                      <div className="text-sm font-medium text-gray-600">
+                        Total Withdrawn
+                      </div>
+                      <div className="text-lg font-bold text-orange-600 mt-1">
+                        {(organizerBalance.approvedWithdrawals || 0).toFixed(2)}{" "}
                         Birr
                       </div>
                     </CardContent>
