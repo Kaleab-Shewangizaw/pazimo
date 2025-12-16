@@ -39,25 +39,31 @@ const getOrganizerBalance = async (req, res) => {
     const getQuantity = (ticket, event) => {
       let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-      // Validate quantity against price if possible
-      if (event && event.ticketTypes) {
-        const type = event.ticketTypes.find(
-          (tt) =>
-            tt.name === ticket.ticketType ||
-            tt._id.toString() === ticket.ticketType ||
-            (tt.name &&
-              ticket.ticketType &&
-              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
-        );
+      // Check if ticket was bought before Dec 14, 2025
+      const cutoffDate = new Date("2025-12-14");
+      const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate);
 
-        // If we found the type and both prices are valid
-        if (type && type.price > 0 && ticket.price > 0) {
-          const expectedPrice = quantity * type.price;
-          // If mismatch (allowing for small float diff), recalculate
-          // This handles legacy data where quantity might be 1 but price is for multiple
-          if (Math.abs(expectedPrice - ticket.price) > 1) {
-            const calculatedQty = Math.round(ticket.price / type.price);
-            if (calculatedQty > 0) return calculatedQty;
+      if (ticketDate < cutoffDate) {
+        // Validate quantity against price if possible
+        if (event && event.ticketTypes) {
+          const type = event.ticketTypes.find(
+            (tt) =>
+              tt.name === ticket.ticketType ||
+              tt._id.toString() === ticket.ticketType ||
+              (tt.name &&
+                ticket.ticketType &&
+                tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+          );
+
+          // If we found the type and both prices are valid
+          if (type && type.price > 0 && ticket.price > 0) {
+            const expectedPrice = quantity * type.price;
+            // If mismatch (allowing for small float diff), recalculate
+            // This handles legacy data where quantity might be 1 but price is for multiple
+            if (Math.abs(expectedPrice - ticket.price) > 1) {
+              const calculatedQty = Math.round(ticket.price / type.price);
+              if (calculatedQty > 0) return calculatedQty;
+            }
           }
         }
       }

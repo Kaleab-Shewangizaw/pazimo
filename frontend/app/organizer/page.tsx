@@ -177,19 +177,28 @@ export default function OrganizerDashboard() {
             const getTicketQuantity = (ticket: any) => {
               let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-              if (event.ticketTypes && ticket.price > 0) {
-                const type = event.ticketTypes.find(
-                  (t: any) =>
-                    t.name === ticket.ticketType ||
-                    (t.name &&
-                      ticket.ticketType &&
-                      t.name.toLowerCase() === ticket.ticketType.toLowerCase())
-                );
-                if (type && type.price > 0) {
-                  const expectedPrice = quantity * type.price;
-                  if (Math.abs(expectedPrice - ticket.price) > 1) {
-                    const calculated = Math.round(ticket.price / type.price);
-                    if (calculated > 0) return calculated;
+              // Check if ticket was bought before Dec 14, 2025
+              const cutoffDate = new Date("2025-12-14");
+              const ticketDate = new Date(
+                ticket.createdAt || ticket.purchaseDate
+              );
+
+              if (ticketDate < cutoffDate) {
+                if (event.ticketTypes && ticket.price > 0) {
+                  const type = event.ticketTypes.find(
+                    (t: any) =>
+                      t.name === ticket.ticketType ||
+                      (t.name &&
+                        ticket.ticketType &&
+                        t.name.toLowerCase() ===
+                          ticket.ticketType.toLowerCase())
+                  );
+                  if (type && type.price > 0) {
+                    const expectedPrice = quantity * type.price;
+                    if (Math.abs(expectedPrice - ticket.price) > 1) {
+                      const calculated = Math.round(ticket.price / type.price);
+                      if (calculated > 0) return calculated;
+                    }
                   }
                 }
               }
@@ -521,22 +530,28 @@ export default function OrganizerDashboard() {
 
     let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-    // Fallback if we have event data
-    if (eventId) {
-      const event = events.find((e) => e._id === eventId);
-      if (event && event.ticketTypes && ticket.price > 0) {
-        const type = event.ticketTypes.find(
-          (t: any) =>
-            t.name === ticket.ticketType ||
-            (t.name &&
-              ticket.ticketType &&
-              t.name.toLowerCase() === ticket.ticketType.toLowerCase())
-        );
-        if (type && type.price > 0) {
-          const expectedPrice = quantity * type.price;
-          if (Math.abs(expectedPrice - ticket.price) > 1) {
-            const calculated = Math.round(ticket.price / type.price);
-            if (calculated > 0) return calculated;
+    // Check if ticket was bought before Dec 14, 2025
+    const cutoffDate = new Date("2025-12-14");
+    const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate);
+
+    if (ticketDate < cutoffDate) {
+      // Fallback if we have event data
+      if (eventId) {
+        const event = events.find((e) => e._id === eventId);
+        if (event && event.ticketTypes && ticket.price > 0) {
+          const type = event.ticketTypes.find(
+            (t: any) =>
+              t.name === ticket.ticketType ||
+              (t.name &&
+                ticket.ticketType &&
+                t.name.toLowerCase() === ticket.ticketType.toLowerCase())
+          );
+          if (type && type.price > 0) {
+            const expectedPrice = quantity * type.price;
+            if (Math.abs(expectedPrice - ticket.price) > 1) {
+              const calculated = Math.round(ticket.price / type.price);
+              if (calculated > 0) return calculated;
+            }
           }
         }
       }
@@ -1343,23 +1358,31 @@ export default function OrganizerDashboard() {
 
                         let quantity = t.purchaseQuantity || t.ticketCount || 1;
 
-                        if (t.price && event.ticketTypes) {
-                          const type = event.ticketTypes.find(
-                            (type: any) =>
-                              type.name === t.ticketType ||
-                              type._id === t.ticketType ||
-                              (type.name &&
-                                t.ticketType &&
-                                type.name.toLowerCase() ===
-                                  t.ticketType.toLowerCase())
-                          );
-                          if (type && type.price > 0) {
-                            const expectedPrice = quantity * type.price;
-                            if (Math.abs(expectedPrice - t.price) > 1) {
-                              const calculated = Math.round(
-                                t.price / type.price
-                              );
-                              if (calculated > 0) return calculated;
+                        // Check if ticket was bought before Dec 14, 2025
+                        const cutoffDate = new Date("2025-12-14");
+                        const ticketDate = new Date(
+                          t.createdAt || t.purchaseDate
+                        );
+
+                        if (ticketDate < cutoffDate) {
+                          if (t.price && event.ticketTypes) {
+                            const type = event.ticketTypes.find(
+                              (type: any) =>
+                                type.name === t.ticketType ||
+                                type._id === t.ticketType ||
+                                (type.name &&
+                                  t.ticketType &&
+                                  type.name.toLowerCase() ===
+                                    t.ticketType.toLowerCase())
+                            );
+                            if (type && type.price > 0) {
+                              const expectedPrice = quantity * type.price;
+                              if (Math.abs(expectedPrice - t.price) > 1) {
+                                const calculated = Math.round(
+                                  t.price / type.price
+                                );
+                                if (calculated > 0) return calculated;
+                              }
                             }
                           }
                         }

@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Loader2 } from "lucide-react";
 
 interface OrganizerData {
   _id: string;
@@ -136,6 +137,131 @@ interface OrganizerBalance {
 
 // Add payment method type
 type PaymentMethod = "telebirr" | "mpesa" | "bank";
+
+const EventCardWithStats = ({
+  event,
+  token,
+}: {
+  event: EventData;
+  token: string | null;
+}) => {
+  const [tickets, setTickets] = useState<TicketData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTickets = async () => {
+      if (!token) return;
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setTickets(data.tickets || []);
+        }
+      } catch (error) {
+        console.error("Error fetching tickets:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTickets();
+  }, [event._id, token]);
+
+  // Helper function to calculate ticket quantity
+  const getTicketQuantity = (ticket: TicketData, event: EventData) => {
+    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+    // Check if ticket was bought before Dec 14, 2025
+    const cutoffDate = new Date("2025-12-14");
+    const ticketDate = new Date(ticket.createdAt || "");
+
+    if (ticketDate < cutoffDate) {
+      // Validate quantity against price if possible
+      if (event && event.ticketTypes) {
+        const type = event.ticketTypes.find(
+          (tt) =>
+            tt.name === ticket.ticketType ||
+            (tt._id && tt._id === ticket.ticketType) ||
+            (tt.name &&
+              ticket.ticketType &&
+              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+        );
+
+        // If we found the type and both prices are valid
+        if (type && type.price > 0 && ticket.price > 0) {
+          const expectedPrice = quantity * type.price;
+          // If mismatch (allowing for small float diff), recalculate
+          // This handles legacy data where quantity might be 1 but price is for multiple
+          if (Math.abs(expectedPrice - ticket.price) > 1) {
+            const calculatedQty = Math.round(ticket.price / type.price);
+            if (calculatedQty > 0) return calculatedQty;
+          }
+        }
+      }
+    }
+    return quantity;
+  };
+
+  const calculateRevenue = (tickets: TicketData[]) => {
+    return tickets.reduce((sum, t) => sum + (t.price || 0), 0);
+  };
+
+  const ticketsSold = tickets.reduce(
+    (sum, t) => sum + getTicketQuantity(t, event),
+    0
+  );
+  const revenue = calculateRevenue(tickets);
+
+  return (
+    <div className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+      <div className="flex justify-between items-start">
+        <div>
+          <h5 className="font-medium text-gray-900">{event.title}</h5>
+          <p className="text-sm text-gray-600">
+            {event.location.address}, {event.location.city}
+          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <Badge
+              className={
+                event.status === "published"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-yellow-100 text-yellow-800"
+              }
+            >
+              {event.status}
+            </Badge>
+            <span className="text-sm text-gray-600">
+              {new Date(event.startDate).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+          {loading ? (
+            <div className="flex items-center justify-end gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              <span className="text-xs text-gray-500">Loading...</span>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-gray-600">Tickets Sold</p>
+              <p className="text-lg font-bold text-blue-600">{ticketsSold}</p>
+              <p className="text-sm text-gray-600">
+                Revenue: {revenue.toFixed(2)} Birr
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function OrganizersPage() {
   const router = useRouter();
@@ -426,29 +552,34 @@ export default function OrganizersPage() {
   const getTicketQuantity = (ticket: TicketData, event: EventData) => {
     let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-    // Validate quantity against price if possible
-    if (event && event.ticketTypes) {
-      const type = event.ticketTypes.find(
-        (tt) =>
-          tt.name === ticket.ticketType ||
-          (tt._id && tt._id === ticket.ticketType) ||
-          (tt.name &&
-            ticket.ticketType &&
-            tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
-      );
+    // Check if ticket was bought before Dec 14, 2025
+    const cutoffDate = new Date("2025-12-14");
+    const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate || "");
 
-      // If we found the type and both prices are valid
-      if (type && type.price > 0 && ticket.price > 0) {
-        const expectedPrice = quantity * type.price;
-        // If mismatch (allowing for small float diff), recalculate
-        // This handles legacy data where quantity might be 1 but price is for multiple
-        if (Math.abs(expectedPrice - ticket.price) > 1) {
-          const calculatedQty = Math.round(ticket.price / type.price);
-          if (calculatedQty > 0) return calculatedQty;
+    if (ticketDate < cutoffDate) {
+      // Validate quantity against price if possible
+      if (event && event.ticketTypes) {
+        const type = event.ticketTypes.find(
+          (tt) =>
+            tt.name === ticket.ticketType ||
+            (tt._id && tt._id === ticket.ticketType) ||
+            (tt.name &&
+              ticket.ticketType &&
+              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+        );
+
+        // If we found the type and both prices are valid
+        if (type && type.price > 0 && ticket.price > 0) {
+          const expectedPrice = quantity * type.price;
+          // If mismatch (allowing for small float diff), recalculate
+          // This handles legacy data where quantity might be 1 but price is for multiple
+          if (Math.abs(expectedPrice - ticket.price) > 1) {
+            const calculatedQty = Math.round(ticket.price / type.price);
+            if (calculatedQty > 0) return calculatedQty;
+          }
         }
       }
     }
-
     return quantity;
   };
 
@@ -1348,57 +1479,11 @@ export default function OrganizersPage() {
                       </h4>
                       <div className="space-y-3">
                         {selectedOrganizer.events?.slice(0, 5).map((event) => (
-                          <div
+                          <EventCardWithStats
                             key={event._id}
-                            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h5 className="font-medium text-gray-900">
-                                  {event.title}
-                                </h5>
-                                <p className="text-sm text-gray-600">
-                                  {event.location.address},{" "}
-                                  {event.location.city}
-                                </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge
-                                    className={
-                                      event.status === "published"
-                                        ? "bg-green-100 text-green-800"
-                                        : "bg-yellow-100 text-yellow-800"
-                                    }
-                                  >
-                                    {event.status}
-                                  </Badge>
-                                  <span className="text-sm text-gray-600">
-                                    {new Date(
-                                      event.startDate
-                                    ).toLocaleDateString()}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-medium text-gray-600">
-                                  Tickets Sold
-                                </p>
-                                <p className="text-lg font-bold text-blue-600">
-                                  {event.tickets?.reduce(
-                                    (sum, t) =>
-                                      sum + getTicketQuantity(t, event),
-                                    0
-                                  ) || 0}
-                                </p>
-                                <p className="text-sm text-gray-600">
-                                  Revenue:{" "}
-                                  {calculateRevenue(
-                                    event.tickets || []
-                                  ).toFixed(2)}{" "}
-                                  Birr
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+                            event={event}
+                            token={token}
+                          />
                         ))}
                       </div>
                     </div>

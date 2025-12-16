@@ -30,24 +30,30 @@ const getDashboardStats = async (req, res) => {
     const totalTicketsSold = tickets.reduce((sum, ticket) => {
       let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-      // Strict check: if price doesn't match quantity * unit_price, recalculate
-      if (ticket.event && ticket.event.ticketTypes) {
-        const type = ticket.event.ticketTypes.find(
-          (tt) =>
-            tt.name === ticket.ticketType ||
-            tt._id.toString() === ticket.ticketType ||
-            (tt.name &&
-              ticket.ticketType &&
-              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
-        );
+      // Check if ticket was bought before Dec 14, 2025
+      const cutoffDate = new Date("2025-12-14");
+      const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate);
 
-        if (type && type.price > 0 && ticket.price > 0) {
-          const expectedPrice = quantity * type.price;
-          // If the difference is significant (more than 1 unit of currency/rounding error)
-          if (Math.abs(expectedPrice - ticket.price) > 1) {
-            const calculatedQty = Math.round(ticket.price / type.price);
-            if (calculatedQty > 0) {
-              quantity = calculatedQty;
+      if (ticketDate < cutoffDate) {
+        // Strict check: if price doesn't match quantity * unit_price, recalculate
+        if (ticket.event && ticket.event.ticketTypes) {
+          const type = ticket.event.ticketTypes.find(
+            (tt) =>
+              tt.name === ticket.ticketType ||
+              tt._id.toString() === ticket.ticketType ||
+              (tt.name &&
+                ticket.ticketType &&
+                tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+          );
+
+          if (type && type.price > 0 && ticket.price > 0) {
+            const expectedPrice = quantity * type.price;
+            // If the difference is significant (more than 1 unit of currency/rounding error)
+            if (Math.abs(expectedPrice - ticket.price) > 1) {
+              const calculatedQty = Math.round(ticket.price / type.price);
+              if (calculatedQty > 0) {
+                quantity = calculatedQty;
+              }
             }
           }
         }

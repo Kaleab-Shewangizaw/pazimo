@@ -243,21 +243,27 @@ const getAllTicketsAdmin = async (req, res) => {
     const totalSold = purchasedTickets.reduce((sum, t) => {
       let quantity = t.purchaseQuantity || t.ticketCount || 1;
 
-      // Fallback: calculate from price
-      if (t.event && t.event.ticketTypes) {
-        const type = t.event.ticketTypes.find(
-          (tt) =>
-            tt.name === t.ticketType ||
-            tt._id.toString() === t.ticketType ||
-            (tt.name &&
-              t.ticketType &&
-              tt.name.toLowerCase() === t.ticketType.toLowerCase())
-        );
-        if (type && type.price > 0 && t.price > 0) {
-          const expectedPrice = quantity * type.price;
-          if (Math.abs(expectedPrice - t.price) > 1) {
-            const calculatedQty = Math.round(t.price / type.price);
-            if (calculatedQty > 0) return sum + calculatedQty;
+      // Check if ticket was bought before Dec 14, 2025
+      const cutoffDate = new Date("2025-12-14");
+      const ticketDate = new Date(t.createdAt || t.purchaseDate);
+
+      if (ticketDate < cutoffDate) {
+        // Fallback: calculate from price
+        if (t.event && t.event.ticketTypes) {
+          const type = t.event.ticketTypes.find(
+            (tt) =>
+              tt.name === t.ticketType ||
+              tt._id.toString() === t.ticketType ||
+              (tt.name &&
+                t.ticketType &&
+                tt.name.toLowerCase() === t.ticketType.toLowerCase())
+          );
+          if (type && type.price > 0 && t.price > 0) {
+            const expectedPrice = quantity * type.price;
+            if (Math.abs(expectedPrice - t.price) > 1) {
+              const calculatedQty = Math.round(t.price / type.price);
+              if (calculatedQty > 0) return sum + calculatedQty;
+            }
           }
         }
       }
@@ -1021,20 +1027,26 @@ const getEventTickets = async (req, res) => {
 
       let quantity = t.purchaseQuantity || t.ticketCount || 1;
 
-      if (eventForCalc && eventForCalc.ticketTypes) {
-        const type = eventForCalc.ticketTypes.find(
-          (tt) =>
-            tt.name === t.ticketType ||
-            tt._id.toString() === t.ticketType ||
-            (tt.name &&
-              t.ticketType &&
-              tt.name.toLowerCase() === t.ticketType.toLowerCase())
-        );
-        if (type && type.price > 0 && t.price > 0) {
-          const expectedPrice = quantity * type.price;
-          if (Math.abs(expectedPrice - t.price) > 1) {
-            const calculatedQty = Math.round(t.price / type.price);
-            if (calculatedQty > 0) return sum + calculatedQty;
+      // Check if ticket was bought before Dec 14, 2025
+      const cutoffDate = new Date("2025-12-14");
+      const ticketDate = new Date(t.createdAt || t.purchaseDate);
+
+      if (ticketDate < cutoffDate) {
+        if (eventForCalc && eventForCalc.ticketTypes) {
+          const type = eventForCalc.ticketTypes.find(
+            (tt) =>
+              tt.name === t.ticketType ||
+              tt._id.toString() === t.ticketType ||
+              (tt.name &&
+                t.ticketType &&
+                tt.name.toLowerCase() === t.ticketType.toLowerCase())
+          );
+          if (type && type.price > 0 && t.price > 0) {
+            const expectedPrice = quantity * type.price;
+            if (Math.abs(expectedPrice - t.price) > 1) {
+              const calculatedQty = Math.round(t.price / type.price);
+              if (calculatedQty > 0) return sum + calculatedQty;
+            }
           }
         }
       }

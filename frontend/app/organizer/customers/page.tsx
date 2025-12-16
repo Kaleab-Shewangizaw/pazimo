@@ -177,19 +177,25 @@ export default function CustomersPage() {
   const getTicketQuantity = (ticket: Ticket) => {
     let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-    if (selectedEvent?.ticketTypes && ticket.price > 0) {
-      const type = selectedEvent.ticketTypes.find(
-        (t) =>
-          t.name === ticket.ticketType ||
-          (t.name &&
-            ticket.ticketType &&
-            t.name.toLowerCase() === ticket.ticketType.toLowerCase())
-      );
-      if (type && type.price > 0) {
-        const expectedPrice = quantity * type.price;
-        if (Math.abs(expectedPrice - ticket.price) > 1) {
-          const calculated = Math.round(ticket.price / type.price);
-          if (calculated > 0) return calculated;
+    // Check if ticket was bought before Dec 14, 2025
+    const cutoffDate = new Date("2025-12-14");
+    const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate || "");
+
+    if (ticketDate < cutoffDate) {
+      if (selectedEvent?.ticketTypes && ticket.price > 0) {
+        const type = selectedEvent.ticketTypes.find(
+          (t) =>
+            t.name === ticket.ticketType ||
+            (t.name &&
+              ticket.ticketType &&
+              t.name.toLowerCase() === ticket.ticketType.toLowerCase())
+        );
+        if (type && type.price > 0) {
+          const expectedPrice = quantity * type.price;
+          if (Math.abs(expectedPrice - ticket.price) > 1) {
+            const calculated = Math.round(ticket.price / type.price);
+            if (calculated > 0) return calculated;
+          }
         }
       }
     }
