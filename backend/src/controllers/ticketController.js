@@ -241,7 +241,7 @@ const getAllTicketsAdmin = async (req, res) => {
         !["cancelled", "expired", "pending"].includes(t.status)
     );
     const totalSold = purchasedTickets.reduce((sum, t) => {
-      if (t.purchaseQuantity) return sum + t.purchaseQuantity;
+      let quantity = t.purchaseQuantity || t.ticketCount || 1;
 
       // Fallback: calculate from price
       if (t.event && t.event.ticketTypes) {
@@ -254,11 +254,14 @@ const getAllTicketsAdmin = async (req, res) => {
               tt.name.toLowerCase() === t.ticketType.toLowerCase())
         );
         if (type && type.price > 0 && t.price > 0) {
-          const calculatedQty = Math.round(t.price / type.price);
-          if (calculatedQty > 0) return sum + calculatedQty;
+          const expectedPrice = quantity * type.price;
+          if (Math.abs(expectedPrice - t.price) > 1) {
+            const calculatedQty = Math.round(t.price / type.price);
+            if (calculatedQty > 0) return sum + calculatedQty;
+          }
         }
       }
-      return sum + (t.ticketCount || 1);
+      return sum + quantity;
     }, 0);
     const totalRevenue = purchasedTickets.reduce(
       (sum, t) => sum + (t.price || 0),
@@ -1015,7 +1018,8 @@ const getEventTickets = async (req, res) => {
 
     const totalTicketsSold = tickets.reduce((sum, t) => {
       if (t.isInvitation === true) return sum;
-      if (t.purchaseQuantity) return sum + t.purchaseQuantity;
+
+      let quantity = t.purchaseQuantity || t.ticketCount || 1;
 
       if (eventForCalc && eventForCalc.ticketTypes) {
         const type = eventForCalc.ticketTypes.find(
@@ -1027,11 +1031,14 @@ const getEventTickets = async (req, res) => {
               tt.name.toLowerCase() === t.ticketType.toLowerCase())
         );
         if (type && type.price > 0 && t.price > 0) {
-          const calculatedQty = Math.round(t.price / type.price);
-          if (calculatedQty > 0) return sum + calculatedQty;
+          const expectedPrice = quantity * type.price;
+          if (Math.abs(expectedPrice - t.price) > 1) {
+            const calculatedQty = Math.round(t.price / type.price);
+            if (calculatedQty > 0) return sum + calculatedQty;
+          }
         }
       }
-      return sum + (t.ticketCount || 1);
+      return sum + quantity;
     }, 0);
 
     res

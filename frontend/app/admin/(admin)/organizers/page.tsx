@@ -84,6 +84,7 @@ interface TicketType {
   available: boolean;
   startDate?: string;
   endDate?: string;
+  _id?: string;
 }
 
 interface TicketData {
@@ -98,6 +99,8 @@ interface TicketData {
   price: number;
   status: string;
   createdAt: string;
+  purchaseQuantity?: number;
+  ticketCount?: number;
 }
 
 interface RevenueBreakdown {
@@ -417,6 +420,36 @@ export default function OrganizersPage() {
   const handleViewOrganizerDetails = (organizer: OrganizerData) => {
     setSelectedOrganizer(organizer);
     setOrganizerDetailsDialogOpen(true);
+  };
+
+  // Helper function to calculate ticket quantity
+  const getTicketQuantity = (ticket: TicketData, event: EventData) => {
+    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+    // Validate quantity against price if possible
+    if (event && event.ticketTypes) {
+      const type = event.ticketTypes.find(
+        (tt) =>
+          tt.name === ticket.ticketType ||
+          (tt._id && tt._id === ticket.ticketType) ||
+          (tt.name &&
+            ticket.ticketType &&
+            tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+      );
+
+      // If we found the type and both prices are valid
+      if (type && type.price > 0 && ticket.price > 0) {
+        const expectedPrice = quantity * type.price;
+        // If mismatch (allowing for small float diff), recalculate
+        // This handles legacy data where quantity might be 1 but price is for multiple
+        if (Math.abs(expectedPrice - ticket.price) > 1) {
+          const calculatedQty = Math.round(ticket.price / type.price);
+          if (calculatedQty > 0) return calculatedQty;
+        }
+      }
+    }
+
+    return quantity;
   };
 
   // Helper function to calculate revenue from all tickets (active, used, etc.)
@@ -1350,7 +1383,11 @@ export default function OrganizersPage() {
                                   Tickets Sold
                                 </p>
                                 <p className="text-lg font-bold text-blue-600">
-                                  {event.tickets?.length || 0}
+                                  {event.tickets?.reduce(
+                                    (sum, t) =>
+                                      sum + getTicketQuantity(t, event),
+                                    0
+                                  ) || 0}
                                 </p>
                                 <p className="text-sm text-gray-600">
                                   Revenue:{" "}
@@ -1384,24 +1421,48 @@ export default function OrganizersPage() {
                             {event.title}
                           </h4>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {event.ticketTypes?.map((type) => (
-                              <div
-                                key={type.name}
-                                className="p-3 bg-gray-50 rounded-lg"
-                              >
-                                <p className="text-sm font-medium text-gray-900">
-                                  {type.name}
-                                </p>
-                                <div className="flex justify-between items-center mt-1">
-                                  <span className="text-sm text-gray-600">
-                                    {type.quantity} available
-                                  </span>
-                                  <span className="text-sm font-medium text-green-600">
-                                    {type.price.toFixed(2)} Birr
-                                  </span>
+                            {event.ticketTypes?.map((type) => {
+                              const soldCount = event.tickets
+                                ? event.tickets
+                                    .filter(
+                                      (t) =>
+                                        t.ticketType === type.name ||
+                                        (type._id &&
+                                          t.ticketType === type._id) ||
+                                        (t.ticketType &&
+                                          type.name &&
+                                          t.ticketType.toLowerCase() ===
+                                            type.name.toLowerCase())
+                                    )
+                                    .reduce(
+                                      (sum, t) =>
+                                        sum + getTicketQuantity(t, event),
+                                      0
+                                    )
+                                : 0;
+
+                              return (
+                                <div
+                                  key={type.name}
+                                  className="p-3 bg-gray-50 rounded-lg"
+                                >
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {type.name}
+                                  </p>
+                                  <div className="flex justify-between items-center mt-1">
+                                    <span className="text-sm text-gray-600">
+                                      {type.quantity} available
+                                    </span>
+                                    <span className="text-sm font-medium text-green-600">
+                                      {type.price.toFixed(2)} Birr
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 text-xs text-blue-600 font-medium">
+                                    {soldCount} sold
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       ))}

@@ -28,9 +28,9 @@ const getDashboardStats = async (req, res) => {
     );
 
     const totalTicketsSold = tickets.reduce((sum, ticket) => {
-      if (ticket.purchaseQuantity) return sum + ticket.purchaseQuantity;
+      let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-      // Fallback: calculate from price
+      // Strict check: if price doesn't match quantity * unit_price, recalculate
       if (ticket.event && ticket.event.ticketTypes) {
         const type = ticket.event.ticketTypes.find(
           (tt) =>
@@ -40,13 +40,20 @@ const getDashboardStats = async (req, res) => {
               ticket.ticketType &&
               tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
         );
+
         if (type && type.price > 0 && ticket.price > 0) {
-          const calculatedQty = Math.round(ticket.price / type.price);
-          if (calculatedQty > 0) return sum + calculatedQty;
+          const expectedPrice = quantity * type.price;
+          // If the difference is significant (more than 1 unit of currency/rounding error)
+          if (Math.abs(expectedPrice - ticket.price) > 1) {
+            const calculatedQty = Math.round(ticket.price / type.price);
+            if (calculatedQty > 0) {
+              quantity = calculatedQty;
+            }
+          }
         }
       }
 
-      return sum + (ticket.ticketCount || 1);
+      return sum + quantity;
     }, 0);
 
     // Get active organizers

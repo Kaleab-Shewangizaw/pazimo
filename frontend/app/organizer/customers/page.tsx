@@ -175,7 +175,7 @@ export default function CustomersPage() {
 
   // Helper to calculate ticket quantity
   const getTicketQuantity = (ticket: Ticket) => {
-    if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
     if (selectedEvent?.ticketTypes && ticket.price > 0) {
       const type = selectedEvent.ticketTypes.find(
@@ -186,12 +186,15 @@ export default function CustomersPage() {
             t.name.toLowerCase() === ticket.ticketType.toLowerCase())
       );
       if (type && type.price > 0) {
-        const calculated = Math.round(ticket.price / type.price);
-        if (calculated > 0) return calculated;
+        const expectedPrice = quantity * type.price;
+        if (Math.abs(expectedPrice - ticket.price) > 1) {
+          const calculated = Math.round(ticket.price / type.price);
+          if (calculated > 0) return calculated;
+        }
       }
     }
 
-    return ticket.ticketCount || 1;
+    return quantity;
   };
 
   const onDoorTickets = filteredTickets.filter((t) => t.isOnDoor === true);
@@ -369,8 +372,7 @@ export default function CustomersPage() {
                 </tr>
               ) : (
                 paginatedTickets.map((ticket) => {
-                  const total =
-                    ticket.purchaseQuantity || ticket.ticketCount || 1;
+                  const total = getTicketQuantity(ticket);
                   const remaining =
                     ticket.ticketCount !== undefined ? ticket.ticketCount : 1;
                   const used = total - remaining;

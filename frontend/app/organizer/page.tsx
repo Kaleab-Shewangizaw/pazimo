@@ -175,7 +175,7 @@ export default function OrganizerDashboard() {
 
             // Helper to calculate ticket quantity
             const getTicketQuantity = (ticket: any) => {
-              if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+              let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
               if (event.ticketTypes && ticket.price > 0) {
                 const type = event.ticketTypes.find(
@@ -186,12 +186,15 @@ export default function OrganizerDashboard() {
                       t.name.toLowerCase() === ticket.ticketType.toLowerCase())
                 );
                 if (type && type.price > 0) {
-                  const calculated = Math.round(ticket.price / type.price);
-                  if (calculated > 0) return calculated;
+                  const expectedPrice = quantity * type.price;
+                  if (Math.abs(expectedPrice - ticket.price) > 1) {
+                    const calculated = Math.round(ticket.price / type.price);
+                    if (calculated > 0) return calculated;
+                  }
                 }
               }
 
-              return ticket.ticketCount || 1;
+              return quantity;
             };
 
             // Map tickets to include calculated quantity
@@ -516,7 +519,7 @@ export default function OrganizerDashboard() {
     // If we already calculated it during fetch, use it
     if (ticket.calculatedQuantity) return ticket.calculatedQuantity;
 
-    if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
     // Fallback if we have event data
     if (eventId) {
@@ -530,13 +533,16 @@ export default function OrganizerDashboard() {
               t.name.toLowerCase() === ticket.ticketType.toLowerCase())
         );
         if (type && type.price > 0) {
-          const calculated = Math.round(ticket.price / type.price);
-          if (calculated > 0) return calculated;
+          const expectedPrice = quantity * type.price;
+          if (Math.abs(expectedPrice - ticket.price) > 1) {
+            const calculated = Math.round(ticket.price / type.price);
+            if (calculated > 0) return calculated;
+          }
         }
       }
     }
 
-    return ticket.ticketCount || 1;
+    return quantity;
   };
 
   const totalTicketsSold = Object.entries(allTicketsByEvent).reduce(
@@ -1333,20 +1339,31 @@ export default function OrganizerDashboard() {
 
                       // Helper to calculate quantity for a ticket
                       const getQuantity = (t: any) => {
-                        if (t.purchaseQuantity) return t.purchaseQuantity;
-                        if (t.ticketCount) return t.ticketCount;
-                        // Fallback: calculate from price
+                        if (t.calculatedQuantity) return t.calculatedQuantity;
+
+                        let quantity = t.purchaseQuantity || t.ticketCount || 1;
+
                         if (t.price && event.ticketTypes) {
                           const type = event.ticketTypes.find(
                             (type: any) =>
                               type.name === t.ticketType ||
-                              type._id === t.ticketType
+                              type._id === t.ticketType ||
+                              (type.name &&
+                                t.ticketType &&
+                                type.name.toLowerCase() ===
+                                  t.ticketType.toLowerCase())
                           );
                           if (type && type.price > 0) {
-                            return Math.round(t.price / type.price);
+                            const expectedPrice = quantity * type.price;
+                            if (Math.abs(expectedPrice - t.price) > 1) {
+                              const calculated = Math.round(
+                                t.price / type.price
+                              );
+                              if (calculated > 0) return calculated;
+                            }
                           }
                         }
-                        return 1;
+                        return quantity;
                       };
 
                       const totalTickets = tickets.reduce(
