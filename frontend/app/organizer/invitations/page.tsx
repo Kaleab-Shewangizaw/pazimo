@@ -196,7 +196,7 @@ export default function InvitationsPage() {
   }, [searchParams, router]);
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
+    <div className="min-h-screen bg-gray-50/50 p-4 md:p-6 space-y-6">
       <StatsOverview stats={stats} />
       <PageHeader activeTab={activeTab} setActiveTab={setActiveTab} />
 

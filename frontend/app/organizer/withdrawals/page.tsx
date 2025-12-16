@@ -1,578 +1,3 @@
-// "use client"
-
-// import { useState, useEffect, useRef } from "react"
-// import { Card, CardContent } from "@/components/ui/card"
-// import { Badge } from "@/components/ui/badge"
-// import { Button } from "@/components/ui/button"
-// import { Input } from "@/components/ui/input"
-// import { Label } from "@/components/ui/label"
-// import { Textarea } from "@/components/ui/textarea"
-// import { toast } from "sonner"
-// import { DollarSign, Wallet, AlertCircle, Banknote } from "lucide-react"
-// import {
-//   Dialog,
-//   DialogContent,
-//   DialogDescription,
-//   DialogFooter,
-//   DialogHeader,
-//   DialogTitle,
-// } from "@/components/ui/dialog"
-// import {
-//   Table,
-//   TableBody,
-//   TableCell,
-//   TableHead,
-//   TableHeader,
-//   TableRow,
-// } from "@/components/ui/table"
-// import {
-//   Select,
-//   SelectContent,
-//   SelectItem,
-//   SelectTrigger,
-//   SelectValue,
-// } from "@/components/ui/select"
-// import { io, Socket } from "socket.io-client"
-
-// interface Withdrawal {
-//   _id: string;
-//   amount: number;
-//   status: 'pending' | 'approved' | 'rejected' | 'completed';
-//   createdAt: string;
-//   processedAt?: string;
-//   notes?: string;
-//   bankDetails: {
-//     accountName: string;
-//     accountNumber: string;
-//     bankName: string;
-//   };
-//   transactionId?: string;
-//   processedBy?: {
-//     firstName: string;
-//     lastName: string;
-//     email: string;
-//   };
-// }
-
-// interface BalanceData {
-//   totalRevenue: number;
-//   pendingWithdrawals: number;
-//   approvedWithdrawals: number;
-//   availableBalance: number;
-//   revenueBreakdown: Array<{
-//     eventId: string;
-//     eventTitle: string;
-//     totalRevenue: number;
-//     ticketTypeBreakdown: Array<{
-//       name: string;
-//       price: number;
-//       quantitySold: number;
-//       revenue: number;
-//     }>;
-//     totalTicketsSold: number;
-//   }>;
-//   summary: {
-//     totalEvents: number;
-//     totalTicketsSold: number;
-//     averageTicketPrice: number;
-//   };
-// }
-
-// export default function WithdrawalsPage() {
-//   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
-//   const [loading, setLoading] = useState(true)
-//   const [balance, setBalance] = useState<BalanceData | null>(null)
-//   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false)
-//   const [withdrawAmount, setWithdrawAmount] = useState("")
-//   const [withdrawNotes, setWithdrawNotes] = useState("")
-//   const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState(false)
-//   const [statusFilter, setStatusFilter] = useState<string>("all")
-//   const [currentPage, setCurrentPage] = useState(1)
-//   const [itemsPerPage, setItemsPerPage] = useState(5)
-//   const [totalPages, setTotalPages] = useState(1)
-//   const [bankDetails, setBankDetails] = useState({
-//     accountName: "",
-//     accountNumber: "",
-//     bankName: ""
-//   })
-//   const socketRef = useRef<Socket | null>(null);
-
-//   useEffect(() => {
-//     fetchWithdrawals()
-//     fetchBalance()
-//     // Socket.IO notification for withdrawal status updates
-//     const storedAuth = localStorage.getItem("auth-storage");
-//     let token = "";
-//     let userId = "";
-//     if (storedAuth) {
-//       try {
-//         const parsedAuth = JSON.parse(storedAuth);
-//         token = parsedAuth.state?.token;
-//         userId = parsedAuth.state?.user?._id;
-//       } catch {}
-//     }
-//     if (!token || !userId) return;
-
-//     if (!socketRef.current) {
-//       socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL as string, {
-//         auth: { token },
-//         transports: ["websocket"],
-//       });
-//       socketRef.current.on("connect", () => {
-//         console.log("Socket connected (withdrawals page):", socketRef.current?.id);
-//       });
-//       socketRef.current.on("disconnect", () => {
-//         console.log("Socket disconnected (withdrawals page)");
-//       });
-//     }
-//     socketRef.current.emit("joinOrganizerRoom", userId);
-//     console.log("Emitted joinOrganizerRoom (withdrawals page):", userId);
-
-//     socketRef.current.on("withdrawalStatusUpdated", (data) => {
-//       console.log("Received withdrawalStatusUpdated (withdrawals page):", data);
-//       toast.success(
-//         `Your withdrawal of ${data.amount} Birr has been ${data.status}.`
-//       );
-//       // Optionally refresh the withdrawal list
-//       fetchWithdrawals();
-//     });
-
-//     return () => {
-//       if (socketRef.current) {
-//         socketRef.current.off("withdrawalStatusUpdated");
-//         socketRef.current.disconnect();
-//         socketRef.current = null;
-//       }
-//     };
-//   }, [currentPage, itemsPerPage, statusFilter])
-
-//   const fetchWithdrawals = async () => {
-//     try {
-//       setLoading(true)
-//       const storedAuth = localStorage.getItem("auth-storage")
-//       let token = ""
-//       let userId = ""
-//       if (storedAuth) {
-//         try {
-//           const parsedAuth = JSON.parse(storedAuth)
-//           token = parsedAuth.state?.token
-//           userId = parsedAuth.state?.user?._id
-//         } catch {}
-//       }
-//       if (!token || !userId) {
-//         toast.error('Please login to view withdrawals')
-//         return
-//       }
-//       const response = await fetch(
-//         `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?page=${currentPage}&limit=${itemsPerPage}&status=${statusFilter}`,
-//         {
-//           method: 'GET',
-//           headers: {
-//             'Authorization': `Bearer ${token}`,
-//             'Content-Type': 'application/json'
-//           },
-//           credentials: 'include',
-//         }
-//       )
-//       if (!response.ok) {
-//         const errorData = await response.json()
-//         throw new Error(errorData.message || 'Failed to fetch withdrawals')
-//       }
-//       const data = await response.json()
-//       if (data.success) {
-//         setWithdrawals(data.data || [])
-//         setTotalPages(data.pagination?.pages || 1)
-//       } else {
-//         throw new Error(data.message || 'Failed to fetch withdrawals')
-//       }
-//     } catch (error) {
-//       console.error('Error fetching withdrawals:', error)
-//       toast.error(error instanceof Error ? error.message : 'Failed to fetch withdrawals')
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   const fetchBalance = async () => {
-//     try {
-//       const storedAuth = localStorage.getItem("auth-storage")
-//       let token = ""
-//       let userId = ""
-//       if (storedAuth) {
-//         try {
-//           const parsedAuth = JSON.parse(storedAuth)
-//           token = parsedAuth.state?.token
-//           userId = parsedAuth.state?.user?._id
-//         } catch {}
-//       }
-//       if (!token || !userId) {
-//         toast.error('Please login to view balance')
-//         return
-//       }
-//       const response = await fetch(
-//         `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`,
-//         {
-//           method: 'GET',
-//           headers: {
-//             'Authorization': `Bearer ${token}`,
-//             'Content-Type': 'application/json'
-//           },
-//           credentials: 'include',
-//         }
-//       )
-//       if (!response.ok) {
-//         const errorData = await response.json()
-//         throw new Error(errorData.message || 'Failed to fetch balance')
-//       }
-//       const data = await response.json()
-//       if (data.success) {
-//         setBalance(data.data)
-//       } else {
-//         throw new Error(data.message || 'Failed to fetch balance')
-//       }
-//     } catch (error) {
-//       console.error('Error fetching balance:', error)
-//       toast.error(error instanceof Error ? error.message : 'Failed to fetch balance')
-//     }
-//   }
-
-//   const handleWithdraw = async () => {
-//     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
-//       toast.error('Please enter a valid amount')
-//       return
-//     }
-//     if (parseFloat(withdrawAmount) > (balance?.availableBalance ?? 0) || !balance) {
-//       toast.error('Withdrawal amount cannot exceed available balance')
-//       return
-//     }
-//     if (!bankDetails.bankName) {
-//       toast.error('Please select a payment method')
-//       return
-//     }
-//     if ((bankDetails.bankName === 'telebirr' || bankDetails.bankName === 'mpesa') && !bankDetails.accountNumber) {
-//       toast.error('Please provide the phone number for the selected payment method')
-//       return
-//     }
-//     if (bankDetails.bankName === 'bank' && (!bankDetails.accountName || !bankDetails.accountNumber)) {
-//       toast.error('Please provide all bank account details')
-//       return
-//     }
-//     try {
-//       setIsSubmittingWithdraw(true)
-//       const storedAuth = localStorage.getItem("auth-storage")
-//       let token = ""
-//       let userId = ""
-//       if (storedAuth) {
-//         try {
-//           const parsedAuth = JSON.parse(storedAuth)
-//           token = parsedAuth.state?.token
-//           userId = parsedAuth.state?.user?._id
-//         } catch {}
-//       }
-//       if (!token || !userId) {
-//         toast.error('Please login to request withdrawal')
-//         return
-//       }
-//       const response = await fetch(
-//         `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals`,
-//         {
-//           method: 'POST',
-//           headers: {
-//             'Authorization': `Bearer ${token}`,
-//             'Content-Type': 'application/json',
-//           },
-//           credentials: 'include',
-//           body: JSON.stringify({
-//             amount: parseFloat(withdrawAmount),
-//             notes: withdrawNotes,
-//             bankDetails
-//           }),
-//         }
-//       )
-//       if (!response.ok) {
-//         const errorData = await response.json()
-//         throw new Error(errorData.message || 'Failed to request withdrawal')
-//       }
-//       const data = await response.json()
-//       if (data.success) {
-//         toast.success('Withdrawal request submitted successfully')
-//         setWithdrawDialogOpen(false)
-//         setWithdrawAmount("")
-//         setWithdrawNotes("")
-//         setBankDetails({
-//           accountName: "",
-//           accountNumber: "",
-//           bankName: ""
-//         })
-//         fetchWithdrawals()
-//         fetchBalance()
-//       } else {
-//         throw new Error(data.message || 'Failed to request withdrawal')
-//       }
-//     } catch (error) {
-//       console.error('Error requesting withdrawal:', error)
-//       toast.error(error instanceof Error ? error.message : 'Failed to request withdrawal')
-//     } finally {
-//       setIsSubmittingWithdraw(false)
-//     }
-//   }
-
-//   if (loading) {
-//     return (
-//       <div className="flex items-center justify-center min-h-screen">
-//         <div className="text-center">
-//           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a] mx-auto"></div>
-//           <p className="mt-2 text-muted-foreground">Loading withdrawals...</p>
-//         </div>
-//       </div>
-//     )
-//   }
-
-//   return (
-//     <div className="container mx-auto py-10 p-10">
-//       {/* Header */}
-//       <div className="mb-8">
-//         <h1 className="text-3xl font-bold">Withdrawals</h1>
-//         <p className="text-muted-foreground mt-1">Manage your earnings and withdrawal requests</p>
-//       </div>
-
-//       {/* Balance Cards */}
-//       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-//         <Card>
-//           <CardContent className="p-6">
-//             <div className="flex items-center gap-4">
-//               <div className="p-3 rounded-full bg-[#1a2d5a]/10">
-//                 <Wallet className="h-6 w-6 text-[#1a2d5a]" />
-//               </div>
-//               <div>
-//                 <div className="text-sm font-medium text-muted-foreground">Available Balance</div>
-//                 <div className="text-2xl font-bold mt-1">{balance?.availableBalance.toFixed(2) || '0.00'} birr</div>
-//               </div>
-//             </div>
-//           </CardContent>
-//         </Card>
-
-//         <Card>
-//           <CardContent className="p-6">
-//             <div className="flex items-center gap-4">
-//               <div className="p-3 rounded-full bg-green-500/10">
-//                 <DollarSign className="h-6 w-6 text-green-500" />
-//               </div>
-//               <div>
-//                 <div className="text-sm font-medium text-muted-foreground">Approved Withdrawals</div>
-//                 <div className="text-2xl font-bold mt-1">{balance?.approvedWithdrawals.toFixed(2) || '0.00'} birr</div>
-//               </div>
-//             </div>
-//           </CardContent>
-//         </Card>
-
-//         <Card>
-//           <CardContent className="p-6">
-//             <div className="flex items-center gap-4">
-//               <div className="p-3 rounded-full bg-yellow-500/10">
-//                 <AlertCircle className="h-6 w-6 text-yellow-500" />
-//               </div>
-//               <div>
-//                 <div className="text-sm font-medium text-muted-foreground">Pending Withdrawals</div>
-//                 <div className="text-2xl font-bold mt-1">{balance?.pendingWithdrawals.toFixed(2) || '0.00'} birr</div>
-//               </div>
-//             </div>
-//           </CardContent>
-//         </Card>
-//       </div>
-
-//       {/* Withdrawal Request Button */}
-//       <div className="mb-8">
-//         <Button
-//           onClick={() => setWithdrawDialogOpen(true)}
-//           disabled={!balance || balance.availableBalance <= 0}
-//           className="bg-[#1a2d5a] hover:bg-[#1a2d5a]/90"
-//         >
-//           <DollarSign className="h-4 w-4 mr-2" />
-//           Request Withdrawal
-//         </Button>
-//       </div>
-
-//       {/* Withdrawals Table */}
-//       <Card>
-//         <CardContent className="p-6">
-//           <div className="flex justify-between items-center mb-6">
-//             <h2 className="text-xl font-semibold">Withdrawal History</h2>
-//             <Select value={statusFilter} onValueChange={setStatusFilter}>
-//               <SelectTrigger className="w-[180px]">
-//                 <SelectValue placeholder="Filter by status" />
-//               </SelectTrigger>
-//               <SelectContent>
-//                 <SelectItem value="all">All Status</SelectItem>
-//                 <SelectItem value="pending">Pending</SelectItem>
-//                 <SelectItem value="completed">Completed</SelectItem>
-//                 <SelectItem value="rejected">Rejected</SelectItem>
-//               </SelectContent>
-//             </Select>
-//           </div>
-
-//           <Table>
-//             <TableHeader>
-//               <TableRow>
-//                 <TableHead>Date</TableHead>
-//                 <TableHead>Amount</TableHead>
-//                 <TableHead>Status</TableHead>
-//                 <TableHead>Notes</TableHead>
-//                 <TableHead>Processed By</TableHead>
-//               </TableRow>
-//             </TableHeader>
-//             <TableBody>
-//               {withdrawals.length === 0 ? (
-//                 <TableRow>
-//                   <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-//                     No withdrawal requests found
-//                   </TableCell>
-//                 </TableRow>
-//               ) : (
-//                 withdrawals.map((withdrawal) => (
-//                   <TableRow key={withdrawal._id}>
-//                     <TableCell>
-//                       {new Date(withdrawal.createdAt).toLocaleDateString()}
-//                     </TableCell>
-//                     <TableCell className="font-medium">{withdrawal.amount.toFixed(2)} birr</TableCell>
-//                     <TableCell>
-//                       <Badge
-//                         variant={withdrawal.status === 'completed' ? 'default' : 'secondary'}
-//                         className={`px-3 py-1 ${
-//                           withdrawal.status === 'completed'
-//                             ? 'bg-green-500 text-white'
-//                             : withdrawal.status === 'pending'
-//                             ? 'bg-yellow-500 text-white'
-//                             : 'bg-red-500 text-white'
-//                         }`}
-//                       >
-//                         {withdrawal.status}
-//                       </Badge>
-//                     </TableCell>
-//                     <TableCell className="max-w-[200px] truncate">{withdrawal.notes}</TableCell>
-//                     <TableCell>{withdrawal.processedBy?.firstName || '-'}</TableCell>
-//                   </TableRow>
-//                 ))
-//               )}
-//             </TableBody>
-//           </Table>
-//         </CardContent>
-//       </Card>
-
-//       {/* Withdrawal Request Dialog */}
-//       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-//         <DialogContent>
-//           <DialogHeader>
-//             <DialogTitle>Request Withdrawal</DialogTitle>
-//             <DialogDescription>
-//               Enter the amount you wish to withdraw from your available balance.
-//             </DialogDescription>
-//           </DialogHeader>
-//           <div className="space-y-4 py-4">
-//             <div className="space-y-2">
-//               <Label>Amount (birr)</Label>
-//               <Input
-//                 type="number"
-//                 value={withdrawAmount}
-//                 onChange={(e) => setWithdrawAmount(e.target.value)}
-//                 placeholder="Enter amount"
-//                 min="0"
-//                 step="0.01"
-//               />
-//             </div>
-//             <div className="space-y-2">
-//               <Label>Payment Method</Label>
-//               <Select
-//                 value={bankDetails.bankName}
-//                 onValueChange={(value) => setBankDetails((prev) => ({ ...prev, bankName: value, accountName: "", accountNumber: "" }))}
-//               >
-//                 <SelectTrigger>
-//                   <SelectValue placeholder="Select payment method" />
-//                 </SelectTrigger>
-//                 <SelectContent>
-//                   <SelectItem value="telebirr">Telebirr</SelectItem>
-//                   <SelectItem value="mpesa">M-Pesa</SelectItem>
-//                   <SelectItem value="bank">Bank Transfer</SelectItem>
-//                 </SelectContent>
-//               </Select>
-//             </div>
-//             {bankDetails.bankName === 'telebirr' && (
-//               <div className="space-y-2">
-//                 <Label>Telebirr Phone Number</Label>
-//                 <Input
-//                   value={bankDetails.accountNumber}
-//                   onChange={(e) => setBankDetails((prev) => ({ ...prev, accountNumber: e.target.value }))}
-//                   placeholder="Enter Telebirr phone number"
-//                 />
-//               </div>
-//             )}
-//             {bankDetails.bankName === 'mpesa' && (
-//               <div className="space-y-2">
-//                 <Label>M-Pesa Phone Number</Label>
-//                 <Input
-//                   value={bankDetails.accountNumber}
-//                   onChange={(e) => setBankDetails((prev) => ({ ...prev, accountNumber: e.target.value }))}
-//                   placeholder="Enter M-Pesa phone number"
-//                 />
-//               </div>
-//             )}
-//             {bankDetails.bankName === 'bank' && (
-//               <>
-//                 <div className="space-y-2">
-//                   <Label>Bank Account Name</Label>
-//                   <Input
-//                     value={bankDetails.accountName}
-//                     onChange={(e) => setBankDetails((prev) => ({ ...prev, accountName: e.target.value }))}
-//                     placeholder="Enter account name"
-//                   />
-//                 </div>
-//                 <div className="space-y-2">
-//                   <Label>Bank Account Number</Label>
-//                   <Input
-//                     value={bankDetails.accountNumber}
-//                     onChange={(e) => setBankDetails((prev) => ({ ...prev, accountNumber: e.target.value }))}
-//                     placeholder="Enter account number"
-//                   />
-//                 </div>
-//               </>
-//             )}
-//             <div className="space-y-2">
-//               <Label>Notes (optional)</Label>
-//               <Textarea
-//                 value={withdrawNotes}
-//                 onChange={(e) => setWithdrawNotes(e.target.value)}
-//                 placeholder="Add any notes about this withdrawal request"
-//                 rows={3}
-//               />
-//             </div>
-//             <div className="p-4 bg-muted/50 rounded-lg">
-//               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-//                 <AlertCircle className="h-4 w-4" />
-//                 <span>Available Balance: {(balance?.availableBalance ?? 0).toFixed(2)} birr</span>
-//               </div>
-//             </div>
-//           </div>
-//           <DialogFooter>
-//             <Button
-//               variant="outline"
-//               onClick={() => setWithdrawDialogOpen(false)}
-//             >
-//               Cancel
-//             </Button>
-//             <Button
-//               onClick={handleWithdraw}
-//               disabled={!withdrawAmount || isSubmittingWithdraw || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > balance?.availableBalance || !bankDetails.bankName || ((bankDetails.bankName === 'telebirr' || bankDetails.bankName === 'mpesa') && !bankDetails.accountNumber) || (bankDetails.bankName === 'bank' && (!bankDetails.accountName || !bankDetails.accountNumber))}
-//               className="bg-[#1a2d5a] hover:bg-[#1a2d5a]/90"
-//             >
-//               {isSubmittingWithdraw ? 'Processing...' : 'Request Withdrawal'}
-//             </Button>
-//           </DialogFooter>
-//         </DialogContent>
-//       </Dialog>
-//     </div>
-//   )
-// }
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -943,16 +368,34 @@ export default function WithdrawalsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a] mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading withdrawals...</p>
+  const SkeletonCard = () => (
+    <Card className="overflow-hidden border-none shadow-md bg-white relative">
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(100%);
+          }
+        }
+        .animate-shimmer {
+          animation: shimmer 2s infinite;
+        }
+      `}</style>
+      <CardContent className="p-6 relative overflow-hidden">
+        <div className="flex items-center gap-4">
+          <div className="h-12 w-12 bg-gray-200 rounded-full" />
+          <div className="space-y-2 flex-1">
+            <div className="h-4 w-32 bg-gray-200 rounded" />
+            <div className="h-8 w-40 bg-gray-200 rounded" />
+          </div>
         </div>
-      </div>
-    );
-  }
+        {/* Shimmer overlay */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-shimmer" />
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -966,62 +409,72 @@ export default function WithdrawalsPage() {
 
       {/* Balance Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
-        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-emerald-100 hover:from-emerald-100 hover:to-white">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
-                  Available Balance
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          <>
+            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-emerald-100 hover:from-emerald-100 hover:to-white">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                      Available Balance
+                    </div>
+                    <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                      {balance?.availableBalance.toFixed(2) || "0.00"} birr
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      After 3% commission
+                    </div>
+                  </div>
+                  <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 shadow-sm">
+                    <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
+                  </div>
                 </div>
-                <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                  {balance?.availableBalance.toFixed(2) || "0.00"} birr
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  After 3% commission
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 shadow-sm">
-                <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-orange-100 hover:from-orange-100 hover:to-white">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
-                  Pending Withdrawals
+            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-orange-100 hover:from-orange-100 hover:to-white">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                      Pending Withdrawals
+                    </div>
+                    <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                      {balance?.pendingWithdrawals.toFixed(2) || "0.00"} birr
+                    </div>
+                  </div>
+                  <div className="p-2 sm:p-3 rounded-lg bg-orange-100 shadow-sm">
+                    <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+                  </div>
                 </div>
-                <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                  {balance?.pendingWithdrawals.toFixed(2) || "0.00"} birr
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 rounded-lg bg-orange-100 shadow-sm">
-                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-green-100 hover:from-green-100 hover:to-white">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
-                  Approved Withdrawals
+            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-green-100 hover:from-green-100 hover:to-white">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                      Approved Withdrawals
+                    </div>
+                    <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                      {balance?.approvedWithdrawals.toFixed(2) || "0.00"} birr
+                    </div>
+                  </div>
+                  <div className="p-2 sm:p-3 rounded-lg bg-green-100 shadow-sm">
+                    <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                  </div>
                 </div>
-                <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                  {balance?.approvedWithdrawals.toFixed(2) || "0.00"} birr
-                </div>
-              </div>
-              <div className="p-2 sm:p-3 rounded-lg bg-green-100 shadow-sm">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Withdrawal Request Button */}
