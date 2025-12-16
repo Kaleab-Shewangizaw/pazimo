@@ -16,18 +16,38 @@ const getDashboardStats = async (req, res) => {
     // Get active events (published)
     const activeEvents = await Event.countDocuments({ status: "published" });
 
-    // Get total revenue from tickets
+    // Get total revenue from tickets (Gross Revenue - matching withdrawalController logic)
+    // Include all tickets that have a price > 0
     const tickets = await Ticket.find({
-      paymentStatus: "completed",
-      isInvitation: { $ne: true },
+      price: { $gt: 0 },
     }).populate("event");
 
-    const totalRevenue = tickets.reduce(
-      (sum, ticket) => sum + (ticket.price || 0),
+    // Calculate Revenue (Gross Revenue - matching withdrawalController logic)
+    // We now include ALL tickets to match the dashboard display as requested.
+    const validTickets = tickets.filter((t) => {
+      // We exclude tickets with no price
+      if (!t.price || t.price <= 0) return false;
+
+      // We DO NOT filter by status, paymentStatus, or isInvitation anymore
+      return true;
+    });
+
+    const grossRevenue = validTickets.reduce(
+      (sum, t) => sum + (t.price || 0),
       0
     );
 
+    // Use Gross Revenue as Total Revenue for consistency
+    const totalRevenue = grossRevenue;
+
+    // Calculate breakdown based on Gross Revenue
+    const organizerRevenue = grossRevenue * 0.97;
+    const pazimoCommission = grossRevenue * 0.03;
+
     const totalTicketsSold = tickets.reduce((sum, ticket) => {
+      // Exclude invitations from sold count if needed, or keep consistent with revenue
+      if (ticket.isInvitation === true) return sum;
+
       let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
       // Check if ticket was bought before Dec 14, 2025
@@ -65,10 +85,25 @@ const getDashboardStats = async (req, res) => {
     // Get active organizers
     const activeOrganizers = await User.countDocuments({ role: "organizer" });
 
-    // Get pending withdrawals
-    const pendingWithdrawals = await Withdrawal.countDocuments({
-      status: "pending",
-    });
+    // Get withdrawal stats
+    const withdrawals = await Withdrawal.find({});
+
+    const totalWithdrawn = withdrawals
+      .filter((w) => w.status === "approved" || w.status === "completed")
+      .reduce((sum, w) => sum + (w.amount || 0), 0);
+
+    const pendingWithdrawalsAmount = withdrawals
+      .filter((w) => w.status === "pending")
+      .reduce((sum, w) => sum + (w.amount || 0), 0);
+
+    const pendingWithdrawals = withdrawals.filter(
+      (w) => w.status === "pending"
+    ).length;
+
+    // Calculate available balance (Global)
+    // Available = Total Organizer Revenue (97%) - Total Withdrawn - Pending Withdrawals
+    const availableBalance =
+      organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount;
 
     res.status(StatusCodes.OK).json({
       status: "success",
@@ -76,10 +111,14 @@ const getDashboardStats = async (req, res) => {
         totalUsers,
         totalEvents,
         totalRevenue,
+        organizerRevenue,
+        pazimoCommission,
         totalTicketsSold,
         activeOrganizers,
         activeEvents,
         pendingWithdrawals,
+        totalWithdrawn,
+        availableBalance,
       },
     });
   } catch (error) {

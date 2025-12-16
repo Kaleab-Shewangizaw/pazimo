@@ -23,25 +23,21 @@ const getOrganizerBalance = async (req, res) => {
       event: { $in: eventIds },
     }).populate("event", "title ticketTypes");
 
-    // Filter for Net Revenue (Withdrawal Calculation) - Strict
-    // This determines what the organizer can actually withdraw
+    // Filter for Net Revenue (Withdrawal Calculation)
+    // We now include ALL tickets to match the dashboard display as requested.
+    // The user explicitly wants "Total Revenue" to be the sum of all tickets found.
     const validTickets = allTickets.filter((t) => {
-      if (["cancelled", "expired", "pending"].includes(t.status)) return false;
-      if (t.isOnDoor) return true;
-      if (t.isInvitation === true) return false;
+      // We exclude tickets with no price
       if (!t.price || t.price <= 0) return false;
-      if (t.paymentStatus !== "completed") return false;
+
+      // We DO NOT filter by status, paymentStatus, or isInvitation anymore.
+      // If it has a price, it counts towards the total revenue shown on the dashboard.
       return true;
     });
 
-    // Filter for Gross Revenue (Display) - Loose
-    // This matches admin/tickets page logic to show total volume
-    const grossTickets = allTickets.filter((t) => {
-      return t.price && t.price > 0;
-    });
-
-    // Use grossTickets for display purposes (revenue breakdown)
-    const tickets = grossTickets;
+    // Use validTickets for ALL revenue calculations to ensure consistency
+    // Total Revenue displayed will now match the base for 97% calculation
+    const tickets = validTickets;
 
     // Helper to calculate ticket quantity
     const getQuantity = (ticket, event) => {
@@ -165,32 +161,26 @@ const getOrganizerBalance = async (req, res) => {
     };
 
     // Calculate Net Revenue from valid tickets (for withdrawal)
+    // Since validTickets now includes ALL tickets, this is effectively Gross Revenue
     const netRevenue = validTickets.reduce((sum, t) => sum + t.price, 0);
 
-    // Calculate organizer revenue after 3% Pazimo commission (based on Net Revenue)
-    // Note: totalRevenue is Gross (includes cancelled/pending), so these won't sum up to totalRevenue
-    const pazimoCommission = netRevenue * 0.03;
-    const organizerRevenue = netRevenue * 0.97;
+    // Calculate organizer revenue after 3% Pazimo commission
+    // Use totalRevenue (Gross) as the base for consistency
+    const pazimoCommission = totalRevenue * 0.03;
+    const organizerRevenue = totalRevenue * 0.97;
 
     // Get pending and approved withdrawals
-    const pendingWithdrawals = await Withdrawal.find({
+    const withdrawals = await Withdrawal.find({
       organizer: organizerId,
-      status: "pending",
     });
 
-    const approvedWithdrawals = await Withdrawal.find({
-      organizer: organizerId,
-      status: "approved",
-    });
+    const pendingAmount = withdrawals
+      .filter((w) => w.status === "pending")
+      .reduce((sum, w) => sum + w.amount, 0);
 
-    const pendingAmount = pendingWithdrawals.reduce(
-      (sum, w) => sum + w.amount,
-      0
-    );
-    const approvedAmount = approvedWithdrawals.reduce(
-      (sum, w) => sum + w.amount,
-      0
-    );
+    const approvedAmount = withdrawals
+      .filter((w) => w.status === "approved" || w.status === "completed")
+      .reduce((sum, w) => sum + w.amount, 0);
 
     // Available balance = organizer revenue - (pending + approved withdrawals)
     const availableBalance =

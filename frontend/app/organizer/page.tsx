@@ -581,17 +581,38 @@ export default function OrganizerDashboard() {
     0
   );
 
-  // Total revenue: calculate from filtered tickets
-  const totalRevenue = Object.values(allTicketsByEvent).reduce(
-    (sum, tickets) => sum + tickets.reduce((s, t) => s + (t.price || 0), 0),
+  // --- Client-Side Revenue Calculation ---
+  // We calculate these values directly from the fetched tickets and withdrawals
+  // to ensure perfect consistency with the data displayed to the user.
+
+  const allTicketsFlat = Object.values(allTicketsByEvent).flat();
+
+  // Use ALL tickets for revenue calculation as requested by user to match the table
+  const totalRevenue = allTicketsFlat.reduce(
+    (sum, t: any) => sum + (t.price || 0),
     0
   );
+  const organizerRevenue = totalRevenue * 0.97;
+  const pazimoCommission = totalRevenue * 0.03;
+
+  const totalWithdrawn = withdrawals
+    .filter((w: any) => ["approved", "completed"].includes(w.status))
+    .reduce((sum, w: any) => sum + (w.amount || 0), 0);
+
+  const pendingWithdrawals = withdrawals
+    .filter((w: any) => w.status === "pending")
+    .reduce((sum, w: any) => sum + (w.amount || 0), 0);
+
+  // Available Balance = (Total Revenue * 0.97) - (Approved Withdrawals) - (Pending Withdrawals)
+  const availableBalance =
+    organizerRevenue - totalWithdrawn - pendingWithdrawals;
 
   // --- Chart Data Preparation ---
 
   // Revenue trend data (last 6 months)
   const revenueData = events.slice(0, 6).map((event) => {
     const allTickets = allTicketsByEvent[event._id] || [];
+    // Use all tickets for charts to match total revenue
     const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
     const ticketCount = allTickets.reduce(
       (sum, t) => sum + getTicketQuantity(t, event._id),
@@ -631,6 +652,7 @@ export default function OrganizerDashboard() {
       events: 1,
       revenue: revenue,
       tickets: ticketCount,
+      event: event.title,
     };
   });
 
@@ -653,10 +675,6 @@ export default function OrganizerDashboard() {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  // Commission calculations - use backend balance data
-  const organizerRevenue = balance?.availableBalance || 0;
-  const pazimoCommission = totalRevenue - organizerRevenue;
-
   // --- Stat Cards Data (Top Row) ---
   const statCards = [
     {
@@ -672,7 +690,7 @@ export default function OrganizerDashboard() {
     {
       id: "organizer-revenue",
       title: "Available balance",
-      value: organizerRevenue,
+      value: availableBalance,
       icon: DollarSign,
       iconBg: "bg-emerald-100",
       iconColor: "text-emerald-600",
@@ -682,7 +700,7 @@ export default function OrganizerDashboard() {
     {
       id: "total-withdrawn",
       title: "Total Withdrawn",
-      value: balance?.approvedWithdrawals || 0,
+      value: totalWithdrawn,
       icon: CreditCard,
       iconBg: "bg-orange-100",
       iconColor: "text-orange-600",

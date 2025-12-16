@@ -269,8 +269,10 @@ const getAllTicketsAdmin = async (req, res) => {
       }
       return sum + quantity;
     }, 0);
-    const totalRevenue = purchasedTickets.reduce(
-      (sum, t) => sum + (t.price || 0),
+
+    // Calculate Total Revenue (Gross) - All tickets with price > 0
+    const totalRevenue = tickets.reduce(
+      (sum, t) => sum + (t.price && t.price > 0 ? t.price : 0),
       0
     );
 

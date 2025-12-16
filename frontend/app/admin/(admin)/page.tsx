@@ -101,6 +101,10 @@ interface DashboardStats {
   totalUsers: number;
   totalEvents: number;
   totalRevenue: number;
+  organizerRevenue: number;
+  pazimoCommission: number;
+  totalWithdrawn: number;
+  availableBalance: number;
   activeOrganizers: number;
   activeEvents: number;
   pendingWithdrawals: number;
@@ -123,6 +127,10 @@ export default function AdminDashboardPage() {
     totalUsers: 0,
     totalEvents: 0,
     totalRevenue: 0,
+    organizerRevenue: 0,
+    pazimoCommission: 0,
+    totalWithdrawn: 0,
+    availableBalance: 0,
     activeOrganizers: 0,
     activeEvents: 0,
     pendingWithdrawals: 0,
@@ -341,7 +349,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Total Revenue",
-      value: `${stats.totalRevenue.toFixed(2)} Birr`,
+      value: `${(stats.totalRevenue || 0).toFixed(2)} Birr`,
       icon: DollarSign,
       iconBg: "bg-green-100",
       iconColor: "text-green-600",
@@ -349,21 +357,36 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Organizer Revenue (97%)",
-      value: `${(stats.totalRevenue * 0.97).toFixed(2)} Birr`,
+      value: `${(stats.organizerRevenue || 0).toFixed(2)} Birr`,
       icon: DollarSign,
       iconBg: "bg-purple-100",
       iconColor: "text-purple-600",
       borderColor: "border-l-purple-600",
-
       trendUp: true,
     },
     {
       title: "Pazimo Commission (3%)",
-      value: `${(stats.totalRevenue * 0.03).toFixed(2)} Birr`,
+      value: `${(stats.pazimoCommission || 0).toFixed(2)} Birr`,
       icon: DollarSign,
       iconBg: "bg-red-100",
       iconColor: "text-red-600",
       borderColor: "border-l-red-600",
+    },
+    {
+      title: "Total Withdrawn",
+      value: `${(stats.totalWithdrawn || 0).toFixed(2)} Birr`,
+      icon: ArrowUpRight,
+      iconBg: "bg-yellow-100",
+      iconColor: "text-yellow-600",
+      borderColor: "border-l-yellow-600",
+    },
+    {
+      title: "Available Balance",
+      value: `${(stats.availableBalance || 0).toFixed(2)} Birr`,
+      icon: Building2,
+      iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
+      borderColor: "border-l-emerald-600",
     },
     {
       title: "Active Events",
@@ -683,7 +706,7 @@ export default function AdminDashboardPage() {
                   </h3>
                 </div>
                 <div className="space-y-4">
-                  {stats.pendingWithdrawals > 0 && (
+                  {(stats.pendingWithdrawals || 0) > 0 && (
                     <div className="flex items-start gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
                       <div className="p-1 bg-yellow-100 rounded">
                         <AlertCircle className="h-4 w-4 text-yellow-600" />

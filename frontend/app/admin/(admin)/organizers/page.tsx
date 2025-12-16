@@ -58,6 +58,9 @@ interface OrganizerData {
   events: EventData[];
   createdAt: string;
   totalRevenue?: number;
+  organizerRevenue?: number;
+  availableBalance?: number;
+  pazimoCommission?: number;
 }
 
 interface EventData {
@@ -211,7 +214,13 @@ const EventCardWithStats = ({
   }, [event._id, token]);
 
   const calculateRevenue = (tickets: TicketData[]) => {
-    return tickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    // Only count valid tickets (completed payment, not cancelled/pending/expired)
+    const validTickets = tickets.filter(
+      (t: any) =>
+        t.paymentStatus === "completed" &&
+        !["cancelled", "pending", "expired"].includes(t.status)
+    );
+    return validTickets.reduce((sum, t) => sum + (t.price || 0), 0);
   };
 
   const ticketsSold = tickets.reduce(
@@ -282,6 +291,8 @@ export default function OrganizersPage() {
     totalOrganizers: 0,
     totalEvents: 0,
     totalRevenue: 0,
+    organizerRevenue: 0,
+    pazimoCommission: 0,
     activeEvents: 0,
   });
   const [selectedOrganizer, setSelectedOrganizer] =
@@ -382,6 +393,9 @@ export default function OrganizersPage() {
               return {
                 ...organizer,
                 totalRevenue: balanceData.data?.totalRevenue || 0,
+                organizerRevenue: balanceData.data?.organizerRevenue || 0,
+                availableBalance: balanceData.data?.availableBalance || 0,
+                pazimoCommission: balanceData.data?.pazimoCommission || 0,
               };
             }
             return organizer;
@@ -412,11 +426,23 @@ export default function OrganizersPage() {
         (sum: number, org: OrganizerData) => sum + (org.totalRevenue || 0),
         0
       );
+      const organizerRevenue = organizersWithRevenue.reduce(
+        (sum: number, org: OrganizerData) => sum + (org.organizerRevenue || 0),
+        0
+      );
+      // Use backend commission if available, otherwise calculate from Gross Revenue
+      const pazimoCommission = organizersWithRevenue.reduce(
+        (sum: number, org: OrganizerData) =>
+          sum + (org.pazimoCommission || (org.totalRevenue || 0) * 0.03),
+        0
+      );
 
       setStats({
         totalOrganizers: data.data?.total || 0,
         totalEvents,
         totalRevenue,
+        organizerRevenue,
+        pazimoCommission,
         activeEvents,
       });
 
@@ -549,11 +575,13 @@ export default function OrganizersPage() {
     setOrganizerDetailsDialogOpen(true);
   };
 
-  // Helper function to calculate revenue from all tickets (active, used, etc.)
+  // Helper function to calculate revenue from all tickets
   const calculateRevenue = (tickets: TicketData[]) => {
     if (!tickets || tickets.length === 0) return 0;
+
+    // Use ALL tickets for revenue calculation as requested
+    // We sum up the price of every ticket, regardless of status or type
     return tickets.reduce((sum, ticket) => {
-      // Count all tickets regardless of status (active, used, etc.)
       return sum + (ticket.price || 0);
     }, 0);
   };
@@ -694,7 +722,7 @@ export default function OrganizersPage() {
                   Total Revenue
                 </p>
                 <p className="text-sm font-bold text-gray-900">
-                  {stats.totalRevenue.toFixed(2)} Birr
+                  {(stats.totalRevenue || 0).toFixed(2)} Birr
                 </p>
               </div>
             </CardContent>
@@ -707,7 +735,7 @@ export default function OrganizersPage() {
                   Organizer Revenue (97%)
                 </p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(stats.totalRevenue * 0.97).toFixed(2)} Birr
+                  {(stats.organizerRevenue || 0).toFixed(2)} Birr
                 </p>
               </div>
             </CardContent>
@@ -720,7 +748,7 @@ export default function OrganizersPage() {
                   Pazimo Commission (3%)
                 </p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(stats.totalRevenue * 0.03).toFixed(2)} Birr
+                  {(stats.pazimoCommission || 0).toFixed(2)} Birr
                 </p>
               </div>
             </CardContent>
@@ -948,11 +976,16 @@ export default function OrganizersPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600">Available Balance (97%)</p>
-                    <p className="font-semibold text-green-600">
-                      {((selectedOrganizer.totalRevenue || 0) * 0.97).toFixed(
-                        2
-                      )}{" "}
+                    <p className="text-gray-600">Organizer Revenue (97%)</p>
+                    <p className="font-semibold text-purple-600">
+                      {(selectedOrganizer.organizerRevenue || 0).toFixed(2)}{" "}
+                      Birr
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-gray-600">Available Balance</p>
+                    <p className="font-semibold text-green-600 text-lg">
+                      {(selectedOrganizer.availableBalance || 0).toFixed(2)}{" "}
                       Birr
                     </p>
                   </div>

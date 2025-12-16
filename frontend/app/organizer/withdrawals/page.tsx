@@ -976,9 +976,9 @@ export default function WithdrawalsPage() {
                 <div className="text-xl sm:text-2xl font-bold text-gray-800">
                   {balance?.availableBalance.toFixed(2) || "0.00"} birr
                 </div>
-                {/* <div className="text-xs text-muted-foreground mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   After 3% commission
-                </div> */}
+                </div>
               </div>
               <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 shadow-sm">
                 <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
@@ -987,24 +987,41 @@ export default function WithdrawalsPage() {
           </CardContent>
         </Card>
 
-        {/* <Card>
+        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white">
           <CardContent className="p-4 sm:p-6">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-2 sm:p-3 rounded-full bg-red-500/10">
-                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-red-500" />
-              </div>
+            <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs sm:text-sm font-medium text-muted-foreground">Pazimo Commission (3%)</div>
-                <div className="text-xl sm:text-2xl font-bold mt-1">
-                  {((balance?.totalRevenue ?? 0) * 0.03).toFixed(2)} birr
+                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                  Total Revenue
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Platform fee
+                <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                  {balance?.totalRevenue.toFixed(2) || "0.00"} birr
                 </div>
+              </div>
+              <div className="p-2 sm:p-3 rounded-lg bg-blue-100 shadow-sm">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
               </div>
             </div>
           </CardContent>
-        </Card> */}
+        </Card>
+
+        <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-orange-100 hover:from-orange-100 hover:to-white">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                  Pending Withdrawals
+                </div>
+                <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                  {balance?.pendingWithdrawals.toFixed(2) || "0.00"} birr
+                </div>
+              </div>
+              <div className="p-2 sm:p-3 rounded-lg bg-orange-100 shadow-sm">
+                <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-green-100 hover:from-green-100 hover:to-white">
           <CardContent className="p-4 sm:p-6">
