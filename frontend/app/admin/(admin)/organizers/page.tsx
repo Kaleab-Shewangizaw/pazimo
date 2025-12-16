@@ -1042,7 +1042,7 @@ export default function OrganizersPage() {
                       <div className="text-sm font-medium text-gray-600">
                         Total Revenue
                       </div>
-                      <div className="text-2xl font-bold text-green-600 mt-1">
+                      <div className="text-lg font-bold text-green-600 mt-1">
                         {organizerBalance.totalRevenue.toFixed(2)} Birr
                       </div>
                     </CardContent>
@@ -1052,7 +1052,7 @@ export default function OrganizersPage() {
                       <div className="text-sm font-medium text-gray-600">
                         Organizer Revenue (97%)
                       </div>
-                      <div className="text-2xl font-bold text-blue-600 mt-1">
+                      <div className="text-lg font-bold text-blue-600 mt-1">
                         {(
                           organizerBalance.organizerRevenue ||
                           organizerBalance.totalRevenue * 0.97
@@ -1066,7 +1066,7 @@ export default function OrganizersPage() {
                       <div className="text-sm font-medium text-gray-600">
                         Pazimo Commission (3%)
                       </div>
-                      <div className="text-2xl font-bold text-red-600 mt-1">
+                      <div className="text-lg font-bold text-red-600 mt-1">
                         {(
                           organizerBalance.pazimoCommission ||
                           organizerBalance.totalRevenue * 0.03
@@ -1080,7 +1080,7 @@ export default function OrganizersPage() {
                       <div className="text-sm font-medium text-gray-600">
                         Available Balance
                       </div>
-                      <div className="text-2xl font-bold text-purple-600 mt-1">
+                      <div className="text-lg font-bold text-purple-600 mt-1">
                         {organizerBalance.availableBalance.toFixed(2)} Birr
                       </div>
                     </CardContent>
@@ -1090,7 +1090,7 @@ export default function OrganizersPage() {
                       <div className="text-sm font-medium text-gray-600">
                         Total Tickets Sold
                       </div>
-                      <div className="text-2xl font-bold text-indigo-600 mt-1">
+                      <div className="text-lg font-bold text-indigo-600 mt-1">
                         {organizerBalance.summary.totalTicketsSold}
                       </div>
                     </CardContent>

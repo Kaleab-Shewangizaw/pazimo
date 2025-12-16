@@ -173,13 +173,40 @@ export default function OrganizerDashboard() {
               return true;
             });
 
-            console.log(`Event ${event.title} tickets:`, allTickets);
+            // Helper to calculate ticket quantity
+            const getTicketQuantity = (ticket: any) => {
+              if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+
+              if (event.ticketTypes && ticket.price > 0) {
+                const type = event.ticketTypes.find(
+                  (t: any) =>
+                    t.name === ticket.ticketType ||
+                    (t.name &&
+                      ticket.ticketType &&
+                      t.name.toLowerCase() === ticket.ticketType.toLowerCase())
+                );
+                if (type && type.price > 0) {
+                  const calculated = Math.round(ticket.price / type.price);
+                  if (calculated > 0) return calculated;
+                }
+              }
+
+              return ticket.ticketCount || 1;
+            };
+
+            // Map tickets to include calculated quantity
+            const processedTickets = allTickets.map((t: any) => ({
+              ...t,
+              calculatedQuantity: getTicketQuantity(t),
+            }));
+
+            console.log(`Event ${event.title} tickets:`, processedTickets);
 
             // Store all tickets (for analytics and total counts)
-            allTicketsMap[event._id] = allTickets;
+            allTicketsMap[event._id] = processedTickets;
 
             // Filter for active tickets only (for revenue calculations)
-            const activeTickets = allTickets.filter(
+            const activeTickets = processedTickets.filter(
               (t: any) => t.status === "active"
             );
             ticketsMap[event._id] = activeTickets;
@@ -483,23 +510,35 @@ export default function OrganizerDashboard() {
   const completedEvents = events.filter((e) => e.status === "completed").length;
 
   // Helper to calculate quantity for a ticket (reused for totals)
-  const getTicketQuantity = (t: any, eventId: string) => {
-    if (t.purchaseQuantity) return t.purchaseQuantity;
-    if (t.ticketCount) return t.ticketCount;
-    // Fallback: calculate from price
-    const event = events.find((e) => e._id === eventId);
-    if (t.price && event && event.ticketTypes) {
-      const type = event.ticketTypes.find(
-        (type: any) => type.name === t.ticketType || type._id === t.ticketType
-      );
-      if (type && type.price > 0) {
-        return Math.round(t.price / type.price);
+  // Calculate totals from actual ticket data
+  // Helper to calculate ticket quantity (redefined here for render scope)
+  const getTicketQuantity = (ticket: any, eventId?: string) => {
+    // If we already calculated it during fetch, use it
+    if (ticket.calculatedQuantity) return ticket.calculatedQuantity;
+
+    if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+
+    // Fallback if we have event data
+    if (eventId) {
+      const event = events.find((e) => e._id === eventId);
+      if (event && event.ticketTypes && ticket.price > 0) {
+        const type = event.ticketTypes.find(
+          (t: any) =>
+            t.name === ticket.ticketType ||
+            (t.name &&
+              ticket.ticketType &&
+              t.name.toLowerCase() === ticket.ticketType.toLowerCase())
+        );
+        if (type && type.price > 0) {
+          const calculated = Math.round(ticket.price / type.price);
+          if (calculated > 0) return calculated;
+        }
       }
     }
-    return 1;
+
+    return ticket.ticketCount || 1;
   };
 
-  // Calculate totals from actual ticket data
   const totalTicketsSold = Object.entries(allTicketsByEvent).reduce(
     (sum, [eventId, tickets]) =>
       sum +
@@ -544,12 +583,16 @@ export default function OrganizerDashboard() {
   const revenueData = events.slice(0, 6).map((event) => {
     const allTickets = allTicketsByEvent[event._id] || [];
     const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    const ticketCount = allTickets.reduce(
+      (sum, t) => sum + getTicketQuantity(t, event._id),
+      0
+    );
     return {
       month: new Date(event.startDate).toLocaleDateString("en-US", {
         month: "short",
       }),
       revenue: revenue,
-      tickets: allTickets.length,
+      tickets: ticketCount,
       event: event.title.substring(0, 15) + "...",
     };
   });
@@ -566,6 +609,10 @@ export default function OrganizerDashboard() {
   const monthlyData = events.slice(0, 12).map((event, index) => {
     const allTickets = allTicketsByEvent[event._id] || [];
     const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    const ticketCount = allTickets.reduce(
+      (sum, t) => sum + getTicketQuantity(t, event._id),
+      0
+    );
     return {
       month: new Date(event.startDate).toLocaleDateString("en-US", {
         month: "short",
@@ -573,7 +620,7 @@ export default function OrganizerDashboard() {
       }),
       events: 1,
       revenue: revenue,
-      tickets: allTickets.length,
+      tickets: ticketCount,
     };
   });
 
@@ -582,10 +629,14 @@ export default function OrganizerDashboard() {
     .map((event) => {
       const allTickets = allTicketsByEvent[event._id] || [];
       const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+      const ticketCount = allTickets.reduce(
+        (sum, t) => sum + getTicketQuantity(t, event._id),
+        0
+      );
       return {
         name: event.title.substring(0, 20) + "...",
         revenue: revenue,
-        tickets: allTickets.length,
+        tickets: ticketCount,
         status: event.status,
       };
     })

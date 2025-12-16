@@ -74,6 +74,11 @@ interface Event {
     country: string;
   };
   capacity: number;
+  ticketTypes: {
+    _id: string;
+    name: string;
+    price: number;
+  }[];
 }
 
 export default function TicketsPage() {
@@ -277,14 +282,44 @@ export default function TicketsPage() {
   );
   const totalTicketPages = Math.ceil(filteredTickets.length / itemsPerPage);
 
+  // Helper to calculate ticket quantity
+  const getTicketQuantity = (ticket: Ticket) => {
+    if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+
+    if (selectedEvent?.ticketTypes && ticket.price > 0) {
+      const type = selectedEvent.ticketTypes.find(
+        (t) =>
+          t.name === ticket.ticketType ||
+          (t.name &&
+            ticket.ticketType &&
+            t.name.toLowerCase() === ticket.ticketType.toLowerCase())
+      );
+      if (type && type.price > 0) {
+        const calculated = Math.round(ticket.price / type.price);
+        if (calculated > 0) return calculated;
+      }
+    }
+
+    return ticket.ticketCount || 1;
+  };
+
   // Revenue Calculations
   const totalRevenue = filteredTickets.reduce(
     (sum, t) => sum + (t.price || 0),
     0
   );
+  const totalTicketsCount = filteredTickets.reduce(
+    (sum, t) => sum + getTicketQuantity(t),
+    0
+  );
+
   const onDoorTickets = filteredTickets.filter((t) => t.isOnDoor);
   const onDoorRevenue = onDoorTickets.reduce(
     (sum, t) => sum + (t.price || 0),
+    0
+  );
+  const onDoorTicketsCount = onDoorTickets.reduce(
+    (sum, t) => sum + getTicketQuantity(t),
     0
   );
 
@@ -456,7 +491,7 @@ export default function TicketsPage() {
               ETB {totalRevenue.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {filteredTickets.length} tickets
+              From {totalTicketsCount} tickets
             </p>
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -471,7 +506,7 @@ export default function TicketsPage() {
               ETB {onDoorRevenue.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {onDoorTickets.length} tickets
+              From {onDoorTicketsCount} tickets
             </p>
           </div>
           <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">

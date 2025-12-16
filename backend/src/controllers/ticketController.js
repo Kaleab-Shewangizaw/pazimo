@@ -203,7 +203,7 @@ const getAllTicketsAdmin = async (req, res) => {
     const tickets = await Ticket.find()
       .populate({
         path: "event",
-        select: "title startDate endDate location organizer",
+        select: "title startDate endDate location organizer ticketTypes",
         populate: {
           path: "organizer",
           select: "name email",
@@ -236,14 +236,30 @@ const getAllTicketsAdmin = async (req, res) => {
     // Filter out invitations for sold count
     const purchasedTickets = tickets.filter(
       (t) =>
-        !t.isInvitation &&
+        t.isInvitation !== true &&
         t.paymentStatus === "completed" &&
         !["cancelled", "expired", "pending"].includes(t.status)
     );
-    const totalSold = purchasedTickets.reduce(
-      (sum, t) => sum + (t.purchaseQuantity || t.ticketCount || 1),
-      0
-    );
+    const totalSold = purchasedTickets.reduce((sum, t) => {
+      if (t.purchaseQuantity) return sum + t.purchaseQuantity;
+
+      // Fallback: calculate from price
+      if (t.event && t.event.ticketTypes) {
+        const type = t.event.ticketTypes.find(
+          (tt) =>
+            tt.name === t.ticketType ||
+            tt._id.toString() === t.ticketType ||
+            (tt.name &&
+              t.ticketType &&
+              tt.name.toLowerCase() === t.ticketType.toLowerCase())
+        );
+        if (type && type.price > 0 && t.price > 0) {
+          const calculatedQty = Math.round(t.price / type.price);
+          if (calculatedQty > 0) return sum + calculatedQty;
+        }
+      }
+      return sum + (t.ticketCount || 1);
+    }, 0);
     const totalRevenue = purchasedTickets.reduce(
       (sum, t) => sum + (t.price || 0),
       0
@@ -994,11 +1010,29 @@ const getEventTickets = async (req, res) => {
       .populate("user", "firstName lastName email")
       .sort("-createdAt");
 
-    const totalTicketsSold = tickets.reduce(
-      (sum, t) =>
-        sum + (!t.isInvitation ? t.purchaseQuantity || t.ticketCount || 1 : 0),
-      0
-    );
+    // Fetch event to get ticket types for calculation
+    const eventForCalc = await Event.findById(eventId).select("ticketTypes");
+
+    const totalTicketsSold = tickets.reduce((sum, t) => {
+      if (t.isInvitation === true) return sum;
+      if (t.purchaseQuantity) return sum + t.purchaseQuantity;
+
+      if (eventForCalc && eventForCalc.ticketTypes) {
+        const type = eventForCalc.ticketTypes.find(
+          (tt) =>
+            tt.name === t.ticketType ||
+            tt._id.toString() === t.ticketType ||
+            (tt.name &&
+              t.ticketType &&
+              tt.name.toLowerCase() === t.ticketType.toLowerCase())
+        );
+        if (type && type.price > 0 && t.price > 0) {
+          const calculatedQty = Math.round(t.price / type.price);
+          if (calculatedQty > 0) return sum + calculatedQty;
+        }
+      }
+      return sum + (t.ticketCount || 1);
+    }, 0);
 
     res
       .status(StatusCodes.OK)

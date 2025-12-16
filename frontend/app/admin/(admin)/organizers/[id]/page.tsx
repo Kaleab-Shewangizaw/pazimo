@@ -1,22 +1,39 @@
-"use client"
+"use client";
 
-import { useState, useEffect, use } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, MapPin, Users, Ticket, Wallet, ArrowLeft, Mail, Phone, TrendingUp, DollarSign, CalendarDays, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react"
+import { useState, useEffect, use } from "react";
+import { useRouter } from "next/navigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Calendar,
+  Clock,
+  MapPin,
+  Users,
+  Ticket,
+  Wallet,
+  ArrowLeft,
+  Mail,
+  Phone,
+  TrendingUp,
+  DollarSign,
+  CalendarDays,
+  Search,
+  Filter,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
-import { toast } from "sonner"
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -24,14 +41,14 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 
 interface OrganizerData {
   _id: string;
@@ -88,172 +105,200 @@ interface WithdrawalData {
   _id: string;
   organizerId: string;
   amount: number;
-  status: 'pending' | 'completed' | 'rejected';
+  status: "pending" | "completed" | "rejected";
   notes: string;
   createdAt: string;
 }
 
-export default function OrganizerDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter()
-  const { id } = use(params)
-  const [organizer, setOrganizer] = useState<OrganizerData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null)
-  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false)
-  const [withdrawAmount, setWithdrawAmount] = useState("")
-  const [withdrawNotes, setWithdrawNotes] = useState("")
-  const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [currentPage, setCurrentPage] = useState(1)
-  const [itemsPerPage, setItemsPerPage] = useState(5)
+export default function OrganizerDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const router = useRouter();
+  const { id } = use(params);
+  const [organizer, setOrganizer] = useState<OrganizerData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawNotes, setWithdrawNotes] = useState("");
+  const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
   const [currentPageStats, setCurrentPageStats] = useState({
     totalTickets: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
   });
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalEvents: 0,
     totalRevenue: 0,
-    activeOrganizers: 0
+    activeOrganizers: 0,
   });
 
   useEffect(() => {
-    fetchOrganizerDetails()
-  }, [id])
+    fetchOrganizerDetails();
+  }, [id]);
 
   const fetchOrganizerDetails = async () => {
     try {
-      setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${id}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      })
+      setLoading(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/users/${id}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch organizer details')
+        throw new Error("Failed to fetch organizer details");
       }
 
-      const data = await response.json()
-      const organizerData = data.user
+      const data = await response.json();
+      const organizerData = data.user;
 
       // Fetch events for the organizer
-      const eventsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/organizer/${id}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      })
+      const eventsResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/organizer/${id}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (eventsResponse.ok) {
-        const eventsData = await eventsResponse.json()
+        const eventsData = await eventsResponse.json();
         setOrganizer({
           ...organizerData,
-          events: eventsData.events || []
-        })
+          events: eventsData.events || [],
+        });
       } else {
-        setOrganizer(organizerData)
+        setOrganizer(organizerData);
       }
     } catch (error) {
-      console.error('Error fetching organizer details:', error)
-      toast.error('Failed to fetch organizer details')
+      console.error("Error fetching organizer details:", error);
+      toast.error("Failed to fetch organizer details");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const fetchEventTickets = async (eventId: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}`, {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}`,
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch event tickets')
+        throw new Error("Failed to fetch event tickets");
       }
 
-      const data = await response.json()
-      return data.tickets || []
+      const data = await response.json();
+      return data.tickets || [];
     } catch (error) {
-      console.error('Error fetching event tickets:', error)
-      toast.error('Failed to fetch event tickets')
-      return []
+      console.error("Error fetching event tickets:", error);
+      toast.error("Failed to fetch event tickets");
+      return [];
     }
-  }
+  };
 
   const handleViewEvent = async (event: EventData) => {
-    const tickets = await fetchEventTickets(event._id)
-    setSelectedEvent({ ...event, tickets })
-  }
+    const tickets = await fetchEventTickets(event._id);
+    setSelectedEvent({ ...event, tickets });
+  };
 
   const handleWithdraw = async () => {
-    if (!organizer) return
+    if (!organizer) return;
 
     try {
-      setIsSubmittingWithdraw(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          organizerId: organizer._id,
-          amount: parseFloat(withdrawAmount),
-          notes: withdrawNotes,
-        }),
-      })
+      setIsSubmittingWithdraw(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            organizerId: organizer._id,
+            amount: parseFloat(withdrawAmount),
+            notes: withdrawNotes,
+          }),
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to process withdrawal')
+        throw new Error("Failed to process withdrawal");
       }
 
-      toast.success('Withdrawal request submitted successfully')
-      setWithdrawDialogOpen(false)
-      setWithdrawAmount("")
-      setWithdrawNotes("")
-      fetchOrganizerDetails() // Refresh data
+      toast.success("Withdrawal request submitted successfully");
+      setWithdrawDialogOpen(false);
+      setWithdrawAmount("");
+      setWithdrawNotes("");
+      fetchOrganizerDetails(); // Refresh data
     } catch (error) {
-      console.error('Error processing withdrawal:', error)
-      toast.error('Failed to process withdrawal')
+      console.error("Error processing withdrawal:", error);
+      toast.error("Failed to process withdrawal");
     } finally {
-      setIsSubmittingWithdraw(false)
+      setIsSubmittingWithdraw(false);
     }
-  }
+  };
 
-  const filteredEvents = organizer?.events.filter((event) => {
-    const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.location.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.location.country.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredEvents =
+    organizer?.events.filter((event) => {
+      const matchesSearch =
+        event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.location.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.location.country
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === "all" || event.status === statusFilter
+      const matchesStatus =
+        statusFilter === "all" || event.status === statusFilter;
 
-    return matchesSearch && matchesStatus
-  }) || []
+      return matchesSearch && matchesStatus;
+    }) || [];
 
   const paginatedEvents = filteredEvents.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
-  )
+  );
 
-  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage)
+  const totalPages = Math.ceil(filteredEvents.length / itemsPerPage);
 
   // Calculate stats for current page whenever paginatedEvents changes
   useEffect(() => {
-    const stats = paginatedEvents.reduce((acc, event) => {
-      const eventTickets = event.tickets?.length || 0;
-      const eventRevenue = event.tickets?.reduce((sum, ticket) => sum + (Number(ticket.price) || 0), 0) || 0;
-      return {
-        totalTickets: acc.totalTickets + eventTickets,
-        totalRevenue: acc.totalRevenue + eventRevenue
-      };
-    }, { totalTickets: 0, totalRevenue: 0 });
+    const stats = paginatedEvents.reduce(
+      (acc, event) => {
+        const eventTickets = event.tickets?.length || 0;
+        const eventRevenue =
+          event.tickets?.reduce(
+            (sum, ticket) => sum + (Number(ticket.price) || 0),
+            0
+          ) || 0;
+        return {
+          totalTickets: acc.totalTickets + eventTickets,
+          totalRevenue: acc.totalRevenue + eventRevenue,
+        };
+      },
+      { totalTickets: 0, totalRevenue: 0 }
+    );
 
     setCurrentPageStats(stats);
   }, [paginatedEvents]);
@@ -266,13 +311,21 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
     const totalEvents = organizer.events?.length || 0;
 
     // Calculate total revenue from all events
-    const totalRevenue = organizer.events?.reduce((sum, event) => 
-      sum + (event.tickets?.reduce((ticketSum, ticket) => ticketSum + (Number(ticket.price) || 0), 0) || 0), 0) || 0;
+    const totalRevenue =
+      organizer.events?.reduce(
+        (sum, event) =>
+          sum +
+          (event.tickets?.reduce(
+            (ticketSum, ticket) => ticketSum + (Number(ticket.price) || 0),
+            0
+          ) || 0),
+        0
+      ) || 0;
 
     // Calculate total unique users (from tickets)
     const uniqueUsers = new Set();
-    organizer.events?.forEach(event => {
-      event.tickets?.forEach(ticket => {
+    organizer.events?.forEach((event) => {
+      event.tickets?.forEach((ticket) => {
         if (ticket.user?.email) {
           uniqueUsers.add(ticket.user.email);
         }
@@ -280,13 +333,17 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
     });
 
     // Calculate active organizers (those with published events)
-    const activeOrganizers = organizer.events?.filter(event => event.status === 'published').length > 0 ? 1 : 0;
+    const activeOrganizers =
+      organizer.events?.filter((event) => event.status === "published").length >
+      0
+        ? 1
+        : 0;
 
     setStats({
       totalUsers: uniqueUsers.size,
       totalEvents,
       totalRevenue,
-      activeOrganizers
+      activeOrganizers,
     });
   }, [organizer]);
 
@@ -295,10 +352,12 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading organizer details...</p>
+          <p className="mt-2 text-muted-foreground">
+            Loading organizer details...
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!organizer) {
@@ -309,13 +368,13 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
           <Button
             variant="outline"
             className="mt-4"
-            onClick={() => router.push('/admin/organizers')}
+            onClick={() => router.push("/admin/organizers")}
           >
             Back to Organizers
           </Button>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -325,7 +384,7 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
         <div className="flex items-center gap-4 mb-8">
           <Button
             variant="outline"
-            onClick={() => router.push('/admin/organizers')}
+            onClick={() => router.push("/admin/organizers")}
             className="hover:bg-primary/10 transition-colors"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -357,8 +416,12 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                   <Users className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-muted-foreground">Total Users</div>
-                  <div className="text-2xl font-bold mt-1">{stats.totalUsers.toLocaleString()}</div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Total Users
+                  </div>
+                  <div className="text-2xl font-bold mt-1">
+                    {stats.totalUsers.toLocaleString()}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -371,8 +434,12 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                   <Calendar className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-muted-foreground">Total Events</div>
-                  <div className="text-2xl font-bold mt-1">{stats.totalEvents.toLocaleString()}</div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Total Events
+                  </div>
+                  <div className="text-2xl font-bold mt-1">
+                    {stats.totalEvents.toLocaleString()}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -385,8 +452,12 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                   <DollarSign className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-muted-foreground">Total Revenue</div>
-                  <div className="text-2xl font-bold mt-1">{stats.totalRevenue.toLocaleString()} birr</div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Total Revenue
+                  </div>
+                  <div className="text-2xl font-bold mt-1">
+                    {stats.totalRevenue.toLocaleString()} birr
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -399,8 +470,12 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                   <TrendingUp className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-muted-foreground">Active Organizers</div>
-                  <div className="text-2xl font-bold mt-1">{stats.activeOrganizers}</div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Active Organizers
+                  </div>
+                  <div className="text-2xl font-bold mt-1">
+                    {stats.activeOrganizers}
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -416,12 +491,20 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
               </div>
               <div className="flex gap-6">
                 <div className="text-right">
-                  <div className="text-sm font-medium text-muted-foreground">Current Page Tickets</div>
-                  <div className="text-lg font-semibold">{currentPageStats.totalTickets}</div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Current Page Tickets
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {currentPageStats.totalTickets}
+                  </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-medium text-muted-foreground">Current Page Revenue</div>
-                  <div className="text-lg font-semibold">{currentPageStats.totalRevenue.toFixed(2)} birr</div>
+                  <div className="text-sm font-medium text-muted-foreground">
+                    Current Page Revenue
+                  </div>
+                  <div className="text-lg font-semibold">
+                    {currentPageStats.totalRevenue.toFixed(2)} birr
+                  </div>
                 </div>
               </div>
             </div>
@@ -435,7 +518,7 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
             className="w-full h-12 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 transition-all duration-300"
           >
             <Wallet className="h-5 w-5 mr-2" />
-            Process Withdrawal  
+            Process Withdrawal
           </Button>
         </div>
 
@@ -448,8 +531,8 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setSearchQuery("")
-                  setStatusFilter("all")
+                  setSearchQuery("");
+                  setStatusFilter("all");
                 }}
               >
                 <Filter className="h-4 w-4 mr-2" />
@@ -499,13 +582,20 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
           ) : (
             <>
               {paginatedEvents.map((event) => (
-                <Card key={event._id} className="overflow-hidden hover:shadow-lg transition-all duration-300">
+                <Card
+                  key={event._id}
+                  className="overflow-hidden hover:shadow-lg transition-all duration-300"
+                >
                   <CardContent className="p-0">
                     <div className="p-6">
                       <div className="flex justify-between items-start">
                         <div className="space-y-3">
-                          <h3 className="font-semibold text-xl">{event.title}</h3>
-                          <p className="text-muted-foreground line-clamp-2">{event.description}</p>
+                          <h3 className="font-semibold text-xl">
+                            {event.title}
+                          </h3>
+                          <p className="text-muted-foreground line-clamp-2">
+                            {event.description}
+                          </p>
                           <div className="flex items-center gap-6 text-sm text-muted-foreground">
                             <div className="flex items-center gap-2">
                               <Calendar className="h-4 w-4" />
@@ -522,12 +612,16 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge 
-                            variant={event.status === 'published' ? 'default' : 'secondary'}
+                          <Badge
+                            variant={
+                              event.status === "published"
+                                ? "default"
+                                : "secondary"
+                            }
                             className={`px-3 py-1 ${
-                              event.status === 'published' 
-                                ? 'bg-[#1a2d5a] text-white' 
-                                : 'bg-[#1a2d5a]/10 text-[#1a2d5a]'
+                              event.status === "published"
+                                ? "bg-[#1a2d5a] text-white"
+                                : "bg-[#1a2d5a]/10 text-[#1a2d5a]"
                             }`}
                           >
                             {event.status}
@@ -548,18 +642,35 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                     <div className="bg-muted/50 p-6 border-t">
                       <div className="grid grid-cols-3 gap-6">
                         <div>
-                          <div className="text-sm font-medium text-muted-foreground">Tickets Sold</div>
-                          <div className="text-xl font-semibold mt-1">{event.tickets?.length || 0}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-muted-foreground">Revenue</div>
+                          <div className="text-sm font-medium text-muted-foreground">
+                            Tickets Sold
+                          </div>
                           <div className="text-xl font-semibold mt-1">
-                            {(event.tickets?.reduce((sum, ticket) => sum + (Number(ticket.price) || 0), 0) || 0).toFixed(2)} birr
+                            {event.tickets?.length || 0}
                           </div>
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-muted-foreground">Capacity</div>
-                          <div className="text-xl font-semibold mt-1">{event.capacity}</div>
+                          <div className="text-sm font-medium text-muted-foreground">
+                            Revenue
+                          </div>
+                          <div className="text-xl font-semibold mt-1">
+                            {(
+                              event.tickets?.reduce(
+                                (sum, ticket) =>
+                                  sum + (Number(ticket.price) || 0),
+                                0
+                              ) || 0
+                            ).toFixed(2)}{" "}
+                            birr
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-muted-foreground">
+                            Capacity
+                          </div>
+                          <div className="text-xl font-semibold mt-1">
+                            {event.capacity}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -572,13 +683,18 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                 <div className="flex items-center justify-between mt-6">
                   <div className="flex items-center gap-2">
                     <p className="text-sm text-muted-foreground">
-                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredEvents.length)} of {filteredEvents.length} events
+                      Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                      {Math.min(
+                        currentPage * itemsPerPage,
+                        filteredEvents.length
+                      )}{" "}
+                      of {filteredEvents.length} events
                     </p>
                     <Select
                       value={itemsPerPage.toString()}
                       onValueChange={(value) => {
-                        setItemsPerPage(Number(value))
-                        setCurrentPage(1)
+                        setItemsPerPage(Number(value));
+                        setCurrentPage(1);
                       }}
                     >
                       <SelectTrigger className="w-[100px]">
@@ -595,32 +711,41 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      }
                       disabled={currentPage === 1}
                       className="hover:bg-[#1a2d5a]/10 transition-colors"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <div className="flex items-center gap-1">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <Button
-                          key={page}
-                          variant={page === currentPage ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(page)}
-                          className={page === currentPage 
-                            ? "bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white" 
-                            : "hover:bg-[#1a2d5a]/10 transition-colors"
-                          }
-                        >
-                          {page}
-                        </Button>
-                      ))}
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                        (page) => (
+                          <Button
+                            key={page}
+                            variant={
+                              page === currentPage ? "default" : "outline"
+                            }
+                            size="sm"
+                            onClick={() => setCurrentPage(page)}
+                            className={
+                              page === currentPage
+                                ? "bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white"
+                                : "hover:bg-[#1a2d5a]/10 transition-colors"
+                            }
+                          >
+                            {page}
+                          </Button>
+                        )
+                      )}
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      }
                       disabled={currentPage === totalPages}
                       className="hover:bg-[#1a2d5a]/10 transition-colors"
                     >
@@ -637,7 +762,9 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
         <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-semibold">Process Withdrawal</DialogTitle>
+              <DialogTitle className="text-2xl font-semibold">
+                Process Withdrawal
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="space-y-2">
@@ -661,10 +788,20 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                 />
               </div>
               <div className="p-4 bg-muted/50 rounded-lg">
-                <div className="text-sm font-medium text-muted-foreground">Available Balance</div>
+                <div className="text-sm font-medium text-muted-foreground">
+                  Available Balance
+                </div>
                 <div className="text-xl font-semibold mt-1">
-                  {organizer.events.reduce((sum, event) => 
-                    sum + (event.tickets?.reduce((ticketSum, ticket) => ticketSum + ticket.price, 0) || 0), 0) || 0} birr
+                  {organizer.events.reduce(
+                    (sum, event) =>
+                      sum +
+                      (event.tickets?.reduce(
+                        (ticketSum, ticket) => ticketSum + ticket.price,
+                        0
+                      ) || 0),
+                    0
+                  ) || 0}{" "}
+                  birr
                 </div>
               </div>
             </div>
@@ -681,17 +818,22 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                 disabled={!withdrawAmount || isSubmittingWithdraw}
                 className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
               >
-                {isSubmittingWithdraw ? 'Processing...' : 'Process Withdrawal'}
+                {isSubmittingWithdraw ? "Processing..." : "Process Withdrawal"}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Event Details Dialog */}
-        <Dialog open={!!selectedEvent} onOpenChange={() => setSelectedEvent(null)}>
+        <Dialog
+          open={!!selectedEvent}
+          onOpenChange={() => setSelectedEvent(null)}
+        >
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-semibold">{selectedEvent?.title}</DialogTitle>
+              <DialogTitle className="text-2xl font-semibold">
+                {selectedEvent?.title}
+              </DialogTitle>
               <div className="text-muted-foreground mt-2">
                 {selectedEvent?.description}
               </div>
@@ -702,18 +844,28 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
               <div className="grid grid-cols-2 gap-6">
                 <Card className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
-                    <h3 className="font-semibold text-lg mb-4">Event Details</h3>
+                    <h3 className="font-semibold text-lg mb-4">
+                      Event Details
+                    </h3>
                     <div className="space-y-4 text-sm">
                       <div className="flex items-center gap-3">
                         <Calendar className="h-5 w-5 text-primary" />
                         <span>
-                          {new Date(selectedEvent?.startDate || '').toLocaleDateString()} - {new Date(selectedEvent?.endDate || '').toLocaleDateString()}
+                          {new Date(
+                            selectedEvent?.startDate || ""
+                          ).toLocaleDateString()}{" "}
+                          -{" "}
+                          {new Date(
+                            selectedEvent?.endDate || ""
+                          ).toLocaleDateString()}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
                         <MapPin className="h-5 w-5 text-primary" />
                         <span>
-                          {selectedEvent?.location.address}, {selectedEvent?.location.city}, {selectedEvent?.location.country}
+                          {selectedEvent?.location.address},{" "}
+                          {selectedEvent?.location.city},{" "}
+                          {selectedEvent?.location.country}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -721,12 +873,16 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                         <span>Capacity: {selectedEvent?.capacity}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge 
-                          variant={selectedEvent?.status === 'published' ? 'default' : 'secondary'}
+                        <Badge
+                          variant={
+                            selectedEvent?.status === "published"
+                              ? "default"
+                              : "secondary"
+                          }
                           className={`px-3 py-1 ${
-                            selectedEvent?.status === 'published' 
-                              ? 'bg-[#1a2d5a] text-white' 
-                              : 'bg-[#1a2d5a]/10 text-[#1a2d5a]'
+                            selectedEvent?.status === "published"
+                              ? "bg-[#1a2d5a] text-white"
+                              : "bg-[#1a2d5a]/10 text-[#1a2d5a]"
                           }`}
                         >
                           {selectedEvent?.status}
@@ -738,22 +894,82 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
 
                 <Card className="hover:shadow-md transition-shadow">
                   <CardContent className="p-6">
-                    <h3 className="font-semibold text-lg mb-4">Ticket Summary</h3>
+                    <h3 className="font-semibold text-lg mb-4">
+                      Ticket Summary
+                    </h3>
                     <div className="space-y-4 text-sm">
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Total Tickets Sold:</span>
-                        <span className="font-semibold">{selectedEvent?.tickets.length}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Total Revenue:</span>
+                        <span className="text-muted-foreground">
+                          Total Tickets Sold:
+                        </span>
                         <span className="font-semibold">
-                          {selectedEvent?.tickets.reduce((sum, ticket) => sum + ticket.price, 0)} birr
+                          {selectedEvent?.tickets.reduce((sum, ticket) => {
+                            if (ticket.purchaseQuantity)
+                              return sum + ticket.purchaseQuantity;
+
+                            if (selectedEvent.ticketTypes && ticket.price > 0) {
+                              const type = selectedEvent.ticketTypes.find(
+                                (t) =>
+                                  t.name === ticket.ticketType ||
+                                  (t.name &&
+                                    ticket.ticketType &&
+                                    t.name.toLowerCase() ===
+                                      ticket.ticketType.toLowerCase())
+                              );
+                              if (type && type.price > 0) {
+                                const calculated = Math.round(
+                                  ticket.price / type.price
+                                );
+                                if (calculated > 0) return sum + calculated;
+                              }
+                            }
+                            return sum + (ticket.ticketCount || 1);
+                          }, 0)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground">Remaining Capacity:</span>
+                        <span className="text-muted-foreground">
+                          Total Revenue:
+                        </span>
                         <span className="font-semibold">
-                          {(selectedEvent?.capacity || 0) - (selectedEvent?.tickets.length || 0)}
+                          {selectedEvent?.tickets.reduce(
+                            (sum, ticket) => sum + ticket.price,
+                            0
+                          )}{" "}
+                          birr
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">
+                          Remaining Capacity:
+                        </span>
+                        <span className="font-semibold">
+                          {(selectedEvent?.capacity || 0) -
+                            (selectedEvent?.tickets.reduce((sum, ticket) => {
+                              if (ticket.purchaseQuantity)
+                                return sum + ticket.purchaseQuantity;
+
+                              if (
+                                selectedEvent.ticketTypes &&
+                                ticket.price > 0
+                              ) {
+                                const type = selectedEvent.ticketTypes.find(
+                                  (t) =>
+                                    t.name === ticket.ticketType ||
+                                    (t.name &&
+                                      ticket.ticketType &&
+                                      t.name.toLowerCase() ===
+                                        ticket.ticketType.toLowerCase())
+                                );
+                                if (type && type.price > 0) {
+                                  const calculated = Math.round(
+                                    ticket.price / type.price
+                                  );
+                                  if (calculated > 0) return sum + calculated;
+                                }
+                              }
+                              return sum + (ticket.ticketCount || 1);
+                            }, 0) || 0)}
                         </span>
                       </div>
                     </div>
@@ -766,33 +982,51 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                 <h3 className="font-semibold text-lg">Ticket Types</h3>
                 <div className="grid gap-4">
                   {selectedEvent?.ticketTypes.map((ticket, index) => (
-                    <Card key={index} className="hover:shadow-md transition-shadow">
+                    <Card
+                      key={index}
+                      className="hover:shadow-md transition-shadow"
+                    >
                       <CardContent className="p-6">
                         <div className="flex justify-between items-start">
                           <div className="space-y-3">
                             <div className="flex items-center gap-3">
                               <Ticket className="h-5 w-5 text-primary" />
-                              <span className="font-semibold text-lg">{ticket.name}</span>
+                              <span className="font-semibold text-lg">
+                                {ticket.name}
+                              </span>
                             </div>
-                            <p className="text-muted-foreground">{ticket.description}</p>
+                            <p className="text-muted-foreground">
+                              {ticket.description}
+                            </p>
                             {ticket.startDate && ticket.endDate && (
                               <p className="text-sm text-muted-foreground">
-                                Available: {new Date(ticket.startDate).toLocaleDateString()} - {new Date(ticket.endDate).toLocaleDateString()}
+                                Available:{" "}
+                                {new Date(
+                                  ticket.startDate
+                                ).toLocaleDateString()}{" "}
+                                -{" "}
+                                {new Date(ticket.endDate).toLocaleDateString()}
                               </p>
                             )}
                           </div>
                           <div className="text-right space-y-2">
-                            <p className="font-semibold text-lg">{ticket.price} birr</p>
-                            <p className="text-sm text-muted-foreground">Quantity: {ticket.quantity}</p>
-                            <Badge 
-                              variant={ticket.available ? 'default' : 'secondary'}
+                            <p className="font-semibold text-lg">
+                              {ticket.price} birr
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              Quantity: {ticket.quantity}
+                            </p>
+                            <Badge
+                              variant={
+                                ticket.available ? "default" : "secondary"
+                              }
                               className={`px-3 py-1 ${
-                                ticket.available 
-                                  ? 'bg-[#1a2d5a] text-white' 
-                                  : 'bg-[#1a2d5a]/10 text-[#1a2d5a]'
+                                ticket.available
+                                  ? "bg-[#1a2d5a] text-white"
+                                  : "bg-[#1a2d5a]/10 text-[#1a2d5a]"
                               }`}
                             >
-                              {ticket.available ? 'Available' : 'Sold Out'}
+                              {ticket.available ? "Available" : "Sold Out"}
                             </Badge>
                           </div>
                         </div>
@@ -819,13 +1053,19 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                     <TableBody>
                       {selectedEvent?.tickets.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          <TableCell
+                            colSpan={5}
+                            className="text-center text-muted-foreground py-8"
+                          >
                             No tickets sold yet
                           </TableCell>
                         </TableRow>
                       ) : (
                         selectedEvent?.tickets.map((ticket) => (
-                          <TableRow key={ticket._id} className="hover:bg-muted/50">
+                          <TableRow
+                            key={ticket._id}
+                            className="hover:bg-muted/50"
+                          >
                             <TableCell>
                               <div className="font-medium">
                                 {ticket.user.firstName} {ticket.user.lastName}
@@ -837,12 +1077,16 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
                             <TableCell>{ticket.ticketType}</TableCell>
                             <TableCell>{ticket.price} birr</TableCell>
                             <TableCell>
-                              <Badge 
-                                variant={ticket.status === 'active' ? 'default' : 'secondary'}
+                              <Badge
+                                variant={
+                                  ticket.status === "active"
+                                    ? "default"
+                                    : "secondary"
+                                }
                                 className={`px-3 py-1 ${
-                                  ticket.status === 'active' 
-                                    ? 'bg-[#1a2d5a] text-white' 
-                                    : 'bg-[#1a2d5a]/10 text-[#1a2d5a]'
+                                  ticket.status === "active"
+                                    ? "bg-[#1a2d5a] text-white"
+                                    : "bg-[#1a2d5a]/10 text-[#1a2d5a]"
                                 }`}
                               >
                                 {ticket.status}
@@ -863,5 +1107,5 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
         </Dialog>
       </div>
     </div>
-  )
-} 
+  );
+}

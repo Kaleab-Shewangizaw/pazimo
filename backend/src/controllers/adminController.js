@@ -19,17 +19,35 @@ const getDashboardStats = async (req, res) => {
     // Get total revenue from tickets
     const tickets = await Ticket.find({
       paymentStatus: "completed",
-      isInvitation: false,
-    });
+      isInvitation: { $ne: true },
+    }).populate("event");
+
     const totalRevenue = tickets.reduce(
       (sum, ticket) => sum + (ticket.price || 0),
       0
     );
-    const totalTicketsSold = tickets.reduce(
-      (sum, ticket) =>
-        sum + (ticket.purchaseQuantity || ticket.ticketCount || 1),
-      0
-    );
+
+    const totalTicketsSold = tickets.reduce((sum, ticket) => {
+      if (ticket.purchaseQuantity) return sum + ticket.purchaseQuantity;
+
+      // Fallback: calculate from price
+      if (ticket.event && ticket.event.ticketTypes) {
+        const type = ticket.event.ticketTypes.find(
+          (tt) =>
+            tt.name === ticket.ticketType ||
+            tt._id.toString() === ticket.ticketType ||
+            (tt.name &&
+              ticket.ticketType &&
+              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+        );
+        if (type && type.price > 0 && ticket.price > 0) {
+          const calculatedQty = Math.round(ticket.price / type.price);
+          if (calculatedQty > 0) return sum + calculatedQty;
+        }
+      }
+
+      return sum + (ticket.ticketCount || 1);
+    }, 0);
 
     // Get active organizers
     const activeOrganizers = await User.countDocuments({ role: "organizer" });

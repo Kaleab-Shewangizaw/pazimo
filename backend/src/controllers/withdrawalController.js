@@ -38,22 +38,26 @@ const getOrganizerBalance = async (req, res) => {
     // Helper to calculate ticket quantity
     const getQuantity = (ticket, event) => {
       if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
-      if (ticket.ticketCount) return ticket.ticketCount;
 
       // Fallback: calculate from price
       if (event && event.ticketTypes) {
         const type = event.ticketTypes.find(
           (tt) =>
             tt.name === ticket.ticketType ||
-            tt._id.toString() === ticket.ticketType
+            tt._id.toString() === ticket.ticketType ||
+            (tt.name &&
+              ticket.ticketType &&
+              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
         );
         // If we found the type and both prices are valid
         if (type && type.price > 0 && ticket.price > 0) {
           // Calculate quantity based on total price paid vs unit price
           const calculatedQty = Math.round(ticket.price / type.price);
-          return calculatedQty > 0 ? calculatedQty : 1;
+          if (calculatedQty > 0) return calculatedQty;
         }
       }
+
+      if (ticket.ticketCount) return ticket.ticketCount;
       return 1;
     };
 
