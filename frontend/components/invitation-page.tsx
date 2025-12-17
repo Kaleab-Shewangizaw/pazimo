@@ -39,6 +39,8 @@ import BulkInvite from "./bulkInviteModel";
 import { useRouter, useSearchParams } from "next/navigation";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
+const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
+
 interface Event {
   id: number;
   title: string;
@@ -290,6 +292,10 @@ export default function InvitationPage() {
   >(null);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
 
+  const [santimForm, setSantimForm] = useState({
+    paymentMethod: ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
+  });
+
   useEffect(() => {
     setIsMounted(true);
     setMounted(true);
@@ -378,11 +384,7 @@ export default function InvitationPage() {
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
     <!-- Header -->
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0;">
-      <img src="https://pazimo.com/logo.png" alt="Pazimo" style="height: 50px; margin-bottom: 20px;" />
-      <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🎉 You're Invited!</h1>
-      <p style="color: #e2e8f0; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Join us for an amazing event</p>
-    </div>
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%
     
     <!-- Content -->
     <div style="padding: 40px 30px;">
@@ -1315,6 +1317,22 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
       return;
     }
 
+    // Format phone number based on provider
+    let formattedPhone = payerPhone;
+    if (ACTIVE_PAYMENT_PROVIDER === "CHAPA") {
+      // Ensure it starts with 0
+      if (!formattedPhone.startsWith("0")) {
+        formattedPhone = `0${formattedPhone}`;
+      }
+    } else {
+      // Ensure it starts with +251
+      if (formattedPhone.startsWith("0")) {
+        formattedPhone = `+251${formattedPhone.substring(1)}`;
+      } else if (!formattedPhone.startsWith("+251")) {
+        formattedPhone = `+251${formattedPhone}`;
+      }
+    }
+
     setIsSantimLoading(true);
     try {
       const { contact, customerName, qrCodeCount, contactType, selectedEvent } =
@@ -1324,8 +1342,13 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
         contactType === "email" ? pricing.email : pricing.sms;
       const amount = pricePerInvite * (qrCodeCount || 1);
 
+      const endpoint =
+        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+          ? "/api/invitations/payment/initiate/chapa"
+          : "/api/invitations/payment/initiate";
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/initiate`,
+        `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`,
         {
           method: "POST",
           headers: {
@@ -1335,7 +1358,8 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           body: JSON.stringify({
             amount,
             paymentReason: `Invitation for ${selectedEvent?.title}`,
-            phoneNumber: payerPhone,
+            phoneNumber: formattedPhone,
+            paymentMethod: santimForm.paymentMethod,
             invitationData: {
               ...pendingInvitation,
               selectedEvent: {
@@ -1351,6 +1375,12 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
+
+      // Handle Chapa Redirect
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
 
       if (data.transactionId) {
         setCurrentTransactionId(data.transactionId);
@@ -1687,9 +1717,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                 </button>
                 <span className="text-sm text-gray-700">
                   Page {eventsPage} of {totalEventsPages}
-                </span>
-                <button
-                  onClick={() =>
+                </span
                     setEventsPage(Math.min(totalEventsPages, eventsPage + 1))
                   }
                   disabled={eventsPage === totalEventsPages}
@@ -2306,10 +2334,10 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                     <span
                       className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                         selectedInvitation.status === "delivered"
-                          ? "bg-green-100 text-green-800"
+                          ? "bg-green-100 text-green-600 border border-green-200"
                           : selectedInvitation.status === "sent"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-red-100 text-red-800"
+                          ? "bg-blue-100 text-blue-600 border border-blue-200"
+                          : "bg-red-100 text-red-600 border border-red-200"
                       }`}
                     >
                       {selectedInvitation.status.charAt(0).toUpperCase() +
@@ -2646,8 +2674,11 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                 </label>
                 <PaymentMethodSelector
                   phoneNumber={payerPhone}
-                  selectedMethod={selectedPaymentMethod}
-                  onSelect={setSelectedPaymentMethod}
+                  selectedMethod={santimForm.paymentMethod}
+                  onSelect={(val) =>
+                    setSantimForm({ ...santimForm, paymentMethod: val })
+                  }
+                  provider={ACTIVE_PAYMENT_PROVIDER}
                 />
               </div>
 
@@ -2663,7 +2694,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                   </>
                 ) : (
                   <>
-                    <CreditCard className="mr-2 h-5 w-5" /> Pay with SantimPay
+                    <CreditCard className="mr-2 h-5 w-5" /> Pay with {ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "Chapa" : "SantimPay"}
                   </>
                 )}
               </Button>

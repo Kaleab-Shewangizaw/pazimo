@@ -10,6 +10,8 @@ import {
   ImageIcon,
   BookOpen,
   Ticket,
+  CreditCard,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Suspense } from "react";
@@ -31,8 +33,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
-import { CreditCard, Loader2 } from "lucide-react";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
+
+const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "SANTIM";
 
 type TicketType = {
   _id: string;
@@ -132,7 +135,8 @@ function EventDetailContent() {
     fullName: "",
     email: "",
     phoneNumber: "",
-    paymentMethod: "Telebirr",
+    paymentMethod:
+      ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
   });
   const [isSantimLoading, setIsSantimLoading] = useState(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -291,7 +295,8 @@ function EventDetailContent() {
           fullName: `${u.firstName} ${u.lastName}`.trim(),
           email: u.email || "",
           phoneNumber: phone,
-          paymentMethod: "Telebirr",
+          paymentMethod:
+            ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
         });
       } else {
         // Clear form for guest
@@ -299,7 +304,8 @@ function EventDetailContent() {
           fullName: "",
           email: "",
           phoneNumber: "",
-          paymentMethod: "Telebirr",
+          paymentMethod:
+            ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
         });
       }
 
@@ -424,8 +430,11 @@ function EventDetailContent() {
       );
       if (!selectedType) throw new Error("Ticket type not found");
 
-      // Format phone number with +251 prefix
-      const formattedPhone = `+251${santimForm.phoneNumber}`;
+      // Format phone number based on provider
+      const formattedPhone =
+        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+          ? `0${santimForm.phoneNumber}`
+          : `+251${santimForm.phoneNumber}`;
 
       // Implicit Auth for Guest
       let finalUserId = userId;
@@ -469,6 +478,7 @@ function EventDetailContent() {
       }
 
       const amount = selectedType.price * ticketQuantity;
+      const currency = "ETB";
       // Generate orderId on client to ensure we have it for the success URL
       const orderId =
         typeof crypto !== "undefined" && crypto.randomUUID
@@ -481,31 +491,33 @@ function EventDetailContent() {
           ? crypto.randomUUID()
           : `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      const response = await fetch(
-        process.env.NEXT_PUBLIC_API_URL + "/api/tickets/ticket/initiate",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount,
-            paymentReason: `Ticket Purchase - ${event?.title}`,
-            phoneNumber: formattedPhone,
-            orderId, // Pass the generated ID
-            method: santimForm.paymentMethod,
-            ticketDetails: {
-              // Changed from ticketData to ticketDetails to match backend
-              ticketId: ticketId,
-              eventId: eventId,
-              ticketTypeId: selectedType._id || selectedType.name,
-              quantity: ticketQuantity,
-              userId: finalUserId,
-              fullName: santimForm.fullName,
-              email: santimForm.email,
-            },
-            successUrl: `${window.location.origin}/my-account/tickets/${ticketId}`,
-          }),
-        }
-      );
+      const endpoint =
+        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+          ? "/api/tickets/ticket/initiate/chapa"
+          : "/api/tickets/ticket/initiate";
+
+      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          paymentReason: `Ticket Purchase - ${event?.title}`,
+          phoneNumber: formattedPhone,
+          orderId, // Pass the generated ID
+          method: santimForm.paymentMethod,
+          ticketDetails: {
+            // Changed from ticketData to ticketDetails to match backend
+            ticketId: ticketId,
+            eventId: eventId,
+            ticketTypeId: selectedType._id || selectedType.name,
+            quantity: ticketQuantity,
+            userId: finalUserId,
+            fullName: santimForm.fullName,
+            email: santimForm.email,
+          },
+          successUrl: `${window.location.origin}/my-account/tickets/${ticketId}`,
+        }),
+      });
 
       const data = await response.json();
       if (!response.ok)
@@ -517,6 +529,12 @@ function EventDetailContent() {
         setUser(data.user);
         setUserId(data.user.id || data.user._id);
         toast.success("Account created/verified successfully!");
+      }
+
+      // Handle Chapa Redirect
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
       }
 
       if (data.transactionId) {
@@ -1558,6 +1576,7 @@ function EventDetailContent() {
                 onSelect={(val) =>
                   setSantimForm({ ...santimForm, paymentMethod: val })
                 }
+                provider={ACTIVE_PAYMENT_PROVIDER}
               />
             </div>
 

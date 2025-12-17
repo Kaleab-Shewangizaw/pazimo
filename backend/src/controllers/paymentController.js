@@ -4,6 +4,8 @@ const Ticket = require("../models/Ticket");
 const SantimPayService = require("../services/santimPayService");
 const { processSuccessfulPayment } = require("./ticketController");
 
+const ChapaService = require("../services/chapaService");
+
 class PaymentController {
   async checkPaymentStatus(req, res) {
     try {
@@ -25,33 +27,62 @@ class PaymentController {
         });
       }
 
-      // If pending, check with SantimPay directly
+      // If pending, check with Provider directly
       if (payment.status === "PENDING") {
         try {
-          const statusData = await SantimPayService.checkTransactionStatus(txn);
-          console.log(
-            `SantimPay Status Response for ${txn}:`,
-            JSON.stringify(statusData, null, 2)
-          );
+          if (payment.provider === "chapa") {
+            // Check Chapa Status
+            const verifyResponse = await ChapaService.verify(txn);
+            console.log(`Chapa Verify Response for ${txn}:`, verifyResponse);
 
-          // Check status from SantimPay response
-          let remoteStatus = statusData.status || statusData.paymentStatus;
-          if (remoteStatus) remoteStatus = remoteStatus.toUpperCase();
+            if (verifyResponse.status === "success" && verifyResponse.data) {
+              // Chapa status: 'success', 'failed', 'pending'
+              // Note: Chapa verify usually returns success if the transaction was successful.
+              // If it's pending, it might not return success or might return a different status.
+              // Assuming verifyResponse.data.status holds the actual transaction status if available,
+              // or verifyResponse.status itself indicates success of the verification call which implies payment success for 'verify'.
+              
+              // According to Chapa docs, verify returns the transaction details.
+              // We should check verifyResponse.data.status
+              const chapaStatus = verifyResponse.data.status; 
+              
+              if (chapaStatus === "success") {
+                payment.status = "PAID";
+                await payment.save();
+                await processSuccessfulPayment(payment);
+              } else if (chapaStatus === "failed") {
+                payment.status = "FAILED";
+                await payment.save();
+              }
+              // If 'pending', do nothing
+            }
+          } else {
+            // Default to SantimPay
+            const statusData = await SantimPayService.checkTransactionStatus(txn);
+            console.log(
+              `SantimPay Status Response for ${txn}:`,
+              JSON.stringify(statusData, null, 2)
+            );
 
-          if (remoteStatus === "COMPLETED" || remoteStatus === "SUCCESS") {
-            payment.status = "PAID";
-            await payment.save();
-            await processSuccessfulPayment(payment);
-          } else if (
-            remoteStatus === "FAILED" ||
-            remoteStatus === "CANCELLED" ||
-            remoteStatus === "EXPIRED"
-          ) {
-            payment.status = "FAILED";
-            await payment.save();
+            // Check status from SantimPay response
+            let remoteStatus = statusData.status || statusData.paymentStatus;
+            if (remoteStatus) remoteStatus = remoteStatus.toUpperCase();
+
+            if (remoteStatus === "COMPLETED" || remoteStatus === "SUCCESS") {
+              payment.status = "PAID";
+              await payment.save();
+              await processSuccessfulPayment(payment);
+            } else if (
+              remoteStatus === "FAILED" ||
+              remoteStatus === "CANCELLED" ||
+              remoteStatus === "EXPIRED"
+            ) {
+              payment.status = "FAILED";
+              await payment.save();
+            }
           }
         } catch (err) {
-          console.error("Error checking SantimPay status:", err.message || err);
+          console.error(`Error checking ${payment.provider || 'SantimPay'} status:`, err.message || err);
           // Ignore error and return current DB status
         }
       }

@@ -24,6 +24,7 @@ const {
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
+const ChapaService = require("../services/chapaService");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const Payment = require("../models/Payment");
@@ -165,6 +166,180 @@ router.post("/ticket/initiate", async (req, res) => {
     });
   } catch (err) {
     console.error("Error initiating payment:", err);
+    res.status(500).json({ success: false, error: "Could not start payment" });
+  }
+});
+
+// Chapa Payment Initiation Route
+router.post("/ticket/initiate/chapa", async (req, res) => {
+  try {
+    const {
+      ticketDetails,
+      amount,
+      phoneNumber,
+      method,
+      orderId,
+      paymentReason,
+    } = req.body;
+
+    if (!ticketDetails) {
+      return res
+        .status(400)
+        .json({ success: false, error: "ticketDetails is required" });
+    }
+
+    // --- User Creation / Lookup Logic (Same as SantimPay) ---
+    let userId = ticketDetails.userId;
+    let token = null;
+    let user = null;
+
+    if (!userId) {
+      const email = ticketDetails.email;
+      const phone = phoneNumber;
+
+      if (email) {
+        user = await User.findOne({ email: email });
+      }
+
+      if (!user && phone) {
+        user = await User.findOne({ phoneNumber: phone });
+      }
+
+      if (!user && email && phone) {
+        try {
+          const splitName = (ticketDetails.fullName || "Guest User").split(" ");
+          const firstName = splitName[0];
+          const lastName = splitName.slice(1).join(" ") || "User";
+          const password = phone;
+
+          user = await User.create({
+            firstName,
+            lastName,
+            email,
+            phoneNumber: phone,
+            password: password,
+            role: "customer",
+            isPhoneVerified: true,
+            isActive: true,
+          });
+        } catch (err) {
+          console.error("Failed to auto-create user:", err.message);
+        }
+      }
+
+      if (user) {
+        userId = user._id;
+        token = user.createJWT();
+      }
+    }
+
+    const selectedEvent = await Event.findById(ticketDetails.eventId);
+    if (!selectedEvent) {
+      return res.status(404).json({ success: false, error: "Event not found" });
+    }
+
+    const reason =
+      paymentReason ||
+      `Ticket purchase: ${selectedEvent.title} - ${ticketDetails.ticketTypeId}`;
+    
+    // Chapa specific URLs
+    const chapaCallbackUrl = `${
+      process.env.BACKEND_URL || "http://localhost:5000"
+    }/api/webhook/chapa`;
+    const returnUrl = req.body.successUrl || `${
+      process.env.FRONTEND_URL || "http://localhost:3000"
+    }/payment/success`;
+
+    const transactionId =
+      orderId ||
+      `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Call Chapa Direct Charge
+    let response;
+    try {
+      // Ensure mobile number format for Chapa (09... or 07...)
+      let chapaMobile = phoneNumber.replace(/^\+/, "");
+      if (chapaMobile.startsWith("251")) {
+        chapaMobile = "0" + chapaMobile.substring(3);
+      }
+
+      response = await ChapaService.directCharge({
+        amount: String(amount),
+        currency: "ETB",
+        mobile: chapaMobile,
+        type: method, // "telebirr", "mpesa", etc.
+        email: user ? user.email : "guest@example.com",
+        first_name: ticketDetails.fullName.split(" ")[0],
+        last_name: ticketDetails.fullName.split(" ")[1] || "User",
+        tx_ref: transactionId,
+        callback_url: chapaCallbackUrl,
+        return_url: returnUrl,
+        customization: {
+          title: reason,
+          description: "Ticket Purchase",
+        },
+      });
+    } catch (error) {
+      console.error("Chapa Direct Charge Error:", error);
+      return res.status(400).json({
+        success: false,
+        error: error.message || "Payment initiation failed",
+      });
+    }
+
+    if (response.status !== "success") {
+      console.error("Chapa Direct Charge Failed:", response);
+      return res.status(400).json({
+        success: false,
+        error: response.message || "Payment initiation failed",
+      });
+    }
+
+    let checkoutUrl = null;
+    // Direct charge might return checkout_url for some methods or just success
+    if (response.status === "success" && response.data && response.data.checkout_url) {
+      checkoutUrl = response.data.checkout_url;
+    }
+
+    console.log("Chapa payment initiated:", response);
+
+    // Save Payment Record
+    await Payment.create({
+      transactionId: transactionId,
+      status: "PENDING",
+      guestName: ticketDetails.fullName,
+      contact: phoneNumber,
+      method: method,
+      provider: "chapa",
+      price: amount,
+      eventId: ticketDetails.eventId,
+      userId: userId,
+      ticketDetails: {
+        ...ticketDetails,
+        ticketType: ticketDetails.ticketTypeId,
+        ticketCount: ticketDetails.quantity,
+      },
+    });
+
+    // Return response matching SantimPay shape
+    res.json({
+      success: true,
+      transactionId: transactionId,
+      checkoutUrl: checkoutUrl,
+      message: "Redirecting to payment...",
+      token: token,
+      user: user
+        ? {
+            id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            role: user.role,
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error("Error initiating Chapa payment:", err);
     res.status(500).json({ success: false, error: "Could not start payment" });
   }
 });

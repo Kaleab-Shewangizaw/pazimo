@@ -3,6 +3,7 @@ const Ticket = require("../models/Ticket");
 const Invitation = require("../models/Invitation");
 const Event = require("../models/Event");
 const SantimPayService = require("../services/santimPayService");
+const ChapaService = require("../services/chapaService");
 const {
   sendInvitationEmail,
   createEmailTemplate,
@@ -83,6 +84,122 @@ const initiateInvitationPayment = async (req, res) => {
   }
 };
 
+// Initiate Chapa Payment for Invitation
+const initiateChapaInvitationPayment = async (req, res) => {
+  try {
+    const {
+      amount,
+      paymentReason,
+      phoneNumber,
+      invitationData,
+      paymentMethod: reqPaymentMethod,
+      successUrl,
+    } = req.body;
+    const userId = req.user ? req.user._id : null;
+
+    // Generate a unique transaction ID
+    const transactionId = uuidv4();
+
+    // Chapa specific URLs
+    const chapaCallbackUrl = `${
+      process.env.BACKEND_URL || "http://localhost:5000"
+    }/api/webhook/chapa`;
+    const returnUrl = successUrl || `${
+      process.env.FRONTEND_URL || "http://localhost:3000"
+    }/payment/success`;
+
+    // Initiate Chapa Direct Charge
+    let response;
+    try {
+      // Ensure mobile number format for Chapa (09... or 07...)
+      let chapaMobile = phoneNumber.replace(/^\+/, "");
+      if (chapaMobile.startsWith("251")) {
+        chapaMobile = "0" + chapaMobile.substring(3);
+      }
+
+      response = await ChapaService.directCharge({
+        amount: String(amount),
+        currency: "ETB",
+        mobile: chapaMobile,
+        type: reqPaymentMethod || "telebirr", // Default to telebirr if not provided
+        email:
+          invitationData.contactType === "email"
+            ? invitationData.contact
+            : "guest@example.com",
+        first_name: (invitationData.customerName || "Guest").split(" ")[0],
+        last_name:
+          (invitationData.customerName || "User").split(" ")[1] || "User",
+        tx_ref: transactionId,
+        callback_url: chapaCallbackUrl,
+        return_url: returnUrl,
+        customization: {
+          title: paymentReason,
+          description: "Invitation Fee",
+        },
+      });
+    } catch (error) {
+      console.error("Chapa Direct Charge Error:", error);
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Payment initiation failed",
+      });
+    }
+
+    let checkoutUrl = null;
+    if (
+      response.status === "success" &&
+      response.data &&
+      response.data.checkout_url
+    ) {
+      checkoutUrl = response.data.checkout_url;
+    } else if (response.status !== "success") {
+      console.error("Chapa Direct Charge Failed:", response);
+      return res.status(400).json({
+        success: false,
+        message: response.message || "Payment initiation failed",
+      });
+    }
+
+    // Save Payment Record
+    const payment = await Payment.create({
+      transactionId,
+      status: "PENDING",
+      guestName: invitationData.customerName,
+      contact: invitationData.contact || phoneNumber,
+      method: invitationData.contactType,
+      provider: "chapa",
+      invitationType: invitationData.guestType || invitationData.type,
+      message: invitationData.message,
+      price: amount,
+      eventId:
+        invitationData.eventId ||
+        (invitationData.selectedEvent
+          ? invitationData.selectedEvent.id || invitationData.selectedEvent._id
+          : null),
+      userId,
+      ticketDetails: {
+        qrCodeCount: invitationData.qrCodeCount,
+        ...invitationData,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Redirecting to payment...",
+      transactionId,
+      checkoutUrl,
+      payment,
+    });
+  } catch (error) {
+    console.error("Initiate Chapa Invitation Payment Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to initiate payment",
+      error: error.message,
+    });
+  }
+};
+
 // Check Payment Status (Polling)
 const checkInvitationPaymentStatus = async (req, res) => {
   try {
@@ -99,19 +216,27 @@ const checkInvitationPaymentStatus = async (req, res) => {
       return res.status(200).json({ success: true, status: "PAID" });
     }
 
-    // Check with SantimPay
-    const santimStatus = await SantimPayService.checkTransactionStatus(
-      transactionId
-    );
-    console.log(
-      `SantimPay Invitation Status Response for ${transactionId}:`,
-      JSON.stringify(santimStatus, null, 2)
-    );
+    let status;
 
-    // Update status based on SantimPay response
-    // Note: Adjust based on actual SantimPay response structure
-    let status = santimStatus.status || santimStatus.paymentStatus;
-    if (status) status = status.toUpperCase();
+    if (payment.provider === "chapa") {
+      const verifyResponse = await ChapaService.verify(transactionId);
+      console.log(`Chapa Verify Response for ${transactionId}:`, verifyResponse);
+      if (verifyResponse.status === "success" && verifyResponse.data) {
+        status = verifyResponse.data.status;
+        if (status) status = status.toUpperCase();
+      }
+    } else {
+      // Check with SantimPay
+      const santimStatus = await SantimPayService.checkTransactionStatus(
+        transactionId
+      );
+      console.log(
+        `SantimPay Invitation Status Response for ${transactionId}:`,
+        JSON.stringify(santimStatus, null, 2)
+      );
+      status = santimStatus.status || santimStatus.paymentStatus;
+      if (status) status = status.toUpperCase();
+    }
 
     if (status === "COMPLETED" || status === "SUCCESS") {
       // Atomic update to prevent race condition
@@ -533,6 +658,7 @@ const handlePaymentSuccess = async (payment) => {
 
 module.exports = {
   initiateInvitationPayment,
+  initiateChapaInvitationPayment,
   checkInvitationPaymentStatus,
   invitationWebhook,
   cancelInvitationPayment,

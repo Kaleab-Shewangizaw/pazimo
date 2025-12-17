@@ -24,6 +24,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
+const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
+
 interface EditableTableProps {
   event: Event;
   data: Row[];
@@ -45,7 +47,7 @@ export default function EditableTable({
   const [canSend, setCanSend] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState("Telebirr");
+  const [paymentMethod, setPaymentMethod] = useState(ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr");
   const [paymentPhoneNumber, setPaymentPhoneNumber] = useState("");
   const { user } = useAuthStore();
   const [paymentConfig, setPaymentConfig] = useState<PaymentInit | null>(null);
@@ -450,15 +452,28 @@ export default function EditableTable({
 
     // Normalize phone number
     let finalPhone = paymentPhoneNumber;
-    if (!finalPhone.startsWith("+251")) {
-      finalPhone = `+251${finalPhone}`;
+    if (ACTIVE_PAYMENT_PROVIDER === "CHAPA") {
+      if (!finalPhone.startsWith("0")) {
+        finalPhone = `0${finalPhone}`;
+      }
+    } else {
+      if (finalPhone.startsWith("0")) {
+        finalPhone = `+251${finalPhone.substring(1)}`;
+      } else if (!finalPhone.startsWith("+251")) {
+        finalPhone = `+251${finalPhone}`;
+      }
     }
 
     try {
       const txnId = crypto.randomUUID();
 
+      const endpoint =
+        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+          ? "/api/invitations/payment/initiate/chapa"
+          : "/api/invitations/payment/initiate";
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/payment/initiate`,
+        `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`,
         {
           method: "POST",
           headers: {
@@ -484,6 +499,12 @@ export default function EditableTable({
       const data = await response.json();
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
+
+      // Handle Chapa Redirect
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
 
       if (data.success && data.transactionId) {
         setCurrentTransactionId(data.transactionId);
@@ -603,6 +624,7 @@ export default function EditableTable({
                     phoneNumber={paymentPhoneNumber}
                     selectedMethod={paymentMethod}
                     onSelect={setPaymentMethod}
+                    provider={ACTIVE_PAYMENT_PROVIDER}
                   />
                 </div>
               </div>
