@@ -985,10 +985,8 @@ export function useInvitationPage() {
     }
 
     const currentUsage = qrCodeUsage[contact] || 0;
-    if (currentUsage + qrCodeCount > 6) {
-      toast.error(`Cannot send ${qrCodeCount} QR codes. Max 6 per contact.`);
-      return;
-    }
+    // Limit check removed
+
 
     if (contactType === "email" && !validateEmail(contact)) {
       toast.error("Please enter a valid email address");
