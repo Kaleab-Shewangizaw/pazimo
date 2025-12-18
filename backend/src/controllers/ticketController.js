@@ -485,7 +485,7 @@ const createGuestTicket = async (req, res) => {
           : event.location?.address || "See map";
 
       const smsMessage = `Hello, ${guestName}\n\n${
-        message ? message + "\n\n" : ""
+        message ? message.trim() + "\n\n" : ""
       }Event: ${
         event.title
       }\nDate: ${eventDate} | ${timeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
@@ -912,7 +912,7 @@ const createInvitationTicket = async (req, res) => {
           : event.location?.address || "See map";
 
       const smsMessage = `Hello, ${guestName}\n\n${
-        message ? message + "\n\n" : ""
+        message ? message.trim() + "\n\n" : ""
       }Event: ${
         event.title
       }\nDate: ${eventDate} | ${timeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
