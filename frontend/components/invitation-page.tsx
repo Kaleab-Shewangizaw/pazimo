@@ -504,17 +504,6 @@ export default function InvitationPage() {
       return;
     }
 
-    // Check QR code limit for this contact
-    const currentUsage = qrCodeUsage[contact] || 0;
-    if (currentUsage + qrCodeCount > 6) {
-      alert(
-        `Cannot send ${qrCodeCount} QR codes. This contact can only receive ${
-          6 - currentUsage
-        } more QR codes (maximum 6 total)`
-      );
-      return;
-    }
-
     let formattedContact = contact;
     if (contactType === "phone") {
       // Strip any non-digit characters just in case
@@ -1007,17 +996,7 @@ export default function InvitationPage() {
       const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}`;
 
       // Filter contacts based on QR code limits
-      const validContacts = contacts.filter((contact) => {
-        const currentUsage = qrCodeUsage[contact.contact] || 0;
-        return currentUsage < 6;
-      });
-
-      if (validContacts.length < contacts.length) {
-        const skippedCount = contacts.length - validContacts.length;
-        alert(
-          `${skippedCount} contacts skipped due to QR code limit (6 per contact)`
-        );
-      }
+      const validContacts = contacts;
 
       const results = await Promise.allSettled(
         validContacts.map(async (contact) => {
