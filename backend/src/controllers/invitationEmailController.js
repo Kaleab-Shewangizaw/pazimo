@@ -278,7 +278,7 @@ const createEmailTemplate = (
     </div>
     <div style="background: #2d3748; padding: 30px; text-align: center; border-radius: 0 0 8px 8px;">
       <div style="margin-bottom: 20px;">
-        <img src="cid:logo" alt="Pazimo" style="height: 30px; opacity: 0.8;" />
+        <img src="https://pazimo.com/logo.png" alt="Pazimo" style="height: 30px; opacity: 0.8;" />
       </div>
       <p style="color: #a0aec0; margin: 0 0 10px 0; font-size: 14px;">Powered by <strong style="color: #ffffff;">Pazimo Events</strong></p>
       <!-- Unique identifier to prevent Gmail clipping/threading -->
