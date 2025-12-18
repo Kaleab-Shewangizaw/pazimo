@@ -42,7 +42,6 @@ const invitationSchema = new mongoose.Schema(
       type: Number,
       default: 1,
       min: 0,
-      max: 10,
     },
     status: {
       type: String,
