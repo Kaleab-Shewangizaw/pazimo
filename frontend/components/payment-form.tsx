@@ -1,25 +1,31 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { Send } from "lucide-react"
-import QRCode from "qrcode"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { useState } from "react";
+import { Send } from "lucide-react";
+import QRCode from "qrcode";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 
 interface PaymentFormProps {
-  amount?: string
-  email?: string
-  firstName?: string
-  lastName?: string
-  phoneNumber?: string
-  description?: string
-  title?: string
-  onSuccess?: (data: any) => void
-  returnUrl?: string
+  amount?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  description?: string;
+  title?: string;
+  onSuccess?: (data: any) => void;
+  returnUrl?: string;
 }
 
 export default function PaymentForm({
@@ -39,16 +45,16 @@ export default function PaymentForm({
     firstName: firstName,
     lastName: lastName,
     phoneNumber: phoneNumber,
-  })
-  const [qrCode, setQrCode] = useState<string>("")
-  const [showQR, setShowQR] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  });
+  const [qrCode, setQrCode] = useState<string>("");
+  const [showQR, setShowQR] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+    e.preventDefault();
+    setIsSubmitting(true);
 
-    const txRef = `tx-${Date.now()}` // Generate unique transaction reference
+    const txRef = `tx-${Date.now()}`; // Generate unique transaction reference
 
     const paymentData = {
       amount: formData.amount,
@@ -63,23 +69,26 @@ export default function PaymentForm({
       "customization[title]": title,
       "customization[description]": description,
       "meta[hide_receipt]": "false",
-    }
+    };
 
     try {
-      const myHeaders = new Headers()
-      myHeaders.append("Authorization", "Bearer CHASECK-xxxxxxxxxxxxxxxx") // Replace with your actual Chapa secret key
-      myHeaders.append("Content-Type", "application/json")
+      const myHeaders = new Headers();
+      myHeaders.append("Authorization", "Bearer CHASECK-xxxxxxxxxxxxxxxx"); // Replace with your actual Chapa secret key
+      myHeaders.append("Content-Type", "application/json");
 
       const requestOptions = {
         method: "POST",
         headers: myHeaders,
         body: JSON.stringify(paymentData),
         redirect: "follow",
-      }
+      };
 
-      const response = await fetch("https://api.chapa.co/v1/transaction/initialize", requestOptions)
+      const response = await fetch(
+        "https://api.chapa.co/v1/transaction/initialize",
+        requestOptions
+      );
 
-      const result = await response.json()
+      const result = await response.json();
 
       if (result.status === "success") {
         // Generate QR code with payment details
@@ -89,111 +98,143 @@ export default function PaymentForm({
           email: formData.email,
           name: `${formData.firstName} ${formData.lastName}`,
           timestamp: new Date().toISOString(),
-        })
+        });
 
-        const qrCodeDataUrl = await QRCode.toDataURL(qrData)
-        setQrCode(qrCodeDataUrl)
-        setShowQR(true)
+        const qrCodeDataUrl = await QRCode.toDataURL(qrData);
+        setQrCode(qrCodeDataUrl);
+        setShowQR(true);
 
         // Call success callback if provided
         if (onSuccess) {
-          onSuccess(result)
+          onSuccess(result);
         }
 
         // Redirect to Chapa checkout page after showing QR
         setTimeout(() => {
-          window.location.href = result.data.checkout_url
-        }, 3000)
+          window.location.href = result.data.checkout_url;
+        }, 3000);
       } else {
-        console.error("Payment initialization failed:", result)
-        setIsSubmitting(false)
+        console.error("Payment initialization failed:", result);
+        setIsSubmitting(false);
       }
     } catch (error) {
-      console.error("Error:", error)
-      setIsSubmitting(false)
+      console.error("Error:", error);
+      setIsSubmitting(false);
     }
-  }
+  };
 
   return (
     <Card className="w-full max-w-md mx-auto shadow-lg">
       <CardHeader>
-        <CardTitle className="text-2xl font-bold text-gray-800">Make Payment</CardTitle>
+        <CardTitle className="text-2xl font-bold text-gray-800">
+          Make Payment
+        </CardTitle>
         <CardDescription>Complete your payment securely</CardDescription>
       </CardHeader>
       <CardContent>
         {showQR && qrCode ? (
           <div className="mb-6 text-center">
             <h3 className="text-lg font-semibold mb-2">Your Payment QR Code</h3>
-            <img src={qrCode || "/placeholder.svg"} alt="Payment QR Code" className="mx-auto mb-2" />
-            <p className="text-sm text-gray-600">Redirecting to payment page...</p>
+            <img
+              src={qrCode || "/placeholder.svg"}
+              alt="Payment QR Code"
+              className="mx-auto mb-2"
+            />
+            <p className="text-sm text-gray-600">
+              Redirecting to payment page...
+            </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="amount" className="text-sm font-medium text-gray-700">
+              <Label
+                htmlFor="amount"
+                className="text-sm font-medium text-gray-700"
+              >
                 Amount (ETB)
               </Label>
               <Input
                 id="amount"
                 type="number"
                 value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, amount: e.target.value })
+                }
                 className="mt-1 block w-full"
                 required
                 disabled={isSubmitting}
               />
             </div>
             <div>
-              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+              <Label
+                htmlFor="email"
+                className="text-sm font-medium text-gray-700"
+              >
                 Email
               </Label>
               <Input
                 id="email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
                 className="mt-1 block w-full"
                 required
                 disabled={isSubmitting}
               />
             </div>
             <div>
-              <Label htmlFor="firstName" className="text-sm font-medium text-gray-700">
+              <Label
+                htmlFor="firstName"
+                className="text-sm font-medium text-gray-700"
+              >
                 First Name
               </Label>
               <Input
                 id="firstName"
                 type="text"
                 value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, firstName: e.target.value })
+                }
                 className="mt-1 block w-full"
                 required
                 disabled={isSubmitting}
               />
             </div>
             <div>
-              <Label htmlFor="lastName" className="text-sm font-medium text-gray-700">
+              <Label
+                htmlFor="lastName"
+                className="text-sm font-medium text-gray-700"
+              >
                 Last Name
               </Label>
               <Input
                 id="lastName"
                 type="text"
                 value={formData.lastName}
-                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, lastName: e.target.value })
+                }
                 className="mt-1 block w-full"
-                required
                 disabled={isSubmitting}
               />
             </div>
             <div>
-              <Label htmlFor="phoneNumber" className="text-sm font-medium text-gray-700">
+              <Label
+                htmlFor="phoneNumber"
+                className="text-sm font-medium text-gray-700"
+              >
                 Phone Number
               </Label>
               <Input
                 id="phoneNumber"
                 type="tel"
                 value={formData.phoneNumber}
-                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, phoneNumber: e.target.value })
+                }
                 className="mt-1 block w-full"
                 required
                 disabled={isSubmitting}
@@ -211,5 +252,5 @@ export default function PaymentForm({
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

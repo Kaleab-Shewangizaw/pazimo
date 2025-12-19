@@ -104,9 +104,9 @@ const initiateChapaInvitationPayment = async (req, res) => {
     const chapaCallbackUrl = `${
       process.env.BACKEND_URL || "http://localhost:5000"
     }/api/webhook/chapa`;
-    const returnUrl = successUrl || `${
-      process.env.FRONTEND_URL || "http://localhost:3000"
-    }/payment/success`;
+    const returnUrl =
+      successUrl ||
+      `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success`;
 
     // Initiate Chapa Direct Charge
     let response;
@@ -220,7 +220,10 @@ const checkInvitationPaymentStatus = async (req, res) => {
 
     if (payment.provider === "chapa") {
       const verifyResponse = await ChapaService.verify(transactionId);
-      console.log(`Chapa Verify Response for ${transactionId}:`, verifyResponse);
+      console.log(
+        `Chapa Verify Response for ${transactionId}:`,
+        verifyResponse
+      );
       if (verifyResponse.status === "success" && verifyResponse.data) {
         status = verifyResponse.data.status;
         if (status) status = status.toUpperCase();

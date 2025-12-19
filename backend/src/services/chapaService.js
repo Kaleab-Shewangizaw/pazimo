@@ -49,7 +49,8 @@ class ChapaService {
   }
 
   async verify(tx_ref) {
-    return await this.chapa.verify(tx_ref);
+    // Chapa SDK expects an object with tx_ref
+    return await this.chapa.verify({ tx_ref });
   }
 }
 

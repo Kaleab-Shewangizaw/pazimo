@@ -30,6 +30,12 @@ class PaymentController {
       // If pending, check with Provider directly
       if (payment.status === "PENDING") {
         try {
+          console.log(
+            `Checking payment status for ${txn}. Provider: ${
+              payment.provider || "undefined (defaulting to SantimPay)"
+            }`
+          );
+
           if (payment.provider === "chapa") {
             // Check Chapa Status
             const verifyResponse = await ChapaService.verify(txn);
@@ -41,11 +47,11 @@ class PaymentController {
               // If it's pending, it might not return success or might return a different status.
               // Assuming verifyResponse.data.status holds the actual transaction status if available,
               // or verifyResponse.status itself indicates success of the verification call which implies payment success for 'verify'.
-              
+
               // According to Chapa docs, verify returns the transaction details.
               // We should check verifyResponse.data.status
-              const chapaStatus = verifyResponse.data.status; 
-              
+              const chapaStatus = verifyResponse.data.status;
+
               if (chapaStatus === "success") {
                 payment.status = "PAID";
                 await payment.save();
@@ -58,7 +64,9 @@ class PaymentController {
             }
           } else {
             // Default to SantimPay
-            const statusData = await SantimPayService.checkTransactionStatus(txn);
+            const statusData = await SantimPayService.checkTransactionStatus(
+              txn
+            );
             console.log(
               `SantimPay Status Response for ${txn}:`,
               JSON.stringify(statusData, null, 2)
@@ -82,7 +90,10 @@ class PaymentController {
             }
           }
         } catch (err) {
-          console.error(`Error checking ${payment.provider || 'SantimPay'} status:`, err.message || err);
+          console.error(
+            `Error checking ${payment.provider || "SantimPay"} status:`,
+            err.message || err
+          );
           // Ignore error and return current DB status
         }
       }

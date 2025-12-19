@@ -10,6 +10,11 @@ const Payment = new mongoose.Schema({
   guestName: String,
   contact: String,
   method: String, // "email" or "sms"
+  provider: {
+    type: String,
+    enum: ["santim", "chapa"],
+    default: "santim",
+  },
   invitationType: {
     type: String, // "guest" or "paid"
     default: "guest",

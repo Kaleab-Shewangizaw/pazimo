@@ -47,7 +47,9 @@ export default function EditableTable({
   const [canSend, setCanSend] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState(ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr");
+  const [paymentMethod, setPaymentMethod] = useState(
+    ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr"
+  );
   const [paymentPhoneNumber, setPaymentPhoneNumber] = useState("");
   const { user } = useAuthStore();
   const [paymentConfig, setPaymentConfig] = useState<PaymentInit | null>(null);

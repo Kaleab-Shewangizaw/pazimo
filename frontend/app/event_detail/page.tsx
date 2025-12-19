@@ -598,16 +598,7 @@ function EventDetailContent() {
           router.replace(`/event_detail?id=${eventId || ""}`);
         }
       };
-      if (userId) {
-        processPayment();
-      }
-    }
-  }, [searchParams, router, eventId, userId]);
-
-  useEffect(() => {
-    const txRef = searchParams.get("tx_ref");
-    if (txRef) {
-      router.replace(`/event_detail?id=${eventId || ""}`);
+      processPayment();
     }
   }, [searchParams, router, eventId]);
 
