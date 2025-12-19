@@ -24,14 +24,17 @@ const getOrganizerBalance = async (req, res) => {
     }).populate("event", "title ticketTypes");
 
     // Filter for Net Revenue (Withdrawal Calculation)
-    // We now include ALL tickets to match the dashboard display as requested.
-    // The user explicitly wants "Total Revenue" to be the sum of all tickets found.
+    // We exclude tickets with no price or invalid status
     const validTickets = allTickets.filter((t) => {
       // We exclude tickets with no price
       if (!t.price || t.price <= 0) return false;
 
-      // We DO NOT filter by status, paymentStatus, or isInvitation anymore.
-      // If it has a price, it counts towards the total revenue shown on the dashboard.
+      // Exclude cancelled or failed tickets
+      // If status is undefined/null (legacy tickets), we include them
+      if (t.status === "cancelled" || t.status === "failed") return false;
+      if (t.paymentStatus === "failed" || t.paymentStatus === "cancelled")
+        return false;
+
       return true;
     });
 
@@ -251,9 +254,13 @@ const createWithdrawal = async (req, res) => {
     const eventIds = events.map((event) => event._id);
     const tickets = await Ticket.find({
       event: { $in: eventIds },
-      status: { $nin: ["cancelled", "expired", "pending"] },
-      paymentStatus: "completed",
-      isInvitation: false,
+      // Exclude cancelled/failed tickets, but include legacy tickets (no status)
+      $and: [
+        { status: { $nin: ["cancelled", "failed"] } },
+        { paymentStatus: { $nin: ["failed", "cancelled"] } },
+      ],
+      // We include invitations if they have a price (paid invitations)
+      price: { $gt: 0 },
     });
     const totalRevenue = tickets.reduce((sum, ticket) => sum + ticket.price, 0);
     // Calculate organizer revenue after 3% Pazimo commission
