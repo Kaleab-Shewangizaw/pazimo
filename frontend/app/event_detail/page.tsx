@@ -35,7 +35,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
-const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
+// const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
 
 type TicketType = {
   _id: string;
@@ -123,6 +123,9 @@ function EventDetailContent() {
   const [shouldShowTicketModal, setShouldShowTicketModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
+  const [activePaymentProvider, setActivePaymentProvider] = useState<
+    "SANTIM" | "CHAPA"
+  >("CHAPA");
 
   const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
   const [user, setUser] = useState<User | null>(null);
@@ -135,11 +138,27 @@ function EventDetailContent() {
     fullName: "",
     email: "",
     phoneNumber: "",
-    paymentMethod:
-      ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
+    paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
   });
   const [isSantimLoading, setIsSantimLoading] = useState(false);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const fetchProvider = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setActivePaymentProvider(data.data.activeProvider);
+        }
+      } catch (error) {
+        console.error("Failed to fetch active payment provider", error);
+      }
+    };
+    fetchProvider();
+  }, []);
 
   // Auth store
   // const { login, signup } = useAuthStore();
@@ -292,11 +311,11 @@ function EventDetailContent() {
         if (phone.startsWith("0")) phone = phone.substring(1);
 
         setSantimForm({
-          fullName: `${u.firstName} ${u.lastName}`.trim(),
+          fullName: `${u.firstName} ${u.lastName || ""}`.trim(),
           email: u.email || "",
           phoneNumber: phone,
           paymentMethod:
-            ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
+            activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
         });
       } else {
         // Clear form for guest
@@ -305,7 +324,7 @@ function EventDetailContent() {
           email: "",
           phoneNumber: "",
           paymentMethod:
-            ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
+            activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
         });
       }
 
@@ -432,7 +451,7 @@ function EventDetailContent() {
 
       // Format phone number based on provider
       const formattedPhone =
-        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+        activePaymentProvider === "CHAPA"
           ? `0${santimForm.phoneNumber}`
           : `+251${santimForm.phoneNumber}`;
 
@@ -492,7 +511,7 @@ function EventDetailContent() {
           : `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       const endpoint =
-        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+        activePaymentProvider === "CHAPA"
           ? "/api/tickets/ticket/initiate/chapa"
           : "/api/tickets/ticket/initiate";
 
@@ -1567,7 +1586,7 @@ function EventDetailContent() {
                 onSelect={(val) =>
                   setSantimForm({ ...santimForm, paymentMethod: val })
                 }
-                provider={ACTIVE_PAYMENT_PROVIDER}
+                provider={activePaymentProvider}
               />
             </div>
 

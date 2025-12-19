@@ -24,7 +24,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
+// const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
 
 interface EditableTableProps {
   event: Event;
@@ -48,7 +48,7 @@ export default function EditableTable({
   const [showPayment, setShowPayment] = useState(false);
   const [isSantimLoading, setIsSantimLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(
-    ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr"
+    activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr"
   );
   const [paymentPhoneNumber, setPaymentPhoneNumber] = useState("");
   const { user } = useAuthStore();
@@ -68,6 +68,34 @@ export default function EditableTable({
     string | null
   >(null);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
+  const [activePaymentProvider, setActivePaymentProvider] = useState<
+    "SANTIM" | "CHAPA"
+  >("CHAPA");
+
+  useEffect(() => {
+    const fetchPaymentConfig = async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payment-config/active`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.provider) {
+            setActivePaymentProvider(data.provider);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch payment config:", error);
+      }
+    };
+    fetchPaymentConfig();
+  }, []);
+
+  useEffect(() => {
+    setPaymentMethod(
+      activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr"
+    );
+  }, [activePaymentProvider]);
 
   const displayData = data.length > 1000 ? data.slice(0, 1000) : data;
 
@@ -454,7 +482,7 @@ export default function EditableTable({
 
     // Normalize phone number
     let finalPhone = paymentPhoneNumber;
-    if (ACTIVE_PAYMENT_PROVIDER === "CHAPA") {
+    if (activePaymentProvider === "CHAPA") {
       if (!finalPhone.startsWith("0")) {
         finalPhone = `0${finalPhone}`;
       }
@@ -470,7 +498,7 @@ export default function EditableTable({
       const txnId = crypto.randomUUID();
 
       const endpoint =
-        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+        activePaymentProvider === "CHAPA"
           ? "/api/invitations/payment/initiate/chapa"
           : "/api/invitations/payment/initiate";
 
@@ -626,7 +654,7 @@ export default function EditableTable({
                     phoneNumber={paymentPhoneNumber}
                     selectedMethod={paymentMethod}
                     onSelect={setPaymentMethod}
-                    provider={ACTIVE_PAYMENT_PROVIDER}
+                    provider={activePaymentProvider}
                   />
                 </div>
               </div>

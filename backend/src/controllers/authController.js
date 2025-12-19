@@ -1102,14 +1102,17 @@ const unifiedAuth = async (req, res) => {
 
     // Split fullName into firstName and lastName
     const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
-    if (nameParts.length < 2) {
+
+    // Allow single name for customers (lastName is optional)
+    if (nameParts.length < 1) {
       return res.status(400).json({
         status: "error",
-        message: "Please enter your full name (first and last name)",
+        message: "Please enter your name",
       });
     }
+
     const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(" ");
+    const lastName = nameParts.slice(1).join(" ") || ""; // Optional last name
 
     // 1. Find ALL users with this phone number
     const usersByPhone = await User.find({ phoneNumber });

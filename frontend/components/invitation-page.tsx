@@ -39,7 +39,7 @@ import BulkInvite from "./bulkInviteModel";
 import { useRouter, useSearchParams } from "next/navigation";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
-const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
+// const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
 
 interface Event {
   id: number;
@@ -57,6 +57,29 @@ interface Event {
 export default function InvitationPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [activePaymentProvider, setActivePaymentProvider] = useState<
+    "SANTIM" | "CHAPA"
+  >("CHAPA");
+
+  useEffect(() => {
+    const fetchPaymentConfig = async () => {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payment-config/active`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.provider) {
+            setActivePaymentProvider(data.provider);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch payment config:", error);
+      }
+    };
+    fetchPaymentConfig();
+  }, []);
+
   const [pricing, setPricing] = useState({
     email: 2.5,
     sms: 7.5,
@@ -293,8 +316,17 @@ export default function InvitationPage() {
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
 
   const [santimForm, setSantimForm] = useState({
-    paymentMethod: ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "telebirr" : "Telebirr",
+    paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
   });
+
+  // Update santimForm when provider changes
+  useEffect(() => {
+    setSantimForm((prev) => ({
+      ...prev,
+      paymentMethod:
+        activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+    }));
+  }, [activePaymentProvider]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -1319,7 +1351,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
 
     // Format phone number based on provider
     let formattedPhone = payerPhone;
-    if (ACTIVE_PAYMENT_PROVIDER === "CHAPA") {
+    if (activePaymentProvider === "CHAPA") {
       // Ensure it starts with 0
       if (!formattedPhone.startsWith("0")) {
         formattedPhone = `0${formattedPhone}`;
@@ -1343,7 +1375,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
       const amount = pricePerInvite * (qrCodeCount || 1);
 
       const endpoint =
-        ACTIVE_PAYMENT_PROVIDER === "CHAPA"
+        activePaymentProvider === "CHAPA"
           ? "/api/invitations/payment/initiate/chapa"
           : "/api/invitations/payment/initiate";
 
@@ -2678,7 +2710,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                   onSelect={(val) =>
                     setSantimForm({ ...santimForm, paymentMethod: val })
                   }
-                  provider={ACTIVE_PAYMENT_PROVIDER}
+                  provider={activePaymentProvider}
                 />
               </div>
 
@@ -2694,7 +2726,7 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                   </>
                 ) : (
                   <>
-                    <CreditCard className="mr-2 h-5 w-5" /> Pay with {ACTIVE_PAYMENT_PROVIDER === "CHAPA" ? "Chapa" : "SantimPay"}
+                    <CreditCard className="mr-2 h-5 w-5" /> Pay with {activePaymentProvider === "CHAPA" ? "Chapa" : "SantimPay"}
                   </>
                 )}
               </Button>

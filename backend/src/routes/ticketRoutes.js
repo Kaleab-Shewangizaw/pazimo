@@ -241,14 +241,14 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
     const reason =
       paymentReason ||
       `Ticket purchase: ${selectedEvent.title} - ${ticketDetails.ticketTypeId}`;
-    
+
     // Chapa specific URLs
     const chapaCallbackUrl = `${
       process.env.BACKEND_URL || "http://localhost:5000"
     }/api/webhook/chapa`;
-    const returnUrl = req.body.successUrl || `${
-      process.env.FRONTEND_URL || "http://localhost:3000"
-    }/payment/success`;
+    const returnUrl =
+      req.body.successUrl ||
+      `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success`;
 
     const transactionId =
       orderId ||
@@ -297,7 +297,11 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
 
     let checkoutUrl = null;
     // Direct charge might return checkout_url for some methods or just success
-    if (response.status === "success" && response.data && response.data.checkout_url) {
+    if (
+      response.status === "success" &&
+      response.data &&
+      response.data.checkout_url
+    ) {
       checkoutUrl = response.data.checkout_url;
     }
 
