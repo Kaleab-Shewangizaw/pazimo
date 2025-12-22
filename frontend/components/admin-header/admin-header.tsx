@@ -202,7 +202,20 @@ export default function AdminHeader({
           </div>
 
           {/* Mobile Hamburger Menu */}
-          <div className="flex md:hidden items-center">
+          <div className="flex md:hidden items-center gap-2">
+            {/* Mobile Payment Switch */}
+            <div className="flex items-center gap-1 mr-1">
+              <span className="text-xs font-medium text-gray-700">
+                {activeProvider === "CHAPA" ? "Chapa" : "Santim"}
+              </span>
+              <Switch
+                checked={activeProvider === "SANTIM"}
+                onCheckedChange={toggleProvider}
+                disabled={isLoading}
+                className="data-[state=checked]:bg-green-600 scale-75 origin-right"
+              />
+            </div>
+
             <button
               className="p-2 rounded-md text-gray-700 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
               aria-label="Open menu"

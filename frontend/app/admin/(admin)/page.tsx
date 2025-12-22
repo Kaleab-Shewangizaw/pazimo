@@ -744,6 +744,8 @@ export default function AdminDashboardPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Payment Provider Switch */}
           </div>
         </div>
       </main>
