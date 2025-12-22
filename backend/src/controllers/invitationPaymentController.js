@@ -217,6 +217,7 @@ const checkInvitationPaymentStatus = async (req, res) => {
     }
 
     let status;
+    let santimStatus = null;
 
     if (payment.provider === "chapa") {
       const verifyResponse = await ChapaService.verify(transactionId);
@@ -230,7 +231,7 @@ const checkInvitationPaymentStatus = async (req, res) => {
       }
     } else {
       // Check with SantimPay
-      const santimStatus = await SantimPayService.checkTransactionStatus(
+      santimStatus = await SantimPayService.checkTransactionStatus(
         transactionId
       );
       console.log(
