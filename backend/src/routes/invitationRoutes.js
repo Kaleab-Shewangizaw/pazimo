@@ -16,6 +16,7 @@ const {
 
 const {
   initiateInvitationPayment,
+  initiateChapaInvitationPayment,
   checkInvitationPaymentStatus,
   invitationWebhook,
   cancelInvitationPayment,
@@ -26,6 +27,11 @@ router.post(
   "/invitations/payment/initiate",
   protect,
   initiateInvitationPayment
+);
+router.post(
+  "/invitations/payment/initiate/chapa",
+  protect,
+  initiateChapaInvitationPayment
 );
 router.post("/invitations/payment/cancel", protect, cancelInvitationPayment);
 router.get(

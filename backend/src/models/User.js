@@ -142,7 +142,9 @@ const userSchema = new mongoose.Schema(
     },
     lastName: {
       type: String,
-      required: [true, "Last name is required"],
+      required: function () {
+        return this.role === "organizer";
+      },
       trim: true,
     },
     isActive: {

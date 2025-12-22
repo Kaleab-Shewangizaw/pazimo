@@ -91,33 +91,90 @@
 //   )
 // }
 
+"use client";
 
+import type React from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Search, Shield, Menu, CreditCard } from "lucide-react";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
-"use client"
+export default function AdminHeader({
+  onMenuClick,
+}: {
+  onMenuClick?: () => void;
+}) {
+  const { admin, logout, token } = useAdminAuthStore();
+  const router = useRouter();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeProvider, setActiveProvider] = useState<"CHAPA" | "SANTIM">(
+    "CHAPA"
+  );
+  const [isLoading, setIsLoading] = useState(false);
 
-import type React from "react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Search, Shield, Menu } from "lucide-react"
-import { useAdminAuthStore } from "@/store/adminAuthStore"
-import { useRouter } from "next/navigation"
-import { useState } from "react"
+  useEffect(() => {
+    fetchActiveProvider();
+  }, []);
 
-export default function AdminHeader({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { admin, logout } = useAdminAuthStore()
-  const router = useRouter()
-  const [searchTerm, setSearchTerm] = useState("")
+  const fetchActiveProvider = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setActiveProvider(data.data.activeProvider);
+      }
+    } catch (error) {
+      console.error("Failed to fetch active provider:", error);
+    }
+  };
+
+  const toggleProvider = async (checked: boolean) => {
+    const newProvider = checked ? "SANTIM" : "CHAPA";
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ provider: newProvider }),
+        }
+      );
+
+      if (response.ok) {
+        setActiveProvider(newProvider);
+        toast.success(`Payment provider switched to ${newProvider}`);
+      } else {
+        throw new Error("Failed to update provider");
+      }
+    } catch (error) {
+      console.error("Error updating provider:", error);
+      toast.error("Failed to update payment provider");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleLogout = () => {
-    logout()
-    router.push("/admin/login")
-  }
+    logout();
+    router.push("/admin/login");
+  };
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
     // Add search functionality here
     // console.log("Searching for:", searchTerm)
-  }
+  };
 
   return (
     <>
@@ -157,17 +214,38 @@ export default function AdminHeader({ onMenuClick }: { onMenuClick?: () => void 
 
           {/* Desktop: Admin Info */}
           <div className="hidden md:flex items-center gap-4">
+            {/* Payment Provider Switch */}
+            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+              <CreditCard className="h-4 w-4 text-gray-500" />
+              <Label
+                htmlFor="provider-switch"
+                className="text-sm font-medium text-gray-700"
+              >
+                {activeProvider === "CHAPA" ? "Chapa" : "SantimPay"}
+              </Label>
+              <Switch
+                id="provider-switch"
+                checked={activeProvider === "SANTIM"}
+                onCheckedChange={toggleProvider}
+                disabled={isLoading}
+                className="data-[state=checked]:bg-green-600"
+              />
+            </div>
+
             <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-2 hover:bg-gray-100 transition-colors">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                 <Shield className="h-5 w-5 text-blue-600" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900">
-                  {admin ? `${admin.firstName} ${admin.lastName}` : "Admin User"}
+                  {admin
+                    ? `${admin.firstName} ${admin.lastName}`
+                    : "Admin User"}
                 </p>
-                <p className="text-xs text-gray-500">{admin?.email || "admin@example.com"}</p>
+                <p className="text-xs text-gray-500">
+                  {admin?.email || "admin@example.com"}
+                </p>
               </div>
-             
             </div>
           </div>
         </div>
@@ -176,5 +254,5 @@ export default function AdminHeader({ onMenuClick }: { onMenuClick?: () => void 
       {/* Spacer div to prevent content from being hidden behind fixed header on mobile */}
       <div className="md:hidden h-20" />
     </>
-  )
+  );
 }
