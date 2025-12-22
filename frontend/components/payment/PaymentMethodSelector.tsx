@@ -42,35 +42,36 @@ const CHAPA_METHODS = [
     image: "/Telebirr.png",
   },
   {
-    id: "mpesa",
-    name: "M-Pesa",
-    image: "/mpesa-logo.png",
-  },
-  {
     id: "CBEBirr",
     name: "CBE Birr",
     image: "/cbe-logo.png",
   },
   {
-    id: "Coopay-Ebirr",
-    name: "Coopay Ebirr",
-    image: "/coopay-logo.png",
+    id: "mpesa",
+    name: "M-Pesa",
+    image: "/mpesa-logo.png",
   },
+
+  // {
+  //   id: "Coopay-Ebirr",
+  //   name: "Coopay Ebirr",
+  //   image: "/coopay-logo.png",
+  // },
   {
     id: "AwashBirr",
     name: "Awash Bank",
     image: "/Awash-Bank.png",
   },
-  {
-    id: "yaya",
-    name: "Yaya Wallet",
-    image: "/yaya-logo.png",
-  },
-  {
-    id: "Amole",
-    name: "Amole",
-    image: "/amole-logo.png",
-  },
+  // {
+  //   id: "yaya",
+  //   name: "Yaya Wallet",
+  //   image: "/yaya-logo.png",
+  // },
+  // {
+  //   id: "Amole",
+  //   name: "Amole",
+  //   image: "/amole-logo.png",
+  // },
 ];
 
 export default function PaymentMethodSelector({
