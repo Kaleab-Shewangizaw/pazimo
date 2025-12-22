@@ -151,8 +151,8 @@ function EventDetailContent() {
         );
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.provider) {
-            setActivePaymentProvider(data.provider);
+          if (data.success && data.data && data.data.activeProvider) {
+            setActivePaymentProvider(data.data.activeProvider);
           }
         }
       } catch (error) {
