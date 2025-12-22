@@ -454,6 +454,7 @@ function EventDetailContent() {
     }
 
     setIsSantimLoading(true);
+    // toast.info(`Initiating payment via ${activePaymentProvider}...`);
     try {
       const selectedType = ticketsToDisplay.find(
         (t) => t.name === selectedTicketType
@@ -525,6 +526,13 @@ function EventDetailContent() {
         activePaymentProvider === "CHAPA"
           ? "/api/tickets/ticket/initiate/chapa"
           : "/api/tickets/ticket/initiate";
+
+      // console.log("Initiating payment:", {
+      //   provider: activePaymentProvider,
+      //   endpoint,
+      //   method: santimForm.paymentMethod,
+      //   phone: formattedPhone,
+      // });
 
       const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
         method: "POST",
@@ -1589,7 +1597,7 @@ function EventDetailContent() {
             {/* Payment Methods */}
             <div>
               <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
-                Payment Method
+                Payment Method ({activePaymentProvider})
               </Label>
               <PaymentMethodSelector
                 phoneNumber={santimForm.phoneNumber}
