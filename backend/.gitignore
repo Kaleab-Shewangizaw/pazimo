@@ -8,6 +8,7 @@ node_modules/
 logs
 *.log
 npm-debug.log*
+nodemon.json*
 
 # Runtime data
 pids
