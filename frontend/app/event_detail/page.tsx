@@ -151,7 +151,9 @@ function EventDetailContent() {
         );
         if (response.ok) {
           const data = await response.json();
-          setActivePaymentProvider(data.data.activeProvider);
+          if (data.success && data.provider) {
+            setActivePaymentProvider(data.provider);
+          }
         }
       } catch (error) {
         console.error("Failed to fetch active payment provider", error);
@@ -159,6 +161,15 @@ function EventDetailContent() {
     };
     fetchProvider();
   }, []);
+
+  // Update santimForm when provider changes
+  useEffect(() => {
+    setSantimForm((prev) => ({
+      ...prev,
+      paymentMethod:
+        activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+    }));
+  }, [activePaymentProvider]);
 
   // Auth store
   // const { login, signup } = useAuthStore();
