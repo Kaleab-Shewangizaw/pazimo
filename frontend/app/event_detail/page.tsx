@@ -1596,9 +1596,9 @@ function EventDetailContent() {
 
             {/* Payment Methods */}
             <div>
-              <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+              {/* <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
                 Payment Method ({activePaymentProvider})
-              </Label>
+              </Label> */}
               <PaymentMethodSelector
                 phoneNumber={santimForm.phoneNumber}
                 selectedMethod={santimForm.paymentMethod}
