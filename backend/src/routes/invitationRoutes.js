@@ -84,6 +84,7 @@ router.post("/invitations", protect, async (req, res) => {
         (req.body.contactType === "phone" ? req.body.contact : undefined),
       type: type,
       guestType: req.body.guestType || "guest",
+      ticketType: req.body.ticketType || "Regular",
     };
 
     const invitation = new Invitation(invitationData);

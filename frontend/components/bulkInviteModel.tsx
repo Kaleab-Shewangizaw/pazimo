@@ -128,6 +128,8 @@ export default function BulkInvite({
     )
       return "Phone";
     if (h === "type" || h === "contacttype") return "Type";
+    if (h === "tickettype" || h === "ticket type" || h === "ticket")
+      return "TicketType";
     if (h === "amount" || h === "quantity" || h === "count") return "Amount";
     if (h === "message" || h === "note") return "Message";
     return header.trim(); // Return original if no match
@@ -219,14 +221,15 @@ export default function BulkInvite({
   };
 
   const downloadTemplate = (type: string) => {
-    let csvContent = "Name,Email,Phone,Type,Amount,Message\n";
+    let csvContent = "Name,Email,Phone,Type,Ticket Type,Amount,Message\n";
     if (type === "email") {
-      csvContent += "John Doe,johndoe@example.com,,Email,1,Hello John!\n";
+      csvContent +=
+        "John Doe,johndoe@example.com,,Email,Regular,1,Hello John!\n";
     } else if (type === "phone") {
-      csvContent += "Jane Doe,,+251911223344,Phone,1,Hello Jane!\n";
+      csvContent += "Jane Doe,,+251911223344,Phone,VIP,1,Hello Jane!\n";
     } else if (type === "mixed") {
       csvContent +=
-        "John Doe,johndoe@example.com,,Email,1,Hello John!\nJane Doe,,+251911223344,Phone,2,Hello Jane!\n";
+        "John Doe,johndoe@example.com,,Email,Regular,1,Hello John!\nJane Doe,,+251911223344,Phone,VIP,2,Hello Jane!\n";
     }
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -414,13 +417,21 @@ export default function BulkInvite({
                   <li className="flex items-start gap-2">
                     <span className="font-medium text-blue-600">Column D:</span>
                     <span>
+                      Ticket Type (Optional)
+                      <br />
+                      Example: &quot;Regular&quot;, &quot;VIP&quot;
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="font-medium text-blue-600">Column E:</span>
+                    <span>
                       Amount (Optional)
                       <br />
                       Number of tickets (Default: 1)
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column E:</span>
+                    <span className="font-medium text-blue-600">Column F:</span>
                     <span>
                       Message (Optional)
                       <br />

@@ -52,6 +52,9 @@ const validateBulkRows = (rows, eventId) => {
 
     // Preserve any organizer message provided per-row (case-insensitive keys)
     corrected.message = row.message || row.Message || row.MessageText || "";
+    
+    // Ticket Type
+    corrected.ticketType = row.ticketType || row.TicketType || "Regular";
 
     corrected.eventId = eventId;
     correctedRows.push(corrected);
@@ -192,7 +195,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           guestName: invitation.guestName,
           guestEmail: invitation.guestEmail,
           guestPhone: invitation.guestPhone,
-          ticketType: "Guest Ticket",
+          ticketType: invitation.ticketType || "Guest Ticket",
           ticketCount: invitation.amount, // Use amount from bulk data
           purchaseQuantity: invitation.amount,
           price: 0, // Free ticket
@@ -581,6 +584,7 @@ const createAndSendProfessionalInvitation = async (data) => {
       amount,
       message,
       guestType,
+      ticketType,
     } = data;
 
     const event = await Event.findById(eventId);
@@ -599,7 +603,7 @@ const createAndSendProfessionalInvitation = async (data) => {
         guestName,
         guestEmail,
         guestPhone,
-        ticketType: "Guest Ticket",
+        ticketType: ticketType || "Guest Ticket",
         ticketCount: parseInt(amount) || 1,
         purchaseQuantity: parseInt(amount) || 1,
         price: 0,
@@ -650,6 +654,7 @@ const createAndSendProfessionalInvitation = async (data) => {
       guestPhone,
       type: contactType,
       guestType: guestType || "guest",
+      ticketType: ticketType || "Regular",
       amount: parseInt(amount) || 1,
       status: "sent",
       paymentStatus: "paid",
@@ -777,6 +782,7 @@ const createPendingInvitation = async (req, res) => {
       amount,
       message,
       guestType,
+      ticketType,
     } = req.body;
 
     if (!req.user || !req.user._id) {
@@ -811,6 +817,7 @@ const createPendingInvitation = async (req, res) => {
       guestPhone,
       type: contactType,
       guestType: guestType || "guest",
+      ticketType: ticketType || "Regular",
       amount: parseInt(amount) || 1,
       status: "pending_payment",
       paymentStatus: "pending",

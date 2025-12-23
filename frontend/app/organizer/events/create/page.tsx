@@ -583,8 +583,19 @@ export default function CreateEventPage() {
       );
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to create event");
+        let errorMessage = "Failed to create event";
+        try {
+          const error = await response.json();
+          errorMessage = error.message || errorMessage;
+        } catch (e) {
+          console.error("Failed to parse error response:", e);
+          if (response.status === 413) {
+            errorMessage = "File too large. Please upload smaller images.";
+          } else {
+            errorMessage = `Server error (${response.status})`;
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       toast.success("Event created successfully");

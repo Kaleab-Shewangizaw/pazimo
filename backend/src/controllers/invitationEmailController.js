@@ -7,16 +7,13 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    host: "smtp.zoho.com",
-    port: 587,
-    secure: false, // Use TLS
+    service: "gmail",
     auth: {
-      user: process.env.EMAIL_USER_ZOHO,
-      pass: process.env.EMAIL_PASS_ZOHO,
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
   });
 };
-
 const createEmailTemplate = (
   event,
   invitation,
@@ -64,15 +61,6 @@ const createEmailTemplate = (
     actionText === "Buy Ticket"
       ? "Secure your spot today"
       : "Join us for an amazing event";
-
-  const messageSection = message
-    ? `
-      <div style="background: #fff5f5; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #fc8181;">
-        <h3 style="color: #c53030; margin: 0 0 10px 0; font-size: 18px; font-weight: 600;">💬 Message from Organizer</h3>
-        <p style="color: #2d3748; margin: 0; font-size: 16px; line-height: 1.6; font-style: italic;">"${message}"</p>
-      </div>
-  `
-    : "";
 
   // Custom Template for Signature Events
   if (isSignatureEvent) {
@@ -201,93 +189,264 @@ const createEmailTemplate = (
 
   return `
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${headerTitle}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <style>
-    .button {
-      display: inline-block;
-      background: linear-gradient(135deg, #d4af37 0%, #aa8c2c 100%);
-      color: #ffffff !important;
-      padding: 15px 40px;
-      border-radius: 30px;
-      text-decoration: none;
-      font-weight: 700;
-      font-size: 18px;
-      box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);
-      transition: all 0.3s ease;
+    body {
+      margin: 0;
+      padding: 0;
+      background: #12143e;
+      font-family: 'Inter', system-ui, sans-serif;
+      color: #f5f6ff;
     }
-    .button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 8px rgba(102, 126, 234, 0.6);
+
+    .container {
+      max-width: 620px;
+      margin: 32px auto;
+      background: #1b1c44;
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .top-strip {
+      height: 8px;
+      background: #5b5fdd;
+    }
+
+    /* HEADER */
+    .header {
+      padding: 26px 28px 22px;
+      text-align: center;
+      position: relative;
+    }
+
+    .decor-circle {
+      width: 80px;
+      height: 80px;
+      background: #ffd966;
+      border-radius: 50%;
+      position: absolute;
+      top: -30px;
+      right: -30px;
+    }
+
+    .decor-triangle {
+      width: 0;
+      height: 0;
+      border-left: 25px solid transparent;
+      border-right: 25px solid transparent;
+      border-bottom: 45px solid #5b5fdd;
+      position: absolute;
+      bottom: -20px;
+      left: -15px;
+    }
+
+    .logo {
+      margin-bottom: 14px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffd966;
+      margin-bottom: 6px;
+    }
+
+    .headline {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0;
+      color: #f5f6ff;
+    }
+
+    /* EVENT HERO */
+    .event-hero {
+      padding: 28px;
+      background: #32325E;
+      color: #ffffff;
+      border-radius: 18px;
+      position: relative;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+
+    .event-hero::before {
+      content: "";
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: #ffd966;
+      border-radius: 50%;
+      top: -20px;
+      left: -20px;
+      opacity: 0.6;
+    }
+
+    .event-hero::after {
+      content: "";
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background: #ff6f61;
+      border-radius: 14px;
+      bottom: -15px;
+      right: -15px;
+      opacity: 0.6;
+    }
+
+    .event-title {
+      font-size: 28px;
+      font-weight: 900;
+      margin-bottom: 14px;
+      line-height: 1.2;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .event-info {
+      font-size: 15px;
+      line-height: 1.6;
+      background: #1b1c44;
+      padding: 14px 16px;
+      border-radius: 12px;
+      color: #ffd966;
+      display: inline-block;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    /* CTA */
+    .cta-wrap {
+      text-align: center;
+      padding: 18px 0;
+      border-radius: 50px;
+    }
+
+    .cta {
+      display: inline-block;
+      padding: 14px 36px;
+      font-size: 16px;
+      font-weight: 800;
+      background: #ffd966;
+      color: #1b1c44;
+      text-decoration: none;
+      border-radius: 8px;
+      box-shadow: 0 10px 24px rgba(255, 217, 102, 0.55);
+    }
+
+    /* MESSAGE */
+    .message {
+      padding: 22px 28px;
+      background: #1b1c44;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      border-left: 4px solid #5b5fdd;
+    }
+
+    .message-label {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffd966;
+      margin-bottom: 8px;
+    }
+
+    .message-text {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #f5f6ff;
+      background: #12143e;
+      padding: 14px 16px;
+      border-radius: 12px;
+    }
+
+    /* FOOTER */
+    .footer {
+      padding: 22px;
+      text-align: center;
+      font-size: 13px;
+      color: #f5f6ffaa;
+      border-top: 1px solid #5b5fdd;
+    }
+
+    .footer a {
+      color: #ffd966;
+      font-weight: 600;
+      text-decoration: none;
     }
   </style>
 </head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); border-radius: 8px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center; border-radius: 8px 8px 0 0;">
-      <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🎉 ${headerTitle}</h1>
-      <p style="color: #e2e8f0; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">${headerSubtitle}</p>
-    </div>
-    <div style="padding: 40px 30px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h2 style="color: #1a202c; margin: 0 0 10px 0; font-size: 24px; font-weight: 600;">${
-          event.title
-        }</h2>
-        <p style="color: #4a5568; margin: 0; font-size: 16px; line-height: 1.5;">We're excited to have you join us!</p>
-      </div>
 
-      ${messageSection}
+<body>
+  <div class="container">
 
-      <div style="background: #f7fafc; border-radius: 12px; padding: 25px; margin: 25px 0; border-left: 4px solid #667eea;">
-        <h3 style="color: #2d3748; margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">📅 Event Details</h3>
-        <div style="display: grid; gap: 10px;">
-          <div style="display: flex; align-items: center;">
-            <span style="color: #667eea; font-weight: 600; width: 80px; display: inline-block;">📆 Date:</span>
-            <span style="color: #4a5568;">${eventDate}</span>
-          </div>
-          <div style="display: flex; align-items: center;">
-            <span style="color: #667eea; font-weight: 600; width: 80px; display: inline-block;">⏰ Time:</span>
-            <span style="color: #4a5568;">${eventTime}</span>
-          </div>
-          <div style="display: flex; align-items: center;">
-            <span style="color: #667eea; font-weight: 600; width: 80px; display: inline-block;">📍 Location:</span>
-            <span style="color: #4a5568;">${event.location}</span>
-          </div>
+    <div class="top-strip"></div>
+
+    <!-- HEADER -->
+    <div class="header">
+      <div class="decor-circle"></div>
+      <div class="decor-triangle"></div>
+
+      <!-- LOGO WITH LIGHT BACKGROUND -->
+      <div class="logo">
+        <div style="background: #ffffff; padding: 6px 12px; border-radius: 12px; display: inline-block;">
+          <img src="https://pazimo.com/logo.png"
+            onerror="this.onerror=null;this.src='https://pazimo.vercel.app/logo.png';" alt="Pazimo"
+            style="height:30px; display:block;" />
         </div>
       </div>
 
-      <div style="text-align: center; margin: 30px 0;">
-        <div style="background: linear-gradient(135deg, #48bb78 0%, #38a169 100%); border-radius: 12px; padding: 20px; margin: 20px 0;">
-          <h3 style="color: #ffffff; margin: 0 0 15px 0; font-size: 18px; font-weight: 600;">🎫 ${
-            actionText === "Buy Ticket" ? "Get Your Ticket" : "Your Invitation"
-          }</h3>
-          <p style="color: #f0fff4; margin: 0 0 15px 0; font-size: 14px;">
-            ${
-              actionText === "Buy Ticket"
-                ? "Click below to purchase your ticket"
-                : "Click the link below to view your ticket"
-            }
-          </p>
-          <a href="${actionLink}" class="button">${actionText}</a>
-        </div>
+      <div class="subtitle">${headerSubtitle}</div>
+      <h1 class="headline">${headerTitle}</h1>
+    </div>
+
+    <!-- EVENT HERO -->
+    <div class="event-hero">
+      <div class="event-title">${event.title}</div>
+      <div class="event-info">
+        ${eventDate}<br />
+        ${eventTime}<br />
+        ${event.location}
       </div>
     </div>
-    <div style="background: #2d3748; padding: 30px; text-align: center; border-radius: 0 0 8px 8px;">
-      <div style="margin-bottom: 20px;">
-        <img src="https://pazimo.com/logo.png" alt="Pazimo" style="height: 30px; opacity: 0.8;" />
-      </div>
-      <p style="color: #a0aec0; margin: 0 0 10px 0; font-size: 14px;">Powered by <strong style="color: #ffffff;">Pazimo Events</strong></p>
-      <!-- Unique identifier to prevent Gmail clipping/threading -->
-      <div style="display:none; opacity:0; font-size:1px; color:#000000;">${new Date().getTime()}-${Math.random()
+
+    <!-- CTA -->
+    <div class="cta-wrap">
+      <a href="${actionLink}" class="cta">${actionText}</a>
+    </div>
+
+    <!-- MESSAGE -->
+    ${
+      message
+        ? `
+    <div class="message">
+      <div class="message-label">Message from the Organizer</div>
+      <div class="message-text">${message}</div>
+    </div>
+    `
+        : ""
+    }
+
+    <!-- FOOTER -->
+    <div class="footer">
+      Powered by <a href="https://pazimo.com" target="_blank">pazimo.com</a><br />
+      Where people and events connect.
+      <div style="display:none;">${Date.now()}-${Math.random()
     .toString(36)
-    .substring(7)}</div>
+    .slice(2)}</div>
     </div>
+
   </div>
 </body>
+
 </html>`;
 };
 

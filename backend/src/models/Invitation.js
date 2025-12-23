@@ -33,6 +33,10 @@ const invitationSchema = new mongoose.Schema(
       enum: ["guest", "paid"],
       default: "guest",
     },
+    ticketType: {
+      type: String,
+      default: "Regular",
+    },
     type: {
       type: String,
       enum: ["email", "sms", "both"],

@@ -248,6 +248,7 @@ export default function InvitationPage() {
   const [message, setMessage] = useState("");
   const [qrCodeCount, setQrCodeCount] = useState(1);
   const [guestType, setGuestType] = useState<"guest" | "paid">("guest");
+  const [selectedTicketType, setSelectedTicketType] = useState("Regular");
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -577,6 +578,7 @@ export default function InvitationPage() {
       message,
       qrCodeCount,
       guestType,
+      ticketType: selectedTicketType,
       contactType,
       selectedEvent,
     });
@@ -704,6 +706,7 @@ export default function InvitationPage() {
               contact,
               contactType,
               guestType,
+              ticketType: pendingInvitation.ticketType,
               qrCodeCount,
               message,
               status: newInvitation.status,
@@ -1414,6 +1417,17 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
     }
   };
 
+  useEffect(() => {
+    if (selectedEvent?.ticketTypes && selectedEvent.ticketTypes.length > 0) {
+      const types = selectedEvent.ticketTypes.filter(
+        (t: any) => !t.name.toLowerCase().includes("group")
+      );
+      if (types.length > 0) {
+        setSelectedTicketType(types[0].name);
+      }
+    }
+  }, [selectedEvent]);
+
   if (!mounted) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -1850,6 +1864,31 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                     </div>
                   </div>
                 </div>
+
+                {/* Ticket Type Selection */}
+                {guestType !== "paid" && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-900 mb-2">
+                      Ticket Type
+                    </label>
+                    <select
+                      value={selectedTicketType}
+                      onChange={(e) => setSelectedTicketType(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="Regular">Regular</option>
+                      {selectedEvent?.ticketTypes
+                        ?.filter(
+                          (t: any) => !t.name.toLowerCase().includes("group")
+                        )
+                        .map((t: any) => (
+                          <option key={t._id || t.name} value={t.name}>
+                            {t.name}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Contact Input and QR Code Count Row */}
                 <div className="flex gap-4">

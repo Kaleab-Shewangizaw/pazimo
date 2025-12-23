@@ -7,6 +7,7 @@ export interface Row {
   Email: string;
   Phone: string;
   Type: "Email" | "Phone" | "Both";
+  TicketType?: string;
   Amount: number;
   Message: string;
   QR?: string;

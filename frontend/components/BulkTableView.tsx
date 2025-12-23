@@ -71,6 +71,16 @@ export default function EditableTable({
   const [activePaymentProvider, setActivePaymentProvider] = useState<
     "SANTIM" | "CHAPA"
   >("CHAPA");
+  const [ticketTypes, setTicketTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (event?.ticketTypes) {
+      const types = event.ticketTypes.filter(
+        (t) => !t.name.toLowerCase().includes("group")
+      );
+      setTicketTypes(types);
+    }
+  }, [event]);
 
   useEffect(() => {
     const fetchPaymentConfig = async () => {
@@ -317,6 +327,7 @@ export default function EditableTable({
           guestEmail: row.Email,
           guestPhone: row.Phone,
           type: row.Type.toLowerCase(),
+          ticketType: row.TicketType || "Regular",
           amount: row.Amount,
           qrCodecount: row.Amount,
           message: row.Message,
@@ -564,6 +575,7 @@ export default function EditableTable({
     "Email",
     "Phone",
     "Type",
+    "Ticket Type",
     "Amount",
     "Message",
     "QR",
@@ -708,6 +720,8 @@ export default function EditableTable({
                           ? "2.5rem"
                           : h === "Type"
                           ? "6rem"
+                          : h === "Ticket Type"
+                          ? "8rem"
                           : h === "Amount"
                           ? "5rem"
                           : undefined,
@@ -798,8 +812,25 @@ export default function EditableTable({
                           className="border px-2 py-1 rounded w-full text-xs"
                         >
                           <option value="Email">Email</option>
-                          <option value="Phone">Phone</option>
+                          <option value="Phone">SMS</option>
                           <option value="Both">Both</option>
+                        </select>
+                      )}
+
+                      {key === "Ticket Type" && (
+                        <select
+                          value={row.TicketType || "Regular"}
+                          onChange={(e) =>
+                            handleChange(i, "TicketType", e.target.value)
+                          }
+                          className="border px-2 py-1 rounded w-full text-xs"
+                        >
+                          <option value="Regular">Regular</option>
+                          {ticketTypes.map((t) => (
+                            <option key={t._id || t.name} value={t.name}>
+                              {t.name}
+                            </option>
+                          ))}
                         </select>
                       )}
 
