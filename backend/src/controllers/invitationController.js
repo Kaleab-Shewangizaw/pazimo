@@ -52,7 +52,7 @@ const validateBulkRows = (rows, eventId) => {
 
     // Preserve any organizer message provided per-row (case-insensitive keys)
     corrected.message = row.message || row.Message || row.MessageText || "";
-    
+
     // Ticket Type
     corrected.ticketType = row.ticketType || row.TicketType || "Regular";
 
