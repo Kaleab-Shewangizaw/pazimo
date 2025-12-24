@@ -20,6 +20,7 @@ interface InvitationData {
   status: string;
   qrCode?: string;
   event: EventData;
+  ticketType?: string;
 }
 
 function GuestInvitationContent() {
@@ -220,8 +221,20 @@ function GuestInvitationContent() {
               <rect x="60" y="20" width="8" height="8" fill="#f472b6" />
             </svg>
 
-            <h3 className="font-semibold text-gray-900 mb-3">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               Dear {invitation.guestName},
+              {invitation.ticketType &&
+                ["VIP", "VVIP"].includes(invitation.ticketType) && (
+                  <span
+                    className={`px-2 py-1 rounded-full text-xs font-bold ${
+                      invitation.ticketType === "VVIP"
+                        ? "bg-purple-100 text-purple-700 border border-purple-200"
+                        : "bg-amber-100 text-amber-700 border border-amber-200"
+                    }`}
+                  >
+                    {invitation.ticketType}
+                  </span>
+                )}
             </h3>
             <p className="text-gray-700 text-sm leading-relaxed">
               You are warmly invited to{" "}

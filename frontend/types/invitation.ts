@@ -30,6 +30,7 @@ export interface Invitation {
   contact: string;
   contactType: "email" | "phone";
   guestType: "guest" | "paid";
+  ticketType?: string;
   paymentStatus?: "paid" | "free";
   qrCodeCount: number;
   message?: string;

@@ -13,6 +13,8 @@ const axios = require("axios");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 
+const PaymentConfig = require("../models/PaymentConfig");
+
 // Initiate Direct Payment for Invitation
 const initiateInvitationPayment = async (req, res) => {
   try {
@@ -22,8 +24,18 @@ const initiateInvitationPayment = async (req, res) => {
       phoneNumber,
       invitationData,
       paymentMethod: reqPaymentMethod,
+      successUrl,
     } = req.body;
     const userId = req.user ? req.user._id : null;
+
+    // Check active payment provider
+    const config = await PaymentConfig.findOne().sort({ createdAt: -1 });
+    const activeProvider = config ? config.activeProvider : "SANTIM";
+
+    if (activeProvider === "CHAPA") {
+      // Redirect to Chapa handler
+      return initiateChapaInvitationPayment(req, res);
+    }
 
     // Generate a unique transaction ID
     const transactionId = uuidv4();
@@ -62,6 +74,7 @@ const initiateInvitationPayment = async (req, res) => {
           ? invitationData.selectedEvent.id || invitationData.selectedEvent._id
           : null),
       userId,
+      provider: "santim",
       ticketDetails: {
         qrCodeCount: invitationData.qrCodeCount,
         ...invitationData,

@@ -201,6 +201,9 @@ export default function SentInvitationsTable({
                   Guests / Tickets
                 </th>
                 <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
+                  Ticket Type
+                </th>
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
                   Sent At
                 </th>
                 <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900">
@@ -273,28 +276,24 @@ export default function SentInvitationsTable({
                       </div>
                     </td>
                     <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
-                      <div className="flex flex-col gap-1">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                            invitation.paymentStatus === "paid"
-                              ? "bg-green-100 text-green-800 border border-green-200"
-                              : "bg-blue-100 text-blue-800 border border-blue-200"
-                          }`}
-                        >
-                          <Ticket className="w-3 h-3" />
-                          {invitation.paymentStatus === "paid"
-                            ? "Paid"
-                            : "Guest"}
-                          <span className="ml-1 font-bold">
-                            ×{invitation.qrCodeCount}
-                          </span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                          invitation.paymentStatus === "paid"
+                            ? "bg-green-100 text-green-800 border border-green-200"
+                            : "bg-blue-100 text-blue-800 border border-blue-200"
+                        }`}
+                      >
+                        <Ticket className="w-3 h-3" />
+                        {invitation.paymentStatus === "paid" ? "Paid" : "Guest"}
+                        <span className="ml-1 font-bold">
+                          ×{invitation.qrCodeCount}
                         </span>
-                        {invitation.ticketType && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 w-fit">
-                            {invitation.ticketType} Guest
-                          </span>
-                        )}
-                      </div>
+                      </span>
+                    </td>
+                    <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                        {invitation.ticketType || "Regular"}
+                      </span>
                     </td>
                     <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 hidden lg:table-cell">
                       {invitation.sentAt}

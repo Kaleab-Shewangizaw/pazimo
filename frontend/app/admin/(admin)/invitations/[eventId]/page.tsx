@@ -56,6 +56,7 @@ interface InvitationData {
   };
   type: "email" | "sms" | "both";
   guestType: "guest" | "paid";
+  ticketType?: string;
   amount: number;
   status: string;
   paymentStatus: string;
@@ -229,6 +230,7 @@ export default function EventInvitationsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Guest</TableHead>
+                  <TableHead>Ticket Type</TableHead>
                   <TableHead>Organizer</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
@@ -265,6 +267,14 @@ export default function EventInvitationsPage() {
                           )}
                           {inv.guestEmail || inv.guestPhone}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className="bg-purple-50 text-purple-700 border-purple-200"
+                        >
+                          {inv.ticketType || "Regular"}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
