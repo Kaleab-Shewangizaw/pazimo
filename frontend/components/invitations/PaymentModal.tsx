@@ -17,6 +17,7 @@ interface PaymentModalProps {
     paymentMethod: string;
   }) => Promise<void>;
   onCancel: () => void;
+  activePaymentProvider?: "SANTIM" | "CHAPA";
 }
 
 export default function PaymentModal({
@@ -25,9 +26,18 @@ export default function PaymentModal({
   isSantimLoading,
   onPay,
   onCancel,
+  activePaymentProvider = "SANTIM",
 }: PaymentModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [selectedMethod, setSelectedMethod] = useState("Telebirr");
+  const [selectedMethod, setSelectedMethod] = useState(
+    activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr"
+  );
+
+  React.useEffect(() => {
+    setSelectedMethod(
+      activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr"
+    );
+  }, [activePaymentProvider]);
 
   const amount = (
     (pendingInvitation?.contactType === "email" ? pricing.email : pricing.sms) *
@@ -106,6 +116,7 @@ export default function PaymentModal({
               phoneNumber={phoneNumber}
               selectedMethod={selectedMethod}
               onSelect={setSelectedMethod}
+              provider={activePaymentProvider}
             />
           </div>
         </div>

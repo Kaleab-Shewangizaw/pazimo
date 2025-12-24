@@ -68,20 +68,6 @@ export default function EditableTable({
     success: unknown[];
     failed: unknown[];
   } | null>(null);
-  const [currentTransactionId, setCurrentTransactionId] = useState<
-    string | null
-  >(null);
-  const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
-  const [ticketTypes, setTicketTypes] = useState<any[]>([]);
-
-  useEffect(() => {
-    if (event?.ticketTypes) {
-      const types = event.ticketTypes.filter(
-        (t) => !t.name.toLowerCase().includes("group")
-      );
-      setTicketTypes(types);
-    }
-  }, [event]);
 
   useEffect(() => {
     setPaymentMethod(

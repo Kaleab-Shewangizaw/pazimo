@@ -94,6 +94,7 @@ export default function InvitationsPage() {
     pricing,
     pendingInvitation,
     isSantimLoading,
+    activePaymentProvider,
   } = useInvitationPage();
 
   useEffect(() => {
@@ -301,6 +302,7 @@ export default function InvitationsPage() {
           isSantimLoading={isSantimLoading}
           onPay={handleSantimPayment}
           onCancel={() => setShowPaymentModal(false)}
+          activePaymentProvider={activePaymentProvider}
         />
       )}
 
@@ -312,7 +314,11 @@ export default function InvitationsPage() {
       )}
 
       {showBulkModal && selectedEvent && (
-        <BulkInvite event={selectedEvent} setShowBulkModal={setShowBulkModal} />
+        <BulkInvite
+          event={selectedEvent}
+          setShowBulkModal={setShowBulkModal}
+          activePaymentProvider={activePaymentProvider}
+        />
       )}
     </div>
   );

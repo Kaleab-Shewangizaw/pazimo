@@ -126,41 +126,25 @@ export function useInvitationPage() {
 
   useEffect(() => {
     setMounted(true);
+    fetchEvents();
+    fetchSentInvitations();
+    fetchPricing();
 
-    const checkAuth = () => {
-      const authState = localStorage.getItem("auth-storage");
-      if (!authState) return false;
-
+    // Fetch payment config
+    const fetchConfig = async () => {
       try {
-        const { state } = JSON.parse(authState);
-        const { user, token, isAuthenticated } = state;
-
-        if (!isAuthenticated || !token || user.role !== "organizer")
-          return false;
-
-        localStorage.setItem("userId", user._id);
-        localStorage.setItem("userRole", user.role);
-        localStorage.setItem("token", token);
-
-        return true;
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payment/config`
+        );
+        const data = await res.json();
+        if (data.success) {
+          setActivePaymentProvider(data.data.activeProvider);
+        }
       } catch (error) {
-        console.error("Error parsing auth state:", error);
-        return false;
+        console.error("Failed to fetch payment config", error);
       }
     };
-
-    if (checkAuth()) {
-      const userId = localStorage.getItem("userId");
-      if (userId) {
-        loadEvents(userId);
-        // Fetch invitations after auth is confirmed
-        fetchSentInvitations();
-      }
-    } else {
-      // Try fetching anyway if userId exists in localStorage
-      fetchSentInvitations();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchConfig();
   }, []);
 
   useEffect(() => {
@@ -589,7 +573,7 @@ export function useInvitationPage() {
                 <rect width="110" height="110" rx="20" fill="#fbcfe8" />
               </svg>
               <!-- Ribbon curve -->
-              <svg width="400" height="80" style="position:absolute;top:0px;left:-50px;opacity:0.3;">
+              <svg width="400" height="80" style="position:absolute;top=0px;left:-50px;opacity:0.3;">
                 <path d="M0,40 Q150,0 300,40" stroke="#fbbf24" stroke-width="8" fill="transparent" />
               </svg>
               <svg width="400" height="80" style="position:absolute;bottom:0px;right:-100px;opacity:0.3;">
@@ -1422,5 +1406,6 @@ export function useInvitationPage() {
     handleSantimPayment,
     handleDownloadTicket,
     processPendingInvitation,
+    activePaymentProvider,
   };
 }
