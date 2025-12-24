@@ -76,6 +76,9 @@ const processSuccessfulPayment = async (payment) => {
     paymentReference: payment.transactionId,
     status: "active",
     paymentStatus: "completed",
+    message:
+      payment.message ||
+      (payment.ticketDetails && payment.ticketDetails.message),
   };
 
   // Handle User vs Guest
@@ -402,6 +405,7 @@ const createGuestTicket = async (req, res) => {
         rsvpLink: rsvpLink,
         rsvpStatus: "pending",
         qrCodeData: ticket.qrCode,
+        message,
       });
     } catch (invError) {
       console.error("Failed to create invitation record:", invError);
@@ -574,6 +578,7 @@ const processGuestInvitation = async (ticketId) => {
       paymentStatus: "paid",
       rsvpLink: rsvpLink,
       rsvpStatus: "pending",
+      message,
     });
     console.log(`Invitation record created successfully`);
   } catch (invitationError) {
@@ -851,6 +856,7 @@ const createInvitationTicket = async (req, res) => {
       paymentStatus: "paid",
       rsvpLink: rsvpLink,
       rsvpStatus: "pending",
+      message,
     });
 
     // Send Email

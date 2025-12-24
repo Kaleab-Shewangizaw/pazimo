@@ -21,6 +21,7 @@ interface InvitationData {
   qrCode?: string;
   event: EventData;
   ticketType?: string;
+  message?: string;
 }
 
 function GuestInvitationContent() {
@@ -236,20 +237,28 @@ function GuestInvitationContent() {
                   </span>
                 )}
             </h3>
-            <p className="text-gray-700 text-sm leading-relaxed">
-              You are warmly invited to{" "}
-              <strong>{invitation.event.title}</strong>.
-              <br />
-              <br />
-              {invitation.event.description ||
-                "We would be honored to have you join us."}
-              <br />
-              <br />
-              This invitation admits <strong>
-                {invitation.ticketCount}
-              </strong>{" "}
-              {invitation.ticketCount > 1 ? "people" : "person"}.
-            </p>
+            <div className="text-gray-700 text-sm leading-relaxed space-y-4">
+              <p>
+                You are warmly invited to{" "}
+                <strong>{invitation.event.title}</strong>.
+              </p>
+
+              {invitation.message && (
+                <p className="italic text-gray-800 border-l-4 border-blue-500 pl-3 py-1 bg-blue-50/50 rounded-r">
+                  &quot;{invitation.message}&quot;
+                </p>
+              )}
+
+              <p>
+                {invitation.event.description ||
+                  "We would be honored to have you join us."}
+              </p>
+
+              <p>
+                This invitation admits <strong>{invitation.ticketCount}</strong>{" "}
+                {invitation.ticketCount > 1 ? "people" : "person"}.
+              </p>
+            </div>
           </div>
 
           {/* Event Details */}
