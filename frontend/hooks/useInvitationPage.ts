@@ -318,6 +318,7 @@ export function useInvitationPage() {
         id: inv._id || inv.id || Math.random().toString(36).substr(2, 9),
         eventTitle: eventTitle,
         customerName: inv.guestName || inv.customerName || "Unknown Guest",
+        ticketType: inv.ticketType || "Regular",
         contact:
           inv.type === "email"
             ? inv.guestEmail
