@@ -126,7 +126,7 @@ export default function EventsPage() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events?detailed=true`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events?detailed=true&limit=10000`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
