@@ -1398,6 +1398,8 @@ export function useInvitationPage() {
     setQrCodeCount,
     guestType,
     setGuestType,
+    selectedTicketType,
+    setSelectedTicketType,
     isSubmitting,
     isSantimLoading,
 

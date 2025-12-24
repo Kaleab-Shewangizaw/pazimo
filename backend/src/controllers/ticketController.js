@@ -371,7 +371,7 @@ const createGuestTicket = async (req, res) => {
       guestName,
       guestEmail,
       guestPhone,
-      ticketType: ticketType || "General",
+      ticketType: ticketType || "Regular",
       ticketCount: ticketCount || 1,
       purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
@@ -395,7 +395,7 @@ const createGuestTicket = async (req, res) => {
         guestPhone,
         type: guestEmail ? "email" : "sms",
         guestType: "guest",
-        ticketType: ticketType || "General",
+        ticketType: ticketType || "Regular",
         amount: ticketCount || 1,
         status: "sent",
         paymentStatus: "paid",
@@ -421,7 +421,7 @@ const createGuestTicket = async (req, res) => {
 
       const invitationData = {
         guestName,
-        ticketType: ticket.ticketType || "General",
+        ticketType: ticket.ticketType || "Regular",
         uniqueId: ticket.ticketId,
         actionLink: rsvpLink,
         actionText: "Confirm Attendance",
@@ -567,6 +567,7 @@ const processGuestInvitation = async (ticketId) => {
       guestEmail: ticket.guestEmail,
       guestPhone: ticket.guestPhone,
       guestType: "guest",
+      ticketType: ticket.ticketType,
       type: ticket.guestEmail ? "email" : "sms",
       amount: ticket.ticketCount,
       status: "sent",
@@ -595,7 +596,7 @@ const processGuestInvitation = async (ticketId) => {
 
     const invitationData = {
       guestName: ticket.guestName,
-      ticketType: ticket.ticketType || "General",
+      ticketType: ticket.ticketType || "Regular",
       uniqueId: ticket.ticketId,
       actionLink: rsvpLink,
       actionText: "Confirm Attendance",
@@ -821,7 +822,7 @@ const createInvitationTicket = async (req, res) => {
       guestName,
       guestEmail,
       guestPhone,
-      ticketType: ticketType || "General", // Default or from body
+      ticketType: ticketType || "Regular", // Default or from body
       ticketCount: ticketCount || 1,
       purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
@@ -833,6 +834,24 @@ const createInvitationTicket = async (req, res) => {
     // Generate RSVP Link
     const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
     const rsvpLink = `${frontendUrl}/guest-invitation?inv=${ticket.ticketId}`;
+
+    // Create Invitation Record to track it
+    await Invitation.create({
+      invitationId: uuidv4(),
+      eventId,
+      organizerId: event.organizer,
+      guestName,
+      guestEmail,
+      guestPhone,
+      type: guestEmail ? "email" : "sms",
+      guestType: "guest",
+      ticketType: ticket.ticketType,
+      amount: ticketCount || 1,
+      status: "sent",
+      paymentStatus: "paid",
+      rsvpLink: rsvpLink,
+      rsvpStatus: "pending",
+    });
 
     // Send Email
     if (guestEmail) {
@@ -848,7 +867,7 @@ const createInvitationTicket = async (req, res) => {
 
       const invitationData = {
         guestName,
-        ticketType: ticket.ticketType || "General",
+        ticketType: ticket.ticketType || "Regular",
         uniqueId: ticket.ticketId,
         actionLink: rsvpLink,
         actionText: "Confirm Attendance",
