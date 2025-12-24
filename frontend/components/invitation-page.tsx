@@ -39,8 +39,6 @@ import BulkInvite from "./bulkInviteModel";
 import { useRouter, useSearchParams } from "next/navigation";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
-// const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
-
 interface Event {
   id: number;
   title: string;

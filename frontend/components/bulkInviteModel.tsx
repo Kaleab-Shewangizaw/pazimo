@@ -24,6 +24,7 @@ export default function BulkInvite({
   setShowBulkModal: (show: boolean) => void;
   activePaymentProvider: "SANTIM" | "CHAPA";
 }) {
+  console.log("BulkInvite activePaymentProvider:", activePaymentProvider);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [data, setData] = useState<Row[]>([]);
   const [missingColumns, setMissingColumns] = useState<string[]>([]);

@@ -134,7 +134,7 @@ export function useInvitationPage() {
     const fetchConfig = async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/payment/config`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`
         );
         const data = await res.json();
         if (data.success) {
@@ -1322,6 +1322,10 @@ export function useInvitationPage() {
     // Placeholder for download logic
     toast.info("Download ticket functionality");
   };
+
+  const [activePaymentProvider, setActivePaymentProvider] = useState<
+    "SANTIM" | "CHAPA"
+  >("CHAPA");
 
   return {
     // State

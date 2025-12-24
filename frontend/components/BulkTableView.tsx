@@ -24,8 +24,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-// const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
-
 interface EditableTableProps {
   event: Event;
   data: Row[];
@@ -42,9 +40,10 @@ export default function EditableTable({
   setData,
   setSelectedFile,
   setShowBulkModal,
-  activePaymentProvider,
+  activePaymentProvider = "SANTIM",
   ticketType,
 }: EditableTableProps) {
+  console.log("EditableTable activePaymentProvider:", activePaymentProvider);
   const [showDataTrimmed, setShowDataTrimmed] = useState(false);
   const [qrRow, setQrRow] = useState<Row | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

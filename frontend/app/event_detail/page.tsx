@@ -35,8 +35,6 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
-// const ACTIVE_PAYMENT_PROVIDER: "SANTIM" | "CHAPA" = "CHAPA";
-
 type TicketType = {
   _id: string;
   name: string;

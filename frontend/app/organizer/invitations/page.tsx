@@ -97,6 +97,11 @@ export default function InvitationsPage() {
     activePaymentProvider,
   } = useInvitationPage();
 
+  // Force re-render on activePaymentProvider change
+  useEffect(() => {
+    console.log("Active Payment Provider:", activePaymentProvider);
+  }, [activePaymentProvider]);
+
   useEffect(() => {
     const action = searchParams.get("action");
     const orderId = searchParams.get("orderId") || searchParams.get("txn");
