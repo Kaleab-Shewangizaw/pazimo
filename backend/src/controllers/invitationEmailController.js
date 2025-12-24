@@ -198,7 +198,7 @@ const createEmailTemplate = (
 </head>
 
 <body
-  style="margin:0;padding:0;background-color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+  style="margin:0;padding:0; background:#f5f7fb;background-color:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
     <tr>
       <td align="center" style="padding:32px 16px;">

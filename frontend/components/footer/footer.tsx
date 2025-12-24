@@ -91,7 +91,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Facebook, Twitter, Instagram, Linkedin, X } from "lucide-react";
+import { Facebook, Instagram, Linkedin, X } from "lucide-react";
 
 interface FooterProps {
   variant?: "default" | "signature";
@@ -256,7 +256,7 @@ export default function Footer({ variant = "default" }: FooterProps) {
             >
               Host your event with us and reach millions of users.
             </p>
-            <Link href="https://organizer.pazimo.com/">
+            <Link href="https://pazimo-organizer.vercel.app/">
               <Button className="bg-white text-[#0D47A1] hover:bg-gray-200 font-bold w-full transition-colors">
                 Register Your Event
               </Button>
