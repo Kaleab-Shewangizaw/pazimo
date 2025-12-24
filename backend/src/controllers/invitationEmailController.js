@@ -7,10 +7,12 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.zoho.com",
+    port: 587,
+    secure: false, // Use TLS
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: process.env.EMAIL_USER_ZOHO,
+      pass: process.env.EMAIL_PASS_ZOHO,
     },
   });
 };
