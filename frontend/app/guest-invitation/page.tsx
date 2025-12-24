@@ -1,15 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  QrCode,
-  Download,
-  Users,
-  BadgeCheck,
-} from "lucide-react";
+import { Calendar, Clock, MapPin, QrCode, Download, Users } from "lucide-react";
 import Image from "next/image";
 
 interface EventData {
@@ -71,6 +63,34 @@ function GuestInvitationContent() {
     }
   };
 
+  const handleStatusUpdate = async (status: "confirmed" | "declined") => {
+    if (!invitation) return;
+    setIsLoading(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${invitation.ticketId}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status }),
+        }
+      );
+      const result = await response.json();
+      if (response.ok) {
+        if (status === "confirmed") setIsConfirmed(true);
+        else setIsDeclined(true);
+      } else {
+        setError(result.message || "Failed to update status");
+      }
+    } catch (error) {
+      setError("An error occurred while updating status");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const formatLocation = (loc: string | { address: string }) =>
     typeof loc === "string" ? loc : loc.address;
   const formatDate = (dateStr: string) =>
@@ -102,11 +122,6 @@ function GuestInvitationContent() {
       <div className="max-w-3xl mx-auto space-y-6 relative">
         {/* HERO */}
         <div className="relative bg-white rounded-xl shadow-xl p-8 text-center overflow-hidden">
-          <div className="absolute top-4 right-4 bg-blue-400 text-white px-4 py-1 rounded-full text-sm font-semibold flex items-center gap-2 shadow">
-            {" "}
-            <Users className="w-4 h-4" /> Admits {invitation.ticketCount}{" "}
-            {invitation.ticketCount > 1 ? "People" : "Person"}{" "}
-          </div>
           {/* Decorations */}
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-yellow-200 rounded-full opacity-60 rotate-12" />
           <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-pink-200 rounded-lg opacity-50 -rotate-6" />
@@ -176,7 +191,7 @@ function GuestInvitationContent() {
           {/* Guest Hero Content */}
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             {isConfirmed
-              ? "You're Going!"
+              ? "You're Going! 🎊"
               : isDeclined
               ? "Maybe Next Time"
               : "You're Invited!"}
@@ -192,12 +207,7 @@ function GuestInvitationContent() {
             {invitation.event.title}
           </h2>
 
-          {invitation.event.organizer?.name && (
-            <p className="mt-2 text-sm text-gray-500 flex justify-center items-center gap-1">
-              <BadgeCheck className="w-4 h-4 text-blue-500" /> Organized by{" "}
-              {invitation.event.organizer.name}
-            </p>
-          )}
+          {/* Action Buttons */}
         </div>
 
         {/* Invitation + Details */}
@@ -256,10 +266,31 @@ function GuestInvitationContent() {
             </div>
           </div>
         </div>
+        {!isConfirmed && !isDeclined && (
+          <div className="flex justify-center gap-4 mt-6 relative z-10">
+            <button
+              onClick={() => handleStatusUpdate("confirmed")}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold shadow-lg transition-all transform hover:scale-105"
+            >
+              Confirm Attendance
+            </button>
+            <button
+              onClick={() => handleStatusUpdate("declined")}
+              className="bg-red-100 hover:bg-red-200 text-red-700 px-8 py-3 rounded-lg font-semibold shadow transition-all"
+            >
+              Decline
+            </button>
+          </div>
+        )}
 
         {/* QR */}
         {isConfirmed && invitation.qrCode && (
-          <div className="bg-white rounded-xl p-6 shadow text-center">
+          <div className="bg-white relative rounded-xl p-6 shadow text-center">
+            <div className=" my-3 mx-auto w-fit  bg-blue-400 text-white px-4 py-1 rounded-md text-sm font-semibold flex items-center gap-2 z-10 shadow">
+              {" "}
+              <Users className="w-4 h-4" /> Admits {invitation.ticketCount}{" "}
+              {invitation.ticketCount > 1 ? "People" : "Person"}{" "}
+            </div>
             <h3 className="font-semibold mb-4 flex items-center justify-center gap-2">
               <QrCode className="w-5 h-5 text-blue-600" />
               Digital Ticket (admits {invitation.ticketCount})

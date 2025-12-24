@@ -10,6 +10,8 @@ interface InviteModalProps {
   setContactType: (type: "email" | "phone") => void;
   guestType: "guest" | "paid";
   setGuestType: (type: "guest" | "paid") => void;
+  selectedTicketType: string;
+  setSelectedTicketType: (type: string) => void;
   contact: string;
   setContact: (contact: string) => void;
   qrCodeCount: number;
@@ -30,6 +32,8 @@ export default function InviteModal({
   setContactType,
   guestType,
   setGuestType,
+  selectedTicketType,
+  setSelectedTicketType,
   contact,
   setContact,
   qrCodeCount,
@@ -145,7 +149,25 @@ export default function InviteModal({
             </div>
           </div>
 
-          {/* Contact Input and QR Code Count Row */}
+          {/* Ticket Type Selection */}
+          {guestType !== "paid" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-900 mb-2">
+                Ticket Type
+              </label>
+              <select
+                value={selectedTicketType}
+                onChange={(e) => setSelectedTicketType(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+              >
+                <option value="Regular">Regular</option>
+                <option value="VIP">VIP</option>
+                <option value="VVIP">VVIP</option>
+              </select>
+            </div>
+          )}
+
+          {/* Contact Method and Guest Type Row */}
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-900 mb-2">

@@ -73,6 +73,8 @@ export default function InvitationsPage() {
     setQrCodeCount,
     guestType,
     setGuestType,
+    selectedTicketType,
+    setSelectedTicketType,
     contactType,
     setContactType,
     isSubmitting,
@@ -251,6 +253,8 @@ export default function InvitationsPage() {
           setQrCodeCount={setQrCodeCount}
           guestType={guestType}
           setGuestType={setGuestType}
+          selectedTicketType={selectedTicketType}
+          setSelectedTicketType={setSelectedTicketType}
           contactType={contactType}
           setContactType={setContactType}
           isSubmitting={isSubmitting}

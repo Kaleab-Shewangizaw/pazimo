@@ -195,7 +195,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           guestName: invitation.guestName,
           guestEmail: invitation.guestEmail,
           guestPhone: invitation.guestPhone,
-          ticketType: invitation.ticketType || "Guest Ticket",
+          ticketType: invitation.ticketType || "Regular",
           ticketCount: invitation.amount, // Use amount from bulk data
           purchaseQuantity: invitation.amount,
           price: 0, // Free ticket
@@ -262,7 +262,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
 
         const invitationData = {
           guestName: invitation.guestName,
-          ticketType: "Guest Ticket",
+          ticketType: invitation.ticketType || "Guest Ticket",
           uniqueId: uniqueId,
           actionLink: actionLink,
           actionText: actionText,
@@ -675,7 +675,7 @@ const createAndSendProfessionalInvitation = async (data) => {
 
       const invitationData = {
         guestName,
-        ticketType: "Guest Ticket",
+        ticketType: ticketType || "Guest Ticket",
         uniqueId: uniqueId,
         actionLink: actionLink,
         actionText: actionText,

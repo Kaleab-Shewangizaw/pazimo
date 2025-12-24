@@ -395,6 +395,7 @@ const createGuestTicket = async (req, res) => {
         guestPhone,
         type: guestEmail ? "email" : "sms",
         guestType: "guest",
+        ticketType: ticketType || "General",
         amount: ticketCount || 1,
         status: "sent",
         paymentStatus: "paid",

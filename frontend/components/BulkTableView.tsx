@@ -32,6 +32,8 @@ interface EditableTableProps {
   setData: (rows: Row[]) => void;
   setSelectedFile: (file: File | null) => void;
   setShowBulkModal: (show: boolean) => void | undefined;
+  activePaymentProvider: "SANTIM" | "CHAPA";
+  ticketType?: string;
 }
 
 export default function EditableTable({
@@ -40,6 +42,8 @@ export default function EditableTable({
   setData,
   setSelectedFile,
   setShowBulkModal,
+  activePaymentProvider,
+  ticketType,
 }: EditableTableProps) {
   const [showDataTrimmed, setShowDataTrimmed] = useState(false);
   const [qrRow, setQrRow] = useState<Row | null>(null);
@@ -68,9 +72,6 @@ export default function EditableTable({
     string | null
   >(null);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
-  const [activePaymentProvider, setActivePaymentProvider] = useState<
-    "SANTIM" | "CHAPA"
-  >("CHAPA");
   const [ticketTypes, setTicketTypes] = useState<any[]>([]);
 
   useEffect(() => {
@@ -81,25 +82,6 @@ export default function EditableTable({
       setTicketTypes(types);
     }
   }, [event]);
-
-  useEffect(() => {
-    const fetchPaymentConfig = async () => {
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success && data.data && data.data.activeProvider) {
-            setActivePaymentProvider(data.data.activeProvider);
-          }
-        }
-      } catch (error) {
-        console.error("Failed to fetch payment config:", error);
-      }
-    };
-    fetchPaymentConfig();
-  }, []);
 
   useEffect(() => {
     setPaymentMethod(
@@ -327,7 +309,7 @@ export default function EditableTable({
           guestEmail: row.Email,
           guestPhone: row.Phone,
           type: row.Type.toLowerCase(),
-          ticketType: row.TicketType || "Regular",
+          ticketType: row.TicketType || ticketType || "Regular",
           amount: row.Amount,
           qrCodecount: row.Amount,
           message: row.Message,
@@ -819,18 +801,15 @@ export default function EditableTable({
 
                       {key === "Ticket Type" && (
                         <select
-                          value={row.TicketType || "Regular"}
+                          value={row.TicketType || ticketType || "Regular"}
                           onChange={(e) =>
                             handleChange(i, "TicketType", e.target.value)
                           }
                           className="border px-2 py-1 rounded w-full text-xs"
                         >
                           <option value="Regular">Regular</option>
-                          {ticketTypes.map((t) => (
-                            <option key={t._id || t.name} value={t.name}>
-                              {t.name}
-                            </option>
-                          ))}
+                          <option value="VIP">VIP</option>
+                          <option value="VVIP">VVIP</option>
                         </select>
                       )}
 

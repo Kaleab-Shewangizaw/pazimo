@@ -103,14 +103,8 @@ export default function SentInvitationsTable({
     switch (status) {
       case "confirmed":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-500">
             <CheckCircle className="w-3 h-3" /> Confirmed
-          </span>
-        );
-      case "pending":
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
-            <Clock className="w-3 h-3" /> Pending
           </span>
         );
       case "declined":
@@ -121,8 +115,8 @@ export default function SentInvitationsTable({
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-            {status || "Pending"}
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+            <Clock className="w-3 h-3" /> Pending
           </span>
         );
     }
@@ -279,19 +273,28 @@ export default function SentInvitationsTable({
                       </div>
                     </td>
                     <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                          invitation.paymentStatus === "paid"
-                            ? "bg-green-100 text-green-800 border border-green-200"
-                            : "bg-blue-100 text-blue-800 border border-blue-200"
-                        }`}
-                      >
-                        <Ticket className="w-3 h-3" />
-                        {invitation.paymentStatus === "paid" ? "Paid" : "Guest"}
-                        <span className="ml-1 font-bold">
-                          ×{invitation.qrCodeCount}
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                            invitation.paymentStatus === "paid"
+                              ? "bg-green-100 text-green-800 border border-green-200"
+                              : "bg-blue-100 text-blue-800 border border-blue-200"
+                          }`}
+                        >
+                          <Ticket className="w-3 h-3" />
+                          {invitation.paymentStatus === "paid"
+                            ? "Paid"
+                            : "Guest"}
+                          <span className="ml-1 font-bold">
+                            ×{invitation.qrCodeCount}
+                          </span>
                         </span>
-                      </span>
+                        {invitation.ticketType && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200 w-fit">
+                            {invitation.ticketType} Guest
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 hidden lg:table-cell">
                       {invitation.sentAt}

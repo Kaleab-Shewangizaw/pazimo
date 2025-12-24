@@ -255,7 +255,10 @@ const createEmailTemplate = (
               <!-- Event Message -->
               <p
                 style="margin:16px auto 0;max-width:520px;font-size:16px;line-height:1.6;color:#4b5563;position:relative;z-index:1;">
-                ${headerSubtitle}
+                ${
+                  headerSubtitle ||
+                  "Please join us for a thoughtfully crafted event."
+                }
               </p>
 
               <!-- Organizer Message -->

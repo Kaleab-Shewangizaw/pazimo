@@ -18,14 +18,17 @@ import { Event } from "@/types/invitation";
 export default function BulkInvite({
   event,
   setShowBulkModal,
+  activePaymentProvider,
 }: {
   event: Event;
   setShowBulkModal: (show: boolean) => void;
+  activePaymentProvider: "SANTIM" | "CHAPA";
 }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [data, setData] = useState<Row[]>([]);
   const [missingColumns, setMissingColumns] = useState<string[]>([]);
   const [pricing, setPricing] = useState({ email: 2, sms: 5 });
+  const [ticketType, setTicketType] = useState("Regular");
 
   useEffect(() => {
     const fetchPricing = async () => {
@@ -258,7 +261,7 @@ export default function BulkInvite({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 max-h-screen">
-      <div className="bg-white border border-gray-200 rounded-xl max-w-6xl w-full p-6 md:p-8 shadow-xl relative">
+      <div className="bg-white border border-gray-200 rounded-xl max-w-8xl w-full p-6 md:p-8 shadow-xl relative">
         <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
           <FileSpreadsheet className="h-5 w-5 text-blue-600" />
           Bulk Invitation Upload
@@ -307,6 +310,24 @@ export default function BulkInvite({
         <div className="space-y-4">
           {!selectedFile && (
             <div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-900 mb-2">
+                  Default Ticket Type
+                </label>
+                <select
+                  value={ticketType}
+                  onChange={(e) => setTicketType(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                >
+                  <option value="Regular">Regular</option>
+                  <option value="VIP">VIP</option>
+                  <option value="VVIP">VVIP</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  This will be applied if not specified in the file.
+                </p>
+              </div>
+
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-medium text-gray-900">
                   Upload File
@@ -378,6 +399,8 @@ export default function BulkInvite({
               data={data}
               setData={setData}
               event={event}
+              activePaymentProvider={activePaymentProvider}
+              ticketType={ticketType}
             />
           )}
 

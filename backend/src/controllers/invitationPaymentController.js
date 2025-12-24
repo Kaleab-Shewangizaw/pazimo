@@ -425,7 +425,7 @@ const handlePaymentSuccess = async (payment) => {
         guestName: payment.guestName,
         guestEmail: payment.method === "email" ? payment.contact : undefined,
         guestPhone: payment.method === "phone" ? payment.contact : undefined,
-        ticketType: "Guest Ticket",
+        ticketType: ticketDetails.ticketType || "Guest Ticket",
         ticketCount: ticketDetails.qrCodeCount || 1,
         price: 0,
         status: "active",
@@ -470,7 +470,7 @@ const handlePaymentSuccess = async (payment) => {
         };
         const invitationData = {
           guestName: payment.guestName,
-          ticketType: "Guest Ticket",
+          ticketType: ticketDetails.ticketType || "Guest Ticket",
           uniqueId: ticketId,
         };
 
