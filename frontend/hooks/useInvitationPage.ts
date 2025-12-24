@@ -126,9 +126,12 @@ export function useInvitationPage() {
 
   useEffect(() => {
     setMounted(true);
-    fetchEvents();
+    const userId = localStorage.getItem("userId");
+    if (userId) {
+      loadEvents(userId);
+    }
     fetchSentInvitations();
-    fetchPricing();
+    // fetchPricing(); // This requires eventType, removing for now or should be called when event is selected
 
     // Fetch payment config
     const fetchConfig = async () => {
