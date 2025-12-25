@@ -46,6 +46,8 @@ const corsOptions = {
     "https://www.pazimo.com",
     "https://organizer.pazimo.com",
     "https://www.organizer.pazimo.com",
+    "https://www.pazimo-organizer.vercel.app",
+    "https://pazimo-organizer.vercel.app",
     process.env.FRONTEND_URL,
   ].filter(Boolean), // Allow both frontend URLs and filter out undefined
   credentials: true,
