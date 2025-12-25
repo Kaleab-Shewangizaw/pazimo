@@ -1022,6 +1022,16 @@ export function useInvitationPage() {
           }
         );
 
+        console.log("Sending invitation payload:", {
+          eventId: selectedEvent?.id,
+          guestName: customerName,
+          guestEmail: isEmail ? contact : undefined,
+          guestPhone: isPhone ? contact : undefined,
+          ticketCount: qrCodeCount,
+          message: message,
+          ticketType: ticketType || "Guest",
+        });
+
         const result = await response.json();
 
         if (response.ok && result.success) {

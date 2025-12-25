@@ -157,6 +157,7 @@ const processSuccessfulPayment = async (payment) => {
   // Create the ticket
   const ticket = await Ticket.create(ticketData);
   console.log(`Ticket created: ${ticket._id}`);
+  console.log("Created Ticket:", ticket); // Log the created ticket
 
   // Update event ticket quantity
   ticketTypeInfo.quantity -= ticketCount || 1;
@@ -802,6 +803,8 @@ const createInvitationTicket = async (req, res) => {
       message,
     } = req.body;
 
+    console.log("createInvitationTicket Body:", req.body);
+
     // Find the event
     const event = await Event.findById(eventId);
     if (!event) {
@@ -833,7 +836,7 @@ const createInvitationTicket = async (req, res) => {
       price: 0, // Free for guest
       status: "pending",
       paymentStatus: "completed", // Organizer handles payment
-      message,
+      message: message || "",
     });
 
     // Generate RSVP Link
@@ -856,7 +859,7 @@ const createInvitationTicket = async (req, res) => {
       paymentStatus: "paid",
       rsvpLink: rsvpLink,
       rsvpStatus: "pending",
-      message,
+      message: message || "",
     });
 
     // Send Email
@@ -890,7 +893,7 @@ const createInvitationTicket = async (req, res) => {
         invitationData,
         qrCodeUrl,
         eventImage,
-        message
+        message || ""
       );
 
       // We need the QR code from the ticket.
@@ -1695,7 +1698,7 @@ const createOnDoorTicket = async (req, res) => {
       method: paymentMethod || "CASH",
       price: totalPrice,
       eventId,
-      userId, // The admin/organizer who processed it
+      userId: userId, // The admin/organizer who processed it
       ticketDetails: {
         eventId,
         ticketTypeId: ticketType.name,

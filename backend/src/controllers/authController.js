@@ -1230,9 +1230,9 @@ const deleteAccount = async (req, res) => {
       });
     }
 
-    // Delete user's tickets
-    const Ticket = require("../models/Ticket");
-    await Ticket.deleteMany({ user: userId });
+    // don't Delete user's tickets we need them on the db
+    // const Ticket = require("../models/Ticket");
+    // await Ticket.deleteMany({ user: userId });
 
     // Delete user's wishlist items
     const Wishlist = require("../models/Wishlist");
