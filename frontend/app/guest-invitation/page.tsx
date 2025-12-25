@@ -322,7 +322,7 @@ function GuestInvitationContent() {
               alt="QR Code"
               width={192}
               height={192}
-              className="mx-auto border rounded-lg"
+              className="mx-auto border p-2 rounded-lg"
             />
             <button className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 mx-auto">
               <Download className="w-4 h-4" />
