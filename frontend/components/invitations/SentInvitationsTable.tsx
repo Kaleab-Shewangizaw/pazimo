@@ -277,11 +277,10 @@ export default function SentInvitationsTable({
                     </td>
                     <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
                       <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
-                          invitation.paymentStatus === "paid"
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${invitation.paymentStatus === "paid"
                             ? "bg-green-100 text-green-800 border border-green-200"
                             : "bg-blue-100 text-blue-800 border border-blue-200"
-                        }`}
+                          }`}
                       >
                         <Ticket className="w-3 h-3" />
                         {invitation.paymentStatus === "paid" ? "Paid" : "Guest"}
@@ -292,7 +291,7 @@ export default function SentInvitationsTable({
                     </td>
                     <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                        {invitation.ticketType || "Regular"}
+                        {invitation.ticketType}
                       </span>
                     </td>
                     <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 hidden lg:table-cell">
