@@ -1,4 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
+
 import { Button } from "@/components/ui/button";
 import {
   Share2,
@@ -10,7 +12,6 @@ import {
   ImageIcon,
   BookOpen,
   Ticket,
-  CreditCard,
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,6 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
+import { Metadata } from "next";
 
 type TicketType = {
   _id: string;
@@ -106,10 +108,98 @@ type PurchasedTicket = {
   ticketCount?: number;
 };
 
+type Props = {
+  searchParams: { id?: string };
+};
+
+export async function generateMetadata({
+  searchParams,
+}: Props): Promise<Metadata> {
+  const eventId = searchParams.id;
+
+  if (!eventId) {
+    return {
+      title: "Event Not Found",
+      description: "The requested event could not be found.",
+    };
+  }
+
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`,
+      { next: { revalidate: 60 } }
+    );
+
+    if (!res.ok) throw new Error("Event not found");
+
+    const { data: event } = await res.json();
+
+    const title = `${event.title} | Buy Tickets Online`;
+    const description =
+      event.description?.slice(0, 160) ||
+      `Join ${event.title} on ${new Date(
+        event.startDate
+      ).toLocaleDateString()}. Get your tickets now!`;
+
+    const coverImage = event.coverImages?.[0]
+      ? event.coverImages[0].startsWith("http")
+        ? event.coverImages[0]
+        : `${process.env.NEXT_PUBLIC_API_URL}${
+            event.coverImages[0].startsWith("/")
+              ? event.coverImages[0]
+              : `/${event.coverImages[0]}`
+          }`
+      : null;
+
+    const ogImage = coverImage || "/og-fallback.png";
+
+    const url = `${
+      process.env.NEXT_PUBLIC_FRONTEND_URL || "https://yourdomain.com"
+    }/event_detail?id=${eventId}`;
+
+    return {
+      title,
+      description,
+      keywords: [
+        event.title,
+        event.category?.name,
+        "event tickets",
+        "Ethiopia events",
+        "buy tickets online",
+        event.location.city,
+      ].filter(Boolean),
+      openGraph: {
+        title,
+        description,
+        url,
+        siteName: "Your Ticket Platform",
+        images: [{ url: ogImage, width: 1200, height: 630, alt: event.title }],
+        locale: "en_US",
+        type: "website",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description,
+        images: [ogImage],
+      },
+      robots: { index: true, follow: true },
+      alternates: { canonical: url },
+    };
+  } catch {
+    return {
+      title: "Event Not Found",
+      description: "The event you're looking for is no longer available.",
+      robots: { index: false, follow: false },
+    };
+  }
+}
+
 function EventDetailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const eventId = searchParams.get("id");
+
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTicketType, setSelectedTicketType] = useState<string>("");
@@ -124,21 +214,22 @@ function EventDetailContent() {
   const [activePaymentProvider, setActivePaymentProvider] = useState<
     "SANTIM" | "CHAPA"
   >("CHAPA");
-
   const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
   const [user, setUser] = useState<User | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [shareQrUrl, setShareQrUrl] = useState<string>("");
-
   const [santimForm, setSantimForm] = useState({
     fullName: "",
     email: "",
     phoneNumber: "",
-    paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+    paymentMethod: "telebirr",
   });
   const [isSantimLoading, setIsSantimLoading] = useState(false);
+  const [currentTransactionId, setCurrentTransactionId] = useState<
+    string | null
+  >(null);
+
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -149,18 +240,15 @@ function EventDetailContent() {
         );
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.data && data.data.activeProvider) {
+          if (data.success && data.data?.activeProvider) {
             setActivePaymentProvider(data.data.activeProvider);
           }
         }
-      } catch (error) {
-        console.error("Failed to fetch active payment provider", error);
-      }
+      } catch {}
     };
     fetchProvider();
   }, []);
 
-  // Update santimForm when provider changes
   useEffect(() => {
     setSantimForm((prev) => ({
       ...prev,
@@ -169,46 +257,10 @@ function EventDetailContent() {
     }));
   }, [activePaymentProvider]);
 
-  // Auth store
-  // const { login, signup } = useAuthStore();
-
-  // Download QR code function
-  const downloadQRCode = (
-    qrCodeDataUrl: string,
-    ticketId: string,
-    ticketType: string
-  ) => {
-    const link = document.createElement("a");
-    link.href = qrCodeDataUrl;
-    link.download = `ticket-${ticketId}-${ticketType}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success(`QR code for ${ticketType} ticket downloaded!`);
-  };
-
-  // Download all QR codes as ZIP
-  const downloadAllQRCodes = async () => {
-    if (!purchasedTickets.length) return;
-    try {
-      purchasedTickets.forEach((ticket, index) => {
-        setTimeout(() => {
-          downloadQRCode(ticket.qrCode, ticket.ticketId, ticket.ticketType);
-        }, index * 500);
-      });
-      toast.success("Starting download of all QR codes...");
-    } catch (error) {
-      toast.error("Failed to download QR codes");
-    }
-  };
-
   useEffect(() => {
-    if (eventId) {
-      fetchEventDetails();
-    }
+    if (eventId) fetchEventDetails();
   }, [eventId]);
 
-  // Previously auto-triggered payment via shared link; now disabled by request.
   useEffect(() => {
     const qtyParam = searchParams.get("quantity");
     const typeParam = searchParams.get("ticketType");
@@ -219,32 +271,24 @@ function EventDetailContent() {
     if (typeParam && event?.ticketTypes?.some((t) => t.name === typeParam)) {
       setSelectedTicketType(typeParam);
     }
-    // Do not auto-call handleBuyClick; user must click Buy.
-  }, [searchParams, selectedTicketType, event]);
+  }, [searchParams, event]);
 
-  // Build share URL and generate QR code (simple event link only)
   useEffect(() => {
     if (!eventId) return;
-    try {
-      const builtUrl = `${
-        process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin
-      }/event_detail?id=${eventId}`;
-      setShareQrUrl(builtUrl);
-      (async () => {
-        try {
-          const QRCode = (await import("qrcode")).default;
-          const dataUrl = await QRCode.toDataURL(builtUrl, {
-            width: 256,
-            margin: 1,
-          });
-          setShareQrDataUrl(dataUrl);
-        } catch {
-          setShareQrDataUrl("");
-        }
-      })();
-    } catch {
-      // ignore URL build issues
-    }
+    const builtUrl = `${
+      process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin
+    }/event_detail?id=${eventId}`;
+    setShareQrUrl(builtUrl);
+    (async () => {
+      try {
+        const QRCode = (await import("qrcode")).default;
+        const dataUrl = await QRCode.toDataURL(builtUrl, {
+          width: 256,
+          margin: 1,
+        });
+        setShareQrDataUrl(dataUrl);
+      } catch {}
+    })();
   }, [eventId]);
 
   useEffect(() => {
@@ -258,9 +302,7 @@ function EventDetailContent() {
           if (derivedId) setUserId(derivedId);
           setUser(userData);
         }
-      } catch (e) {
-        console.error("Error parsing auth storage:", e);
-      }
+      } catch {}
     }
   }, []);
 
@@ -274,26 +316,33 @@ function EventDetailContent() {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId || ""}`
       );
-      if (!response.ok) {
-        throw new Error("Failed to fetch event details");
-      }
+      if (!response.ok) throw new Error("Failed to fetch");
       const data = await response.json();
       setEvent(data.data);
-      // Set the first available ticket as default selection
-      if (data.data.ticketTypes && data.data.ticketTypes.length > 0) {
-        const firstAvailableTicket = data.data.ticketTypes.find(
-          (ticket: TicketType) => ticket.available !== false
-        );
-        if (firstAvailableTicket) {
-          setSelectedTicketType(firstAvailableTicket.name);
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching event details:", error);
+      const firstAvailableTicket = data.data.ticketTypes.find(
+        (ticket: TicketType) => ticket.available !== false
+      );
+      if (firstAvailableTicket)
+        setSelectedTicketType(firstAvailableTicket.name);
+    } catch {
       toast.error("Failed to fetch event details");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const downloadQRCode = (
+    qrCodeDataUrl: string,
+    ticketId: string,
+    ticketType: string
+  ) => {
+    const link = document.createElement("a");
+    link.href = qrCodeDataUrl;
+    link.download = `ticket-${ticketId}-${ticketType}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success(`QR code for ${ticketType} downloaded!`);
   };
 
   const handleBuyClick = async () => {
@@ -301,84 +350,62 @@ function EventDetailContent() {
       toast.error("Please select ticket type and quantity");
       return;
     }
-    try {
-      const selectedType = ticketsToDisplay.find(
-        (t) => t.name === selectedTicketType
-      );
-      if (!selectedType) {
-        throw new Error("Selected ticket type not found");
-      }
-      localStorage.setItem("current_event_id", eventId || "");
 
-      // Pre-fill form with user data if logged in
-      const u = user || (useAuthStore.getState().user as any);
-      if (u) {
-        let phone = u.phone || u.phoneNumber || "";
-        // Normalize phone number for display (remove +251, 251, or leading 0)
-        phone = phone.replace(/\D/g, ""); // Remove non-digits
-        if (phone.startsWith("251")) phone = phone.substring(3);
-        if (phone.startsWith("0")) phone = phone.substring(1);
+    const selectedType = ticketsToDisplay.find(
+      (t) => t.name === selectedTicketType
+    );
+    if (!selectedType) return;
 
-        setSantimForm({
-          fullName: `${u.firstName} ${u.lastName || ""}`.trim(),
-          email: u.email || "",
-          phoneNumber: phone,
-          paymentMethod:
-            activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
-        });
-      } else {
-        // Clear form for guest
-        setSantimForm({
-          fullName: "",
-          email: "",
-          phoneNumber: "",
-          paymentMethod:
-            activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
-        });
-      }
+    localStorage.setItem("current_event_id", eventId || "");
 
-      // Open Payment modal
-      setShowPaymentModal(true);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to process payment");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const u = user || (useAuthStore.getState().user as any);
+    if (u) {
+      let phone = u.phone || u.phoneNumber || "";
+      phone = phone.replace(/\D/g, "");
+      if (phone.startsWith("251")) phone = phone.substring(3);
+      if (phone.startsWith("0")) phone = phone.substring(1);
+
+      setSantimForm({
+        fullName: `${u.firstName} ${u.lastName || ""}`.trim(),
+        email: u.email || "",
+        phoneNumber: phone,
+        paymentMethod:
+          activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+      });
+    } else {
+      setSantimForm({
+        fullName: "",
+        email: "",
+        phoneNumber: "",
+        paymentMethod:
+          activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+      });
     }
+
+    setShowPaymentModal(true);
   };
 
   const verifyAndShowTickets = async (txRef: string) => {
     try {
-      // Fetch tickets using public endpoint
       const ticketsResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`
       );
       if (ticketsResponse.ok) {
         const ticketsData = await ticketsResponse.json();
-        // The endpoint returns { success: true, data: [...] }
         const newTickets = ticketsData.data || [];
-
         setPurchasedTickets(newTickets);
         setShowTicketModal(true);
         setShouldShowTicketModal(true);
-        // toast.success("Payment successful! Your tickets are ready.");
-        // Clean URL if needed
         router.replace(`/event_detail?id=${eventId || ""}`);
-      } else {
-        throw new Error("Failed to fetch tickets");
       }
-    } catch (e) {
-      console.error("Ticket fetch error", e);
+    } catch {
       toast.error("Failed to load tickets");
     }
   };
 
-  const [currentTransactionId, setCurrentTransactionId] = useState<
-    string | null
-  >(null);
-
   const stopPolling = () => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
     setIsWaitingForPayment(false);
   };
 
@@ -395,21 +422,16 @@ function EventDetailContent() {
           }
         );
         toast.info("Payment cancelled");
-      } catch (e) {
-        console.error("Error cancelling payment:", e);
-      }
+      } catch {}
       setCurrentTransactionId(null);
     }
   };
 
   const pollPaymentStatus = async (txRef: string) => {
-    // Clear any existing interval
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-    }
+    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
 
     let attempts = 0;
-    const maxAttempts = 60; // 2 minutes (2s interval)
+    const maxAttempts = 60;
 
     pollingIntervalRef.current = setInterval(async () => {
       attempts++;
@@ -422,50 +444,41 @@ function EventDetailContent() {
         if (data.status === "COMPLETED" || data.status === "PAID") {
           stopPolling();
           setShowPaymentModal(false);
-
-          // Always show the modal instead of redirecting
           verifyAndShowTickets(txRef);
         } else if (data.status === "FAILED") {
           stopPolling();
-          toast.error("Payment failed. Please try again.");
+          toast.error("Payment failed");
         }
 
         if (attempts >= maxAttempts) {
           stopPolling();
-          toast.error(
-            "Payment verification timed out. Please check 'My Tickets' later."
-          );
+          toast.error("Payment verification timed out");
         }
-      } catch (e) {
-        console.error("Polling error", e);
-      }
+      } catch {}
     }, 2000);
   };
 
   const handleMobilePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSantimLoading) return;
-
     if (!santimForm.fullName || !santimForm.phoneNumber) {
       toast.error("Please fill in all required fields");
       return;
     }
 
     setIsSantimLoading(true);
-    // toast.info(`Initiating payment via ${activePaymentProvider}...`);
+
     try {
       const selectedType = ticketsToDisplay.find(
         (t) => t.name === selectedTicketType
       );
       if (!selectedType) throw new Error("Ticket type not found");
 
-      // Format phone number based on provider
       const formattedPhone =
         activePaymentProvider === "CHAPA"
           ? `0${santimForm.phoneNumber}`
           : `+251${santimForm.phoneNumber}`;
 
-      // Implicit Auth for Guest
       let finalUserId = userId;
       if (!finalUserId) {
         try {
@@ -485,52 +498,32 @@ function EventDetailContent() {
           if (authResponse.ok) {
             const authResult = await authResponse.json();
             const { user: userData, token } = authResult.data;
-
-            // Update store and state
             useAuthStore.getState().setAuth({ user: userData, token });
             setUser(userData);
             setUserId(userData._id);
             finalUserId = userData._id;
-
-            toast.success("Account created/verified successfully!");
+            toast.success("Account created/verified!");
           } else {
             const errorData = await authResponse.json();
-            // If auth fails (e.g. restricted account), stop payment
             toast.error(errorData.message || "Authentication failed");
             setIsSantimLoading(false);
             return;
           }
-        } catch (err) {
-          console.error("Implicit auth error:", err);
-          // Proceed as guest
-        }
+        } catch {}
       }
 
       const amount = selectedType.price * ticketQuantity;
-      const currency = "ETB";
-      // Generate orderId on client to ensure we have it for the success URL
       const orderId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // Generate ticketId on client
+        crypto.randomUUID?.() ||
+        `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const ticketId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        crypto.randomUUID?.() ||
+        `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       const endpoint =
         activePaymentProvider === "CHAPA"
           ? "/api/tickets/ticket/initiate/chapa"
           : "/api/tickets/ticket/initiate";
-
-      // console.log("Initiating payment:", {
-      //   provider: activePaymentProvider,
-      //   endpoint,
-      //   method: santimForm.paymentMethod,
-      //   phone: formattedPhone,
-      // });
 
       const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
         method: "POST",
@@ -539,12 +532,11 @@ function EventDetailContent() {
           amount,
           paymentReason: `Ticket Purchase - ${event?.title}`,
           phoneNumber: formattedPhone,
-          orderId, // Pass the generated ID
+          orderId,
           method: santimForm.paymentMethod,
           ticketDetails: {
-            // Changed from ticketData to ticketDetails to match backend
-            ticketId: ticketId,
-            eventId: eventId,
+            ticketId,
+            eventId,
             ticketTypeId: selectedType._id || selectedType.name,
             quantity: ticketQuantity,
             userId: finalUserId,
@@ -559,15 +551,13 @@ function EventDetailContent() {
       if (!response.ok)
         throw new Error(data.message || "Payment initiation failed");
 
-      // Handle auto-login if token/user returned
       if (data.token && data.user) {
         useAuthStore.getState().setAuth({ user: data.user, token: data.token });
         setUser(data.user);
-        setUserId(data.user.id || data.user._id);
-        toast.success("Account created/verified successfully!");
+        setUserId(data.user._id);
+        toast.success("Account created/verified!");
       }
 
-      // Handle Chapa Redirect
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
         return;
@@ -579,17 +569,14 @@ function EventDetailContent() {
         setCurrentTransactionId(data.transactionId);
         toast.success("Payment initiated! Please check your phone.");
         pollPaymentStatus(data.transactionId);
-      } else {
-        throw new Error("No transaction ID returned");
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-      console.error("Payment error:", error);
       toast.error(error.message || "Failed to initiate payment");
       setIsSantimLoading(false);
     }
   };
 
-  // Handle payment verification after returning from SantimPay
   useEffect(() => {
     const txRef = searchParams.get("tx_ref") || searchParams.get("orderId");
     const status = searchParams.get("status");
@@ -598,36 +585,27 @@ function EventDetailContent() {
     if ((txRef && status) || (paymentStatus === "success" && txRef)) {
       const processPayment = async () => {
         if (status === "success" || paymentStatus === "success") {
-          try {
-            toast.info("Verifying payment...");
-            // Poll for status completion
-            let attempts = 0;
-            const maxAttempts = 10;
-            let verified = false;
+          let attempts = 0;
+          const maxAttempts = 10;
+          let verified = false;
 
-            while (attempts < maxAttempts && !verified) {
-              const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`
-              );
-              const data = await response.json();
+          while (attempts < maxAttempts && !verified) {
+            const response = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`
+            );
+            const data = await response.json();
 
-              if (data.status === "COMPLETED") {
-                verified = true;
-                verifyAndShowTickets(txRef);
-              } else {
-                await new Promise((resolve) => setTimeout(resolve, 2000));
-                attempts++;
-              }
+            if (data.status === "COMPLETED") {
+              verified = true;
+              verifyAndShowTickets(txRef);
+            } else {
+              await new Promise((resolve) => setTimeout(resolve, 2000));
+              attempts++;
             }
+          }
 
-            if (!verified) {
-              toast.error(
-                "Payment verification timed out. Please check 'My Tickets' later."
-              );
-            }
-          } catch (e) {
-            console.error("Payment processing error", e);
-            toast.error("Failed to verify payment");
+          if (!verified) {
+            toast.error("Payment verification timed out");
           }
         } else {
           toast.error("Payment was not successful");
@@ -641,9 +619,7 @@ function EventDetailContent() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D47A1] mx-auto"></div>
-        </div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D47A1]" />
       </div>
     );
   }
@@ -651,32 +627,26 @@ function EventDetailContent() {
   if (!event) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-[#0D47A1]">Event not found</p>
-        </div>
+        <p className="text-[#0D47A1]">Event not found</p>
       </div>
     );
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
-  };
 
-  const formatTimeWithAmPm = (time24?: string): string => {
+  const formatTimeWithAmPm = (time24?: string) => {
     if (!time24) return "";
     const [hourStr, minuteStr] = time24.split(":");
-    if (hourStr === undefined || minuteStr === undefined) return time24;
-    let hour = Number.parseInt(hourStr, 10);
-    const minute = Number.parseInt(minuteStr, 10);
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
     const ampm = hour >= 12 ? "PM" : "AM";
-    hour = hour % 12;
-    if (hour === 0) hour = 12;
-    const minuteFormatted = minute < 10 ? `0${minute}` : minute;
-    return `${hour}:${minuteFormatted} ${ampm}`;
+    hour = hour % 12 || 12;
+    return `${hour}:${minute < 10 ? "0" + minute : minute} ${ampm}`;
   };
 
   const formatTimeRange = (startTime?: string, endTime?: string) => {
@@ -688,10 +658,9 @@ function EventDetailContent() {
     return `${start} - ${end}`;
   };
 
-  const ticketsToDisplay = event.ticketTypes.filter((ticket) => {
-    // Show all tickets that are available (not explicitly set to false)
-    return ticket.available !== false;
-  });
+  const ticketsToDisplay = event.ticketTypes.filter(
+    (ticket) => ticket.available !== false
+  );
 
   const calculateTotal = () => {
     const selectedType = ticketsToDisplay.find(
@@ -700,70 +669,41 @@ function EventDetailContent() {
     return selectedType ? selectedType.price * ticketQuantity : 0;
   };
 
-  const getSelectedTicketType = () => {
-    return ticketsToDisplay.find((t) => t.name === selectedTicketType);
-  };
+  const getSelectedTicketType = () =>
+    ticketsToDisplay.find((t) => t.name === selectedTicketType);
 
   const isQuantityExceeded = () => {
     const selectedType = getSelectedTicketType();
     return selectedType ? ticketQuantity > selectedType.quantity : false;
   };
 
-  // Debug: Log ticket information
-  // console.log("=== TICKET DEBUG INFO ===");
-  // console.log("All tickets from API:", event.ticketTypes);
-  // console.log("Total tickets:", event.ticketTypes?.length || 0);
-  // console.log(
-  //   "Tickets with available=true:",
-  //   event.ticketTypes?.filter((t) => t.available === true).length || 0
-  // );
-  // console.log(
-  //   "Tickets with available=false:",
-  //   event.ticketTypes?.filter((t) => t.available === false).length || 0
-  // );
-  // console.log(
-  //   "Tickets with available=undefined:",
-  //   event.ticketTypes?.filter((t) => t.available === undefined).length || 0
-  // );
-  // console.log("Filtered tickets to display:", ticketsToDisplay);
-  // console.log("Tickets to display count:", ticketsToDisplay?.length || 0);
-  // console.log("Selected ticket type:", selectedTicketType);
-  // console.log("========================");
+  const getDayName = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", { weekday: "short" });
 
-  const getDayName = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      weekday: "short",
-    });
-  };
+  const getDayNumber = (dateString: string) =>
+    new Date(dateString).getDate().toString().padStart(2, "0");
 
-  const getDayNumber = (dateString: string) => {
-    return new Date(dateString).getDate().toString().padStart(2, "0");
-  };
+  const getMonthName = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", { month: "short" });
 
-  const getMonthName = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", { month: "short" });
+  const getCoverImageUrl = () => {
+    if (!event.coverImages?.[0]) return "/events/eventimg.png";
+    const img = event.coverImages[0];
+    return img.startsWith("http")
+      ? img
+      : `${process.env.NEXT_PUBLIC_API_URL}${
+          img.startsWith("/") ? img : `/${img}`
+        }`;
   };
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      {/* Hero Section */}
       <div className="relative w-full overflow-hidden">
-        {/* Mobile: Smaller Image with padding */}
         <div className="block md:hidden px-8 py-4">
           <div className="relative w-full max-w-md mx-auto">
             <Image
-              src={
-                event.coverImages && event.coverImages.length > 0
-                  ? event.coverImages[0].startsWith("http")
-                    ? event.coverImages[0]
-                    : `${process.env.NEXT_PUBLIC_API_URL}${
-                        event.coverImages[0].startsWith("/")
-                          ? event.coverImages[0]
-                          : `/${event.coverImages[0]}`
-                      }`
-                  : "/events/eventimg.png"
-              }
-              alt={event.title}
+              src={getCoverImageUrl()}
+              alt={`${event.title} - Event cover`}
               width={600}
               height={300}
               className="w-full h-auto object-cover rounded-lg shadow-md"
@@ -771,29 +711,19 @@ function EventDetailContent() {
             />
           </div>
         </div>
-        {/* Desktop: Banner with padding and border radius */}
+
         <div className="hidden md:block relative mx-4 mt-4 mb-8">
           <div className="relative h-[60vh] lg:h-[70vh] w-full rounded-2xl overflow-hidden shadow-lg">
             <Image
-              src={
-                event.coverImages && event.coverImages.length > 0
-                  ? event.coverImages[0].startsWith("http")
-                    ? event.coverImages[0]
-                    : `${process.env.NEXT_PUBLIC_API_URL}${
-                        event.coverImages[0].startsWith("/")
-                          ? event.coverImages[0]
-                          : `/${event.coverImages[0]}`
-                      }`
-                  : "/events/eventimg.png"
-              }
-              alt={event.title}
+              src={getCoverImageUrl()}
+              alt={`${event.title} - Event banner`}
               fill
               className="object-contain bg-black"
               priority
               sizes="100vw"
               quality={90}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0D47A1]/30 via-[#0D47A1]/60 to-[#0D47A1] rounded-2xl"></div>
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0D47A1]/30 via-[#0D47A1]/60 to-[#0D47A1] rounded-2xl" />
             <div className="absolute inset-0 flex flex-col justify-end p-6 md:p-12 lg:p-16 z-10">
               <Badge className="w-fit mb-4 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white text-sm px-3 py-1">
                 {event.category?.name || "Uncategorized"}
@@ -801,7 +731,6 @@ function EventDetailContent() {
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-4 text-white leading-tight">
                 {event.title}
               </h1>
-              {/* Desktop: Show all details */}
               <div className="flex flex-wrap gap-4 items-center mt-4 text-white">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-blue-300" />
@@ -844,9 +773,7 @@ function EventDetailContent() {
         </div>
       </div>
 
-      {/* Mobile: Calendar-style Title and Details Section */}
       <div className="block md:hidden px-4 py-4 bg-white">
-        {/* Title and Share Button */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <h1 className="text-xl font-bold tracking-tight text-gray-900 leading-tight flex-1">
             {event.title}
@@ -854,7 +781,7 @@ function EventDetailContent() {
           <Button
             variant="outline"
             size="sm"
-            className="text-gray-700 border-gray-300 bg-transparent hover:bg-gray-50 flex-shrink-0"
+            className="text-gray-700 border-gray-300 bg-transparent hover:bg-gray-50"
             onClick={() => {
               const shareUrl = `${
                 process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin
@@ -869,7 +796,7 @@ function EventDetailContent() {
                   .catch(() => {});
               } else {
                 navigator.clipboard.writeText(shareUrl);
-                toast.success("Link copied to clipboard!");
+                toast.success("Link copied!");
               }
             }}
           >
@@ -877,9 +804,7 @@ function EventDetailContent() {
           </Button>
         </div>
 
-        {/* Calendar-style Date Display and Event Details Layout */}
         <div className="flex gap-4 items-start">
-          {/* Calendar-style Date Box */}
           <div className="shrink-0 bg-white border border-gray-200 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
             <div className="text-xs font-medium text-gray-600 uppercase tracking-wide">
               {getDayName(event.startDate)}
@@ -892,9 +817,7 @@ function EventDetailContent() {
             </div>
           </div>
 
-          {/* Event Details */}
           <div className="flex-1 space-y-3">
-            {/* Location */}
             <div className="flex items-start gap-2 text-gray-700">
               <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
               <div>
@@ -906,33 +829,26 @@ function EventDetailContent() {
                 </div>
               </div>
             </div>
-
-            {/* Date Range */}
             <div className="flex items-center gap-2 text-gray-700">
               <Calendar className="h-4 w-4 flex-shrink-0 text-gray-600" />
               <span className="text-sm">
                 {formatDate(event.startDate)}
-                {event.endDate && event.endDate !== event.startDate && (
-                  <span> - {formatDate(event.endDate)}</span>
-                )}
+                {event.endDate &&
+                  event.endDate !== event.startDate &&
+                  ` - ${formatDate(event.endDate)}`}
               </span>
             </div>
-
-            {/* Time */}
             <div className="flex items-center gap-2 text-gray-700">
               <Clock className="h-4 w-4 flex-shrink-0 text-gray-600" />
               <span className="text-sm">
                 {formatTimeRange(event.startTime, event.endTime)}
               </span>
             </div>
-
-            {/* Organizer */}
             {event.organizer?.name && (
               <div className="text-xs text-gray-500">
                 by {event.organizer.name}
               </div>
             )}
-            {/* Age Restriction */}
             {event.ageRestriction?.hasRestriction && (
               <div className="flex items-center gap-2 text-gray-700">
                 <UserCheck className="h-4 w-4 flex-shrink-0 text-gray-600" />
@@ -956,22 +872,20 @@ function EventDetailContent() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* Left Column - Event Details (desktop only) */}
           <div className="lg:col-span-2 space-y-8 hidden lg:block">
             <Tabs defaultValue="about" className="w-full">
               <TabsList className="hidden md:flex bg-white border-b border-gray-200 w-full justify-start rounded-none h-14 p-0">
                 <TabsTrigger
                   value="about"
-                  className="rounded-none text-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-transparent h-14 px-6"
+                  className="rounded-none text-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-[#0D47A1] h-14 px-6"
                 >
                   About
                 </TabsTrigger>
                 <TabsTrigger
                   value="images"
-                  className="rounded-none text-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-transparent h-14 px-6"
+                  className="rounded-none text-gray-700 data-[state=active]:border-b-2 data-[state=active]:border-[#0D47A1] h-14 px-6"
                 >
                   Images
                 </TabsTrigger>
@@ -992,32 +906,28 @@ function EventDetailContent() {
                     <h2 className="text-2xl font-bold text-gray-900">
                       Event Images
                     </h2>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {event.coverImages.map((image, index) => (
-                          <div
-                            key={index}
-                            className="relative aspect-video rounded-lg overflow-hidden"
-                          >
-                            <Image
-                              src={
-                                image.startsWith("http")
-                                  ? image
-                                  : `${process.env.NEXT_PUBLIC_API_URL}${
-                                      image.startsWith("/")
-                                        ? image
-                                        : `/${image}`
-                                    }`
-                              }
-                              alt={`Cover image ${index + 1}`}
-                              fill
-                              className="object-cover hover:scale-105 transition-transform duration-300"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {event.coverImages.map((image, index) => (
+                        <div
+                          key={index}
+                          className="relative aspect-video rounded-lg overflow-hidden"
+                        >
+                          <Image
+                            src={
+                              image.startsWith("http")
+                                ? image
+                                : `${process.env.NEXT_PUBLIC_API_URL}${
+                                    image.startsWith("/") ? image : `/${image}`
+                                  }`
+                            }
+                            alt={`Cover image ${index + 1}`}
+                            fill
+                            className="object-cover hover:scale-105 transition-transform duration-300"
+                          />
+                        </div>
+                      ))}
                     </div>
-                    {event.eventImages && event.eventImages.length > 0 && (
+                    {event.eventImages?.length > 0 && (
                       <div className="space-y-4">
                         <h3 className="text-xl font-semibold text-gray-900">
                           Event Gallery
@@ -1059,7 +969,7 @@ function EventDetailContent() {
               </div>
             </Tabs>
           </div>
-          {/* Right Column - Ticket Purchase (Desktop Only) */}
+
           <div className="lg:col-span-1 hidden lg:block">
             <div className="bg-white rounded-xl border border-gray-200 p-6 sticky top-6 shadow-md">
               <h2 className="text-2xl text-center font-bold mb-6 text-gray-900">
@@ -1102,7 +1012,7 @@ function EventDetailContent() {
                 </RadioGroup>
                 {ticketsToDisplay.length === 0 && (
                   <div className="text-center py-6 text-gray-500">
-                    No tickets are currently available. Please check back later.
+                    No tickets are currently available.
                   </div>
                 )}
                 {ticketsToDisplay.length > 0 && (
@@ -1135,48 +1045,46 @@ function EventDetailContent() {
                         <Button
                           onClick={handleBuyClick}
                           disabled={isQuantityExceeded()}
-                          className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
+                          className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
                         >
                           Buy Ticket
                         </Button>
                       )}
-                    {false && shareQrDataUrl && <div />}
                   </>
                 )}
               </div>
             </div>
           </div>
         </div>
-        {/* Mobile: Tabs */}
+
         <div className="block lg:hidden">
           <Tabs defaultValue="tickets" className="w-full">
             <TabsList className="flex md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 w-full justify-around rounded-none h-12 p-0 shadow-t">
               <TabsTrigger
                 value="tickets"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-b-0 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs transition-colors"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs"
               >
-                <Ticket className="h-4 w-4 mb-0.5 data-[state=active]:text-[#0D47A1]" />
+                <Ticket className="h-4 w-4 mb-0.5" />
                 <span className="text-xs">Tickets</span>
               </TabsTrigger>
               <TabsTrigger
                 value="about"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-b-0 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs transition-colors"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs"
               >
-                <BookOpen className="h-4 w-4 mb-0.5 data-[state=active]:text-[#0D47A1]" />
+                <BookOpen className="h-4 w-4 mb-0.5" />
                 <span className="text-xs">About</span>
               </TabsTrigger>
               <TabsTrigger
                 value="images"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-b-0 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs transition-colors"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs"
               >
-                <ImageIcon className="h-4 w-4 mb-0.5 data-[state=active]:text-[#0D47A1]" />
+                <ImageIcon className="h-4 w-4 mb-0.5" />
                 <span className="text-xs">Images</span>
               </TabsTrigger>
             </TabsList>
             <div className="pb-16 md:pb-0 mt-0">
               <TabsContent value="tickets" className="mt-0">
                 <div className="space-y-6">
-                  {/* <h2 className="text-2xl font-bold text-gray-900 text-center">Get Your Tickets</h2> */}
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-md">
                     <div className="space-y-6">
                       <RadioGroup
@@ -1215,8 +1123,7 @@ function EventDetailContent() {
                       </RadioGroup>
                       {ticketsToDisplay.length === 0 && (
                         <div className="text-center py-6 text-gray-500">
-                          No tickets are currently available. Please check back
-                          later.
+                          No tickets are currently available.
                         </div>
                       )}
                       {ticketsToDisplay.length > 0 && (
@@ -1251,12 +1158,11 @@ function EventDetailContent() {
                               <Button
                                 onClick={handleBuyClick}
                                 disabled={isQuantityExceeded()}
-                                className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
                               >
                                 Buy Ticket
                               </Button>
                             )}
-                          {false && shareQrDataUrl && <div />}
                         </>
                       )}
                     </div>
@@ -1278,30 +1184,28 @@ function EventDetailContent() {
                   <h2 className="text-2xl font-bold text-gray-900">
                     Event Images
                   </h2>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {event.coverImages.map((image, index) => (
-                        <div
-                          key={index}
-                          className="relative aspect-video rounded-lg overflow-hidden"
-                        >
-                          <Image
-                            src={
-                              image.startsWith("http")
-                                ? image
-                                : `${process.env.NEXT_PUBLIC_API_URL}${
-                                    image.startsWith("/") ? image : `/${image}`
-                                  }`
-                            }
-                            alt={`Cover image ${index + 1}`}
-                            fill
-                            className="object-cover hover:scale-105 transition-transform duration-300"
-                          />
-                        </div>
-                      ))}
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {event.coverImages.map((image, index) => (
+                      <div
+                        key={index}
+                        className="relative aspect-video rounded-lg overflow-hidden"
+                      >
+                        <Image
+                          src={
+                            image.startsWith("http")
+                              ? image
+                              : `${process.env.NEXT_PUBLIC_API_URL}${
+                                  image.startsWith("/") ? image : `/${image}`
+                                }`
+                          }
+                          alt={`Cover image ${index + 1}`}
+                          fill
+                          className="object-cover hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                    ))}
                   </div>
-                  {event.eventImages && event.eventImages.length > 0 && (
+                  {event.eventImages?.length > 0 && (
                     <div className="space-y-4">
                       <h3 className="text-xl font-semibold text-gray-900">
                         Event Gallery
@@ -1342,8 +1246,7 @@ function EventDetailContent() {
           </Tabs>
         </div>
       </div>
-      <div className="hidden md:block"></div>
-      {/* Ticket Modal */}
+
       <Dialog
         open={showTicketModal || shouldShowTicketModal}
         onOpenChange={(open) => {
@@ -1356,9 +1259,7 @@ function EventDetailContent() {
             <h2 className="text-2xl font-bold mb-1">You&apos;re Going!</h2>
             <p className="text-blue-100 text-sm">Your ticket is ready</p>
           </div>
-
           <div className="p-6">
-            {/* Event Details */}
             <div className="text-center mb-6">
               <h3 className="text-xl font-bold text-gray-900 mb-2">
                 {event.title}
@@ -1377,16 +1278,13 @@ function EventDetailContent() {
                 </div>
               </div>
             </div>
-
             <Separator className="my-6" />
-
             {purchasedTickets.length > 0 && (
               <div className="space-y-6">
                 {(() => {
                   const ticket = purchasedTickets[currentTicketIndex];
                   return (
-                    <div className="flex flex-col items-center animate-in fade-in zoom-in duration-300">
-                      {/* QR Code */}
+                    <div className="flex flex-col items-center">
                       <div className="bg-white p-3 rounded-xl border-2 border-dashed border-gray-300 mb-5 shadow-sm">
                         <Image
                           src={ticket.qrCode ?? "/events/sampleqr.png"}
@@ -1396,13 +1294,11 @@ function EventDetailContent() {
                           className="rounded-lg"
                         />
                       </div>
-
-                      {/* Ticket Info */}
                       <div className="text-center space-y-2 w-full">
                         <div className="flex justify-center">
                           <Badge
                             variant="secondary"
-                            className="text-base px-6 py-1.5 bg-blue-50 text-[#0D47A1] hover:bg-blue-100 border-blue-100"
+                            className="text-base px-6 py-1.5 bg-blue-50 text-[#0D47A1]"
                           >
                             Admits: {ticket.ticketCount || 1} Person
                             {(ticket.ticketCount || 1) > 1 ? "s" : ""}
@@ -1418,8 +1314,6 @@ function EventDetailContent() {
                     </div>
                   );
                 })()}
-
-                {/* Navigation if multiple */}
                 {purchasedTickets.length > 1 && (
                   <div className="flex items-center justify-center gap-4 pt-2">
                     <Button
@@ -1470,10 +1364,9 @@ function EventDetailContent() {
               </div>
             )}
           </div>
-
           <div className="p-4 bg-gray-50 border-t flex gap-3">
             <Button
-              className="flex-1 bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:text-gray-900"
+              className="flex-1 bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
               variant="outline"
               onClick={() => {
                 const ticket = purchasedTickets[currentTicketIndex];
@@ -1487,7 +1380,7 @@ function EventDetailContent() {
               <Download className="mr-2 h-4 w-4" /> Save Image
             </Button>
             <Button
-              className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white shadow-md shadow-blue-900/10"
+              className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white shadow-md"
               onClick={() => {
                 setShowTicketModal(false);
                 setShouldShowTicketModal(false);
@@ -1499,8 +1392,6 @@ function EventDetailContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Auth Modal Removed */}
-      {/* Payment Modal */}
       <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
         <DialogContent className="max-w-md rounded-xl max-h-[90vh] overflow-y-auto top-4 translate-y-0">
           <DialogHeader>
@@ -1511,11 +1402,7 @@ function EventDetailContent() {
               Complete your purchase securely
             </DialogDescription>
           </DialogHeader>
-
           <form onSubmit={handleMobilePayment} className="space-y-6 pt-2">
-            {/* Order Summary Removed */}
-
-            {/* Personal Info */}
             <div className="space-y-3">
               {!user && (
                 <div>
@@ -1537,7 +1424,6 @@ function EventDetailContent() {
                   />
                 </div>
               )}
-
               <div className="grid grid-cols-1 gap-3">
                 {!user && (
                   <div>
@@ -1555,7 +1441,6 @@ function EventDetailContent() {
                         setSantimForm({ ...santimForm, email: e.target.value })
                       }
                       placeholder="Email address"
-                      required
                       className="mt-1"
                     />
                   </div>
@@ -1567,15 +1452,13 @@ function EventDetailContent() {
                   >
                     Phone
                   </Label>
-                  <div className="flex items-center border rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                  <div className="flex items-center border rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500">
                     <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r text-sm font-medium">
                       +251
                     </div>
                     <Input
                       id="santim_phone"
                       type="tel"
-                      // change the value to 9 digits without the country code
-
                       value={santimForm.phoneNumber}
                       onChange={(e) => {
                         let val = e.target.value.replace(/\D/g, "");
@@ -1591,12 +1474,7 @@ function EventDetailContent() {
                 </div>
               </div>
             </div>
-
-            {/* Payment Methods */}
             <div>
-              {/* <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
-                Payment Method ({activePaymentProvider})
-              </Label> */}
               <PaymentMethodSelector
                 phoneNumber={santimForm.phoneNumber}
                 selectedMethod={santimForm.paymentMethod}
@@ -1606,8 +1484,6 @@ function EventDetailContent() {
                 provider={activePaymentProvider}
               />
             </div>
-
-            {/* Actions */}
             <div className="flex gap-3 pt-2">
               <Button
                 type="button"
@@ -1640,14 +1516,9 @@ function EventDetailContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Waiting for Payment Modal */}
       <Dialog
         open={isWaitingForPayment}
-        onOpenChange={(open) => {
-          if (!open) {
-            handleCancelPayment();
-          }
-        }}
+        onOpenChange={(open) => !open && handleCancelPayment()}
       >
         <DialogContent className="max-w-sm rounded-xl p-6 text-center">
           <DialogHeader>
@@ -1659,10 +1530,10 @@ function EventDetailContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-center py-6">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]" />
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            We are waiting for confirmation from the payment provider...
+            We are waiting for confirmation...
           </p>
           <Button
             variant="outline"
@@ -1679,7 +1550,13 @@ function EventDetailContent() {
 
 export default function EventDetailPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          Loading event...
+        </div>
+      }
+    >
       <EventDetailContent />
     </Suspense>
   );
