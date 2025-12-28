@@ -69,7 +69,10 @@ export default function CustomersPage() {
         const token = localStorage.getItem("token");
         const userId = localStorage.getItem("userId");
 
-        if (!token || !userId) return;
+        if (!token || !userId) {
+          toast.error("Authentication required");
+          return;
+        }
 
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/events/organizer/${userId}`,
@@ -85,8 +88,7 @@ export default function CustomersPage() {
           const allEvents = data.events || data.data || [];
           setEvents(allEvents);
 
-          // Select the first event by default if available
-          if (allEvents.length > 0) {
+          if (allEvents.length > 0 && !selectedEventId) {
             setSelectedEventId(allEvents[0]._id);
           }
         } else {
@@ -129,13 +131,13 @@ export default function CustomersPage() {
           const data = await response.json();
           setTickets(data.tickets || []);
         } else {
-          // If 401/403, it might be because the user is not the organizer (shouldn't happen if logic is correct)
-          console.error("Failed to fetch tickets");
           setTickets([]);
+          toast.error("Failed to load tickets");
         }
       } catch (error) {
         console.error("Error fetching tickets:", error);
         toast.error("Error loading customers");
+        setTickets([]);
       } finally {
         setIsLoadingTickets(false);
       }
@@ -144,15 +146,43 @@ export default function CustomersPage() {
     fetchTickets();
   }, [selectedEventId]);
 
-  // Reset pagination when event or search changes
+  // Reset pagination on filter change
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedEventId, searchQuery]);
 
-  // Filter tickets based on search
+  const selectedEvent = events.find((e) => e._id === selectedEventId);
+
+  // Calculate correct ticket quantity (handles old price changes before Dec 14, 2025)
+  const getTicketQuantity = (ticket: Ticket): number => {
+    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+    const cutoffDate = new Date("2025-12-14T00:00:00Z");
+    const ticketDate = new Date(ticket.createdAt);
+
+    if (
+      ticketDate < cutoffDate &&
+      selectedEvent?.ticketTypes &&
+      ticket.price > 0
+    ) {
+      const type = selectedEvent.ticketTypes.find(
+        (t) => t.name.toLowerCase() === ticket.ticketType.toLowerCase()
+      );
+
+      if (type && type.price > 0) {
+        const expectedTotal = quantity * type.price;
+        if (Math.abs(expectedTotal - ticket.price) > 1) {
+          const calculated = Math.round(ticket.price / type.price);
+          if (calculated > 0) return calculated;
+        }
+      }
+    }
+
+    return quantity;
+  };
+
+  // Filter paid tickets only (exclude free/invitation)
   const filteredTickets = tickets.filter((ticket) => {
-    // Match admin/tickets page logic: Include all tickets with price > 0
-    // This aligns with the Gross Revenue calculation
     if (!ticket.price || ticket.price <= 0) return false;
 
     const searchLower = searchQuery.toLowerCase();
@@ -169,52 +199,24 @@ export default function CustomersPage() {
     );
   });
 
-  const selectedEvent = events.find((e) => e._id === selectedEventId);
+  // Group tickets by type + price to show "Regular @ 500 - 30 tickets"
+  const ticketsAtPriceMap: { [key: string]: number } = {};
+  filteredTickets.forEach((ticket) => {
+    const key = `${ticket.ticketType}@${ticket.price}`;
+    const quantity = getTicketQuantity(ticket);
+    ticketsAtPriceMap[key] = (ticketsAtPriceMap[key] || 0) + quantity;
+  });
 
-  // Helper to calculate ticket quantity
-  const getTicketQuantity = (ticket: Ticket) => {
-    let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
-
-    // Check if ticket was bought before Dec 14, 2025
-    const cutoffDate = new Date("2025-12-14");
-    const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate || "");
-
-    if (ticketDate < cutoffDate) {
-      if (selectedEvent?.ticketTypes && ticket.price > 0) {
-        const type = selectedEvent.ticketTypes.find(
-          (t) =>
-            t.name === ticket.ticketType ||
-            (t.name &&
-              ticket.ticketType &&
-              t.name.toLowerCase() === ticket.ticketType.toLowerCase())
-        );
-        if (type && type.price > 0) {
-          const expectedPrice = quantity * type.price;
-          if (Math.abs(expectedPrice - ticket.price) > 1) {
-            const calculated = Math.round(ticket.price / type.price);
-            if (calculated > 0) return calculated;
-          }
-        }
-      }
-    }
-
-    return quantity;
-  };
-
+  // On-door sales
   const onDoorTickets = filteredTickets.filter((t) => !!t.isOnDoor);
-  const onDoorRevenue = onDoorTickets.reduce(
-    (sum, t) => sum + (Number(t.price) || 0),
-    0
-  );
+  const onDoorRevenue = onDoorTickets.reduce((sum, t) => sum + t.price, 0);
   const onDoorTicketsCount = onDoorTickets.reduce(
     (sum, t) => sum + getTicketQuantity(t),
     0
   );
 
-  const totalRevenue = filteredTickets.reduce(
-    (sum, ticket) => sum + (Number(ticket.price) || 0),
-    0
-  );
+  // Totals
+  const totalRevenue = filteredTickets.reduce((sum, t) => sum + t.price, 0);
   const totalTicketsCount = filteredTickets.reduce(
     (sum, t) => sum + getTicketQuantity(t),
     0
@@ -239,15 +241,15 @@ export default function CustomersPage() {
       </div>
 
       {/* Filters & Stats */}
-      <div className="flex flex-col md:flex-row gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {/* Event Selector */}
-        <div className="flex-1 w-full bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Select Event
           </label>
           <Select
             value={selectedEventId}
-            onValueChange={(value) => setSelectedEventId(value)}
+            onValueChange={setSelectedEventId}
             disabled={isLoadingEvents}
           >
             <SelectTrigger className="w-full">
@@ -273,8 +275,8 @@ export default function CustomersPage() {
           </Select>
         </div>
 
-        {/* Revenue Card */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4 min-w-[250px]">
+        {/* Total Revenue */}
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
             <h3 className="text-2xl font-bold text-gray-900">
@@ -284,43 +286,66 @@ export default function CustomersPage() {
               From {totalTicketsCount} tickets
             </p>
           </div>
-          <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+          <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
             <DollarSign className="h-6 w-6 text-green-600" />
           </div>
         </div>
 
-        {/* On-Door Revenue Card */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4 min-w-[250px]">
-          <div>
-            <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
-            <h3 className="text-2xl font-bold text-gray-900">
-              ETB {onDoorRevenue.toLocaleString()}
-            </h3>
-            <p className="text-xs text-gray-500 mt-1">
-              From {onDoorTicketsCount} tickets
-            </p>
+        {/* Tickets Sold at Different Prices */}
+        {Object.entries(ticketsAtPriceMap).map(([key, quantity]) => {
+          const [ticketType, priceStr] = key.split("@");
+          const price = parseInt(priceStr);
+          return (
+            <div
+              key={key}
+              className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"
+            >
+              <div>
+                <p className="text-sm font-medium text-gray-700">
+                  {ticketType} @ ETB {price.toLocaleString()}
+                </p>
+                <p className="text-xl font-bold text-gray-900 mt-1">
+                  {quantity} tickets
+                </p>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* On-Door Sales */}
+        {onDoorTicketsCount > 0 && (
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
+              <h3 className="text-2xl font-bold text-gray-900">
+                ETB {onDoorRevenue.toLocaleString()}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                From {onDoorTicketsCount} tickets
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <DollarSign className="h-6 w-6 text-blue-600" />
+            </div>
           </div>
-          <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-            <DollarSign className="h-6 w-6 text-blue-600" />
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Customers Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h2 className="text-lg font-semibold text-gray-900">
-              Ticket Sales
+              Ticket Sales ({filteredTickets.length})
             </h2>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <input
                 type="text"
-                placeholder="Search customers..."
+                placeholder="Search by name, email, or ticket ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-64"
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-80"
               />
             </div>
           </div>
@@ -337,7 +362,7 @@ export default function CustomersPage() {
                   Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Usage (Used/Total)
+                  Usage
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Price
@@ -353,13 +378,10 @@ export default function CustomersPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {isLoadingTickets ? (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-6 py-12 text-center text-gray-500"
-                  >
-                    <div className="flex flex-col items-center justify-center gap-2">
+                  <td colSpan={6} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
                       <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                      <p>Loading customers...</p>
+                      <p className="text-gray-500">Loading tickets...</p>
                     </div>
                   </td>
                 </tr>
@@ -367,31 +389,27 @@ export default function CustomersPage() {
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-6 py-8 text-center text-gray-500"
+                    className="px-6 py-12 text-center text-gray-500"
                   >
                     {selectedEventId
-                      ? "No tickets found for this event."
-                      : "Select an event to view customers."}
+                      ? "No paid tickets found for this event."
+                      : "Please select an event to view customers."}
                   </td>
                 </tr>
               ) : (
                 paginatedTickets.map((ticket) => {
                   const total = getTicketQuantity(ticket);
-                  // If status is 'used', assume fully used regardless of ticketCount
-                  // Otherwise use ticketCount as remaining
-                  const remaining =
-                    ticket.status === "used"
-                      ? 0
-                      : ticket.ticketCount !== undefined
-                      ? ticket.ticketCount
-                      : 1;
-                  const used = total - remaining;
+                  const used = ticket.status === "used" ? total : 0;
+                  const remaining = total - used;
 
                   return (
-                    <tr key={ticket._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-2 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold mr-3 text-xs">
+                    <tr
+                      key={ticket._id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
                             {(
                               ticket.user?.firstName?.[0] ||
                               ticket.guestName?.[0] ||
@@ -399,49 +417,52 @@ export default function CustomersPage() {
                             ).toUpperCase()}
                           </div>
                           <div>
-                            <div className="text-sm font-medium text-gray-900">
+                            <p className="text-sm font-medium text-gray-900">
                               {ticket.isOnDoor
                                 ? "On-Door Purchase"
                                 : ticket.user
                                 ? `${ticket.user.firstName} ${ticket.user.lastName}`
                                 : ticket.guestName || "Guest"}
-                            </div>
-                            <div className="text-xs text-gray-500 font-mono">
+                            </p>
+                            <p className="text-xs text-gray-500 font-mono">
                               ID: {ticket.ticketId}
-                            </div>
+                            </p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-gray-900">
                           {ticket.ticketType}
-                        </div>
+                        </span>
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 font-medium">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium">
                           {used} <span className="text-gray-400">/</span>{" "}
                           {total}
-                        </div>
+                        </span>
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          ETB {ticket.price?.toLocaleString() || "0"}
-                        </div>
-                        <div className="text-xs text-gray-500">
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-bold text-gray-900">
+                          ETB {ticket.price.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-gray-500">
                           {ticket.paymentStatus}
-                        </div>
+                        </p>
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        <div>
                           {new Date(ticket.createdAt).toLocaleDateString()}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {new Date(ticket.createdAt).toLocaleTimeString()}
+                          {new Date(ticket.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
                         </div>
                       </td>
-                      <td className="px-6 py-2 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         <span
-                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
                             ticket.status === "active" ||
                             ticket.status === "confirmed"
                               ? "bg-green-100 text-green-800"
@@ -463,13 +484,13 @@ export default function CustomersPage() {
         </div>
 
         {/* Pagination */}
-        {filteredTickets.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <div className="text-sm text-gray-500">
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
+            <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, filteredTickets.length)} of{" "}
-              {filteredTickets.length} results
-            </div>
+              {filteredTickets.length} tickets
+            </p>
             <div className="flex gap-2">
               <Button
                 variant="outline"
