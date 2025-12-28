@@ -57,6 +57,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { IoMdCloseCircle } from "react-icons/io";
 
 interface Event {
   _id: string;
@@ -145,7 +146,6 @@ export default function EventsPage() {
       );
       setEvents(regularEvents);
     } catch (error) {
-      // console.error("Error fetching events:", error)
       toast.error(
         error instanceof Error ? error.message : "Failed to fetch events"
       );
@@ -188,14 +188,12 @@ export default function EventsPage() {
     return matchesSearch && matchesStatus && matchesCategory && matchesPublish;
   });
 
-  // Pagination calculations
   const totalEvents = filteredEvents.length;
   const totalPages = Math.ceil(totalEvents / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedEvents = filteredEvents.slice(startIndex, endIndex);
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, statusFilter, categoryFilter, publishFilter]);
@@ -225,9 +223,8 @@ export default function EventsPage() {
       }
 
       toast.success("Event deleted successfully");
-      fetchEvents(); // Refresh the events list
+      fetchEvents();
     } catch (error) {
-      // console.error("Error deleting event:", error)
       toast.error("Failed to delete event");
     } finally {
       setDeleteDialogOpen(false);
@@ -263,12 +260,9 @@ export default function EventsPage() {
           newStatus === "published" ? "published" : "unpublished"
         } successfully`
       );
-      fetchEvents(); // Refresh the events list
+      fetchEvents();
     } catch (error) {
-      // console.error("Error updating event status:", error)
-      toast.error(
-        error instanceof Error ? error.message : "Failed to update event status"
-      );
+      toast.error("Failed to update event status");
     }
   };
 
@@ -300,7 +294,6 @@ export default function EventsPage() {
         } banner successfully`
       );
 
-      // Update the state locally to reflect the change immediately
       setEvents(
         events.map((event) =>
           event._id === eventId
@@ -309,12 +302,41 @@ export default function EventsPage() {
         )
       );
     } catch (error) {
-      // console.error("Error updating banner status:", error)
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Failed to update banner status"
+      toast.error("Failed to update banner status");
+    }
+  };
+
+  const handleCancelEvent = async (eventId: string, currentStatus: string) => {
+    try {
+      const newStatus =
+        currentStatus === "draft" || currentStatus === "published"
+          ? "cancelled"
+          : "draft";
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/${eventId}/publish`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: newStatus }),
+        }
       );
+
+      if (!response.ok) {
+        throw new Error("Failed to update event status");
+      }
+
+      toast.success(
+        `Event ${
+          newStatus === "cancelled" ? "cancelled" : "restored to draft"
+        } successfully`
+      );
+      fetchEvents();
+    } catch (error) {
+      toast.error("Failed to update event status");
     }
   };
 
@@ -361,7 +383,7 @@ export default function EventsPage() {
       setGeneratedTicket(data.data.ticket);
       setCheckInCount(data.data.ticket.ticketCount);
       toast.success("Ticket generated successfully");
-      fetchEvents(); // Refresh to update ticket counts
+      fetchEvents();
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to generate ticket"
@@ -447,17 +469,6 @@ export default function EventsPage() {
             </div>
           </CardContent>
         </Card>
-        {/* <Card>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-blue-100 p-3 rounded-full">
-              <Ticket className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-500">Total Tickets Sold</p>
-              <p className="text-2xl font-bold text-gray-800">{overviewStats.totalTicketsSold}</p>
-            </div>
-          </CardContent>
-        </Card> */}
       </div>
 
       {/* Filters and Search */}
@@ -519,7 +530,7 @@ export default function EventsPage() {
             <TableHeader>
               <TableRow className="bg-gray-50/80">
                 <TableHead className="font-semibold">Event Title</TableHead>
-                <TableHead className="font-semibold">Date </TableHead>
+                <TableHead className="font-semibold">Date</TableHead>
                 <TableHead className="font-semibold">Location</TableHead>
                 <TableHead className="font-semibold">Category</TableHead>
                 <TableHead className="font-semibold">Capacity</TableHead>
@@ -654,6 +665,18 @@ export default function EventsPage() {
                             variant="ghost"
                             size="sm"
                             className="text-red-600 hover:text-red-700"
+                            onClick={() => handleCancelEvent(event._id, event.status)}
+                          >
+                            {event.status !== "cancelled" ? (
+                              <IoMdCloseCircle className="h-4 w-4" />
+                            ) : (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700"
                             onClick={() => handleDelete(event._id)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -768,6 +791,7 @@ export default function EventsPage() {
         </div>
       )}
 
+      {/* Event Details Dialog */}
       <Dialog open={isEventDialogOpen} onOpenChange={setIsEventDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -777,7 +801,6 @@ export default function EventsPage() {
           </DialogHeader>
           {selectedEvent && (
             <div className="space-y-8 pr-2">
-              {/* Event Header */}
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
@@ -809,7 +832,6 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                {/* Description */}
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h4 className="font-medium text-gray-900 mb-2">
                     Description
@@ -818,9 +840,7 @@ export default function EventsPage() {
                 </div>
               </div>
 
-              {/* Event Details Grid */}
               <div className="grid grid-cols-2 gap-6">
-                {/* Date and Time */}
                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3">
@@ -856,7 +876,6 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                {/* Location */}
                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="flex items-start gap-3">
                     <div className="bg-blue-50 p-2 rounded-lg">
@@ -877,7 +896,6 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                {/* Capacity */}
                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="flex items-center gap-3">
                     <div className="bg-blue-50 p-2 rounded-lg">
@@ -894,7 +912,6 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                {/* Organizer Information */}
                 <div className="bg-white p-4 rounded-lg border border-gray-200">
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
@@ -931,57 +948,11 @@ export default function EventsPage() {
                 </div>
               </div>
 
-              {/* Ticket Types */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="font-medium text-gray-900">
                     Available Ticket Types
                   </h4>
-                  {selectedEvent.ticketTypes.some(
-                    (type) =>
-                      type.name.includes("Wave") ||
-                      type.name.includes("First") ||
-                      type.name.includes("Second") ||
-                      type.name.includes("Final")
-                  ) && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="border-purple-300 text-purple-600 hover:bg-purple-50"
-                      onClick={async () => {
-                        try {
-                          const response = await fetch(
-                            `${process.env.NEXT_PUBLIC_API_URL}/api/events/update-ticket-availability`,
-                            {
-                              method: "POST",
-                              headers: {
-                                Authorization: `Bearer ${token}`,
-                                "Content-Type": "application/json",
-                              },
-                            }
-                          );
-                          const data = await response.json();
-                          if (response.ok) {
-                            toast.success(
-                              data.message ||
-                                "Ticket availability updated successfully"
-                            );
-                            fetchEvents(); // Refresh events to show updated ticket status
-                          } else {
-                            toast.error(
-                              data.message ||
-                                "Failed to update ticket availability"
-                            );
-                          }
-                        } catch (error) {
-                          toast.error("Failed to update ticket availability");
-                        }
-                      }}
-                    >
-                      <Clock className="mr-2 h-4 w-4" />
-                      Update Wave Status
-                    </Button>
-                  )}
                 </div>
                 <div className="grid gap-3">
                   {selectedEvent.ticketTypes.map((type, index) => (
@@ -1014,6 +985,7 @@ export default function EventsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Generate On-Door Ticket Dialog */}
       <Dialog
         open={isGenerateTicketDialogOpen}
         onOpenChange={setIsGenerateTicketDialogOpen}
@@ -1158,6 +1130,7 @@ export default function EventsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

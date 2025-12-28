@@ -137,6 +137,13 @@ export default function OrganizerDashboard() {
   const [analyticsPage, setAnalyticsPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
 
+  //this function counts the number of events that are completed or which end date is already passed.
+
+  const countCompletedEvents = () => {
+    const now = new Date();
+    return events.filter((event) => new Date(event.endDate) < now).length;
+  };
+
   useEffect(() => {
     const authState = localStorage.getItem("auth-storage");
     if (!authState) {
@@ -797,7 +804,7 @@ export default function OrganizerDashboard() {
     {
       id: "completed",
       title: "Completed Events",
-      value: completedEvents,
+      value: countCompletedEvents(),
       icon: Calendar,
       iconBg: "bg-blue-50",
       iconColor: "text-blue-400",
