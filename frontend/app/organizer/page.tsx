@@ -281,6 +281,51 @@ export default function OrganizerDashboard() {
     fetchTickets();
   }, [user, events, isLoading]);
 
+  const fetchBalance = async () => {
+    try {
+      const storedAuth = localStorage.getItem("auth-storage");
+      let token = "";
+      let userId = "";
+      if (storedAuth) {
+        try {
+          const parsedAuth = JSON.parse(storedAuth);
+          token = parsedAuth.state?.token;
+          userId = parsedAuth.state?.user?._id;
+        } catch {}
+      }
+
+      if (!token || !userId) {
+        return;
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to fetch balance");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setBalance(data.data);
+      } else {
+        throw new Error(data.message || "Failed to fetch balance");
+      }
+    } catch (error) {
+      console.error("Error fetching balance:", error);
+    }
+  };
+
   useEffect(() => {
     const fetchWithdrawals = async () => {
       setWithdrawalsLoading(true);
@@ -296,7 +341,6 @@ export default function OrganizerDashboard() {
       }
       if (!token || !userId) {
         setWithdrawals([]);
-        setBalance(null);
         setWithdrawalsLoading(false);
         return;
       }
@@ -321,31 +365,11 @@ export default function OrganizerDashboard() {
       } catch {
         setWithdrawals([]);
       }
-      // Fetch balance
-      try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            credentials: "include",
-          }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          setBalance(data.data || null);
-        } else {
-          setBalance(null);
-        }
-      } catch {
-        setBalance(null);
-      }
       setWithdrawalsLoading(false);
     };
 
     fetchWithdrawals();
+    fetchBalance();
   }, [user]);
 
   // Pagination helper functions
@@ -650,6 +674,7 @@ export default function OrganizerDashboard() {
 
   // Available Balance = (Total Revenue * 0.97) - (Approved Withdrawals) - (Pending Withdrawals)
   const availableBalance =
+    balance?.availableBalance ??
     organizerRevenue - totalWithdrawn - pendingWithdrawals;
 
   // --- Chart Data Preparation ---
