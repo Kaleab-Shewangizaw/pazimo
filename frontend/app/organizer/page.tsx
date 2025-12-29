@@ -676,10 +676,10 @@ export default function OrganizerDashboard() {
 
   // Event status distribution for pie chart
   const statusData = [
-    { name: "Published", value: publishedEvents, color: "#10B981" },
+    { name: "Published", value: publishedEvents, color: "#0d47a1" },
     { name: "Draft", value: draftEvents, color: "#F59E0B" },
     { name: "Cancelled", value: cancelledEvents, color: "#EF4444" },
-    { name: "Completed", value: completedEvents, color: "#3B82F6" },
+    { name: "Completed", value: countCompletedEvents(), color: "#3B82F6" },
   ].filter((item) => item.value > 0);
 
   // Monthly performance data
@@ -1103,37 +1103,87 @@ export default function OrganizerDashboard() {
         </div>
 
         {/* Charts Section - Compact 2x2 Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-6">
-          {/* Revenue Trend Chart */}
-          <Card className="border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader className="p-2 sm:p-3 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1 sm:gap-2">
-                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
+        {/* Premium & Simple Charts Section - Inspired by the Behance Dashboard */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+          {/* Revenue Trend - Smooth Gradient Area Chart */}
+          <Card className="border-0 shadow-lg bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3 text-gray-800">
+                <TrendingUp className="h-5 w-5 text-[#0D47A1]" />
                 Revenue Trend
               </CardTitle>
+              <CardDescription className="text-sm text-gray-600">
+                Ticket sales over recent events
+              </CardDescription>
             </CardHeader>
-            <CardContent className="p-2 sm:p-3 pt-0">
+            <CardContent className="pt-0">
               <ChartContainer
                 config={{
                   revenue: {
-                    label: "Revenue",
-                    color: "hsl(var(--chart-1))",
+                    label: "Revenue (Birr)",
+                    color: "#0D47A1",
                   },
                 }}
-                className="h-[150px] sm:h-[200px]"
+                className="h-[300px]"
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={revenueData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="event" fontSize={10} />
-                    <YAxis fontSize={10} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                  <AreaChart
+                    data={revenueData}
+                    margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient
+                        id="revenueGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#0D47A1"
+                          stopOpacity={0.7}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#0D47A1"
+                          stopOpacity={0.05}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="4 4" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="event"
+                      tick={{ fontSize: 12, fill: "#666" }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12, fill: "#666" }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                    />
+                    <ChartTooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255,255,255,0.95)",
+                        border: "none",
+                        borderRadius: "12px",
+                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                      }}
+                      labelStyle={{ color: "#0D47A1", fontWeight: "bold" }}
+                      formatter={(value: number) =>
+                        `${value.toLocaleString()} Birr`
+                      }
+                    />
                     <Area
                       type="monotone"
                       dataKey="revenue"
-                      stroke="#10B981"
-                      fill="#10B981"
-                      fillOpacity={0.3}
+                      stroke="#0D47A1"
+                      strokeWidth={3}
+                      fill="url(#revenueGradient)"
+                      dot={{ fill: "#0D47A1", r: 5 }}
+                      activeDot={{ r: 7, stroke: "#fff", strokeWidth: 2 }}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1141,23 +1191,26 @@ export default function OrganizerDashboard() {
             </CardContent>
           </Card>
 
-          {/* Event Status Distribution */}
-          <Card className="border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader className="p-2 sm:p-3 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1 sm:gap-2">
-                <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
-                Event Status
+          {/* Event Status Distribution - Clean Donut Chart with Center Total */}
+          <Card className="border-0 shadow-lg bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3 text-gray-800">
+                <PieChart className="h-5 w-5 text-[#0D47A1]" />
+                Event Status Distribution
               </CardTitle>
+              <CardDescription className="text-sm text-gray-600">
+                Overview of all your events
+              </CardDescription>
             </CardHeader>
-            <CardContent className="p-2 sm:p-3 pt-0">
+            <CardContent className="pt-0">
               <ChartContainer
                 config={{
-                  published: { label: "Published", color: "#10B981" },
+                  published: { label: "Published", color: "#0d47a1" },
                   draft: { label: "Draft", color: "#F59E0B" },
-                  cancelled: { label: "Cancelled", color: "#EF4444" },
+                  cancelled: { label: "Cancelled", color: "#0d47a1" },
                   completed: { label: "Completed", color: "#3B82F6" },
                 }}
-                className="h-[150px] sm:h-[200px]"
+                className="h-[300px]"
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1165,62 +1218,109 @@ export default function OrganizerDashboard() {
                       data={statusData}
                       cx="50%"
                       cy="50%"
-                      outerRadius={60}
+                      innerRadius={70}
+                      outerRadius={80}
+                      cornerRadius={10}
+                      paddingAngle={5}
                       dataKey="value"
-                      label={({ name, value }) => `${name}: ${value}`}
-                      fontSize={10}
                     >
                       {statusData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <ChartTooltip />
+                    <ChartTooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255,255,255,0.95)",
+                        borderRadius: "12px",
+                        border: "none",
+                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                      }}
+                    />
+                    {/* Center Total */}
+                    <text
+                      x="50%"
+                      y="45%"
+                      textAnchor="middle"
+                      className="text-4xl font-bold fill-[#0D47A1]"
+                    >
+                      {totalEvents}
+                    </text>
+                    <text
+                      x="50%"
+                      y="55%"
+                      textAnchor="middle"
+                      className="text-sm fill-gray-600"
+                    >
+                      Total Events
+                    </text>
                   </PieChart>
                 </ResponsiveContainer>
               </ChartContainer>
             </CardContent>
           </Card>
 
-          {/* Monthly Performance Chart */}
-          <Card className="border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader className="p-2 sm:p-3 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1 sm:gap-2">
-                <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600" />
+          {/* Monthly Performance - Dual Rounded Bar Chart */}
+          <Card className="border-0 shadow-lg bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3 text-gray-800">
+                <BarChart3 className="h-5 w-5 text-[#0D47A1]" />
                 Monthly Performance
               </CardTitle>
+              <CardDescription className="text-sm text-gray-600">
+                Revenue vs Tickets Sold
+              </CardDescription>
             </CardHeader>
-            <CardContent className="p-2 sm:p-3 pt-0">
+            <CardContent className="pt-0">
               <ChartContainer
                 config={{
-                  revenue: {
-                    label: "Revenue",
-                    color: "hsl(var(--chart-1))",
-                  },
-                  tickets: {
-                    label: "Tickets",
-                    color: "hsl(var(--chart-2))",
-                  },
+                  revenue: { label: "Revenue (Birr)", color: "#0D47A1" },
+                  tickets: { label: "Tickets Sold", color: "#42A5F5" },
                 }}
-                className="h-[150px] sm:h-[200px]"
+                className="h-[300px]"
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" fontSize={10} />
-                    <YAxis yAxisId="left" fontSize={10} />
-                    <YAxis yAxisId="right" orientation="right" fontSize={10} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <CartesianGrid strokeDasharray="4 4" stroke="#f5f5f5" />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 12 }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <ChartTooltip
+                      contentStyle={{
+                        backgroundColor: "rgba(255,255,255,0.95)",
+                        borderRadius: "12px",
+                        border: "none",
+                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                      }}
+                    />
                     <Bar
                       yAxisId="left"
                       dataKey="revenue"
-                      fill="#8884d8"
-                      name="Revenue (Birr)"
+                      fill="#0D47A1"
+                      radius={[10, 10, 0, 0]}
+                      barSize={35}
                     />
                     <Bar
                       yAxisId="right"
                       dataKey="tickets"
-                      fill="#82ca9d"
-                      name="Tickets Sold"
+                      fill="#42A5F5"
+                      radius={[10, 10, 0, 0]}
+                      barSize={35}
                     />
                   </BarChart>
                 </ResponsiveContainer>
@@ -1228,39 +1328,96 @@ export default function OrganizerDashboard() {
             </CardContent>
           </Card>
 
-          {/* Top Performing Events Chart */}
-          <Card className="border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
-            <CardHeader className="p-2 sm:p-3 pb-2">
-              <CardTitle className="text-xs sm:text-sm font-semibold flex items-center gap-1 sm:gap-2">
-                <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600" />
-                Top Events
+          {/* Top Performing Events - Fully Fixed Horizontal Bar Chart */}
+          {/* DEBUG */}
+
+          <Card className="border-0 shadow-lg bg-white rounded-2xl overflow-hidden">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-semibold flex items-center gap-3 text-gray-800">
+                <TrendingUp className="h-5 w-5 text-[#0D47A1]" />
+                Top Performing Events
               </CardTitle>
+              <CardDescription className="text-sm text-gray-600">
+                Highest revenue generators
+              </CardDescription>
             </CardHeader>
-            <CardContent className="p-2 sm:p-3 pt-0">
-              <ChartContainer
-                config={{
-                  revenue: {
-                    label: "Revenue",
-                    color: "hsl(var(--chart-1))",
-                  },
-                }}
-                className="h-[150px] sm:h-[200px]"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topEvents} layout="horizontal">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" fontSize={10} />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={80}
-                      fontSize={9}
-                    />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Bar dataKey="revenue" fill="#F97316" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartContainer>
+            <CardContent className="pt-0">
+              {/* Fallback when no data */}
+              {topEvents.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-gray-500">
+                  <div className="text-center">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p className="text-sm">No revenue data yet</p>
+                    <p className="text-xs mt-1">
+                      Events with sales will appear here
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <ChartContainer
+                  config={{
+                    revenue: { label: "Revenue (Birr)", color: "#0D47A1" },
+                  }}
+                  className="h-[300px]"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topEvents} layout="horizontal">
+                      <CartesianGrid strokeDasharray="4 4" stroke="#f5f5f5" />
+                      <XAxis
+                        type="number"
+                        tickFormatter={(value) => {
+                          if (value >= 1000000)
+                            return `${(value / 1000000).toFixed(1)}M`;
+                          if (value >= 1000)
+                            return `${Math.round(value / 1000)}k`;
+                          return `${value}`;
+                        }}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12, fill: "#666" }}
+                      />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        width={120}
+                        tick={{ fontSize: 11, fill: "#444" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <ChartTooltip
+                        formatter={(value: number) =>
+                          `${value.toLocaleString()} Birr`
+                        }
+                        contentStyle={{
+                          backgroundColor: "rgba(255,255,255,0.95)",
+                          borderRadius: "12px",
+                          border: "none",
+                          boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                        }}
+                        labelStyle={{ fontWeight: "bold", color: "#0D47A1" }}
+                      />
+                      <defs>
+                        <linearGradient
+                          id="topBarGradient"
+                          x1="0"
+                          y1="0"
+                          x2="1"
+                          y2="0"
+                        >
+                          <stop offset="0%" stopColor="#0D47A1" />
+                          <stop offset="100%" stopColor="#1976D2" />
+                        </linearGradient>
+                      </defs>
+                      <Bar
+                        dataKey="revenue"
+                        fill="url(#topBarGradient)"
+                        radius={[0, 10, 10, 0]}
+                        barSize={40}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              )}
             </CardContent>
           </Card>
         </div>
