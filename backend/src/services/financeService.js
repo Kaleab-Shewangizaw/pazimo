@@ -15,15 +15,24 @@ const calculateOrganizerBalance = async (organizerId) => {
   // Filter for Net Revenue (Withdrawal Calculation)
   // We exclude tickets with no price or invalid status
   const validTickets = allTickets.filter((t) => {
-    // We exclude tickets with no price
+    // Always exclude tickets with no price
     if (!t.price || t.price <= 0) return false;
 
-    // Exclude cancelled or failed tickets
-    // If status is undefined/null (legacy tickets), we include them
-    if (t.status === "cancelled" || t.status === "failed") return false;
-    if (t.paymentStatus === "failed" || t.paymentStatus === "cancelled")
+    // If status/paymentStatus are missing, treat as valid (legacy)
+    const hasStatus = typeof t.status !== "undefined" && t.status !== null;
+    const hasPaymentStatus =
+      typeof t.paymentStatus !== "undefined" && t.paymentStatus !== null;
+
+    // If either status or paymentStatus is present and failed/cancelled, exclude
+    if (hasStatus && (t.status === "cancelled" || t.status === "failed"))
+      return false;
+    if (
+      hasPaymentStatus &&
+      (t.paymentStatus === "failed" || t.paymentStatus === "cancelled")
+    )
       return false;
 
+    // Otherwise, include
     return true;
   });
 
