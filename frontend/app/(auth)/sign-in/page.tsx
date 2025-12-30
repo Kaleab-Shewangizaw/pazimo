@@ -110,7 +110,7 @@ function SignInContent() {
   return (
     <div
       ref={containerRef}
-      className="min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden"
       style={{
         background:
           "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #e2e8f0 100%)",
@@ -153,8 +153,21 @@ function SignInContent() {
         </div>
       </div>
 
+      <div className="relative h-14 w-70">
+        <Image
+          fill
+          src="/logo.png"
+          alt="Pazimo Logo"
+          className="h-14 w-auto drop-shadow-md object-contain"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = `https://ui-avatars.com/api/?name=Pazimo&background=0D47A1&color=fff&bold=true&size=128`;
+          }}
+        />
+      </div>
+
       {/* Main Login Card */}
-      <div className="w-full max-w-xl relative z-10 animate-fade-in-up">
+      <div className="w-full max-w-xl relative z-10 mt-5 animate-fade-in-up">
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-8 sm:p-10 relative overflow-hidden">
           <div className="absolute inset-0 rounded-3xl p-[1px] bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 -z-10">
             <div className="absolute inset-0 rounded-3xl bg-white" />
@@ -163,20 +176,6 @@ function SignInContent() {
 
           <div className="relative z-10">
             <div className="text-center mb-10">
-              <div className="inline-flex items-center justify-center mb-6 p-4 rounded-2xl">
-                <div className="relative h-14 w-70">
-                  <Image
-                    fill
-                    src="/logo.png"
-                    alt="Pazimo Logo"
-                    className="h-14 w-auto drop-shadow-md object-contain"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.src = `https://ui-avatars.com/api/?name=Pazimo&background=0D47A1&color=fff&bold=true&size=128`;
-                    }}
-                  />
-                </div>
-              </div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent mb-3">
                 SIGN IN
               </h1>
