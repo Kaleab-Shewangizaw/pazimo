@@ -36,13 +36,16 @@ import {
 } from "@/components/ui/dialog";
 import FileUploadComponent from "./DocumentPreview";
 import BulkInvite from "./bulkInviteModel";
+import AttendeesModal from "./invitations/AttendeesModal";
 import { useRouter, useSearchParams } from "next/navigation";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 
 interface Event {
   id: number;
+  _id?: string;
   title: string;
   date: string;
+  startDate?: string;
   time: string;
   location: string;
   organizer: string;
@@ -50,6 +53,7 @@ interface Event {
   status?: string;
   eventType?: "public" | "private";
   isPublic?: boolean;
+  ticketTypes?: any[];
 }
 
 export default function InvitationPage() {
@@ -1003,6 +1007,7 @@ export default function InvitationPage() {
   const handleViewAttendees = (event: Event) => {
     setSelectedEventAttendees(event);
     setShowAttendeesModal(true);
+    fetchEventAttendees(event);
   };
 
   const fetchEventAttendees = async (event: Event) => {
@@ -1034,7 +1039,11 @@ export default function InvitationPage() {
         if (response.ok) {
           const data = await response.json();
           const tickets = data.tickets || [];
-          ticketAttendees = tickets.map((ticket: any) => {
+          
+          // Filter for invitation tickets only
+          const guestTickets = tickets.filter((t: any) => t.isInvitation);
+          
+          ticketAttendees = guestTickets.map((ticket: any) => {
             const name = ticket.user
               ? `${ticket.user.firstName} ${ticket.user.lastName}`
               : ticket.guestName || "Unknown Guest";
@@ -1047,9 +1056,7 @@ export default function InvitationPage() {
               id: ticket._id,
               customerName: name,
               contact: contact,
-              guestType: ticket.isInvitation
-                ? "Guest"
-                : ticket.ticketType || "Paid",
+              guestType: "Guest",
               confirmedAt:
                 ticket.status === "pending" || ticket.status === "cancelled"
                   ? "Pending"
@@ -1076,7 +1083,7 @@ export default function InvitationPage() {
         id: `inv-${inv.id}`,
         customerName: inv.customerName,
         contact: inv.contact,
-        guestType: inv.guestType === "paid" ? "Paid" : "Guest",
+        guestType: "Guest",
         confirmedAt: inv.sentAt
           ? new Date(inv.sentAt).toLocaleDateString()
           : "Unknown",
@@ -1091,25 +1098,14 @@ export default function InvitationPage() {
       }));
 
       // 3. Merge lists: prefer tickets over invitations for same contact
-      // But user wants "every invitation ticket sent, not purchased"
-      // So we prioritize showing the invitation list, enriched with ticket status if available.
+      const ticketContacts = new Set(ticketAttendees.map(t => t.contact));
+      
+      // Only include invitations that don't have a corresponding ticket
+      const pendingInvitations = invitationAttendees.filter(inv => !ticketContacts.has(inv.contact));
+      
+      const finalAttendees = [...ticketAttendees, ...pendingInvitations];
 
-      // If we have a ticket for this contact, it means they are confirmed.
-      const ticketMap = new Map(ticketAttendees.map((t) => [t.contact, t]));
-
-      const mergedAttendees = invitationAttendees.map((inv) => {
-        if (ticketMap.has(inv.contact)) {
-          // If they have a ticket, they are confirmed
-          return { ...inv, status: "Confirmed" };
-        }
-        return inv;
-      });
-
-      // If the user wants ONLY invitations sent, we just use mergedAttendees.
-      // If they want to see organic tickets too, we would add remaining tickets.
-      // "every invitation ticket sent, not purchased" -> implies showing the invitation list.
-
-      setAttendees(mergedAttendees);
+      setAttendees(finalAttendees);
     } catch (error) {
       console.error("Error fetching attendees:", error);
       setAttendees([]);
@@ -1984,7 +1980,9 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                 </button>
                 <span className="text-sm text-gray-700">
                   Page {eventsPage} of {totalEventsPages}
-                </span
+                </span>
+                <button
+                  onClick={() =>
                     setEventsPage(Math.min(totalEventsPages, eventsPage + 1))
                   }
                   disabled={eventsPage === totalEventsPages}
@@ -2544,15 +2542,17 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
           />
         )}
 
-        <Dialog open={showAttendeesModal} onOpenChange={setShowAttendeesModal}>
-          <DialogContent className="max-w-2xl w-full p-6 rounded-xl bg-white z-[100]">
-            <DialogHeader>
-              <DialogTitle className="text-lg md:text-xl font-semibold text-gray-900">
-                Event Attendees
-              </DialogTitle>
-            </DialogHeader>
-          </DialogContent>
-        </Dialog>
+        {showAttendeesModal && (
+          <AttendeesModal
+            selectedEvent={selectedEventAttendees}
+            attendees={attendees}
+            isLoading={isLoadingAttendees}
+            attendeesPage={attendeesPage}
+            setAttendeesPage={setAttendeesPage}
+            attendeesPerPage={attendeesPerPage}
+            onClose={() => setShowAttendeesModal(false)}
+          />
+        )}
 
         {mounted && showDetailsModal && selectedInvitation && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2586,13 +2586,13 @@ David Brown,david@email.com,email,Looking forward to seeing you there`;
                     <label className="text-sm font-medium text-gray-600">
                       Contact Method
                     </label>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 text-sm text-gray-900">
                       {selectedInvitation.contactType === "email" ? (
                         <Mail className="h-4 w-4 text-blue-600" />
                       ) : (
                         <Phone className="h-4 w-4 text-blue-600" />
                       )}
-                      <span className="text-sm text-gray-900 capitalize">
+                      <span className="capitalize">
                         {selectedInvitation.contactType}
                       </span>
                     </div>

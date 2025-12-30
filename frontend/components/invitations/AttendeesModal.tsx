@@ -22,15 +22,19 @@ export default function AttendeesModal({
 }: AttendeesModalProps) {
   if (!selectedEvent) return null;
 
-  // Filter attendees to only show invitation tickets (pending, confirmed, declined)
-  // Exclude "active" which usually denotes bought tickets, unless it's explicitly an invitation
+  // Filter attendees to only show valid tickets
   const filteredAttendees = attendees.filter((attendee) => {
     const status = attendee.status.toLowerCase();
     return (
-      status === "pending" || status === "confirmed" || status === "declined"
+      status === "pending" ||
+      status === "confirmed" ||
+      status === "declined" ||
+      status === "active" ||
+      status === "used" ||
+      status === "invited" ||
+      status === "sent"
     );
   });
-
   const totalPages =
     Math.ceil(filteredAttendees.length / attendeesPerPage) || 1;
   const startIndex = (attendeesPage - 1) * attendeesPerPage;
