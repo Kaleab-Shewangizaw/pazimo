@@ -87,25 +87,38 @@ const calculateOrganizerBalance = async (organizerId) => {
     );
 
     // Get ticket type breakdown
-    const ticketTypeBreakdown = event.ticketTypes.map((ticketType) => {
+    // Group tickets by type and price (to handle price changes)
+    const ticketTypeBreakdown = [];
+    for (const ticketType of event.ticketTypes) {
+      // Find all tickets for this type
       const typeTickets = eventTickets.filter(
         (t) =>
           t.ticketType === ticketType.name ||
           t.ticketType === ticketType._id.toString()
       );
-      const typeRevenue = typeTickets.reduce((sum, t) => sum + t.price, 0);
-      const quantitySold = typeTickets.reduce(
-        (sum, t) => sum + getQuantity(t, event),
-        0
-      );
-
-      return {
-        name: ticketType.name,
-        price: ticketType.price,
-        quantitySold,
-        revenue: typeRevenue,
-      };
-    });
+      // Group by price
+      const priceMap = new Map();
+      for (const t of typeTickets) {
+        const price = t.price;
+        if (!priceMap.has(price)) {
+          priceMap.set(price, []);
+        }
+        priceMap.get(price).push(t);
+      }
+      for (const [price, ticketsAtPrice] of priceMap.entries()) {
+        const quantitySold = ticketsAtPrice.reduce(
+          (sum, t) => sum + getQuantity(t, event),
+          0
+        );
+        const typeRevenue = ticketsAtPrice.reduce((sum, t) => sum + t.price, 0);
+        ticketTypeBreakdown.push({
+          name: ticketType.name,
+          price,
+          quantitySold,
+          revenue: typeRevenue,
+        });
+      }
+    }
 
     const totalTicketsSold = eventTickets.reduce(
       (sum, t) => sum + getQuantity(t, event),

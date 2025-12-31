@@ -199,13 +199,32 @@ export default function CustomersPage() {
     );
   });
 
-  // Group tickets by type + price to show "Regular @ 500 - 30 tickets"
-  const ticketsAtPriceMap: { [key: string]: number } = {};
+
+  // Group tickets by type, ondoor/online, and single ticket price
+  type TicketGroup = {
+    ticketType: string;
+    isOnDoor: boolean;
+    pricePerTicket: number;
+    totalSold: number;
+  };
+  const ticketGroups: TicketGroup[] = [];
+  const groupMap = new Map<string, TicketGroup>();
   filteredTickets.forEach((ticket) => {
-    const key = `${ticket.ticketType}@${ticket.price}`;
     const quantity = getTicketQuantity(ticket);
-    ticketsAtPriceMap[key] = (ticketsAtPriceMap[key] || 0) + quantity;
+    // Calculate price per single ticket
+    const pricePerTicket = ticket.price && quantity > 0 ? ticket.price / quantity : 0;
+    const key = `${ticket.ticketType}|${ticket.isOnDoor ? "ondoor" : "online"}|${pricePerTicket}`;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        ticketType: ticket.ticketType,
+        isOnDoor: !!ticket.isOnDoor,
+        pricePerTicket,
+        totalSold: 0,
+      });
+    }
+    groupMap.get(key)!.totalSold += quantity;
   });
+  ticketGroups.push(...groupMap.values());
 
   // On-door sales
   const onDoorTickets = filteredTickets.filter((t) => !!t.isOnDoor);
@@ -291,26 +310,22 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        {/* Tickets Sold at Different Prices */}
-        {Object.entries(ticketsAtPriceMap).map(([key, quantity]) => {
-          const [ticketType, priceStr] = key.split("@");
-          const price = parseInt(priceStr);
-          return (
-            <div
-              key={key}
-              className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"
-            >
-              <div>
-                <p className="text-sm font-medium text-gray-700">
-                  {ticketType} @ ETB {price.toLocaleString()}
-                </p>
-                <p className="text-xl font-bold text-gray-900 mt-1">
-                  {quantity} tickets
-                </p>
-              </div>
+        {/* Tickets Sold at Different Prices (Grouped) */}
+        {ticketGroups.map((group, idx) => (
+          <div
+            key={group.ticketType + group.isOnDoor + group.pricePerTicket + idx}
+            className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"
+          >
+            <div>
+              <p className="text-sm font-medium text-gray-700">
+                {group.ticketType} {group.isOnDoor ? "On-Door" : "Online"} @ ETB {group.pricePerTicket.toLocaleString()}
+              </p>
+              <p className="text-xl font-bold text-gray-900 mt-1">
+                {group.totalSold} tickets
+              </p>
             </div>
-          );
-        })}
+          </div>
+        ))}
 
         {/* On-Door Sales */}
         {onDoorTicketsCount > 0 && (
