@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Search,
   Mail,
   Phone,
-  Calendar,
   User,
   DollarSign,
   ArrowLeft,
@@ -75,6 +74,14 @@ export default function EventInvitationsPage() {
   const [filteredInvitations, setFilteredInvitations] = useState<
     InvitationData[]
   >([]);
+  interface TicketData {
+    guestEmail?: string;
+    guestPhone?: string;
+    purchaseQuantity?: number;
+    ticketCount?: number;
+    // add other fields as needed
+  }
+  const [eventTickets, setEventTickets] = useState<TicketData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -85,8 +92,29 @@ export default function EventInvitationsPage() {
   useEffect(() => {
     if (eventId) {
       fetchInvitations();
+      fetchTickets();
     }
+    // eslint-disable-next-line
   }, [eventId]);
+
+  const fetchTickets = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setEventTickets(data.tickets || []);
+      } else {
+        setEventTickets([]);
+      }
+    } catch {
+      setEventTickets([]);
+    }
+  };
 
   useEffect(() => {
     // Filter and paginate locally
@@ -102,11 +130,12 @@ export default function EventInvitationsPage() {
           (inv.guestPhone && inv.guestPhone.includes(lowerQuery))
       );
     }
-
+    // const router = useRouter();
     setFilteredInvitations(result);
     setCurrentPage(1); // Reset to first page on search
   }, [searchQuery, invitations]);
 
+  // Duplicate TicketData interface and eventTickets state removed.
   const fetchInvitations = async () => {
     try {
       setLoading(true);
@@ -181,6 +210,24 @@ export default function EventInvitationsPage() {
     }
   };
 
+  // Helper to get ticket for invitation
+  const getTicketForInvitation = (inv: InvitationData) => {
+    // Match by guestEmail or guestPhone
+    return eventTickets.find((t) => {
+      if (inv.guestEmail && t.guestEmail && inv.guestEmail === t.guestEmail)
+        return true;
+      if (inv.guestPhone && t.guestPhone && inv.guestPhone === t.guestPhone)
+        return true;
+      return false;
+    });
+  };
+
+  // Organizer name for header
+  const organizerName = invitations[0]?.organizerId
+    ? `${invitations[0].organizerId.firstName} ${invitations[0].organizerId.lastName}`
+    : "";
+
+  // const totalPages = Math.ceil(filteredInvitations.length / itemsPerPage);
   return (
     <div className="space-y-6 px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center gap-4">
@@ -192,7 +239,11 @@ export default function EventInvitationsPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {eventName ? `${eventName} - Invitations` : "Event Invitations"}
+            {eventName
+              ? `${eventName} - Invitations${
+                  organizerName ? ` (${organizerName})` : ""
+                }`
+              : "Event Invitations"}
           </h1>
           <p className="text-gray-500">Manage invitations for this event</p>
         </div>
@@ -231,7 +282,7 @@ export default function EventInvitationsPage() {
                 <TableRow>
                   <TableHead>Guest</TableHead>
                   <TableHead>Ticket Type</TableHead>
-                  <TableHead>Organizer</TableHead>
+                  <TableHead>Usage</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Payment</TableHead>
@@ -255,137 +306,193 @@ export default function EventInvitationsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  currentItems.map((inv) => (
-                    <TableRow key={inv._id}>
-                      <TableCell>
-                        <div className="font-medium">{inv.guestName}</div>
-                        <div className="text-sm text-gray-500 flex items-center gap-1">
-                          {inv.type === "email" || inv.type === "both" ? (
-                            <Mail className="h-3 w-3" />
-                          ) : (
-                            <Phone className="h-3 w-3" />
-                          )}
-                          {inv.guestEmail || inv.guestPhone}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className="bg-purple-50 text-purple-700 border-purple-200"
-                        >
-                          {inv.ticketType || "Regular"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-gray-400" />
-                          {inv.organizerId
-                            ? `${inv.organizerId.firstName} ${inv.organizerId.lastName}`
-                            : "Unknown"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="capitalize">
-                          {inv.type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          className={
-                            inv.status === "delivered" || inv.status === "sent"
-                              ? "bg-green-100 text-green-700 hover:bg-green-100"
-                              : inv.status === "failed"
-                              ? "bg-red-100 text-red-700 hover:bg-red-100"
-                              : "bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
-                          }
-                        >
-                          {inv.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {inv.guestType === "paid" ? (
+                  currentItems.map((inv) => {
+                    const ticket = getTicketForInvitation(inv);
+                    let usage = "NO_TIKT";
+                    let cost = inv.estimatedCost || 0;
+                    // Only show usage if ticket exists AND cost > 0
+                    if (
+                      ticket &&
+                      typeof ticket.purchaseQuantity === "number" &&
+                      typeof ticket.ticketCount === "number" &&
+                      ticket.purchaseQuantity > 0 &&
+                      cost > 0
+                    ) {
+                      usage = `${
+                        ticket.purchaseQuantity - ticket.ticketCount
+                      }/${ticket.purchaseQuantity}`;
+                    } else {
+                      usage = "NO_TIKT";
+                      cost = 0;
+                    }
+                    return (
+                      <TableRow key={inv._id}>
+                        <TableCell>
+                          <div className="font-medium">{inv.guestName}</div>
+                          <div className="text-sm text-gray-500 flex items-center gap-1">
+                            {inv.type === "email" || inv.type === "both" ? (
+                              <Mail className="h-3 w-3" />
+                            ) : (
+                              <Phone className="h-3 w-3" />
+                            )}
+                            {inv.guestEmail || inv.guestPhone}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <Badge
-                            variant="secondary"
-                            className="bg-gray-100 text-gray-700"
+                            variant="outline"
+                            className="bg-purple-50 text-purple-700 border-purple-200"
                           >
-                            Free
+                            {inv.ticketType || "Regular"}
                           </Badge>
-                        ) : (
-                          <span className="capitalize text-sm">
-                            {inv.paymentStatus}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {inv.guestType === "paid" ? (
-                          <span className="text-gray-400">-</span>
-                        ) : (
+                        </TableCell>
+                        <TableCell>
                           <Badge
                             variant="outline"
                             className={`capitalize ${
-                              inv.rsvpStatus === "confirmed"
-                                ? "bg-green-50 text-green-700 border-green-200"
-                                : inv.rsvpStatus === "declined"
-                                ? "bg-red-50 text-red-700 border-red-200"
-                                : "bg-gray-50 text-gray-700 border-gray-200"
+                              usage === "NO_TIKT"
+                                ? "bg-gray-50 text-gray-700 border-gray-200"
+                                : "bg-green-50 text-green-700 border-green-200"
                             }`}
                           >
-                            {inv.rsvpStatus || "Pending"}
+                            {usage}
                           </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="font-medium">
-                          {formatCurrency(inv.estimatedCost || 0)}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(inv.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Delete Invitation"
-                              >
-                                <Trash2 className="h-4 w-4 text-red-600" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Delete Invitation?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently delete the invitation
-                                  and any associated ticket. This action cannot
-                                  be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDelete(inv._id)}
-                                  className="bg-red-600 hover:bg-red-700"
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize">
+                            {inv.type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={
+                              inv.status === "delivered" ||
+                              inv.status === "sent"
+                                ? "bg-green-100 text-green-700 hover:bg-green-100"
+                                : inv.status === "failed"
+                                ? "bg-red-100 text-red-700 hover:bg-red-100"
+                                : "bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
+                            }
+                          >
+                            {inv.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {inv.guestType === "paid" ? (
+                            <Badge
+                              variant="secondary"
+                              className="bg-gray-100 text-gray-700"
+                            >
+                              Free
+                            </Badge>
+                          ) : (
+                            <span className="capitalize text-sm">
+                              {inv.paymentStatus}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {inv.guestType === "paid" ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className={`capitalize ${
+                                inv.rsvpStatus === "confirmed"
+                                  ? "bg-green-50 text-green-700 border-green-200"
+                                  : inv.rsvpStatus === "declined"
+                                  ? "bg-red-50 text-red-700 border-red-200"
+                                  : "bg-gray-50 text-gray-700 border-gray-200"
+                              }`}
+                            >
+                              {inv.rsvpStatus || "Pending"}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">
+                            {formatCurrency(cost)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(inv.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Delete Invitation"
                                 >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Delete Invitation?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This will permanently delete the invitation
+                                    and any associated ticket. This action
+                                    cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDelete(inv._id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      <div className="flex justify-end gap-5 items-center mt-4">
+        <button
+          className="px-3 py-1 rounded bg-gray-300 text-gray-700 disabled:opacity-30"
+          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+          disabled={currentPage === 1}
+        >
+          Previous
+        </button>
+        <span className="text-sm text-gray-600">
+          Page {currentPage} of{" "}
+          {Math.max(1, Math.ceil(filteredInvitations.length / itemsPerPage))}
+        </span>
+        <button
+          className="px-3 py-1 rounded bg-gray-300 text-gray-700 disabled:opacity-50"
+          onClick={() =>
+            setCurrentPage((p) =>
+              Math.min(
+                Math.ceil(filteredInvitations.length / itemsPerPage),
+                p + 1
+              )
+            )
+          }
+          disabled={
+            currentPage >= Math.ceil(filteredInvitations.length / itemsPerPage)
+          }
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }

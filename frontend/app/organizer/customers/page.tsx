@@ -199,7 +199,6 @@ export default function CustomersPage() {
     );
   });
 
-
   // Group tickets by type, ondoor/online, and single ticket price
   type TicketGroup = {
     ticketType: string;
@@ -212,8 +211,11 @@ export default function CustomersPage() {
   filteredTickets.forEach((ticket) => {
     const quantity = getTicketQuantity(ticket);
     // Calculate price per single ticket
-    const pricePerTicket = ticket.price && quantity > 0 ? ticket.price / quantity : 0;
-    const key = `${ticket.ticketType}|${ticket.isOnDoor ? "ondoor" : "online"}|${pricePerTicket}`;
+    const pricePerTicket =
+      ticket.price && quantity > 0 ? ticket.price / quantity : 0;
+    const key = `${ticket.ticketType}|${
+      ticket.isOnDoor ? "ondoor" : "online"
+    }|${pricePerTicket}`;
     if (!groupMap.has(key)) {
       groupMap.set(key, {
         ticketType: ticket.ticketType,
@@ -318,7 +320,8 @@ export default function CustomersPage() {
           >
             <div>
               <p className="text-sm font-medium text-gray-700">
-                {group.ticketType} {group.isOnDoor ? "On-Door" : "Online"} @ ETB {group.pricePerTicket.toLocaleString()}
+                {group.ticketType} {group.isOnDoor ? "On-Door" : "Online"} @ ETB{" "}
+                {group.pricePerTicket.toLocaleString()}
               </p>
               <p className="text-xl font-bold text-gray-900 mt-1">
                 {group.totalSold} tickets
