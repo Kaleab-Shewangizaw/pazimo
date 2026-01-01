@@ -298,8 +298,26 @@ export default function SentInvitationsTable({
 
                     let usage = "0/1";
                     if (ticket) {
-                      const total =
+                      // For invitations created before Jan 2, 2026, derive purchaseQuantity from cost
+                      const isOldInvitation =
+                        new Date(invitation.createdAt || invitation.sentAt) <
+                        new Date("2026-01-02");
+
+                      let total =
                         ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+                      if (
+                        isOldInvitation &&
+                        invitation.estimatedCost &&
+                        invitation.estimatedCost > 0
+                      ) {
+                        // Derive original quantity: cost / 1.03 (since each invitation unit is 1.03 ETB)
+                        const derivedQty = Math.round(
+                          invitation.estimatedCost / 1.03
+                        );
+                        total = Math.max(total, derivedQty);
+                      }
+
                       const remaining =
                         typeof ticket.ticketCount === "number"
                           ? ticket.ticketCount

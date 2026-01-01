@@ -37,6 +37,7 @@ export interface Invitation {
   qrCodeCount: number;
   message?: string;
   sentAt: string;
+  createdAt?: string;
   status: "sent" | "delivered" | "failed";
   rsvpStatus?:
     | "pending"

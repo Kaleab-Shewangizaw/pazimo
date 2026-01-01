@@ -343,19 +343,34 @@ export default function EventInvitationsPage() {
                       if (cost === undefined || cost === null) {
                         const emailPrice = 2.5;
                         const smsPrice = 7.5;
+                        const baseAmount = inv.amount || 1;
                         if (inv.type === "email")
-                          cost = emailPrice * (inv.amount || 1);
+                          cost = emailPrice * baseAmount;
                         else if (inv.type === "sms")
-                          cost = smsPrice * (inv.amount || 1);
+                          cost = smsPrice * baseAmount;
                         else if (inv.type === "both")
-                          cost = (emailPrice + smsPrice) * (inv.amount || 1);
+                          cost = (emailPrice + smsPrice) * baseAmount;
                         else cost = 0;
+
+                        // Add 3% service fee and round
+                        cost = Math.round(cost * 1.03 * 100) / 100;
                       }
 
                       let usage = "0/1";
                       if (ticket) {
-                        const total =
+                        // For invitations created before Jan 2, 2026, derive purchaseQuantity from cost
+                        const isOldInvitation =
+                          new Date(inv.createdAt) < new Date("2026-01-02");
+
+                        let total =
                           ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+                        if (isOldInvitation && cost > 0) {
+                          // Derive original quantity: cost / 1.03 (since each invitation unit is 1.03 ETB)
+                          const derivedQty = Math.round(cost / 1.03);
+                          total = Math.max(total, derivedQty);
+                        }
+
                         const remaining =
                           typeof ticket.ticketCount === "number"
                             ? ticket.ticketCount
