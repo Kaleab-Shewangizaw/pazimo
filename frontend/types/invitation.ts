@@ -28,6 +28,8 @@ export interface Invitation {
   eventTitle: string;
   customerName: string;
   contact: string;
+  guestEmail?: string;
+  guestPhone?: string;
   contactType: "email" | "phone";
   guestType: "guest" | "paid";
   ticketType?: string;
@@ -46,6 +48,7 @@ export interface Invitation {
   qrCode: string;
   eventId?: number | string;
   rsvpLink?: string;
+  estimatedCost?: number;
 }
 
 export interface Attendee {
@@ -55,6 +58,8 @@ export interface Attendee {
   guestType: string;
   confirmedAt: string;
   status: string;
+  purchaseQuantity?: number;
+  ticketCount?: number;
 }
 
 export interface Pricing {

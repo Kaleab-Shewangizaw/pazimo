@@ -1047,7 +1047,7 @@ const getEventTickets = async (req, res) => {
     }
 
     const tickets = await Ticket.find({ event: eventId })
-      .populate("user", "firstName lastName email")
+      .populate("user", "firstName lastName email phoneNumber")
       .sort("-createdAt");
 
     // Fetch event to get ticket types for calculation
@@ -1092,6 +1092,32 @@ const getEventTickets = async (req, res) => {
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Failed to fetch event tickets",
+      error: error.message,
+    });
+  }
+};
+
+// Get organizer's tickets
+const getOrganizerTickets = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Find all events by this organizer
+    const events = await Event.find({ organizer: userId }).select("_id");
+    const eventIds = events.map((e) => e._id);
+
+    // Find tickets for these events
+    const tickets = await Ticket.find({ event: { $in: eventIds } })
+      .populate("event", "title")
+      .populate("user", "firstName lastName email phoneNumber")
+      .lean();
+
+    res.status(StatusCodes.OK).json({ success: true, tickets });
+  } catch (error) {
+    console.error("Get organizer tickets error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to fetch organizer tickets",
       error: error.message,
     });
   }
@@ -1757,6 +1783,7 @@ module.exports = {
   createInvitationTicket,
   getUserTickets,
   getEventTickets,
+  getOrganizerTickets,
   checkInTicket,
   cancelTicket,
   getTicket,

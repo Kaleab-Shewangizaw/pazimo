@@ -1056,7 +1056,7 @@ export default function InvitationPage() {
               id: ticket._id,
               customerName: name,
               contact: contact,
-              guestType: "Guest",
+              guestType: ticket.isInvitation ? "Guest" : "Paid",
               confirmedAt:
                 ticket.status === "pending" || ticket.status === "cancelled"
                   ? "Pending"
@@ -1064,6 +1064,8 @@ export default function InvitationPage() {
                   ? new Date(ticket.createdAt).toLocaleDateString()
                   : "Unknown",
               status: ticket.status || "active",
+              purchaseQuantity: ticket.purchaseQuantity || 1,
+              ticketCount: ticket.ticketCount || 0,
             };
           });
         }

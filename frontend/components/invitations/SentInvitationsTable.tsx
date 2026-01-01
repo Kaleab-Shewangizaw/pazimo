@@ -14,6 +14,7 @@ import { Invitation } from "@/types/invitation";
 
 interface SentInvitationsTableProps {
   invitations: Invitation[];
+  tickets?: any[];
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onViewDetails: (invitation: Invitation) => void;
@@ -24,6 +25,7 @@ interface SentInvitationsTableProps {
 
 export default function SentInvitationsTable({
   invitations,
+  tickets = [],
   searchQuery,
   setSearchQuery,
   onViewDetails,
@@ -201,16 +203,16 @@ export default function SentInvitationsTable({
                   Guests / Tickets
                 </th>
                 <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
+                  Usage
+                </th>
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
                   Ticket Type
                 </th>
                 <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
                   Sent At
                 </th>
                 <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900">
-                  Delivery
-                </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900">
-                  RSVP
+                  Status
                 </th>
               </tr>
             </thead>
@@ -218,7 +220,7 @@ export default function SentInvitationsTable({
               {isLoading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 md:px-6 py-12 text-center text-gray-500"
                   >
                     <div className="flex flex-col items-center justify-center gap-2">
@@ -230,7 +232,7 @@ export default function SentInvitationsTable({
               ) : filteredInvitations.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 md:px-6 py-8 text-center text-gray-500"
                   >
                     {safeInvitations.length === 0
@@ -239,72 +241,211 @@ export default function SentInvitationsTable({
                   </td>
                 </tr>
               ) : (
-                paginatedInvitations.map((invitation) => (
-                  <tr
-                    key={invitation.id}
-                    onClick={() => onViewDetails(invitation)}
-                    className="border-t border-gray-200 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
-                  >
-                    <td className="px-4 md:px-6 py-4">
-                      <div className="font-medium text-gray-900 text-sm md:text-base">
-                        {invitation.eventTitle}
-                      </div>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 text-sm text-gray-900 hidden sm:table-cell">
-                      {invitation.customerName}
-                    </td>
-                    <td className="px-4 md:px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        {invitation.contact}
-                      </div>
-                      {invitation.message && (
-                        <div className="text-xs text-gray-600 mt-1 truncate max-w-[150px]">
-                          &quot;{invitation.message}&quot;
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 md:px-6 py-4 hidden md:table-cell">
-                      <div className="flex items-center gap-1 text-sm text-gray-900">
-                        {invitation.contactType === "email" ? (
-                          <Mail className="h-4 w-4 text-blue-600" />
-                        ) : (
-                          <Phone className="h-4 w-4 text-green-600" />
-                        )}
-                        <span className="capitalize">
-                          {invitation.contactType}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${invitation.paymentStatus === "paid"
-                            ? "bg-green-100 text-green-800 border border-green-200"
-                            : "bg-blue-100 text-blue-800 border border-blue-200"
-                          }`}
+                (() => {
+                  const claimedTicketIds = new Set<string>();
+                  return paginatedInvitations.map((invitation) => {
+                    const ticket = tickets.find((t) => {
+                      // Only match invitation tickets
+                      if (!t.isInvitation) return false;
+
+                      // Skip if already claimed by another invitation in this view
+                      if (t._id && claimedTicketIds.has(t._id)) return false;
+
+                      // 1. Match by eventId first
+                      const invEventId = invitation.eventId?.toString();
+                      const tEventId = (t.event?._id || t.event)?.toString();
+                      if (invEventId && tEventId && invEventId !== tEventId)
+                        return false;
+
+                      // 2. Normalize invitation contacts
+                      const invEmail = (
+                        invitation.guestEmail ||
+                        (invitation.contactType === "email"
+                          ? invitation.contact
+                          : "") ||
+                        ""
+                      )
+                        .toLowerCase()
+                        .trim();
+                      const invPhone = (
+                        invitation.guestPhone ||
+                        (invitation.contactType === "phone"
+                          ? invitation.contact
+                          : "") ||
+                        ""
+                      ).trim();
+
+                      // 3. Normalize ticket contacts (check both guest fields and user fields)
+                      const tEmail = (t.guestEmail || t.user?.email || "")
+                        .toLowerCase()
+                        .trim();
+                      const tPhone = (
+                        t.guestPhone ||
+                        t.user?.phoneNumber ||
+                        ""
+                      ).trim();
+
+                      // 4. Compare
+                      if (invEmail && tEmail && invEmail === tEmail)
+                        return true;
+                      if (invPhone && tPhone && invPhone === tPhone)
+                        return true;
+
+                      return false;
+                    });
+
+                    if (ticket && ticket._id) claimedTicketIds.add(ticket._id);
+
+                    let usage = "0/1";
+                    if (ticket) {
+                      const total =
+                        ticket.purchaseQuantity || ticket.ticketCount || 1;
+                      const remaining =
+                        typeof ticket.ticketCount === "number"
+                          ? ticket.ticketCount
+                          : 0;
+                      usage = `${Math.max(0, total - remaining)}/${total}`;
+                    } else {
+                      usage = `0/${invitation.qrCodeCount || 1}`;
+                    }
+
+                    // Unified Status Logic
+                    let unifiedStatus = "pending";
+                    if (
+                      ticket &&
+                      ticket.ticketCount === 0 &&
+                      (ticket.purchaseQuantity || 0) > 0
+                    ) {
+                      unifiedStatus = "used";
+                    } else if (invitation.rsvpStatus === "confirmed") {
+                      unifiedStatus = "confirmed";
+                    } else if (invitation.rsvpStatus === "declined") {
+                      unifiedStatus = "declined";
+                    } else {
+                      unifiedStatus = "pending";
+                    }
+
+                    // If no ticket exists yet, it's a pending invitation without a ticket
+                    const isGuestPending = !ticket;
+
+                    const displayTicketType = isGuestPending
+                      ? "-"
+                      : ticket?.ticketType ||
+                        invitation.ticketType ||
+                        "Regular";
+                    const displayUsage = isGuestPending ? "-" : usage;
+                    const displayStatus =
+                      isGuestPending && invitation.rsvpStatus !== "declined"
+                        ? "-"
+                        : unifiedStatus;
+
+                    // Ticket count for display - only show if ticket exists
+                    const displayTicketCount = ticket
+                      ? ticket.purchaseQuantity || ticket.ticketCount || 1
+                      : invitation.qrCodeCount;
+
+                    return (
+                      <tr
+                        key={invitation.id}
+                        onClick={() => onViewDetails(invitation)}
+                        className="border-t border-gray-200 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
                       >
-                        <Ticket className="w-3 h-3" />
-                        {invitation.paymentStatus === "paid" ? "Paid" : "Guest"}
-                        <span className="ml-1 font-bold">
-                          ×{invitation.qrCodeCount}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
-                        {invitation.ticketType}
-                      </span>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 hidden lg:table-cell">
-                      {invitation.sentAt}
-                    </td>
-                    <td className="px-4 md:px-6 py-4">
-                      {getDeliveryStatusBadge(invitation.status)}
-                    </td>
-                    <td className="px-4 md:px-6 py-4">
-                      {getRsvpStatusBadge(invitation.rsvpStatus)}
-                    </td>
-                  </tr>
-                ))
+                        <td className="px-4 md:px-6 py-4">
+                          <div className="font-medium text-gray-900 text-sm md:text-base">
+                            {invitation.eventTitle}
+                          </div>
+                        </td>
+                        <td className="px-4 md:px-6 py-4 text-sm text-gray-900 hidden sm:table-cell">
+                          {invitation.customerName}
+                        </td>
+                        <td className="px-4 md:px-6 py-4">
+                          <div className="text-sm text-gray-900">
+                            {invitation.contact}
+                          </div>
+                          {invitation.message && (
+                            <div className="text-xs text-gray-600 mt-1 truncate max-w-[150px]">
+                              &quot;{invitation.message}&quot;
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 md:px-6 py-4 hidden md:table-cell">
+                          <div className="flex items-center gap-1 text-sm text-gray-900">
+                            {invitation.contactType === "email" ? (
+                              <Mail className="h-4 w-4 text-blue-600" />
+                            ) : (
+                              <Phone className="h-4 w-4 text-green-600" />
+                            )}
+                            <span className="capitalize">
+                              {invitation.contactType}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
+                              ticket
+                                ? "bg-green-100 text-green-800 border border-green-200"
+                                : "bg-blue-100 text-blue-800 border border-blue-200"
+                            }`}
+                          >
+                            <Ticket className="w-3 h-3" />
+                            {ticket ? "Paid" : "Guest"}
+                            {ticket && (
+                              <span className="ml-1 font-bold">
+                                ×{displayTicketCount}
+                              </span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
+                          {displayUsage === "-" ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                displayUsage.startsWith("0/")
+                                  ? "bg-gray-100 text-gray-800"
+                                  : "bg-green-100 text-green-800"
+                              }`}
+                            >
+                              {displayUsage}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
+                          {displayTicketType === "-" ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                              {displayTicketType}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 hidden lg:table-cell">
+                          {invitation.sentAt}
+                        </td>
+                        <td className="px-4 md:px-6 py-4">
+                          {displayStatus === "-" ? (
+                            <span className="text-gray-400">-</span>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                                displayStatus === "confirmed" ||
+                                displayStatus === "used"
+                                  ? "bg-green-100 text-green-800"
+                                  : displayStatus === "declined"
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
+                              {displayStatus}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()
               )}
             </tbody>
           </table>

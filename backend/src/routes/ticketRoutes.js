@@ -21,6 +21,7 @@ const {
   getPublicTicketDetails,
   cancelPaymentIntent,
   createOnDoorTicket,
+  getOrganizerTickets,
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
@@ -367,6 +368,7 @@ router.post("/invite", createInvitationTicket);
 router.post("/guest-ticket", createGuestTicket);
 router.post("/guest-ticket/send", sendGuestInvitation);
 router.get("/my-tickets", getUserTickets);
+router.get("/organizer/all", getOrganizerTickets);
 router.get("/details/:id", getTicketDetails);
 router.get("/:ticketId", getTicket);
 router.patch("/:ticketId/cancel", cancelTicket);

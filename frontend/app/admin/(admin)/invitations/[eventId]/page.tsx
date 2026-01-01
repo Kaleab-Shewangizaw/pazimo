@@ -75,11 +75,17 @@ export default function EventInvitationsPage() {
     InvitationData[]
   >([]);
   interface TicketData {
+    _id?: string;
     guestEmail?: string;
     guestPhone?: string;
     purchaseQuantity?: number;
     ticketCount?: number;
-    // add other fields as needed
+    ticketType?: string;
+    isInvitation?: boolean;
+    user?: {
+      email?: string;
+      phoneNumber?: string;
+    };
   }
   const [eventTickets, setEventTickets] = useState<TicketData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,14 +217,31 @@ export default function EventInvitationsPage() {
   };
 
   // Helper to get ticket for invitation
-  const getTicketForInvitation = (inv: InvitationData) => {
+  const getTicketForInvitation = (
+    inv: InvitationData,
+    claimedIds: Set<string>
+  ) => {
     // Match by guestEmail or guestPhone
     return eventTickets.find((t) => {
-      if (inv.guestEmail && t.guestEmail && inv.guestEmail === t.guestEmail)
-        return true;
-      if (inv.guestPhone && t.guestPhone && inv.guestPhone === t.guestPhone)
-        return true;
-      return false;
+      // Only match invitation tickets that belong to this invitation
+      if (!t.isInvitation) return false;
+
+      // Skip if already claimed by another invitation in this view
+      if (t._id && claimedIds.has(t._id)) return false;
+
+      // 1. Normalize invitation contacts
+      const invEmail = (inv.guestEmail || "").toLowerCase().trim();
+      const invPhone = (inv.guestPhone || "").trim();
+
+      // 2. Normalize ticket contacts (check both guest fields and user fields)
+      const tEmail = (t.guestEmail || t.user?.email || "").toLowerCase().trim();
+      const tPhone = (t.guestPhone || t.user?.phoneNumber || "").trim();
+
+      // 3. Compare
+      const emailMatch = invEmail && tEmail && invEmail === tEmail;
+      const phoneMatch = invPhone && tPhone && invPhone === tPhone;
+
+      return emailMatch || phoneMatch;
     });
   };
 
@@ -284,9 +307,8 @@ export default function EventInvitationsPage() {
                   <TableHead>Ticket Type</TableHead>
                   <TableHead>Usage</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Payment</TableHead>
-                  <TableHead>RSVP</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Cost</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Actions</TableHead>
@@ -306,156 +328,205 @@ export default function EventInvitationsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  currentItems.map((inv) => {
-                    const ticket = getTicketForInvitation(inv);
-                    let usage = "NO_TIKT";
-                    let cost = inv.estimatedCost || 0;
-                    // Only show usage if ticket exists AND cost > 0
-                    if (
-                      ticket &&
-                      typeof ticket.purchaseQuantity === "number" &&
-                      typeof ticket.ticketCount === "number" &&
-                      ticket.purchaseQuantity > 0 &&
-                      cost > 0
-                    ) {
-                      usage = `${
-                        ticket.purchaseQuantity - ticket.ticketCount
-                      }/${ticket.purchaseQuantity}`;
-                    } else {
-                      usage = "NO_TIKT";
-                      cost = 0;
-                    }
-                    return (
-                      <TableRow key={inv._id}>
-                        <TableCell>
-                          <div className="font-medium">{inv.guestName}</div>
-                          <div className="text-sm text-gray-500 flex items-center gap-1">
-                            {inv.type === "email" || inv.type === "both" ? (
-                              <Mail className="h-3 w-3" />
+                  (() => {
+                    const claimedTicketIds = new Set<string>();
+                    return currentItems.map((inv) => {
+                      const ticket = getTicketForInvitation(
+                        inv,
+                        claimedTicketIds
+                      );
+                      if (ticket && ticket._id)
+                        claimedTicketIds.add(ticket._id);
+
+                      // Calculate estimated cost if not provided by backend
+                      let cost = inv.estimatedCost;
+                      if (cost === undefined || cost === null) {
+                        const emailPrice = 2.5;
+                        const smsPrice = 7.5;
+                        if (inv.type === "email")
+                          cost = emailPrice * (inv.amount || 1);
+                        else if (inv.type === "sms")
+                          cost = smsPrice * (inv.amount || 1);
+                        else if (inv.type === "both")
+                          cost = (emailPrice + smsPrice) * (inv.amount || 1);
+                        else cost = 0;
+                      }
+
+                      let usage = "0/1";
+                      if (ticket) {
+                        const total =
+                          ticket.purchaseQuantity || ticket.ticketCount || 1;
+                        const remaining =
+                          typeof ticket.ticketCount === "number"
+                            ? ticket.ticketCount
+                            : 0;
+                        usage = `${Math.max(0, total - remaining)}/${total}`;
+                      } else {
+                        usage = `0/${inv.amount || 1}`;
+                      }
+
+                      // Unified Status Logic
+                      let unifiedStatus = "pending";
+                      if (
+                        ticket &&
+                        ticket.ticketCount === 0 &&
+                        (ticket.purchaseQuantity || 0) > 0
+                      ) {
+                        unifiedStatus = "used";
+                      } else if (inv.rsvpStatus === "confirmed") {
+                        unifiedStatus = "confirmed";
+                      } else if (inv.rsvpStatus === "declined") {
+                        unifiedStatus = "declined";
+                      } else {
+                        unifiedStatus = "pending";
+                      }
+
+                      // If no ticket exists yet, or cost is 0, it's a pending invitation without a ticket
+                      const isGuestPending = !ticket || cost === 0;
+
+                      const displayTicketType = isGuestPending
+                        ? "-"
+                        : ticket?.ticketType || inv.ticketType || "Regular";
+                      const displayUsage = isGuestPending ? "-" : usage;
+                      const displayStatus =
+                        isGuestPending && inv.rsvpStatus !== "declined"
+                          ? "-"
+                          : unifiedStatus;
+
+                      return (
+                        <TableRow key={inv._id}>
+                          <TableCell>
+                            <div className="font-medium">{inv.guestName}</div>
+                            <div className="text-sm text-gray-500 flex items-center gap-1">
+                              {inv.type === "email" || inv.type === "both" ? (
+                                <Mail className="h-3 w-3" />
+                              ) : (
+                                <Phone className="h-3 w-3" />
+                              )}
+                              {inv.guestEmail || inv.guestPhone}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {displayTicketType === "-" ? (
+                              <span className="text-gray-400">-</span>
                             ) : (
-                              <Phone className="h-3 w-3" />
+                              <Badge
+                                variant="outline"
+                                className="bg-purple-50 text-purple-700 border-purple-200"
+                              >
+                                {displayTicketType}
+                              </Badge>
                             )}
-                            {inv.guestEmail || inv.guestPhone}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className="bg-purple-50 text-purple-700 border-purple-200"
-                          >
-                            {inv.ticketType || "Regular"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={`capitalize ${
-                              usage === "NO_TIKT"
-                                ? "bg-gray-50 text-gray-700 border-gray-200"
-                                : "bg-green-50 text-green-700 border-green-200"
-                            }`}
-                          >
-                            {usage}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {inv.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={
-                              inv.status === "delivered" ||
-                              inv.status === "sent"
-                                ? "bg-green-100 text-green-700 hover:bg-green-100"
-                                : inv.status === "failed"
-                                ? "bg-red-100 text-red-700 hover:bg-red-100"
-                                : "bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
-                            }
-                          >
-                            {inv.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {inv.guestType === "paid" ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-gray-100 text-gray-700"
-                            >
-                              Free
+                          </TableCell>
+                          <TableCell>
+                            {displayUsage === "-" ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className={`capitalize ${
+                                  displayUsage.startsWith("0/")
+                                    ? "bg-gray-50 text-gray-700 border-gray-200"
+                                    : "bg-green-50 text-green-700 border-green-200"
+                                }`}
+                              >
+                                {displayUsage}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="capitalize">
+                              {inv.type}
                             </Badge>
-                          ) : (
-                            <span className="capitalize text-sm">
-                              {inv.paymentStatus}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {inv.guestType === "paid" ? (
-                            <span className="text-gray-400">-</span>
-                          ) : (
+                          </TableCell>
+                          <TableCell>
                             <Badge
                               variant="outline"
                               className={`capitalize ${
-                                inv.rsvpStatus === "confirmed"
+                                ticket
                                   ? "bg-green-50 text-green-700 border-green-200"
-                                  : inv.rsvpStatus === "declined"
-                                  ? "bg-red-50 text-red-700 border-red-200"
-                                  : "bg-gray-50 text-gray-700 border-gray-200"
+                                  : "bg-blue-50 text-blue-700 border-blue-200"
                               }`}
                             >
-                              {inv.rsvpStatus || "Pending"}
+                              {ticket ? "Paid" : "Guest"}
+                              {ticket && (
+                                <span className="ml-1 font-bold">
+                                  ×
+                                  {ticket.purchaseQuantity ||
+                                    ticket.ticketCount ||
+                                    1}
+                                </span>
+                              )}
                             </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">
-                            {formatCurrency(cost)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {new Date(inv.createdAt).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  title="Delete Invitation"
-                                >
-                                  <Trash2 className="h-4 w-4 text-red-600" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    Delete Invitation?
-                                  </AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This will permanently delete the invitation
-                                    and any associated ticket. This action
-                                    cannot be undone.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDelete(inv._id)}
-                                    className="bg-red-600 hover:bg-red-700"
+                          </TableCell>
+                          <TableCell>
+                            {displayStatus === "-" ? (
+                              <span className="text-gray-400">-</span>
+                            ) : (
+                              <Badge
+                                className={`capitalize ${
+                                  displayStatus === "confirmed" ||
+                                  displayStatus === "used"
+                                    ? "bg-green-100 text-green-700 hover:bg-green-100"
+                                    : displayStatus === "declined"
+                                    ? "bg-red-100 text-red-700 hover:bg-red-100"
+                                    : "bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
+                                }`}
+                              >
+                                {displayStatus}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">
+                              {formatCurrency(cost)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(inv.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Delete Invitation"
                                   >
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>
+                                      Delete Invitation?
+                                    </AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      This will permanently delete the
+                                      invitation and any associated ticket. This
+                                      action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>
+                                      Cancel
+                                    </AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDelete(inv._id)}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()
                 )}
               </TableBody>
             </Table>

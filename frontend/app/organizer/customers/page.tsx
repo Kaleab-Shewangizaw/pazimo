@@ -417,8 +417,8 @@ export default function CustomersPage() {
               ) : (
                 paginatedTickets.map((ticket) => {
                   const total = getTicketQuantity(ticket);
-                  const used = ticket.status === "used" ? total : 0;
-                  const remaining = total - used;
+                  const used = Math.max(0, total - (ticket.ticketCount || 0));
+                  const remaining = ticket.ticketCount || 0;
 
                   return (
                     <tr

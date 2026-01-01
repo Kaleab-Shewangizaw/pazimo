@@ -440,6 +440,7 @@ const handlePaymentSuccess = async (payment) => {
         guestPhone: payment.method === "phone" ? payment.contact : undefined,
         ticketType: ticketDetails.ticketType || "Guest Ticket",
         ticketCount: ticketDetails.qrCodeCount || 1,
+        purchaseQuantity: ticketDetails.qrCodeCount || 1,
         price: 0,
         status: "active",
         paymentStatus: "completed",

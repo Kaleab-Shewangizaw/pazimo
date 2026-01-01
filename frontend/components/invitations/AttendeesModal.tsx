@@ -97,54 +97,95 @@ export default function AttendeesModal({
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
                         Status
                       </th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        Usage
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {attendees.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={3}
+                          colSpan={4}
                           className="px-3 py-6 text-center text-gray-500"
                         >
                           No attendees found
                         </td>
                       </tr>
                     ) : (
-                      paginatedAttendees.map((attendee) => (
-                        <tr key={attendee.id} className="hover:bg-gray-50">
-                          <td className="px-3 py-3">
-                            <div className="text-sm font-medium text-gray-900">
-                              {attendee.customerName}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {attendee.contact}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="text-sm text-gray-900">
-                              {attendee.guestType === "paid"
-                                ? "Paid Ticket"
-                                : "Guest Invitation"}
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                attendee.status === "confirmed" ||
-                                attendee.status === "active"
-                                  ? "bg-green-100 text-green-800"
-                                  : attendee.status === "declined" ||
-                                    attendee.status === "cancelled"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
-                              }`}
-                            >
-                              {attendee.status.charAt(0).toUpperCase() +
-                                attendee.status.slice(1)}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
+                      paginatedAttendees.map((attendee) => {
+                        const isGuestPending = !attendee.hasTicket;
+
+                        const displayTicketType = isGuestPending
+                          ? "Guest"
+                          : `Paid x${attendee.purchaseQuantity || 1}`;
+
+                        const displayStatus =
+                          isGuestPending && attendee.status !== "declined"
+                            ? "-"
+                            : attendee.status.charAt(0).toUpperCase() +
+                              attendee.status.slice(1);
+
+                        const displayUsage = isGuestPending
+                          ? "-"
+                          : attendee.purchaseQuantity &&
+                            attendee.purchaseQuantity > 0
+                          ? `${Math.max(
+                              0,
+                              attendee.purchaseQuantity -
+                                (attendee.ticketCount || 0)
+                            )}/${attendee.purchaseQuantity}`
+                          : "0/1";
+
+                        return (
+                          <tr key={attendee.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-3">
+                              <div className="text-sm font-medium text-gray-900">
+                                {attendee.customerName}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {attendee.contact}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="text-sm text-gray-900">
+                                {displayTicketType}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              {displayStatus === "-" ? (
+                                <span className="text-gray-400">-</span>
+                              ) : (
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                    attendee.status === "confirmed" ||
+                                    attendee.status === "active" ||
+                                    attendee.status === "used"
+                                      ? "bg-green-100 text-green-800"
+                                      : attendee.status === "declined" ||
+                                        attendee.status === "cancelled"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                  }`}
+                                >
+                                  {displayStatus}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="text-sm text-gray-900">
+                                {displayUsage === "-" ? (
+                                  <span className="text-gray-400">-</span>
+                                ) : (
+                                  <span className="font-medium">
+                                    {displayUsage}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

@@ -35,6 +35,7 @@ export default function InvitationsPage() {
 
     // Data
     attendees,
+    tickets,
     filteredEvents,
     filteredInvitations,
     totalPages,
@@ -224,6 +225,7 @@ export default function InvitationsPage() {
       ) : (
         <SentInvitationsTable
           invitations={filteredInvitations}
+          tickets={tickets}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onViewDetails={handleViewDetails}
