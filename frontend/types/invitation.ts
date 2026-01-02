@@ -61,6 +61,9 @@ export interface Attendee {
   status: string;
   purchaseQuantity?: number;
   ticketCount?: number;
+  hasTicket?: boolean;
+  ticketType?: string;
+  paymentStatus?: string;
 }
 
 export interface Pricing {

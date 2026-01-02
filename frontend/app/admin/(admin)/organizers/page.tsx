@@ -93,7 +93,7 @@ interface TicketType {
 
 interface TicketData {
   _id: string;
-  event: string;
+  event: string | EventData;
   user: {
     firstName: string;
     lastName: string;
@@ -103,6 +103,8 @@ interface TicketData {
   price: number;
   status: string;
   createdAt: string;
+  isOnDoor?: boolean;
+  paymentStatus?: string;
   purchaseQuantity?: number;
   ticketCount?: number;
 }
@@ -112,10 +114,11 @@ interface RevenueBreakdown {
   eventTitle: string;
   totalRevenue: number;
   ticketTypeBreakdown: {
-    name: string;
-    price: number;
-    quantitySold: number;
-    revenue: number;
+    ticketType: string;
+    isOnDoor: boolean;
+    pricePerTicket: number;
+    totalSold: number;
+    totalRevenue: number;
   }[];
   totalTicketsSold: number;
   onDoorTicketsSold: number;
@@ -554,7 +557,79 @@ export default function OrganizersPage() {
 
       const data = await response.json();
       if (data.success) {
-        setOrganizerBalance(data.data);
+        const balanceData: OrganizerBalance = data.data;
+
+        // Recalculate ticket type breakdown on the frontend using organizer events & tickets
+        const organizer = organizers.find((o) => o._id === organizerId);
+        if (organizer && organizer.events && organizer.events.length > 0) {
+          const enhancedBreakdown = balanceData.revenueBreakdown.map(
+            (eventBreakdown) => {
+              const event = organizer.events.find(
+                (e) => e._id === eventBreakdown.eventId
+              );
+
+              if (!event || !event.tickets || event.tickets.length === 0) {
+                return eventBreakdown;
+              }
+
+              // Filter paid tickets only (exclude free/invitation) similar to organizer/customers
+              const paidTickets = event.tickets.filter((ticket) => {
+                return !!ticket.price && ticket.price > 0;
+              });
+
+              // Helper to calculate correct quantity (reuse getTicketQuantity)
+              const getQuantity = (ticket: TicketData) =>
+                getTicketQuantity(ticket, event);
+
+              type TicketGroup = {
+                ticketType: string;
+                isOnDoor: boolean;
+                pricePerTicket: number;
+                totalSold: number;
+                totalRevenue: number;
+              };
+
+              const groupMap = new Map<string, TicketGroup>();
+
+              paidTickets.forEach((ticket) => {
+                const quantity = getQuantity(ticket);
+                const pricePerTicket =
+                  ticket.price && quantity > 0 ? ticket.price / quantity : 0;
+                const key = `${ticket.ticketType}|$${
+                  ticket.isOnDoor ? "ondoor" : "online"
+                }|${pricePerTicket}`;
+
+                if (!groupMap.has(key)) {
+                  groupMap.set(key, {
+                    ticketType: ticket.ticketType,
+                    isOnDoor: !!ticket.isOnDoor,
+                    pricePerTicket,
+                    totalSold: 0,
+                    totalRevenue: 0,
+                  });
+                }
+
+                const group = groupMap.get(key)!;
+                group.totalSold += quantity;
+                group.totalRevenue += ticket.price || 0;
+              });
+
+              const ticketTypeBreakdown = Array.from(groupMap.values());
+
+              return {
+                ...eventBreakdown,
+                ticketTypeBreakdown,
+              };
+            }
+          );
+
+          setOrganizerBalance({
+            ...balanceData,
+            revenueBreakdown: enhancedBreakdown,
+          });
+        } else {
+          setOrganizerBalance(balanceData);
+        }
       } else {
         throw new Error(data.message || "Failed to fetch organizer balance");
       }
@@ -1333,25 +1408,26 @@ export default function OrganizersPage() {
                             Ticket Type Breakdown
                           </h5>
                           <div className="space-y-2">
-                            {event.ticketTypeBreakdown.map((type) => (
+                            {event.ticketTypeBreakdown.map((type, idx) => (
                               <div
-                                key={type.name}
+                                key={`${type.ticketType}-${type.isOnDoor}-${type.pricePerTicket}-${idx}`}
                                 className="flex justify-between items-center text-sm"
                               >
                                 <div>
                                   <span className="font-medium text-gray-900">
-                                    {type.name}
+                                    {type.ticketType}{" "}
+                                    {type.isOnDoor ? "(On-Door)" : "(Online)"}
                                   </span>
                                   <span className="text-gray-600 ml-2">
-                                    ({type.quantitySold} sold)
+                                    ({type.totalSold} sold)
                                   </span>
                                 </div>
                                 <div className="text-right">
                                   <div className="text-green-600 font-medium">
-                                    {type.revenue.toFixed(2)} Birr
+                                    {type.totalRevenue.toFixed(2)} Birr
                                   </div>
                                   <div className="text-gray-600">
-                                    {type.price.toFixed(2)} Birr each
+                                    {type.pricePerTicket.toFixed(2)} Birr each
                                   </div>
                                 </div>
                               </div>

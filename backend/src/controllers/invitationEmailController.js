@@ -7,12 +7,13 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    host: "smtp.zoho.com",
-    port: 587,
-    secure: false, // Use TLS
+    service: "gmail",
+
+    // Use TLS
     auth: {
-      user: process.env.EMAIL_USER_ZOHO,
-      pass: process.env.EMAIL_PASS_ZOHO,
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+
     },
   });
 };
@@ -116,26 +117,23 @@ const createEmailTemplate = (
 
     <!-- Content -->
     <div style="padding: 50px 40px; text-align: center;">
-      <h2 style="color: #ffffff; margin: 0 0 15px 0; font-size: 28px; font-weight: 400;">${
-        event.title
+      <h2 style="color: #ffffff; margin: 0 0 15px 0; font-size: 28px; font-weight: 400;">${event.title
       }</h2>
       <div style="width: 60px; height: 2px; background-color: #d4af37; margin: 0 auto 30px auto;"></div>
-        <p style="color: #ffffff; font-size: 18px; margin-bottom: 10px;">Hello, ${
-          invitation.guestName
-        }</p>
+        <p style="color: #ffffff; font-size: 18px; margin-bottom: 10px;">Hello, ${invitation.guestName
+      }</p>
         <p style="color: #cccccc; margin: 0 0 40px 0; font-size: 16px; line-height: 1.8; font-family: 'Segoe UI', sans-serif; font-weight: 300;">
           We cordially invite you to join us for an evening of elegance and celebration.
         </p>
 
-      ${
-        message
-          ? `
+      ${message
+        ? `
       <div style="background: #222222; border: 1px solid #333333; padding: 30px; margin: 30px 0;">
         <p style="color: #d4af37; margin: 0 0 10px 0; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;">Message from Organizer</p>
         <p style="color: #ffffff; margin: 0; font-size: 16px; line-height: 1.6; font-style: italic;">"${message}"</p>
       </div>
       `
-          : ""
+        : ""
       }
 
       <!-- Event Details -->
@@ -152,13 +150,12 @@ const createEmailTemplate = (
             </td>
             <td style="padding: 10px; text-align: center; width: 33%;">
               <div style="color: #d4af37; font-size: 14px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;">LOCATION</div>
-              <div style="color: #ffffff; margin-top: 5px; font-family: 'Segoe UI', sans-serif;">${
-                typeof event.location === "string"
-                  ? event.location
-                  : event.location?.city ||
-                    event.location?.address ||
-                    "Venue TBD"
-              }</div>
+              <div style="color: #ffffff; margin-top: 5px; font-family: 'Segoe UI', sans-serif;">${typeof event.location === "string"
+        ? event.location
+        : event.location?.city ||
+        event.location?.address ||
+        "Venue TBD"
+      }</div>
             </td>
           </tr>
         </table>
@@ -180,8 +177,8 @@ const createEmailTemplate = (
       </p>
       <!-- Unique identifier to prevent Gmail clipping/threading -->
       <div style="display:none; opacity:0; font-size:1px; color:#000000;">${new Date().getTime()}-${Math.random()
-      .toString(36)
-      .substring(7)}</div>
+        .toString(36)
+        .substring(7)}</div>
     </div>
   </div>
 </body>
@@ -257,21 +254,19 @@ const createEmailTemplate = (
               <!-- Event Message -->
               <p
                 style="margin:16px auto 0;max-width:520px;font-size:16px;line-height:1.6;color:#4b5563;position:relative;z-index:1;">
-                ${
-                  headerSubtitle ||
-                  "Please join us for a thoughtfully crafted event."
-                }
+                ${headerSubtitle ||
+    "Please join us for a thoughtfully crafted event."
+    }
               </p>
 
               <!-- Organizer Message -->
-              ${
-                message
-                  ? `<p
+              ${message
+      ? `<p
                 style="margin:16px auto 0;max-width:520px;font-size:16px;line-height:1.6;color:#4b5563;position:relative;z-index:1;">
                 ${message}
               </p>`
-                  : ""
-              }
+      : ""
+    }
 
               <!-- Confetti and shapes below messages -->
               <svg width="100%" height="250" style="position:absolute;top:200px;right:0;pointer-events:none;z-index:0;">
@@ -312,13 +307,12 @@ const createEmailTemplate = (
                 <tr>
                   <td style="padding:12px 24px 24px;font-size:14px;color:#374151;">
                     <strong style="color:#111827;">Location</strong><br />
-                    ${
-                      typeof event.location === "string"
-                        ? event.location
-                        : event.location?.city ||
-                          event.location?.address ||
-                          "Venue TBD"
-                    }
+                    ${typeof event.location === "string"
+      ? event.location
+      : event.location?.city ||
+      event.location?.address ||
+      "Venue TBD"
+    }
                   </td>
                 </tr>
               </table>

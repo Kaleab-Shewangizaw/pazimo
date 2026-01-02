@@ -118,24 +118,23 @@ export default function AttendeesModal({
 
                         const displayTicketType = isGuestPending
                           ? "Guest"
-                          : `Paid x${attendee.purchaseQuantity || 1}`;
+                          : attendee.ticketType || "Regular";
+
+                        const total = attendee.purchaseQuantity || 1;
+                        const usedCount = Math.max(
+                          0,
+                          total - (attendee.ticketCount || 0)
+                        );
+
+                        const displayUsage = isGuestPending
+                          ? "-"
+                          : `${usedCount}/${total}`;
 
                         const displayStatus =
                           isGuestPending && attendee.status !== "declined"
                             ? "-"
                             : attendee.status.charAt(0).toUpperCase() +
                               attendee.status.slice(1);
-
-                        const displayUsage = isGuestPending
-                          ? "-"
-                          : attendee.purchaseQuantity &&
-                            attendee.purchaseQuantity > 0
-                          ? `${Math.max(
-                              0,
-                              attendee.purchaseQuantity -
-                                (attendee.ticketCount || 0)
-                            )}/${attendee.purchaseQuantity}`
-                          : "0/1";
 
                         return (
                           <tr key={attendee.id} className="hover:bg-gray-50">
