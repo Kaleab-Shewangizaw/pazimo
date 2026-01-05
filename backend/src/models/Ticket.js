@@ -1,7 +1,8 @@
 const mongoose = require("mongoose");
-const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const User = require("./User");
+const fs = require("fs");
+const path = require("path");
 
 function generateShortId() {
   const chars =
@@ -22,20 +23,24 @@ const TicketSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+
     isInvitation: {
       type: Boolean,
       required: true,
       default: false,
     },
+
     isOnDoor: {
       type: Boolean,
       default: false,
     },
+
     event: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Event",
       required: true,
     },
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -43,33 +48,40 @@ const TicketSchema = new mongoose.Schema(
         return !this.isInvitation && !this.isOnDoor;
       },
     },
+
     guestName: {
       type: String,
       required: function () {
         return this.isInvitation;
       },
     },
+
     guestEmail: {
       type: String,
     },
+
     guestPhone: {
       type: String,
     },
+
     ticketType: {
       type: String,
       required: function () {
         return !this.isInvitation;
       },
     },
+
     price: {
       type: Number,
       required: true,
       min: 0,
     },
+
     purchaseDate: {
       type: Date,
       default: Date.now,
     },
+
     status: {
       type: String,
       enum: [
@@ -83,36 +95,45 @@ const TicketSchema = new mongoose.Schema(
       ],
       default: "active",
     },
+
     paymentStatus: {
       type: String,
       enum: ["pending", "completed", "failed"],
       default: "completed",
     },
+
     paymentDate: {
       type: Date,
     },
-    qrCode: {
-      type: String,
-    },
+
     ticketCount: {
       type: Number,
       default: 1,
     },
+
     purchaseQuantity: {
       type: Number,
       default: 1,
     },
+
     paymentReference: {
       type: String,
     },
+
     checkedIn: {
       type: Boolean,
       default: false,
     },
+
     checkedAt: {
       type: Date,
     },
+
     message: {
+      type: String,
+    },
+
+    qrCode: {
       type: String,
     },
   },
@@ -121,69 +142,132 @@ const TicketSchema = new mongoose.Schema(
   }
 );
 
-// 🔐 Generate QR code before saving
 TicketSchema.pre("save", async function (next) {
-  if (!this.qrCode) {
-    try {
-      let userName = "";
-      let guestName = "";
-      let type = "user";
+  if (this.qrCode) return next();
 
-      if (this.isInvitation) {
-        type = "guest";
-        guestName = this.guestName;
-      } else if (this.user) {
-        // Fetch user details if not already populated
-        if (this.user.firstName && this.user.lastName) {
-          userName = `${this.user.firstName} ${this.user.lastName}`;
-        } else {
-          const user = await User.findById(this.user).select(
-            "firstName lastName"
-          );
-          if (user) {
-            userName = `${user.firstName} ${user.lastName}`;
-          }
+  try {
+    let userName = "";
+    let guestName = "";
+    let type = "user";
+
+    if (this.isInvitation) {
+      type = "guest";
+      guestName = this.guestName;
+    } else if (this.user) {
+      // Fetch user details if not already populated
+      if (this.user.firstName && this.user.lastName) {
+        userName = `${this.user.firstName} ${this.user.lastName}`;
+      } else {
+        const user = await User.findById(this.user).select(
+          "firstName lastName"
+        );
+        if (user) {
+          userName = `${user.firstName} ${user.lastName}`;
         }
       }
-
-      const qrPayload = {
-        _id: this._id,
-        ticketId: this.ticketId,
-        eventId: this.event.toString(),
-        userId: this.user ? this.user.toString() : null,
-        ticketType: this.ticketType,
-        price: this.price,
-        purchaseDate: this.purchaseDate.toISOString(),
-        status: this.status,
-        paymentReference: this.paymentReference || null,
-        ticketCount: this.ticketCount, // Include ticket count in QR code
-        type: type,
-        guest_name: guestName,
-        user_name: userName,
-      };
-
-      // Generate QR code with better error correction and size
-      this.qrCode = await QRCode.toDataURL(JSON.stringify(qrPayload), {
-        errorCorrectionLevel: "H",
-        type: "image/png",
-        quality: 0.92,
-        margin: 1,
-        width: 256,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF",
-        },
-      });
-      next();
-    } catch (error) {
-      console.error("Error generating QR code:", error);
-      next(error);
     }
-  } else {
+
+    const payload = JSON.stringify({
+      ticketId: this.ticketId,
+      guest_name: guestName,
+      type: type,
+      ticketType: this.ticketType,
+    });
+
+    // 1. Generate BASE SVG QR
+    let svg = await QRCode.toString(payload, {
+      errorCorrectionLevel: "H",
+      type: "svg",
+      margin: 2,
+      color: {
+        dark: "#000000",
+        light: "#FFFFFF",
+      },
+    });
+
+    // 2. Convert squares → circles
+    svg = svg.replace(
+      /<rect([^>]*)width="1" height="1"/g,
+      '<circle$1 r="0.5" cx="0.5" cy="0.5"'
+    );
+
+    // 3. Load logo
+    let logoPath = path.join(__dirname, "../../uploads/logo/miniLogo.png");
+    if (!fs.existsSync(logoPath)) {
+      logoPath = path.join(__dirname, "../../../frontend/public/logo.png");
+    }
+
+    let logoSvg = "";
+    if (fs.existsSync(logoPath)) {
+      const logoBase64 = fs.readFileSync(logoPath, "base64");
+
+      const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+      const size = viewBox ? parseInt(viewBox[1]) : 41;
+
+      // Logo size: ~20% of QR code
+      const logoSize = size * 0.2;
+      const center = size / 2;
+      const x = center - logoSize / 2;
+      const y = center - logoSize / 2;
+
+      // White background padding (slightly larger than logo)
+      const padding = 1;
+      const bgSize = logoSize + padding * 2;
+      const bgX = x - padding;
+      const bgY = y - padding;
+
+      logoSvg = `
+        <!-- White background square (PADDING) -->
+        <rect
+          x="${bgX}"
+          y="${bgY}"
+          width="${bgSize}"
+          height="${bgSize}"
+          fill="white"
+          rx="1" ry="1"
+        />
+
+        <!-- Logo (Square) -->
+        <image
+          x="${x}"
+          y="${y}"
+          width="${logoSize}"
+          height="${logoSize}"
+          href="data:image/png;base64,${logoBase64}"
+          preserveAspectRatio="xMidYMid meet"
+        />
+      `;
+    }
+
+    // 4. Finder eye styling (blue rounded)
+    svg = svg.replace(
+      /<rect x="0" y="0" width="7" height="7"[^>]*>/g,
+      `<rect x="0" y="0" width="7" height="7" rx="2" ry="2" fill="#115db1"/>`
+    );
+
+    svg = svg.replace(
+      /<rect x="1" y="1" width="5" height="5"[^>]*>/g,
+      `<rect x="1" y="1" width="5" height="5" rx="1.5" ry="1.5" fill="white"/>`
+    );
+
+    svg = svg.replace(
+      /<rect x="2" y="2" width="3" height="3"[^>]*>/g,
+      `<rect x="2" y="2" width="3" height="3" rx="1" ry="1" fill="#115db1"/>`
+    );
+
+    // 5. Inject logo safely before </svg>
+    svg = svg.replace("</svg>", `${logoSvg}</svg>`);
+
+    // 6. Save as base64
+    this.qrCode = `data:image/svg+xml;base64,${Buffer.from(svg).toString(
+      "base64"
+    )}`;
+
     next();
+  } catch (err) {
+    console.error("QR generation failed:", err);
+    next(err);
   }
 });
 
-const Ticket = mongoose.model("Ticket", TicketSchema);
-
-module.exports = Ticket;
+module.exports = mongoose.model("Ticket", TicketSchema);
