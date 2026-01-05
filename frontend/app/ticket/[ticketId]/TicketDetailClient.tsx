@@ -126,10 +126,6 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
               className="w-48 h-48"
             />
 
-            <p className="text-xs text-gray-500 font-mono mt-1">
-              {ticket.ticketId}
-            </p>
-
             <button
               onClick={handleDownload}
               className="flex items-center gap-2 px-4 py-2 mt-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors"
