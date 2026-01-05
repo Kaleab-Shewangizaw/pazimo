@@ -1,16 +1,23 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useAdminAuthStore } from "@/store/adminAuthStore"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { toast } from "sonner"
-import { ArrowLeft } from "lucide-react"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
+import { ArrowLeft } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 interface Category {
   _id: string;
@@ -20,11 +27,11 @@ interface Category {
 }
 
 export default function AddEventPage() {
-  const router = useRouter()
-  const { token } = useAdminAuthStore()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [categories, setCategories] = useState<Category[]>([])
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
+  const router = useRouter();
+  const { token } = useAdminAuthStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -34,7 +41,7 @@ export default function AddEventPage() {
     location: {
       address: "",
       city: "",
-      country: ""
+      country: "",
     },
     category: "",
     ticketTypes: [
@@ -42,70 +49,79 @@ export default function AddEventPage() {
         name: "Regular",
         price: "",
         quantity: "",
-        description: ""
-      }
+        description: "",
+      },
     ],
     capacity: "",
     tags: "",
-    coverImage: null as File | null
-  })
+    isSoldOut: false,
+    coverImage: null as File | null,
+  });
 
   useEffect(() => {
-    fetchCategories()
-  }, [])
+    fetchCategories();
+  }, []);
 
   const fetchCategories = async () => {
     try {
-      setIsLoadingCategories(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories`)
-      
+      setIsLoadingCategories(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/categories`
+      );
+
       if (!response.ok) {
-        throw new Error('Failed to fetch categories')
+        throw new Error("Failed to fetch categories");
       }
 
-      const data = await response.json()
-      setCategories(data.data)
+      const data = await response.json();
+      setCategories(data.data);
     } catch (error) {
       // console.error('Error fetching categories:', error)
-      toast.error('Failed to fetch categories')
+      toast.error("Failed to fetch categories");
     } finally {
-      setIsLoadingCategories(false)
+      setIsLoadingCategories(false);
     }
-  }
+  };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-    if (name.startsWith('location.')) {
-      const locationField = name.split('.')[1]
-      setFormData(prev => ({
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    if (name.startsWith("location.")) {
+      const locationField = name.split(".")[1];
+      setFormData((prev) => ({
         ...prev,
         location: {
           ...prev.location,
-          [locationField]: value
-        }
-      }))
+          [locationField]: value,
+        },
+      }));
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        [name]: value
-      }))
+        [name]: value,
+      }));
     }
-  }
+  };
 
-  const handleTicketTypeChange = (index: number, field: string, value: string) => {
-    const newTicketTypes = [...formData.ticketTypes]
+  const handleTicketTypeChange = (
+    index: number,
+    field: string,
+    value: string
+  ) => {
+    const newTicketTypes = [...formData.ticketTypes];
     newTicketTypes[index] = {
       ...newTicketTypes[index],
-      [field]: value
-    }
-    setFormData(prev => ({
+      [field]: value,
+    };
+    setFormData((prev) => ({
       ...prev,
-      ticketTypes: newTicketTypes
-    }))
-  }
+      ticketTypes: newTicketTypes,
+    }));
+  };
 
   const addTicketType = () => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       ticketTypes: [
         ...prev.ticketTypes,
@@ -113,90 +129,98 @@ export default function AddEventPage() {
           name: "",
           price: "",
           quantity: "",
-          description: ""
-        }
-      ]
-    }))
-  }
+          description: "",
+        },
+      ],
+    }));
+  };
 
   const removeTicketType = (index: number) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      ticketTypes: prev.ticketTypes.filter((_, i) => i !== index)
-    }))
-  }
+      ticketTypes: prev.ticketTypes.filter((_, i) => i !== index),
+    }));
+  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
-        coverImage: e.target.files![0]
-      }))
+        coverImage: e.target.files![0],
+      }));
     }
-  }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+    e.preventDefault();
+    setIsSubmitting(true);
 
     try {
-      const formDataToSend = new FormData()
-      
+      const formDataToSend = new FormData();
+
       // Append basic event data
-      formDataToSend.append('title', formData.title)
-      formDataToSend.append('description', formData.description)
-      formDataToSend.append('category', formData.category)
-      formDataToSend.append('startDate', formData.startDate)
-      formDataToSend.append('endDate', formData.endDate)
-      formDataToSend.append('capacity', formData.capacity)
-      formDataToSend.append('tags', formData.tags)
-      
+      formDataToSend.append("title", formData.title);
+      formDataToSend.append("description", formData.description);
+      formDataToSend.append("category", formData.category);
+      formDataToSend.append("startDate", formData.startDate);
+      formDataToSend.append("endDate", formData.endDate);
+      formDataToSend.append("capacity", formData.capacity);
+      formDataToSend.append("tags", formData.tags);
+      formDataToSend.append("isSoldOut", String(formData.isSoldOut));
+
       // Append location data
-      formDataToSend.append('location[address]', formData.location.address)
-      formDataToSend.append('location[city]', formData.location.city)
-      formDataToSend.append('location[country]', formData.location.country)
-      
+      formDataToSend.append("location[address]", formData.location.address);
+      formDataToSend.append("location[city]", formData.location.city);
+      formDataToSend.append("location[country]", formData.location.country);
+
       // Append ticket types
       formData.ticketTypes.forEach((ticket, index) => {
-        formDataToSend.append(`ticketTypes[${index}][name]`, ticket.name)
-        formDataToSend.append(`ticketTypes[${index}][price]`, ticket.price)
-        formDataToSend.append(`ticketTypes[${index}][quantity]`, ticket.quantity)
-        formDataToSend.append(`ticketTypes[${index}][description]`, ticket.description)
-      })
-      
+        formDataToSend.append(`ticketTypes[${index}][name]`, ticket.name);
+        formDataToSend.append(`ticketTypes[${index}][price]`, ticket.price);
+        formDataToSend.append(
+          `ticketTypes[${index}][quantity]`,
+          ticket.quantity
+        );
+        formDataToSend.append(
+          `ticketTypes[${index}][description]`,
+          ticket.description
+        );
+      });
+
       // Append cover image if selected
       if (formData.coverImage) {
-        formDataToSend.append('coverImage', formData.coverImage)
+        formDataToSend.append("coverImage", formData.coverImage);
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events`, {
-        method: 'POST',
-        body: formDataToSend,
-      })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events`,
+        {
+          method: "POST",
+          body: formDataToSend,
+        }
+      );
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to create event')
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create event");
       }
 
-      toast.success('Event created successfully')
-      router.push('/admin/events')
+      toast.success("Event created successfully");
+      router.push("/admin/events");
     } catch (error) {
       // console.error('Error creating event:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to create event')
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create event"
+      );
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
   return (
     <div className="p-6">
       <div className="mb-6">
-        <Button
-          variant="ghost"
-          className="mb-4"
-          onClick={() => router.back()}
-        >
+        <Button variant="ghost" className="mb-4" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Events
         </Button>
@@ -306,15 +330,26 @@ export default function AddEventPage() {
                 <Label htmlFor="category">Category</Label>
                 <Select
                   value={formData.category}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
+                  onValueChange={(value) =>
+                    setFormData((prev) => ({ ...prev, category: value }))
+                  }
                   disabled={isLoadingCategories}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={isLoadingCategories ? "Loading categories..." : "Select category"} />
+                    <SelectValue
+                      placeholder={
+                        isLoadingCategories
+                          ? "Loading categories..."
+                          : "Select category"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {categories.map((category) => (
-                      <SelectItem key={category._id} value={category.name.toLowerCase()}>
+                      <SelectItem
+                        key={category._id}
+                        value={category.name.toLowerCase()}
+                      >
                         {category.name}
                       </SelectItem>
                     ))}
@@ -346,6 +381,19 @@ export default function AddEventPage() {
                   placeholder="Enter tags (e.g., music, sports, conference)"
                 />
               </div>
+
+              <div className="flex items-center space-x-2 p-4 border rounded-lg bg-gray-50">
+                <Switch
+                  id="sold-out-toggle"
+                  checked={formData.isSoldOut}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, isSoldOut: checked }))
+                  }
+                />
+                <Label htmlFor="sold-out-toggle" className="font-medium">
+                  Mark as Sold Out
+                </Label>
+              </div>
             </CardContent>
           </Card>
 
@@ -353,11 +401,7 @@ export default function AddEventPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Ticket Types</CardTitle>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={addTicketType}
-              >
+              <Button type="button" variant="outline" onClick={addTicketType}>
                 Add Ticket Type
               </Button>
             </CardHeader>
@@ -384,7 +428,9 @@ export default function AddEventPage() {
                       <Input
                         id={`ticket-name-${index}`}
                         value={ticketType.name}
-                        onChange={(e) => handleTicketTypeChange(index, 'name', e.target.value)}
+                        onChange={(e) =>
+                          handleTicketTypeChange(index, "name", e.target.value)
+                        }
                         placeholder="e.g., Regular, VIP, Early Bird"
                         required
                       />
@@ -399,20 +445,34 @@ export default function AddEventPage() {
                           min="0"
                           step="0.01"
                           value={ticketType.price}
-                          onChange={(e) => handleTicketTypeChange(index, 'price', e.target.value)}
+                          onChange={(e) =>
+                            handleTicketTypeChange(
+                              index,
+                              "price",
+                              e.target.value
+                            )
+                          }
                           placeholder="Enter price"
                           required
                         />
                       </div>
 
                       <div className="grid gap-2">
-                        <Label htmlFor={`ticket-quantity-${index}`}>Quantity Available</Label>
+                        <Label htmlFor={`ticket-quantity-${index}`}>
+                          Quantity Available
+                        </Label>
                         <Input
                           id={`ticket-quantity-${index}`}
                           type="number"
                           min="0"
                           value={ticketType.quantity}
-                          onChange={(e) => handleTicketTypeChange(index, 'quantity', e.target.value)}
+                          onChange={(e) =>
+                            handleTicketTypeChange(
+                              index,
+                              "quantity",
+                              e.target.value
+                            )
+                          }
                           placeholder="Enter quantity"
                           required
                         />
@@ -420,11 +480,19 @@ export default function AddEventPage() {
                     </div>
 
                     <div className="grid gap-2">
-                      <Label htmlFor={`ticket-description-${index}`}>Description</Label>
+                      <Label htmlFor={`ticket-description-${index}`}>
+                        Description
+                      </Label>
                       <Textarea
                         id={`ticket-description-${index}`}
                         value={ticketType.description}
-                        onChange={(e) => handleTicketTypeChange(index, 'description', e.target.value)}
+                        onChange={(e) =>
+                          handleTicketTypeChange(
+                            index,
+                            "description",
+                            e.target.value
+                          )
+                        }
                         placeholder="Enter ticket type description"
                         required
                       />
@@ -451,7 +519,8 @@ export default function AddEventPage() {
                   required
                 />
                 <p className="text-sm text-gray-500">
-                  Upload a cover image for your event (recommended size: 1200x600 pixels)
+                  Upload a cover image for your event (recommended size:
+                  1200x600 pixels)
                 </p>
               </div>
             </CardContent>
@@ -471,11 +540,11 @@ export default function AddEventPage() {
               className="bg-blue-600 hover:bg-blue-700"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Creating Event...' : 'Create Event'}
+              {isSubmitting ? "Creating Event..." : "Create Event"}
             </Button>
           </div>
         </div>
       </form>
     </div>
-  )
-} 
+  );
+}

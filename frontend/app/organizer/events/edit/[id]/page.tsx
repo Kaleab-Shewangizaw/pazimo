@@ -115,6 +115,7 @@ export default function EditEventPage() {
     ],
     capacity: "",
     tags: "",
+    isSoldOut: false,
     coverImages: [] as File[],
   });
 
@@ -153,6 +154,7 @@ export default function EditEventPage() {
         category: event.category?._id || "",
         capacity: event.capacity?.toString() || "",
         tags: event.tags?.join(", ") || "",
+        isSoldOut: event.isSoldOut || false,
         ageRestriction: {
           minAge: event.ageRestriction?.minAge?.toString() || "",
           maxAge: event.ageRestriction?.maxAge?.toString() || "",
@@ -349,6 +351,7 @@ export default function EditEventPage() {
           .split(",")
           .map((tag) => tag.trim())
           .filter(Boolean),
+        isSoldOut: formData.isSoldOut,
         ageRestriction: formData.ageRestriction.hasRestriction
           ? {
               hasRestriction: true,
@@ -588,6 +591,19 @@ export default function EditEventPage() {
                 onChange={handleInputChange}
                 placeholder="e.g., music, sports, conference"
               />
+            </div>
+
+            <div className="flex items-center space-x-2 p-4 border rounded-lg bg-gray-50">
+              <Switch
+                id="sold-out-toggle"
+                checked={formData.isSoldOut}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, isSoldOut: checked }))
+                }
+              />
+              <Label htmlFor="sold-out-toggle" className="font-medium">
+                Mark as Sold Out
+              </Label>
             </div>
 
             {/* Age Restriction */}

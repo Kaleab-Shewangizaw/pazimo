@@ -361,10 +361,10 @@ export default function EventGrid({
                 </Button>
               ) : (
                 <Button
-                  disabled
-                  className="w-full bg-gray-300 text-gray-500 font-semibold py-2.5 rounded-lg"
+                  variant="outline"
+                  className="w-full border-red-500 text-red-500 hover:bg-red-50 font-semibold py-2.5 rounded-lg"
                 >
-                  Event Sold Out
+                  Sold Out
                 </Button>
               )}
             </div>

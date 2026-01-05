@@ -465,6 +465,7 @@ const updateEvent = async (req, res) => {
     capacity,
     tags,
     ageRestriction,
+    isSoldOut,
   } = req.body;
 
   // Find event and verify ownership
@@ -489,6 +490,19 @@ const updateEvent = async (req, res) => {
     return res.status(StatusCodes.UNAUTHORIZED).json({
       success: false,
       message: "Not authorized to update this event",
+    });
+  }
+
+  // If only isSoldOut is provided, update just that field
+  if (
+    Object.keys(req.body).length === 1 &&
+    req.body.hasOwnProperty("isSoldOut")
+  ) {
+    event.isSoldOut = isSoldOut;
+    await event.save();
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: event,
     });
   }
 
@@ -566,6 +580,7 @@ const updateEvent = async (req, res) => {
   event.title = title;
   event.description = description;
   event.category = category;
+  event.isSoldOut = isSoldOut !== undefined ? isSoldOut : event.isSoldOut;
   event.startDate = startDate;
   event.endDate = endDate;
   event.startTime = startTime;

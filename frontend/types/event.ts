@@ -40,6 +40,7 @@ export interface Event {
   endTime: string;
   eventType: "public" | "private";
   isPublic: boolean;
+  isSoldOut?: boolean;
   coverImages: string[];
 
   ageRestriction: string;

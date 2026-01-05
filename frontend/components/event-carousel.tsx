@@ -45,6 +45,7 @@ type Event = {
   }>;
   status: string;
   isPublic?: boolean;
+  isSoldOut?: boolean;
 };
 
 export default function EventCarousel() {
@@ -131,6 +132,9 @@ export default function EventCarousel() {
 
   // Function to check if event is sold out
   const isEventSoldOut = (event: Event) => {
+    // Check manual sold out flag
+    if (event.isSoldOut) return true;
+
     // Check if event status is not published
     if (event.status && event.status !== "published") return true;
 
@@ -614,12 +618,14 @@ export default function EventCarousel() {
                       </Button>
                     </Link>
                   ) : (
-                    <Button
-                      disabled
-                      className="w-full bg-gray-300 text-gray-500 font-semibold py-2.5 rounded-lg cursor-not-allowed"
-                    >
-                      Sold Out
-                    </Button>
+                    <Link href={`event_detail?id=${event._id}`} passHref>
+                      <Button
+                        variant="outline"
+                        className="w-full border-red-500 text-red-500 hover:bg-red-50 font-semibold py-2.5 rounded-lg"
+                      >
+                        Sold Out
+                      </Button>
+                    </Link>
                   )}
                 </div>
               </div>

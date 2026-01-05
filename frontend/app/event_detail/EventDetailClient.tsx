@@ -79,6 +79,7 @@ type Event = {
     minAge?: number;
     maxAge?: number;
   };
+  isSoldOut?: boolean;
 };
 
 type User = {
@@ -571,6 +572,29 @@ export default function EventDetailClient() {
     return `${start} - ${end}`;
   };
 
+  const isEventSoldOut = () => {
+    if (event.isSoldOut) return true;
+    if (event.status && event.status !== "published") return true;
+
+    const now = new Date();
+    const endDate = event.endDate ? new Date(event.endDate) : null;
+    if (endDate) {
+      // Set end time if available
+      if (event.endTime) {
+        const [h, m] = event.endTime.split(":").map(Number);
+        endDate.setHours(h || 23, m || 59, 0, 0);
+      } else {
+        endDate.setHours(23, 59, 59, 999);
+      }
+      if (endDate.getTime() <= now.getTime()) return true;
+    }
+
+    const hasAvailableTickets = event.ticketTypes.some(
+      (t) => t.available !== false && t.quantity > 0
+    );
+    return !hasAvailableTickets;
+  };
+
   const ticketsToDisplay = event.ticketTypes.filter(
     (ticket) => ticket.available !== false
   );
@@ -889,80 +913,93 @@ export default function EventDetailClient() {
                 Get Your Tickets
               </h2>
               <div className="space-y-6">
-                <RadioGroup
-                  value={selectedTicketType}
-                  onValueChange={setSelectedTicketType}
-                >
-                  {ticketsToDisplay.map((ticketType) => (
-                    <div
-                      key={ticketType.name}
-                      className="flex items-center justify-between space-x-2 border border-gray-200 rounded-lg p-4"
+                {isEventSoldOut() ? (
+                  <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                    <p className="text-red-500 font-bold text-lg mb-2">
+                      Tickets Not Available
+                    </p>
+                    <p className="text-gray-500 text-sm">
+                      This event is sold out or has ended.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <RadioGroup
+                      value={selectedTicketType}
+                      onValueChange={setSelectedTicketType}
                     >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem
-                          value={ticketType.name}
-                          id={ticketType.name}
-                        />
+                      {ticketsToDisplay.map((ticketType) => (
+                        <div
+                          key={ticketType.name}
+                          className="flex items-center justify-between space-x-2 border border-gray-200 rounded-lg p-4"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem
+                              value={ticketType.name}
+                              id={ticketType.name}
+                            />
+                            <div>
+                              <Label
+                                htmlFor={ticketType.name}
+                                className="font-medium text-gray-900"
+                              >
+                                {ticketType.name}
+                              </Label>
+                              {ticketType.description && (
+                                <p className="text-xs text-gray-500">
+                                  {ticketType.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="font-bold text-[#0D47A1]">
+                            {ticketType.price} ETB
+                          </div>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                    {ticketsToDisplay.length === 0 && (
+                      <div className="text-center py-6 text-gray-500">
+                        No tickets are currently available.
+                      </div>
+                    )}
+                    {ticketsToDisplay.length > 0 && (
+                      <>
                         <div>
-                          <Label
-                            htmlFor={ticketType.name}
-                            className="font-medium text-gray-900"
-                          >
-                            {ticketType.name}
-                          </Label>
-                          {ticketType.description && (
-                            <p className="text-xs text-gray-500">
-                              {ticketType.description}
+                          <h3 className="text-sm font-medium mb-2 text-gray-700">
+                            Number of tickets:
+                          </h3>
+                          <TicketCounter
+                            value={ticketQuantity}
+                            onChange={setTicketQuantity}
+                            max={getSelectedTicketType()?.quantity || 10}
+                          />
+                          {isQuantityExceeded() && (
+                            <p className="text-xs text-red-500 mt-1">
+                              Not enough tickets available
                             </p>
                           )}
                         </div>
-                      </div>
-                      <div className="font-bold text-[#0D47A1]">
-                        {ticketType.price} ETB
-                      </div>
-                    </div>
-                  ))}
-                </RadioGroup>
-                {ticketsToDisplay.length === 0 && (
-                  <div className="text-center py-6 text-gray-500">
-                    No tickets are currently available.
-                  </div>
-                )}
-                {ticketsToDisplay.length > 0 && (
-                  <>
-                    <div>
-                      <h3 className="text-sm font-medium mb-2 text-gray-700">
-                        Number of tickets:
-                      </h3>
-                      <TicketCounter
-                        value={ticketQuantity}
-                        onChange={setTicketQuantity}
-                        max={getSelectedTicketType()?.quantity || 10}
-                      />
-                      {isQuantityExceeded() && (
-                        <p className="text-xs text-red-500 mt-1">
-                          Not enough tickets available
-                        </p>
-                      )}
-                    </div>
-                    <Separator className="bg-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-lg text-gray-700">Total:</span>
-                      <span className="text-2xl font-bold text-[#0D47A1]">
-                        {calculateTotal()} ETB
-                      </span>
-                    </div>
-                    {user?.role !== "admin" &&
-                      user?.role !== "organizer" &&
-                      user?.role !== "partner" && (
-                        <Button
-                          onClick={handleBuyClick}
-                          disabled={isQuantityExceeded()}
-                          className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
-                        >
-                          Buy Ticket
-                        </Button>
-                      )}
+                        <Separator className="bg-gray-200" />
+                        <div className="flex justify-between items-center">
+                          <span className="text-lg text-gray-700">Total:</span>
+                          <span className="text-2xl font-bold text-[#0D47A1]">
+                            {calculateTotal()} ETB
+                          </span>
+                        </div>
+                        {user?.role !== "admin" &&
+                          user?.role !== "organizer" &&
+                          user?.role !== "partner" && (
+                            <Button
+                              onClick={handleBuyClick}
+                              disabled={isQuantityExceeded()}
+                              className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
+                            >
+                              Buy Ticket
+                            </Button>
+                          )}
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -1000,82 +1037,95 @@ export default function EventDetailClient() {
                 <div className="space-y-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-md">
                     <div className="space-y-6">
-                      <RadioGroup
-                        value={selectedTicketType}
-                        onValueChange={setSelectedTicketType}
-                      >
-                        {ticketsToDisplay.map((ticketType) => (
-                          <div
-                            key={ticketType.name}
-                            className="flex items-center justify-between space-x-2 border border-gray-200 rounded-lg p-4"
+                      {isEventSoldOut() ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-red-500 font-bold text-lg mb-2">
+                            Tickets Not Available
+                          </p>
+                          <p className="text-gray-500 text-sm">
+                            This event is sold out or has ended.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <RadioGroup
+                            value={selectedTicketType}
+                            onValueChange={setSelectedTicketType}
                           >
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem
-                                value={ticketType.name}
-                                id={ticketType.name}
-                              />
+                            {ticketsToDisplay.map((ticketType) => (
+                              <div
+                                key={ticketType.name}
+                                className="flex items-center justify-between space-x-2 border border-gray-200 rounded-lg p-4"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem
+                                    value={ticketType.name}
+                                    id={ticketType.name}
+                                  />
+                                  <div>
+                                    <Label
+                                      htmlFor={ticketType.name}
+                                      className="font-medium text-gray-900"
+                                    >
+                                      {ticketType.name}
+                                    </Label>
+                                    {ticketType.description && (
+                                      <p className="text-xs text-gray-500">
+                                        {ticketType.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="font-bold text-[#0D47A1]">
+                                  {ticketType.price} ETB
+                                </div>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                          {ticketsToDisplay.length === 0 && (
+                            <div className="text-center py-6 text-gray-500">
+                              No tickets are currently available.
+                            </div>
+                          )}
+                          {ticketsToDisplay.length > 0 && (
+                            <>
                               <div>
-                                <Label
-                                  htmlFor={ticketType.name}
-                                  className="font-medium text-gray-900"
-                                >
-                                  {ticketType.name}
-                                </Label>
-                                {ticketType.description && (
-                                  <p className="text-xs text-gray-500">
-                                    {ticketType.description}
+                                <h3 className="text-sm font-medium mb-2 text-gray-700">
+                                  Number of tickets:
+                                </h3>
+                                <TicketCounter
+                                  value={ticketQuantity}
+                                  onChange={setTicketQuantity}
+                                  max={getSelectedTicketType()?.quantity || 10}
+                                />
+                                {isQuantityExceeded() && (
+                                  <p className="text-xs text-red-500 mt-1">
+                                    Not enough tickets available
                                   </p>
                                 )}
                               </div>
-                            </div>
-                            <div className="font-bold text-[#0D47A1]">
-                              {ticketType.price} ETB
-                            </div>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                      {ticketsToDisplay.length === 0 && (
-                        <div className="text-center py-6 text-gray-500">
-                          No tickets are currently available.
-                        </div>
-                      )}
-                      {ticketsToDisplay.length > 0 && (
-                        <>
-                          <div>
-                            <h3 className="text-sm font-medium mb-2 text-gray-700">
-                              Number of tickets:
-                            </h3>
-                            <TicketCounter
-                              value={ticketQuantity}
-                              onChange={setTicketQuantity}
-                              max={getSelectedTicketType()?.quantity || 10}
-                            />
-                            {isQuantityExceeded() && (
-                              <p className="text-xs text-red-500 mt-1">
-                                Not enough tickets available
-                              </p>
-                            )}
-                          </div>
-                          <Separator className="bg-gray-200" />
-                          <div className="flex justify-between items-center">
-                            <span className="text-lg text-gray-700">
-                              Total:
-                            </span>
-                            <span className="text-2xl font-bold text-[#0D47A1]">
-                              {calculateTotal()} ETB
-                            </span>
-                          </div>
-                          {user?.role !== "admin" &&
-                            user?.role !== "organizer" &&
-                            user?.role !== "partner" && (
-                              <Button
-                                onClick={handleBuyClick}
-                                disabled={isQuantityExceeded()}
-                                className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
-                              >
-                                Buy Ticket
-                              </Button>
-                            )}
+                              <Separator className="bg-gray-200" />
+                              <div className="flex justify-between items-center">
+                                <span className="text-lg text-gray-700">
+                                  Total:
+                                </span>
+                                <span className="text-2xl font-bold text-[#0D47A1]">
+                                  {calculateTotal()} ETB
+                                </span>
+                              </div>
+                              {user?.role !== "admin" &&
+                                user?.role !== "organizer" &&
+                                user?.role !== "partner" && (
+                                  <Button
+                                    onClick={handleBuyClick}
+                                    disabled={isQuantityExceeded()}
+                                    className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
+                                  >
+                                    Buy Ticket
+                                  </Button>
+                                )}
+                            </>
+                          )}
                         </>
                       )}
                     </div>

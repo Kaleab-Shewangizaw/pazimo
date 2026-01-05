@@ -490,7 +490,6 @@ export default function CreateEventPage() {
       }
       formDataToSend.append("capacity", formData.capacity);
       formDataToSend.append("tags", formData.tags);
-      formDataToSend.append("organizer", userId); // Add the organizer ID
 
       // Append location data
       formDataToSend.append("location[address]", formData.location.address);
@@ -1239,6 +1238,7 @@ export default function CreateEventPage() {
                   placeholder="Enter tags (e.g., music, sports, conference)"
                 />
               </div>
+
               {/* Age Restriction */}
               <div className="grid gap-4 p-4 border rounded-lg bg-gray-50">
                 <div className="flex items-center space-x-2">

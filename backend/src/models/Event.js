@@ -1,29 +1,33 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const EventSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: [true, 'Please provide an event title'],
+      required: [true, "Please provide an event title"],
       trim: true,
-      maxlength: [100, 'Title cannot be more than 100 characters'],
+      maxlength: [100, "Title cannot be more than 100 characters"],
     },
     description: {
       type: String,
-      required: [true, 'Please provide an event description'],
+      required: [true, "Please provide an event description"],
     },
     category: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Category',
-      required: [true, 'Please provide an event category'],
+      ref: "Category",
+      required: [true, "Please provide an event category"],
     },
     isPublic: {
       type: Boolean,
       default: true,
     },
+    isSoldOut: {
+      type: Boolean,
+      default: false,
+    },
     startDate: {
       type: Date,
-      required: [true, 'Please provide a start date'],
+      required: [true, "Please provide a start date"],
     },
     endDate: {
       type: Date,
@@ -40,8 +44,8 @@ const EventSchema = new mongoose.Schema(
     location: {
       type: {
         type: String,
-        enum: ['Point'],
-        default: 'Point',
+        enum: ["Point"],
+        default: "Point",
       },
       coordinates: {
         type: [Number], // [longitude, latitude]
@@ -53,12 +57,12 @@ const EventSchema = new mongoose.Schema(
     },
     organizer: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: false,
     },
     coverImages: {
       type: [String],
-      default: ['default-event.jpg'],
+      default: ["default-event.jpg"],
     },
     eventImages: [
       {
@@ -69,7 +73,7 @@ const EventSchema = new mongoose.Schema(
         caption: String,
       },
     ],
-    
+
     ticketTypes: [
       {
         name: {
@@ -92,22 +96,19 @@ const EventSchema = new mongoose.Schema(
 
         startDate: {
           type: Date,
-          required: false,  
+          required: false,
         },
         endDate: {
           type: Date,
-          required: false,  
+          required: false,
         },
       },
     ],
 
-
-
-
     status: {
       type: String,
-      enum: ['draft', 'published', 'cancelled', 'completed'],
-      default: 'draft',
+      enum: ["draft", "published", "cancelled", "completed"],
+      default: "draft",
     },
     bannerStatus: {
       type: Boolean,
@@ -115,7 +116,7 @@ const EventSchema = new mongoose.Schema(
     },
     capacity: {
       type: Number,
-      required: [true, 'Please provide event capacity'],
+      required: [true, "Please provide event capacity"],
     },
     tags: [String],
     ageRestriction: {
@@ -134,7 +135,6 @@ const EventSchema = new mongoose.Schema(
         max: 120,
       },
     },
-
   },
   {
     timestamps: true,
@@ -144,13 +144,13 @@ const EventSchema = new mongoose.Schema(
 );
 
 // Virtual for tickets
-EventSchema.virtual('tickets', {
-  ref: 'Ticket',
-  localField: '_id',
-  foreignField: 'event',
+EventSchema.virtual("tickets", {
+  ref: "Ticket",
+  localField: "_id",
+  foreignField: "event",
   justOne: false,
 });
 
-const Event = mongoose.model('Event', EventSchema);
+const Event = mongoose.model("Event", EventSchema);
 
 module.exports = Event;

@@ -1,31 +1,35 @@
+const axios = require("axios");
+
 const sendSMS = async (phone, message) => {
   try {
-    const response = await fetch(
-      "https://api.geezsms.com/api/v1/sms/send/bulk",
+    // Format phone number
+    let formattedPhone = phone.toString().replace("+", "");
+    if (formattedPhone.startsWith("0")) {
+      formattedPhone = "251" + formattedPhone.substring(1);
+    } else if (!formattedPhone.startsWith("251")) {
+      formattedPhone = "251" + formattedPhone;
+    }
+
+    const response = await axios.post(
+      "https://api.geezsms.com/api/v1/sms/send",
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-GeezSMS-Key": "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
-        },
-        body: JSON.stringify({
-          contacts: [{ phone_number: phone }],
-          msg: message,
-          sender: "Pazimo Invitation",
-        }),
+        phone: formattedPhone,
+        msg: message,
+        token:
+          process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
+      },
+      {
+        timeout: 15000, // 15 seconds timeout
       }
     );
 
-    if (response.ok) {
-      return { success: true };
-    } else {
-      const errorData = await response.text();
-      console.error("Geez SMS API error:", errorData);
-      return { success: false, error: "SMS service error" };
-    }
+    return { success: true };
   } catch (error) {
-    console.error("SMS send error:", error);
-    return { success: false, error: "Failed to send SMS" };
+    console.error("SMS send error:", error.message);
+    if (error.response) {
+      console.error("SMS API Response:", error.response.data);
+    }
+    return { success: false, error: error.message || "Failed to send SMS" };
   }
 };
 

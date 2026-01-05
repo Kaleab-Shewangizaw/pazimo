@@ -199,8 +199,12 @@ ${ticketLink}
 ⚠️ Keep this link safe it gives direct access to your ticket.
 Pazimo`;
 
-      await sendSMS(smsPhone, message);
-      console.log(`SMS sent to ${smsPhone}`);
+      const smsResult = await sendSMS(smsPhone, message);
+      if (smsResult.success) {
+        console.log(`SMS sent to ${smsPhone}`);
+      } else {
+        console.error(`Failed to send SMS to ${smsPhone}: ${smsResult.error}`);
+      }
     }
   } catch (smsError) {
     console.error("Failed to send confirmation SMS:", smsError);

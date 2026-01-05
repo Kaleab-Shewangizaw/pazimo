@@ -102,6 +102,9 @@ const isTicketTypeAvailable = (ticket: any) => {
 
 // Function to check if event is sold out
 const isEventSoldOut = (event: any) => {
+  // Check manual sold out flag
+  if (event.isSoldOut) return true;
+
   // Check if event status is not published
   if (event.status && event.status !== "published") return true;
 
@@ -751,7 +754,7 @@ export default function LargeEventCarousel() {
             </div>
 
             {/* Action Button */}
-            {!isEventSoldOut(currentEvent.originalEvent) && (
+            {!isEventSoldOut(currentEvent.originalEvent) ? (
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
                 <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
                   <Button
@@ -760,6 +763,18 @@ export default function LargeEventCarousel() {
                   >
                     <Gift className="h-4 w-4 mr-1" />
                     Get Tickets
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+                <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="pt-2 pb-2 mb-4 border-red-500 text-red-500 hover:bg-red-50 font-bold px-4 text-sm rounded-lg shadow-lg"
+                  >
+                    Sold Out
                   </Button>
                 </Link>
               </div>

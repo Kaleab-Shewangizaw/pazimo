@@ -70,6 +70,7 @@ type Event = {
   ageLimit?: string;
   capacity?: number;
   isPublic?: boolean;
+  isSoldOut?: boolean;
 };
 
 const AGE_RESTRICTIONS = ["3+", "13+", "18+", "21+", "25+"];
@@ -110,6 +111,9 @@ const getCurrentTicket = (event: Event) => {
 
 // Function to check if event is sold out
 const isEventSoldOut = (event: Event) => {
+  // Check manual sold out flag
+  if (event.isSoldOut) return true;
+
   // Check if event status is not published
   if (event.status && event.status !== "published") return true;
 

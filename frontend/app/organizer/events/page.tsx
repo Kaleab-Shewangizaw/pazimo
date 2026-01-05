@@ -49,6 +49,8 @@ import {
   Download,
   Copy,
   Loader2,
+  Ban,
+  CheckCircle2,
 } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
@@ -63,10 +65,14 @@ export default function EventsPage() {
     deleteEvent,
     publishEvent,
     cancelEvent,
+    toggleSoldOut,
   } = useEventStore();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState<string | null>(null);
+  const [isTogglingSoldOut, setIsTogglingSoldOut] = useState<string | null>(
+    null
+  );
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [qrEvent, setQrEvent] = useState<any>(null);
@@ -501,20 +507,30 @@ export default function EventsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={`${
-                          event.status === "published"
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : event.status === "draft"
-                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                            : event.status === "cancelled"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-blue-50 text-blue-700 border-blue-200"
-                        }`}
-                      >
-                        {event.status}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge
+                          variant="outline"
+                          className={`${
+                            event.status === "published"
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : event.status === "draft"
+                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              : event.status === "cancelled"
+                              ? "bg-red-50 text-red-700 border-red-200"
+                              : "bg-blue-50 text-blue-700 border-blue-200"
+                          }`}
+                        >
+                          {event.status}
+                        </Badge>
+                        {event.isSoldOut && (
+                          <Badge
+                            variant="outline"
+                            className="bg-red-50 text-red-700 border-red-200"
+                          >
+                            Sold Out
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -528,6 +544,35 @@ export default function EventsPage() {
                           className="text-green-600 hover:text-green-700"
                         >
                           <QrCode className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setIsTogglingSoldOut(event._id);
+                            await toggleSoldOut(event._id, !event.isSoldOut);
+                            setIsTogglingSoldOut(null);
+                          }}
+                          disabled={isTogglingSoldOut === event._id}
+                          className={`${
+                            event.isSoldOut
+                              ? "text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                              : "text-gray-600 hover:text-gray-700"
+                          }`}
+                          title={
+                            event.isSoldOut
+                              ? "Mark as Available"
+                              : "Mark as Sold Out"
+                          }
+                        >
+                          {isTogglingSoldOut === event._id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : event.isSoldOut ? (
+                            <Ban className="h-4 w-4" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>
