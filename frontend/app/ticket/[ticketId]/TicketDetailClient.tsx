@@ -90,12 +90,15 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden">
         {/* Event Image Header */}
-        <div className="relative h-48 w-full bg-gray-200">
+        <div className="relative w-full bg-gray-200">
           <Image
             src={getCoverImageUrl()}
             alt={ticket.event.title}
-            fill
-            className="object-cover"
+            width={0}
+            height={0}
+            sizes="100vw"
+            className="w-full h-auto"
+            priority
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-4 left-4 text-white">
