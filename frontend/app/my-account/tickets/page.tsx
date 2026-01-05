@@ -532,9 +532,6 @@ export default function TicketsPage() {
                       </div>
 
                       <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <p className="text-sm font-medium">
-                          Event ID: {group.event._id}
-                        </p>
                         <Dialog
                           onOpenChange={(open) => {
                             if (open) {
@@ -564,14 +561,6 @@ export default function TicketsPage() {
                                   <>
                                     <div className="flex justify-between items-start w-full mb-4">
                                       <div className="flex flex-col">
-                                        <p className="text-sm font-medium">
-                                          Ticket ID:{" "}
-                                          {
-                                            selectedGroup.tickets[
-                                              currentTicketIndex
-                                            ].ticketId
-                                          }
-                                        </p>
                                         <p className="text-sm font-bold text-[#0D47A1] mt-1">
                                           Admit:{" "}
                                           {selectedGroup.tickets[
