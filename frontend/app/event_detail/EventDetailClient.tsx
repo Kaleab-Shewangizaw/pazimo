@@ -373,11 +373,14 @@ export default function EventDetailClient() {
     e.preventDefault();
     if (isSantimLoading) return;
 
-    // Require email
-    if (!santimForm.fullName || !santimForm.phoneNumber || !santimForm.email) {
-      toast.error("Please fill in all required fields including email");
+    // Require other fields but treat email as optional (defaults to customerpazimo@gmail.com)
+    if (!santimForm.fullName || !santimForm.phoneNumber) {
+      toast.error("Please fill in all required fields");
       return;
     }
+
+    // Default email if not provided
+    const finalEmail = santimForm.email || "customerpazimo@gmail.com";
 
     setIsSantimLoading(true);
 
@@ -402,7 +405,7 @@ export default function EventDetailClient() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 fullName: santimForm.fullName,
-                email: santimForm.email,
+                email: finalEmail,
                 phoneNumber: formattedPhone,
               }),
             }
@@ -411,11 +414,15 @@ export default function EventDetailClient() {
           if (authResponse.ok) {
             const authResult = await authResponse.json();
             const { user: userData, token } = authResult.data;
-            useAuthStore.getState().setAuth({ user: userData, token });
-            setUser(userData);
-            setUserId(userData._id);
+
+            // Only auto-login if not using the default email
+            if (userData.email !== "customerpazimo@gmail.com") {
+              useAuthStore.getState().setAuth({ user: userData, token });
+              setUser(userData);
+              setUserId(userData._id);
+              toast.success("Account created/verified!");
+            }
             finalUserId = userData._id;
-            toast.success("Account created/verified!");
           } else {
             const errorData = await authResponse.json();
             toast.error(errorData.message || "Authentication failed");
@@ -454,7 +461,7 @@ export default function EventDetailClient() {
             quantity: ticketQuantity,
             userId: finalUserId,
             fullName: santimForm.fullName,
-            email: santimForm.email,
+            email: finalEmail,
           },
           successUrl: `${window.location.origin}/my-account/tickets/${ticketId}`,
         }),
@@ -465,10 +472,15 @@ export default function EventDetailClient() {
         throw new Error(data.message || "Payment initiation failed");
 
       if (data.token && data.user) {
-        useAuthStore.getState().setAuth({ user: data.user, token: data.token });
-        setUser(data.user);
-        setUserId(data.user._id);
-        toast.success("Account created/verified!");
+        // Do not auto-login if using the default placeholder email
+        if (data.user.email !== "customerpazimo@gmail.com") {
+          useAuthStore
+            .getState()
+            .setAuth({ user: data.user, token: data.token });
+          setUser(data.user);
+          setUserId(data.user._id);
+          toast.success("Account created/verified!");
+        }
       }
 
       if (data.checkoutUrl) {
@@ -1404,7 +1416,6 @@ export default function EventDetailClient() {
                       }
                       placeholder="Email address"
                       className="mt-1"
-                      required
                     />
                   </div>
                 )}
