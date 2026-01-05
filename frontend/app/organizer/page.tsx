@@ -77,6 +77,7 @@ import {
 } from "recharts";
 import QRCode from "qrcode";
 import { toast } from "sonner";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 const SkeletonCard = () => (
   <Card className="overflow-hidden border-none shadow-md bg-white relative">
@@ -870,12 +871,10 @@ export default function OrganizerDashboard() {
 
   const downloadQRCode = () => {
     if (!shareQrDataUrl || !selectedEvent) return;
-    const link = document.createElement("a");
-    link.href = shareQrDataUrl;
-    link.download = `buy-${selectedEvent._id}-ticket.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadHighQualityQR(
+      shareQrDataUrl,
+      `buy-${selectedEvent._id}-ticket.png`
+    );
   };
 
   const copyBuyLink = () => {

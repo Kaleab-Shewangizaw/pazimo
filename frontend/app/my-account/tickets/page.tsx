@@ -17,6 +17,7 @@ import {
 // import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner";
 import { Event, TicketType } from "@/types/event";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 export default function TicketsPage() {
   const [visibleTickets, setVisibleTickets] = useState(2);
@@ -140,12 +141,8 @@ export default function TicketsPage() {
     ticketType: string,
     eventTitle: string
   ) => {
-    const link = document.createElement("a");
-    link.href = qrCodeDataUrl;
-    link.download = `ticket-${ticketId}-${eventTitle}-${ticketType}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const filename = `ticket-${ticketId}-${eventTitle}-${ticketType}.png`;
+    downloadHighQualityQR(qrCodeDataUrl, filename);
     toast.success(`QR code for ${eventTitle} downloaded!`);
   };
 
@@ -159,8 +156,6 @@ export default function TicketsPage() {
           downloadQRCode(
             ticket.qrCode,
             ticket.ticketId,
-            ticket.quantity,
-            ticket.eventTitle || "event",
             ticket.ticketType || "ticket",
             group.event.title
           );

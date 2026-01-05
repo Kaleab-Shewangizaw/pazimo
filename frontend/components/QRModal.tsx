@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { QrCode, Download, X } from "lucide-react";
 import QRCode from "qrcode";
 import { Invitation } from "@/types/invitation";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 interface QRModalProps {
   invitation: Invitation;
@@ -53,10 +54,7 @@ export default function QRModal({ invitation, onClose }: QRModalProps) {
   }, [invitation.qrCode]);
 
   const downloadQR = () => {
-    const link = document.createElement("a");
-    link.href = qrCodeImage;
-    link.download = `${invitation.customerName}-QR.png`;
-    link.click();
+    downloadHighQualityQR(qrCodeImage, `${invitation.customerName}-QR.png`);
   };
 
   return (

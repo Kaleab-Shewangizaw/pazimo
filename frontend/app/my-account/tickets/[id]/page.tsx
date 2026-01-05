@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 type Ticket = {
   _id: string;
@@ -123,12 +124,7 @@ export default function TicketSuccessPage() {
   }, [id, user, token, searchParams]);
 
   const downloadQRCode = (qrCodeUrl: string, ticketId: string) => {
-    const link = document.createElement("a");
-    link.href = qrCodeUrl;
-    link.download = `ticket-${ticketId}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadHighQualityQR(qrCodeUrl, `ticket-${ticketId}.png`);
   };
 
   if (loading) {

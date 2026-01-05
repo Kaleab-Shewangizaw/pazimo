@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Calendar, Clock, MapPin, QrCode, Download, Users } from "lucide-react";
 import Image from "next/image";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 interface EventData {
   title: string;
@@ -324,7 +325,17 @@ function GuestInvitationContent() {
               height={192}
               className="mx-auto border p-2 rounded-lg"
             />
-            <button className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 mx-auto">
+            <button
+              onClick={() => {
+                if (invitation.qrCode) {
+                  downloadHighQualityQR(
+                    invitation.qrCode,
+                    `invitation-${invitation.ticketId}.png`
+                  );
+                }
+              }}
+              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 mx-auto hover:bg-blue-700 transition-colors"
+            >
               <Download className="w-4 h-4" />
               Download Ticket
             </button>

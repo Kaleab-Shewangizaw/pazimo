@@ -34,6 +34,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 type TicketType = {
   _id: string;
@@ -248,12 +249,10 @@ export default function EventDetailClient() {
     ticketId: string,
     ticketType: string
   ) => {
-    const link = document.createElement("a");
-    link.href = qrCodeDataUrl;
-    link.download = `ticket-${ticketId}-${ticketType}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadHighQualityQR(
+      qrCodeDataUrl,
+      `ticket-${ticketId}-${ticketType}.png`
+    );
     toast.success(`QR code for ${ticketType} downloaded!`);
   };
 
