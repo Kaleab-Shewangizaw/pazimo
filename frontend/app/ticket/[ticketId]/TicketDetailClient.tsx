@@ -111,14 +111,14 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
         <div className="p-6 space-y-6">
           {/* QR Code Section */}
           <div className="flex flex-col items-center justify-center space-y-2 bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300">
-            <img
+            <Image
+              width={0}
+              height={0}
+              priority
               src={ticket.qrCode}
               alt="Ticket QR Code"
               className="w-48 h-48"
             />
-            <p className="text-xs text-gray-500 font-mono mt-2">
-              {ticket.ticketId}
-            </p>
 
             <a
               href={ticket.qrCode}
