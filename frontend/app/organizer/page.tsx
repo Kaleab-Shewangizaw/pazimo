@@ -1147,69 +1147,63 @@ export default function OrganizerDashboard() {
                     color: "#0D47A1",
                   },
                 }}
-                className="h-[300px]"
+                className="h-[300px] w-full aspect-auto"
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={revenueData}
-                    margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
-                  >
-                    <defs>
-                      <linearGradient
-                        id="revenueGradient"
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor="#0D47A1"
-                          stopOpacity={0.7}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor="#0D47A1"
-                          stopOpacity={0.05}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="4 4" stroke="#f0f0f0" />
-                    <XAxis
-                      dataKey="event"
-                      tick={{ fontSize: 12, fill: "#666" }}
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 12, fill: "#666" }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                    />
-                    <ChartTooltip
-                      contentStyle={{
-                        backgroundColor: "rgba(255,255,255,0.95)",
-                        border: "none",
-                        borderRadius: "12px",
-                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
-                      }}
-                      labelStyle={{ color: "#0D47A1", fontWeight: "bold" }}
-                      formatter={(value: number) =>
-                        `${value.toLocaleString()} Birr`
-                      }
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#0D47A1"
-                      strokeWidth={3}
-                      fill="url(#revenueGradient)"
-                      dot={{ fill: "#0D47A1", r: 5 }}
-                      activeDot={{ r: 7, stroke: "#fff", strokeWidth: 2 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <AreaChart
+                  data={revenueData}
+                  margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient
+                      id="revenueGradient"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="5%" stopColor="#0D47A1" stopOpacity={0.7} />
+                      <stop
+                        offset="95%"
+                        stopColor="#0D47A1"
+                        stopOpacity={0.05}
+                      />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="4 4" stroke="#f0f0f0" />
+                  <XAxis
+                    dataKey="event"
+                    tick={{ fontSize: 12, fill: "#666" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 12, fill: "#666" }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                  />
+                  <ChartTooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(255,255,255,0.95)",
+                      border: "none",
+                      borderRadius: "12px",
+                      boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                    }}
+                    labelStyle={{ color: "#0D47A1", fontWeight: "bold" }}
+                    formatter={(value: number) =>
+                      `${value.toLocaleString()} Birr`
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#0D47A1"
+                    strokeWidth={3}
+                    fill="url(#revenueGradient)"
+                    dot={{ fill: "#0D47A1", r: 5 }}
+                    activeDot={{ r: 7, stroke: "#fff", strokeWidth: 2 }}
+                  />
+                </AreaChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -1233,51 +1227,49 @@ export default function OrganizerDashboard() {
                   cancelled: { label: "Cancelled", color: "#0d47a1" },
                   completed: { label: "Completed", color: "#3B82F6" },
                 }}
-                className="h-[300px]"
+                className="h-[300px] w-full aspect-auto"
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={70}
-                      outerRadius={80}
-                      cornerRadius={10}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {statusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip
-                      contentStyle={{
-                        backgroundColor: "rgba(255,255,255,0.95)",
-                        borderRadius: "12px",
-                        border: "none",
-                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
-                      }}
-                    />
-                    {/* Center Total */}
-                    <text
-                      x="50%"
-                      y="45%"
-                      textAnchor="middle"
-                      className="text-4xl font-bold fill-[#0D47A1]"
-                    >
-                      {totalEvents}
-                    </text>
-                    <text
-                      x="50%"
-                      y="55%"
-                      textAnchor="middle"
-                      className="text-sm fill-gray-600"
-                    >
-                      Total Events
-                    </text>
-                  </PieChart>
-                </ResponsiveContainer>
+                <PieChart>
+                  <Pie
+                    data={statusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={80}
+                    cornerRadius={10}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {statusData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <ChartTooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(255,255,255,0.95)",
+                      borderRadius: "12px",
+                      border: "none",
+                      boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                    }}
+                  />
+                  {/* Center Total */}
+                  <text
+                    x="50%"
+                    y="45%"
+                    textAnchor="middle"
+                    className="text-4xl font-bold fill-[#0D47A1]"
+                  >
+                    {totalEvents}
+                  </text>
+                  <text
+                    x="50%"
+                    y="55%"
+                    textAnchor="middle"
+                    className="text-sm fill-gray-600"
+                  >
+                    Total Events
+                  </text>
+                </PieChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -1299,54 +1291,52 @@ export default function OrganizerDashboard() {
                   revenue: { label: "Revenue (Birr)", color: "#0D47A1" },
                   tickets: { label: "Tickets Sold", color: "#42A5F5" },
                 }}
-                className="h-[300px]"
+                className="h-[300px] w-full aspect-auto"
               >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyData}>
-                    <CartesianGrid strokeDasharray="4 4" stroke="#f5f5f5" />
-                    <XAxis
-                      dataKey="month"
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      yAxisId="left"
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      yAxisId="right"
-                      orientation="right"
-                      tick={{ fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <ChartTooltip
-                      contentStyle={{
-                        backgroundColor: "rgba(255,255,255,0.95)",
-                        borderRadius: "12px",
-                        border: "none",
-                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
-                      }}
-                    />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="revenue"
-                      fill="#0D47A1"
-                      radius={[10, 10, 0, 0]}
-                      barSize={35}
-                    />
-                    <Bar
-                      yAxisId="right"
-                      dataKey="tickets"
-                      fill="#42A5F5"
-                      radius={[10, 10, 0, 0]}
-                      barSize={35}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                <BarChart data={monthlyData}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="#f5f5f5" />
+                  <XAxis
+                    dataKey="month"
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <ChartTooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(255,255,255,0.95)",
+                      borderRadius: "12px",
+                      border: "none",
+                      boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                    }}
+                  />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="revenue"
+                    fill="#0D47A1"
+                    radius={[10, 10, 0, 0]}
+                    barSize={35}
+                  />
+                  <Bar
+                    yAxisId="right"
+                    dataKey="tickets"
+                    fill="#42A5F5"
+                    radius={[10, 10, 0, 0]}
+                    barSize={35}
+                  />
+                </BarChart>
               </ChartContainer>
             </CardContent>
           </Card>
@@ -1381,64 +1371,62 @@ export default function OrganizerDashboard() {
                   config={{
                     revenue: { label: "Revenue (Birr)", color: "#0D47A1" },
                   }}
-                  className="h-[300px]"
+                  className="h-[300px] w-full aspect-auto"
                 >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topEvents} layout="horizontal">
-                      <CartesianGrid strokeDasharray="4 4" stroke="#f5f5f5" />
-                      <XAxis
-                        type="number"
-                        tickFormatter={(value) => {
-                          if (value >= 1000000)
-                            return `${(value / 1000000).toFixed(1)}M`;
-                          if (value >= 1000)
-                            return `${Math.round(value / 1000)}k`;
-                          return `${value}`;
-                        }}
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{ fontSize: 12, fill: "#666" }}
-                      />
-                      <YAxis
-                        dataKey="name"
-                        type="category"
-                        width={120}
-                        tick={{ fontSize: 11, fill: "#444" }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <ChartTooltip
-                        formatter={(value: number) =>
-                          `${value.toLocaleString()} Birr`
-                        }
-                        contentStyle={{
-                          backgroundColor: "rgba(255,255,255,0.95)",
-                          borderRadius: "12px",
-                          border: "none",
-                          boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
-                        }}
-                        labelStyle={{ fontWeight: "bold", color: "#0D47A1" }}
-                      />
-                      <defs>
-                        <linearGradient
-                          id="topBarGradient"
-                          x1="0"
-                          y1="0"
-                          x2="1"
-                          y2="0"
-                        >
-                          <stop offset="0%" stopColor="#0D47A1" />
-                          <stop offset="100%" stopColor="#1976D2" />
-                        </linearGradient>
-                      </defs>
-                      <Bar
-                        dataKey="revenue"
-                        fill="url(#topBarGradient)"
-                        radius={[0, 10, 10, 0]}
-                        barSize={40}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <BarChart data={topEvents} layout="vertical">
+                    <CartesianGrid strokeDasharray="4 4" stroke="#f5f5f5" />
+                    <XAxis
+                      type="number"
+                      tickFormatter={(value) => {
+                        if (value >= 1000000)
+                          return `${(value / 1000000).toFixed(1)}M`;
+                        if (value >= 1000)
+                          return `${Math.round(value / 1000)}k`;
+                        return `${value}`;
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 12, fill: "#666" }}
+                    />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={120}
+                      tick={{ fontSize: 11, fill: "#444" }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <ChartTooltip
+                      formatter={(value: number) =>
+                        `${value.toLocaleString()} Birr`
+                      }
+                      contentStyle={{
+                        backgroundColor: "rgba(255,255,255,0.95)",
+                        borderRadius: "12px",
+                        border: "none",
+                        boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+                      }}
+                      labelStyle={{ fontWeight: "bold", color: "#0D47A1" }}
+                    />
+                    <defs>
+                      <linearGradient
+                        id="topBarGradient"
+                        x1="0"
+                        y1="0"
+                        x2="1"
+                        y2="0"
+                      >
+                        <stop offset="0%" stopColor="#0D47A1" />
+                        <stop offset="100%" stopColor="#1976D2" />
+                      </linearGradient>
+                    </defs>
+                    <Bar
+                      dataKey="revenue"
+                      fill="url(#topBarGradient)"
+                      radius={[0, 10, 10, 0]}
+                      barSize={40}
+                    />
+                  </BarChart>
                 </ChartContainer>
               )}
             </CardContent>
