@@ -1405,7 +1405,7 @@ export default function EventDetailClient() {
                       htmlFor="santim_email"
                       className="text-xs font-semibold uppercase text-gray-500"
                     >
-                      Email <span className="text-red-500">*</span>
+                      Email
                     </Label>
                     <Input
                       id="santim_email"
@@ -1433,6 +1433,7 @@ export default function EventDetailClient() {
                     <Input
                       id="santim_phone"
                       type="tel"
+                      maxLength={9}
                       value={santimForm.phoneNumber}
                       onChange={(e) => {
                         let val = e.target.value.replace(/\D/g, "");
