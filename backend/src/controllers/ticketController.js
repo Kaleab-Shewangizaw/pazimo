@@ -13,6 +13,7 @@ const {
   sendInvitationEmail,
   createEmailTemplate,
 } = require("./invitationEmailController");
+const { sendSMS } = require("../utils/sms");
 const axios = require("axios");
 const Payment = require("../models/Payment");
 const SantimPayService = require("../services/santimPayService");
@@ -169,6 +170,40 @@ const processSuccessfulPayment = async (payment) => {
       $push: { tickets: ticket._id },
     });
     console.log(`Added ticket to user ${finalUserId} history`);
+  }
+
+  // Send SMS Confirmation
+  try {
+    const smsPhone =
+      payment.contact ||
+      ticketData.guestPhone ||
+      (user ? user.phoneNumber : null);
+    if (smsPhone) {
+      const userName =
+        payment.guestName ||
+        ticketData.guestName ||
+        (user ? user.firstName : "Customer");
+      const eventTitle = event.title;
+      const admitCount = ticketCount || 1;
+      const ticketLink = `${
+        process.env.FRONTEND_URL || "https://pazimo.com"
+      }/ticket/${ticket.ticketId}`;
+
+      const message = `Hi ${userName} 👋
+Your ticket for ${eventTitle} is confirmed 🎟️
+Admits: ${admitCount} person
+
+Access your ticket here:
+${ticketLink}
+
+⚠️ Keep this link safe it gives direct access to your ticket.
+Pazimo`;
+
+      await sendSMS(smsPhone, message);
+      console.log(`SMS sent to ${smsPhone}`);
+    }
+  } catch (smsError) {
+    console.error("Failed to send confirmation SMS:", smsError);
   }
 
   return ticket;
@@ -496,24 +531,7 @@ const createGuestTicket = async (req, res) => {
         event.title
       }\nDate: ${eventDate} | ${timeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
-      let phone = guestPhone.replace("+", "");
-      // Ensure phone starts with 251
-      if (phone.startsWith("0")) {
-        phone = "251" + phone.substring(1);
-      } else if (!phone.startsWith("251")) {
-        phone = "251" + phone;
-      }
-
-      await axios
-        .post("https://api.geezsms.com/api/v1/sms/send", {
-          phone: phone,
-          msg: smsMessage,
-          token:
-            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
-        })
-        .catch((err) =>
-          console.error("SMS Error:", err.response?.data || err.message)
-        );
+      await sendSMS(guestPhone, smsMessage);
     }
 
     res.status(StatusCodes.CREATED).json({
@@ -659,35 +677,8 @@ const processGuestInvitation = async (ticketId) => {
 
     const smsMessage = `Hi ${ticket.guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
-    let phone = ticket.guestPhone.replace("+", "");
-    // Ensure phone starts with 251
-    if (phone.startsWith("0")) {
-      phone = "251" + phone.substring(1);
-    } else if (!phone.startsWith("251")) {
-      phone = "251" + phone;
-    }
-
-    console.log(`Formatted phone for SMS: ${phone}`);
-
-    try {
-      const smsResponse = await axios.post(
-        "https://api.geezsms.com/api/v1/sms/send",
-        {
-          phone: phone,
-          msg: smsMessage,
-          token:
-            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
-        }
-      );
-      console.log("SMS sent successfully:", smsResponse.data);
-    } catch (err) {
-      console.error("SMS Error:", err.response?.data || err.message);
-    }
-  } else {
-    console.log("No guest phone found, skipping SMS.");
+    await sendSMS(ticket.guestPhone, smsMessage);
   }
-
-  return true;
 };
 
 // Confirm RSVP and generate tickets
@@ -946,24 +937,7 @@ const createInvitationTicket = async (req, res) => {
         event.title
       }\nDate: ${eventDate} | ${timeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
-      let phone = guestPhone.replace("+", "");
-      // Ensure phone starts with 251
-      if (phone.startsWith("0")) {
-        phone = "251" + phone.substring(1);
-      } else if (!phone.startsWith("251")) {
-        phone = "251" + phone;
-      }
-
-      await axios
-        .post("https://api.geezsms.com/api/v1/sms/send", {
-          phone: phone,
-          msg: smsMessage,
-          token:
-            process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
-        })
-        .catch((err) =>
-          console.error("SMS Error:", err.response?.data || err.message)
-        );
+      await sendSMS(guestPhone, smsMessage);
     }
 
     res.status(StatusCodes.CREATED).json({
@@ -1392,7 +1366,10 @@ const getPublicTicketDetails = async (req, res) => {
 
     // 1. Try finding by ticketId (string)
     const ticketById = await Ticket.findOne({ ticketId: id })
-      .populate("event", "title startDate endDate location organizer")
+      .populate(
+        "event",
+        "title startDate endDate location organizer coverImages"
+      )
       .populate("user", "firstName lastName email");
 
     if (ticketById) {
@@ -1402,7 +1379,10 @@ const getPublicTicketDetails = async (req, res) => {
     // 2. If not found, check if id is a valid ObjectId (for _id lookup)
     if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
       const ticket = await Ticket.findById(id)
-        .populate("event", "title startDate endDate location organizer")
+        .populate(
+          "event",
+          "title startDate endDate location organizer coverImages"
+        )
         .populate("user", "firstName lastName email");
 
       if (ticket) {
@@ -1413,7 +1393,10 @@ const getPublicTicketDetails = async (req, res) => {
     // 3. If still not found, try finding by paymentReference
     if (tickets.length === 0) {
       const txTickets = await Ticket.find({ paymentReference: id })
-        .populate("event", "title startDate endDate location organizer")
+        .populate(
+          "event",
+          "title startDate endDate location organizer coverImages"
+        )
         .populate("user", "firstName lastName email");
 
       if (txTickets && txTickets.length > 0) {

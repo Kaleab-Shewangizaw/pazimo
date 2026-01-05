@@ -30,6 +30,7 @@ const paymentConfigRoutes = require("./routes/paymentConfigRoutes");
 const {
   sendInvitationEmail,
 } = require("./controllers/invitationEmailController");
+const { sendSMS } = require("./utils/sms");
 
 const app = express();
 
@@ -113,29 +114,12 @@ app.post("/api/send-invitation-email", sendInvitationEmail);
 app.post("/api/send-sms", async (req, res) => {
   try {
     const { phone, message } = req.body;
+    const result = await sendSMS(phone, message);
 
-    const response = await fetch(
-      "https://api.geezsms.com/api/v1/sms/send/bulk",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-GeezSMS-Key": "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
-        },
-        body: JSON.stringify({
-          contacts: [{ phone_number: phone }],
-          msg: message,
-          sender: "Pazimo Invitation",
-        }),
-      }
-    );
-
-    if (response.ok) {
+    if (result.success) {
       res.json({ success: true });
     } else {
-      const errorData = await response.text();
-      console.error("Geez SMS API error:", errorData);
-      res.status(500).json({ success: false, error: "SMS service error" });
+      res.status(500).json({ success: false, error: result.error });
     }
   } catch (error) {
     console.error("SMS send error:", error);

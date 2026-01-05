@@ -49,6 +49,16 @@ router.post("/ticket/initiate", async (req, res) => {
         .json({ success: false, error: "ticketDetails is required" });
     }
 
+    // Require email for guest checkout
+    if (!ticketDetails.userId && !ticketDetails.email) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Email is required for ticket purchase",
+        });
+    }
+
     // --- User Creation / Lookup Logic ---
     let userId = ticketDetails.userId;
     let token = null;
@@ -187,6 +197,16 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       return res
         .status(400)
         .json({ success: false, error: "ticketDetails is required" });
+    }
+
+    // Require email for guest checkout
+    if (!ticketDetails.userId && !ticketDetails.email) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Email is required for ticket purchase",
+        });
     }
 
     // --- User Creation / Lookup Logic (Same as SantimPay) ---

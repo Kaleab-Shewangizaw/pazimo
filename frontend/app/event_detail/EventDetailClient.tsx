@@ -372,8 +372,10 @@ export default function EventDetailClient() {
   const handleMobilePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSantimLoading) return;
-    if (!santimForm.fullName || !santimForm.phoneNumber) {
-      toast.error("Please fill in all required fields");
+
+    // Require email
+    if (!santimForm.fullName || !santimForm.phoneNumber || !santimForm.email) {
+      toast.error("Please fill in all required fields including email");
       return;
     }
 
@@ -1336,13 +1338,13 @@ export default function EventDetailClient() {
                 </div>
               )}
               <div className="grid grid-cols-1 gap-3">
-                {!user && (
+                {(!user || !user.email) && (
                   <div>
                     <Label
                       htmlFor="santim_email"
                       className="text-xs font-semibold uppercase text-gray-500"
                     >
-                      Email
+                      Email <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="santim_email"
@@ -1353,6 +1355,7 @@ export default function EventDetailClient() {
                       }
                       placeholder="Email address"
                       className="mt-1"
+                      required
                     />
                   </div>
                 )}
