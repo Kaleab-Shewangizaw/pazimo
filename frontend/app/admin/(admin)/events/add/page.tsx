@@ -28,7 +28,7 @@ interface Category {
 
 export default function AddEventPage() {
   const router = useRouter();
-  const { token } = useAdminAuthStore();
+  const { token, admin } = useAdminAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
@@ -157,6 +157,13 @@ export default function AddEventPage() {
 
     try {
       const formDataToSend = new FormData();
+
+      // Append organizer ID
+      if (admin?.id) {
+        formDataToSend.append("organizer", admin.id);
+      } else {
+        throw new Error("Admin ID not found");
+      }
 
       // Append basic event data
       formDataToSend.append("title", formData.title);

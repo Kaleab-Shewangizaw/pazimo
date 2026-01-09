@@ -193,8 +193,45 @@ export default function UpcomingEvents() {
     };
 
     const fetchWishlist = async () => {
-      // ... (unchanged – kept exactly as you had it)
-      // (omitted for brevity – copy-paste your original fetchWishlist code here)
+      try {
+        setIsWishlistLoading(true);
+        const storedAuth = localStorage.getItem("auth-storage");
+        let userId;
+
+        if (storedAuth) {
+          const parsedAuth = JSON.parse(storedAuth);
+          userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
+        }
+
+        // Always try to load from local storage first for immediate UI
+        const saved = localStorage.getItem("event-wishlist");
+        if (saved) {
+          setWishlist(JSON.parse(saved));
+        }
+
+        if (userId) {
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
+          );
+          const data = await res.json();
+          if (data.success && Array.isArray(data.data)) {
+            // Extract just the event IDs
+            const serverIds = data.data
+              .map((item: any) => {
+                if (typeof item.eventId === "string") return item.eventId;
+                return item.eventId?._id || item.event?._id;
+              })
+              .filter(Boolean);
+
+            setWishlist(serverIds);
+            localStorage.setItem("event-wishlist", JSON.stringify(serverIds));
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching wishlist:", error);
+      } finally {
+        setIsWishlistLoading(false);
+      }
     };
 
     fetchEvents();

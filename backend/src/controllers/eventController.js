@@ -54,7 +54,7 @@ const Notification = require("../models/Notification");
 
 // Create event
 const createEvent = async (req, res) => {
-  const {
+  let {
     title,
     description,
     category,
@@ -70,6 +70,11 @@ const createEvent = async (req, res) => {
     organizer,
     ageRestriction,
   } = req.body;
+
+  // Use authenticated user ID if organizer is not provided
+  if (!organizer && req.user && req.user.userId) {
+    organizer = req.user.userId;
+  }
 
   if (!organizer) {
     throw new BadRequestError("Organizer ID is required");
@@ -1116,24 +1121,45 @@ const getWishlist = async (req, res) => {
  */
 const updateWishlist = async (req, res) => {
   const { userId } = req.params;
-  const { eventId } = req.body;
+  const { eventId, action } = req.body; // Expect explicit action
 
   try {
     // Check if the wishlist entry exists
     const existing = await Wishlist.findOne({ userId, eventId });
 
-    if (existing) {
-      // Remove from wishlist
-      await Wishlist.deleteOne({ _id: existing._id });
-      return res
-        .status(200)
-        .json({ success: true, message: "Removed from wishlist" });
-    } else {
-      // Add to wishlist
+    if (action === "add") {
+      if (existing) {
+        return res
+          .status(200)
+          .json({ success: true, message: "Already in wishlist" });
+      }
       await Wishlist.create({ userId, eventId });
       return res
         .status(201)
         .json({ success: true, message: "Added to wishlist" });
+    } else if (action === "remove") {
+      if (existing) {
+        await Wishlist.deleteOne({ _id: existing._id });
+        return res
+          .status(200)
+          .json({ success: true, message: "Removed from wishlist" });
+      }
+      return res
+        .status(200)
+        .json({ success: true, message: "Item was not in wishlist" });
+    } else {
+      // Fallback to legacy toggle behavior if no action specified
+      if (existing) {
+        await Wishlist.deleteOne({ _id: existing._id });
+        return res
+          .status(200)
+          .json({ success: true, message: "Removed from wishlist" });
+      } else {
+        await Wishlist.create({ userId, eventId });
+        return res
+          .status(201)
+          .json({ success: true, message: "Added to wishlist" });
+      }
     }
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });

@@ -13,6 +13,7 @@ import {
   BookOpen,
   Ticket,
   Loader2,
+  Heart,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState, useRef } from "react";
@@ -35,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { useWishlist } from "@/hooks/useWishlist";
 
 type TicketType = {
   _id: string;

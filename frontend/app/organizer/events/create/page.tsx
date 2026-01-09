@@ -473,6 +473,9 @@ export default function CreateEventPage() {
 
       const formDataToSend = new FormData();
 
+      // Append organizer ID (CRITICAL FIX)
+      formDataToSend.append("organizer", userId);
+
       // Append basic event data
       formDataToSend.append("title", formData.title);
       formDataToSend.append("description", formData.description);
