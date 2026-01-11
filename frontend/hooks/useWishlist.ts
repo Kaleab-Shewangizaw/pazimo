@@ -1,9 +1,11 @@
+import { useAuthStore } from "@/store/authStore";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 export const useWishlist = () => {
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { token } = useAuthStore(); // Get token from store
 
   useEffect(() => {
     fetchWishlist();
@@ -31,24 +33,31 @@ export const useWishlist = () => {
       }
 
       // If logged in, sync with server
-      if (userId) {
+      if (userId && token) {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
         if (res.ok) {
           const data = await res.json();
-          if (data.success && Array.isArray(data.data)) {
-            // Extract just the event IDs
+          // Backend returns { status: "success", data: [...] } OR { success: true, data: [...] }
+          // We need to handle both just in case, but controller uses status="success" for getWishlist
+          const isSuccess = data.success === true || data.status === "success";
+
+          if (isSuccess && Array.isArray(data.data)) {
+            // New structure: data.data is array of Event objects (populated)
+            // or array of IDs (if not populated, but getWishlist populates)
             const serverIds = data.data
               .map((item: any) => {
-                if (
-                  item.eventId &&
-                  typeof item.eventId === "object" &&
-                  item.eventId._id
-                ) {
-                  return item.eventId._id;
+                // Check if item is an object (Event) or just an ID string
+                if (typeof item === "object" && item !== null) {
+                  return item._id; // Event object
                 }
-                return item.eventId;
+                return item; // ID string
               })
               .filter(Boolean);
 
@@ -82,12 +91,15 @@ export const useWishlist = () => {
       setWishlist(newWishlist);
       localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
 
-      if (userId) {
+      if (userId && token) {
         await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
             body: JSON.stringify({
               eventId,
               action: isRemoving ? "remove" : "add",

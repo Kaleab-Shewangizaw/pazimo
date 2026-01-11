@@ -1,5 +1,5 @@
 const Event = require("../models/Event");
-const Wishlist = require("../models/Wishlist");
+const User = require("../models/User");
 const { StatusCodes } = require("http-status-codes");
 const { BadRequestError, NotFoundError } = require("../errors");
 const Ticket = require("../models/Ticket");
@@ -429,60 +429,67 @@ const updateTicketTypes = async (req, res) => {
    WISHLIST
 ====================================================== */
 const getWishlist = async (req, res) => {
-  const items = await Wishlist.find({
-    userId: req.params.userId,
-  }).populate("eventId");
+  const user = await User.findById(req.params.userId).populate("wishlist");
+
+  if (!user) {
+    throw new NotFoundError("User not found");
+  }
 
   res.status(StatusCodes.OK).json({
     status: "success",
-    data: items,
+    data: user.wishlist || [],
   });
 };
 
 const updateWishlist = async (req, res) => {
   const { userId } = req.params;
-  const { eventId, action } = req.body; // Expect explicit action
+  const { eventId, action } = req.body;
 
-  const exists = await Wishlist.findOne({ userId, eventId });
-
-  try {
-    if (action === "add") {
-      if (exists) {
-        return res
-          .status(200)
-          .json({ success: true, message: "Already in wishlist" });
-      }
-      await Wishlist.create({ userId, eventId });
-      return res
-        .status(201)
-        .json({ success: true, message: "Added to wishlist" });
-    } else if (action === "remove") {
-      if (exists) {
-        await Wishlist.deleteOne({ _id: exists._id });
-        return res
-          .status(200)
-          .json({ success: true, message: "Removed from wishlist" });
-      }
-      return res
-        .status(200)
-        .json({ success: true, message: "Item was not in wishlist" });
-    } else {
-      // Fallback to legacy toggle behavior if no action specified
-      if (exists) {
-        await Wishlist.deleteOne({ _id: exists._id });
-        return res
-          .status(200)
-          .json({ success: true, message: "Removed from wishlist" });
-      } else {
-        await Wishlist.create({ userId, eventId });
-        return res
-          .status(201)
-          .json({ success: true, message: "Added to wishlist" });
-      }
-    }
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new NotFoundError("User not found");
   }
+
+  // Ensure wishlist array exists (though schema default should handle this if created recently)
+  if (!user.wishlist) {
+    user.wishlist = [];
+  }
+
+  const inWishlist = user.wishlist.some((id) => id.toString() === eventId);
+  let message = "";
+
+  if (action === "add") {
+    if (!inWishlist) {
+      user.wishlist.push(eventId);
+      message = "Added to wishlist";
+    } else {
+      message = "Already in wishlist";
+    }
+  } else if (action === "remove") {
+    if (inWishlist) {
+      user.wishlist = user.wishlist.filter((id) => id.toString() !== eventId);
+      message = "Removed from wishlist";
+    } else {
+      message = "Item was not in wishlist";
+    }
+  } else {
+    // Toggle fallback
+    if (inWishlist) {
+      user.wishlist = user.wishlist.filter((id) => id.toString() !== eventId);
+      message = "Removed from wishlist";
+    } else {
+      user.wishlist.push(eventId);
+      message = "Added to wishlist";
+    }
+  }
+
+  await user.save();
+
+  res.status(StatusCodes.OK).json({
+    success: true,
+    message,
+    data: user.wishlist,
+  });
 };
 
 const toggleBannerStatus = async (req, res) => {

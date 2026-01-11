@@ -164,6 +164,12 @@ const userSchema = new mongoose.Schema(
         ref: "Ticket",
       },
     ],
+    wishlist: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Event",
+      },
+    ],
     passwordResetToken: String,
     passwordResetExpires: Date,
   },

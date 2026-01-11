@@ -1,14 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
+import { useWishlist } from "@/hooks/useWishlist";
+import { ChevronRight, ImageIcon } from "lucide-react";
 import Image from "next/image";
-import {
-  Heart,
-  Eye,
-  EyeOff,
-  ChevronRight,
-  Image as ImageIcon,
-} from "lucide-react";
+import { Heart, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -49,11 +45,15 @@ type Event = {
 };
 
 export default function EventCarousel() {
-  const [wishlist, setWishlist] = useState<string[]>([]);
+  const {
+    wishlist,
+    toggleWishlist,
+    isLoading: isWishlistLoading,
+  } = useWishlist();
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+  // const [isWishlistLoading, setIsWishlistLoading] = useState(false);
   const [showSoldOut, setShowSoldOut] = useState<boolean>(true);
   const [sortBy, setSortBy] = useState<string>("newest");
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -150,7 +150,6 @@ export default function EventCarousel() {
 
   useEffect(() => {
     fetchEvents();
-    fetchWishlist();
   }, []);
 
   useEffect(() => {
@@ -268,50 +267,7 @@ export default function EventCarousel() {
     setFilteredEvents(filtered);
   };
 
-  const fetchWishlist = async () => {
-    try {
-      const storedAuth = localStorage.getItem("auth-storage");
-      if (!storedAuth) {
-        const localWishlist = localStorage.getItem("event-wishlist");
-        if (localWishlist) {
-          setWishlist(JSON.parse(localWishlist));
-        }
-        return;
-      }
-
-      const parsedAuth = JSON.parse(storedAuth);
-      const userId = parsedAuth.state?.user?._id;
-
-      if (!userId) {
-        const localWishlist = localStorage.getItem("event-wishlist");
-        if (localWishlist) {
-          setWishlist(JSON.parse(localWishlist));
-        }
-        return;
-      }
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
-      );
-      if (!response.ok) {
-        throw new Error("Failed to fetch wishlist");
-      }
-
-      const data = await response.json();
-      if (data.data && Array.isArray(data.data)) {
-        const wishlistIds = data.data.map(
-          (item: any) => item.eventId || item._id
-        );
-        setWishlist(wishlistIds);
-      }
-    } catch (error) {
-      console.error("Error fetching wishlist:", error);
-      const localWishlist = localStorage.getItem("event-wishlist");
-      if (localWishlist) {
-        setWishlist(JSON.parse(localWishlist));
-      }
-    }
-  };
+  // Wishlist fetching handled by useWishlist hook
 
   const formatTimeWithAmPm = (time24?: string): string => {
     if (!time24) return "";
@@ -342,63 +298,7 @@ export default function EventCarousel() {
     return `${start} - ${end}`;
   };
 
-  const toggleWishlist = async (eventId: string) => {
-    try {
-      setIsWishlistLoading(true);
-      const storedAuth = localStorage.getItem("auth-storage");
-      let userId;
-
-      if (storedAuth) {
-        const parsedAuth = JSON.parse(storedAuth);
-        userId = parsedAuth.state?.user?._id;
-      }
-
-      const newWishlist = wishlist.includes(eventId)
-        ? wishlist.filter((id) => id !== eventId)
-        : [...wishlist, eventId];
-      setWishlist(newWishlist);
-      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
-
-      if (userId) {
-        const action = wishlist.includes(eventId) ? "remove" : "add";
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              eventId,
-              action,
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`Failed to ${action} event to wishlist`);
-        }
-
-        toast.success(
-          wishlist.includes(eventId)
-            ? "Removed from wishlist"
-            : "Added to wishlist"
-        );
-      } else {
-        toast.success(
-          wishlist.includes(eventId)
-            ? "Removed from wishlist"
-            : "Added to wishlist"
-        );
-      }
-    } catch (error) {
-      console.error("Error updating wishlist:", error);
-      toast.error("Failed to update wishlist");
-      await fetchWishlist();
-    } finally {
-      setIsWishlistLoading(false);
-    }
-  };
+  // Wishlist toggle handled by useWishlist hook
 
   if (isLoading) {
     return (

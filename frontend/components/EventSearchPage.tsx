@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useWishlist } from "@/hooks/useWishlist";
 
 const EventGrid = lazy(() => import("@/components/skeleton/event-grid"));
 
@@ -153,8 +154,11 @@ export default function EventSearchPage() {
   const [showSoldOut, setShowSoldOut] = useState<boolean>(true); // New state for showing/hiding sold out events
   const [isFilterOpen, setIsFilterOpen] = useState(false); // Mobile filter sheet state
   const eventsPerPage = 9;
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [isWishlistLoading, setIsWishlistLoading] = useState(false);
+  const {
+    wishlist,
+    toggleWishlist,
+    isLoading: isWishlistLoading,
+  } = useWishlist();
   const { user } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -209,44 +213,7 @@ export default function EventSearchPage() {
   ]);
 
   useEffect(() => {
-    const fetchWishlist = async () => {
-      try {
-        const storedAuth = localStorage.getItem("auth-storage");
-        if (!storedAuth) {
-          const localWishlist = localStorage.getItem("event-wishlist");
-          if (localWishlist) setWishlist(JSON.parse(localWishlist));
-          return;
-        }
-
-        const parsedAuth = JSON.parse(storedAuth);
-        const userId =
-          parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
-
-        if (!userId) {
-          const localWishlist = localStorage.getItem("event-wishlist");
-          if (localWishlist) setWishlist(JSON.parse(localWishlist));
-          return;
-        }
-
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
-        );
-        if (!response.ok) throw new Error("Failed to fetch wishlist");
-
-        const data = await response.json();
-        if (data.data && Array.isArray(data.data)) {
-          const wishlistIds = data.data.map(
-            (item: any) => item.eventId || item._id
-          );
-          setWishlist(wishlistIds);
-        }
-      } catch {
-        const localWishlist = localStorage.getItem("event-wishlist");
-        if (localWishlist) setWishlist(JSON.parse(localWishlist));
-      }
-    };
-
-    fetchWishlist();
+    // Wishlist managed by useWishlist hook
   }, []);
 
   const fetchEvents = async () => {
@@ -408,46 +375,7 @@ export default function EventSearchPage() {
     (!showSoldOut ? 1 : 0) +
     (priceRange[0] !== 0 || priceRange[1] !== 2000 ? 1 : 0);
 
-  const toggleWishlist = async (eventId: string) => {
-    try {
-      setIsWishlistLoading(true);
-      const storedAuth = localStorage.getItem("auth-storage");
-      let userId;
-
-      if (storedAuth) {
-        const parsedAuth = JSON.parse(storedAuth);
-        userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
-      }
-
-      const isRemoving = wishlist.includes(eventId);
-      const newWishlist = isRemoving
-        ? wishlist.filter((id) => id !== eventId)
-        : [...wishlist, eventId];
-
-      setWishlist(newWishlist);
-      localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
-
-      if (userId) {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              eventId,
-              action: isRemoving ? "remove" : "add",
-            }),
-          }
-        );
-      }
-
-      toast.success(isRemoving ? "Removed from wishlist" : "Added to wishlist");
-    } catch (error) {
-      toast.error("Failed to update wishlist");
-    } finally {
-      setIsWishlistLoading(false);
-    }
-  };
+  // Wishlist toggle handled by useWishlist hook
 
   // Enhanced Filter content component for mobile with compact design
   const MobileFilterContent = () => (

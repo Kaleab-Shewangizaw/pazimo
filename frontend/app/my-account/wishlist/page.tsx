@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Search, Heart, Calendar, MapPin, Ticket, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useWishlist } from "@/hooks/useWishlist";
+import { ImageIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 
 type Event = {
   _id: string;
@@ -39,7 +43,51 @@ export default function WishlistPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [wishlistItems, setWishlistItems] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRemoving, setIsRemoving] = useState<Record<string, boolean>>({});
+  const { token } = useAuthStore();
+
+  // Use global wishlist hook
+  const {
+    wishlist,
+    toggleWishlist,
+    isLoading: isWishlistLoading,
+  } = useWishlist();
+
+  // Helper functions used in cards
+  const isTicketTypeAvailable = (ticketType: any) => {
+    if (!ticketType) return false;
+    // Basic check: quantity > 0 (assuming you have a 'quantity' or 'sold' field logic)
+    // Adjust based on your actual Ticket model/Type
+    return ticketType.quantity > 0;
+  };
+
+  const isEventSoldOut = (event: Event) => {
+    if (event.status === "cancelled" || event.status === "postponed")
+      return true;
+    if (!event.ticketTypes || event.ticketTypes.length === 0) return false;
+    return event.ticketTypes.every((ticket) => !isTicketTypeAvailable(ticket));
+  };
+
+  const formatTimeWithAmPm = (time24?: string): string => {
+    if (!time24) return "";
+    const [hourStr, minuteStr] = time24.split(":");
+    if (!hourStr || !minuteStr) return time24;
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12;
+    if (hour === 0) hour = 12;
+    const minuteFormatted = minute < 10 ? `0${minute}` : minute;
+    return `${hour}:${minuteFormatted} ${ampm}`;
+  };
+
+  const formatTimeRange = (startTime?: string, endTime?: string) => {
+    const start = formatTimeWithAmPm(startTime);
+    const end = formatTimeWithAmPm(endTime);
+    if (!start && !end) return "Time TBA";
+    if (!start) return end;
+    if (!end) return start;
+    return `${start} - ${end}`;
+  };
 
   useEffect(() => {
     fetchWishlistItems();
@@ -60,34 +108,42 @@ export default function WishlistPage() {
 
       let wishlistEventIds: string[] = [];
 
-      if (userId) {
+      if (userId && token) {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
 
         if (!response.ok) {
-          console.error("Failed to fetch wishlist from API");
+          console.error(
+            `Failed to fetch wishlist from API: ${response.status} ${response.statusText}`
+          );
+          const text = await response.text();
+          console.error("Response body:", text);
         } else {
           const data = await response.json();
           if (data.data && Array.isArray(data.data)) {
-            // Map item.eventId.
-            // Based on backend controller, eventId is populated with the Event object.
-            // However, we need to extract the ID string safely.
-            wishlistEventIds = data.data
-              .map((item: { eventId: string | { _id: string } }) => {
-                if (
-                  item.eventId &&
-                  typeof item.eventId === "object" &&
-                  "_id" in item.eventId
-                ) {
-                  return item.eventId._id;
-                }
-                return item.eventId as string;
-              })
-              .filter(Boolean);
+            // New backend returns populated event objects directly!
+            // We can use them directly.
+
+            // Filter out any nulls just in case population failed for deleted events
+            const events = data.data.filter((item: any) => item && item._id);
+            setWishlistItems(events);
+            setIsLoading(false);
+            return; // Exit early as we have the data
           }
         }
-      } else {
+      }
+
+      // Fallback for non-logged in or if API failed/returned empty but we want to check local logic?
+      // Actually strictly speaking, if userId exists we trust the API.
+      // If we fall through here, it means we are checking local storage (guest mode).
+
+      if (!userId) {
         const localWishlist = localStorage.getItem("event-wishlist");
         if (localWishlist) {
           try {
@@ -140,62 +196,18 @@ export default function WishlistPage() {
     }
   };
 
-  const removeFromWishlist = async (eventId: string) => {
-    try {
-      setIsRemoving((prev) => ({ ...prev, [eventId]: true }));
-
-      const storedAuth = localStorage.getItem("auth-storage");
-      let userId;
-
-      if (storedAuth) {
-        const parsedAuth = JSON.parse(storedAuth);
-        userId = parsedAuth.state?.user?._id || parsedAuth.state?.user?.id;
-      }
-
-      // Optimistic UI update
-      setWishlistItems((prev) => prev.filter((item) => item._id !== eventId));
-
-      if (userId) {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ eventId, action: "remove" }),
-          }
-        );
-
-        if (!response.ok)
-          throw new Error("Failed to remove event from wishlist");
-      }
-
-      // Always update local storage too, to keep in sync if user logs out
-      const localWishlist = localStorage.getItem("event-wishlist");
-      if (localWishlist) {
-        const wishlistIds = JSON.parse(localWishlist);
-        const updatedWishlist = wishlistIds.filter(
-          (id: string) => id !== eventId
-        );
-        localStorage.setItem("event-wishlist", JSON.stringify(updatedWishlist));
-      }
-
-      toast.success("Removed from wishlist");
-    } catch (error) {
-      console.error("Error removing from wishlist:", error);
-      toast.error("Failed to remove from wishlist");
-      // Re-fetch to sync if failed
-      fetchWishlistItems();
-    } finally {
-      setIsRemoving((prev) => ({ ...prev, [eventId]: false }));
-    }
-  };
-
-  const filteredItems = wishlistItems.filter(
-    (item) =>
-      item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.location?.city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.location?.country?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredItems = wishlistItems
+    .filter((item) => wishlist.includes(item._id)) // Only show items currently in wishlist hook state
+    .filter(
+      (item) =>
+        item.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.location?.city
+          ?.toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        item.location?.country
+          ?.toLowerCase()
+          .includes(searchQuery.toLowerCase())
+    );
 
   const formatDate = (dateString: string) =>
     dateString
@@ -247,103 +259,160 @@ export default function WishlistPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((item) => (
-            <Card
-              key={item._id}
-              className="overflow-hidden hover:shadow-lg transition-shadow"
+          {filteredItems.map((event) => (
+            <div
+              key={event._id}
+              className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 group"
             >
-              <CardContent className="p-0">
-                <div className="flex flex-col h-full">
-                  <div className="relative h-48 w-full">
+              <div className="relative">
+                {/* Category Badge */}
+                <div className="absolute top-3 left-3 bg-[#ffc107] text-white text-xs font-bold px-3 py-1.5 rounded-lg z-10 shadow-md">
+                  {typeof event.category === "object" && event.category?.name
+                    ? event.category.name
+                    : event.category || "Uncategorized"}
+                </div>
+
+                {/* Sold Out Badge */}
+                {isEventSoldOut(event) && (
+                  <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-20 shadow-md">
+                    SOLD OUT
+                  </div>
+                )}
+
+                {/* Enhanced Image Container */}
+                <div className="relative aspect-[4/5] overflow-hidden bg-gray-100 flex items-center justify-center">
+                  {/* Fallback Icon */}
+                  <ImageIcon className="w-16 h-16 text-gray-300" />
+
+                  {event.coverImages && event.coverImages.length > 0 && (
                     <Image
                       src={
-                        item.coverImages && item.coverImages.length > 0
-                          ? item.coverImages[0].startsWith("http")
-                            ? item.coverImages[0]
-                            : `${process.env.NEXT_PUBLIC_API_URL}${
-                                item.coverImages[0].startsWith("/")
-                                  ? item.coverImages[0]
-                                  : `/${item.coverImages[0]}`
-                              }`
-                          : item.coverImage
-                          ? item.coverImage.startsWith("http")
-                            ? item.coverImage
-                            : `${process.env.NEXT_PUBLIC_API_URL}${
-                                item.coverImage.startsWith("/")
-                                  ? item.coverImage
-                                  : `/${item.coverImage}`
-                              }`
-                          : "/events/eventimg.png"
+                        event.coverImages[0].startsWith("http")
+                          ? event.coverImages[0]
+                          : `${process.env.NEXT_PUBLIC_API_URL}${
+                              event.coverImages[0].startsWith("/")
+                                ? event.coverImages[0]
+                                : `/${event.coverImages[0]}`
+                            }`
                       }
-                      alt={item.title}
+                      alt={event.title}
                       fill
-                      className="object-cover"
+                      className="object-cover transition-transform duration-500 group-hover:scale-110"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                      quality={90}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
                     />
+                  )}
+
+                  {/* Gradient Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                </div>
+
+                {/* Wishlist Button */}
+                <button
+                  className={cn(
+                    "absolute bottom-3 right-3 p-2.5 rounded-full bg-white/90 backdrop-blur-sm transition-all duration-300 shadow-lg hover:shadow-xl",
+                    wishlist.includes(event._id)
+                      ? "text-red-500 bg-red-50"
+                      : "text-gray-600 hover:text-red-50",
+                    isWishlistLoading
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:scale-110"
+                  )}
+                  onClick={() => toggleWishlist(event._id)}
+                  disabled={isWishlistLoading}
+                  aria-label={
+                    wishlist.includes(event._id)
+                      ? "Remove from wishlist"
+                      : "Add to wishlist"
+                  }
+                >
+                  <Heart
+                    className={cn(
+                      "h-5 w-5",
+                      isWishlistLoading ? "animate-pulse" : ""
+                    )}
+                    fill={
+                      wishlist.includes(event._id) ? "currentColor" : "none"
+                    }
+                  />
+                </button>
+
+                {/* Date Badge */}
+                <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm text-[#1a2d5a] text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md">
+                  {new Date(event.startDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </div>
+              </div>
+
+              {/* Enhanced Card Content */}
+              <div className="p-5">
+                <div className="mb-3">
+                  <p className="text-gray-500 text-sm font-medium mb-1">
+                    {event.location?.city || "TBA"},{" "}
+                    {event.location?.country || ""}
+                  </p>
+                  <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight group-hover:text-[#1a2d5a] transition-colors">
+                    {event.title}
+                  </h3>
+                </div>
+
+                <div className="flex items-center justify-between mb-4">
+                  <div className="bg-gradient-to-r from-[#1a2d5a]/10 to-[#1a2d5a]/5 rounded-lg px-3 py-2">
+                    <p className="text-[#1a2d5a] font-bold text-sm">
+                      {(() => {
+                        if (!event.ticketTypes) return "Free";
+                        const availableTickets = event.ticketTypes.filter(
+                          (ticket) => isTicketTypeAvailable(ticket)
+                        );
+
+                        if (availableTickets.length === 0) {
+                          if (!event.ticketTypes.length) return "Free";
+                          const lowestPrice = Math.min(
+                            ...event.ticketTypes.map((t) => t.price)
+                          );
+                          return lowestPrice > 0
+                            ? `${lowestPrice} ETB`
+                            : "Free";
+                        }
+
+                        const lowestAvailablePrice = Math.min(
+                          ...availableTickets.map((t) => t.price)
+                        );
+                        return lowestAvailablePrice > 0
+                          ? `${lowestAvailablePrice} ETB`
+                          : "Free";
+                      })()}
+                    </p>
                   </div>
-
-                  <div className="p-4 flex-1 flex flex-col">
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-semibold text-lg line-clamp-2">
-                        {item.title}
-                      </h3>
-                      <div className="text-[#1a2d5a] font-bold">
-                        {item.ticketTypes && item.ticketTypes[0]?.price
-                          ? `${item.ticketTypes[0].price} ETB`
-                          : "Free"}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mb-4 flex-1">
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Calendar className="h-4 w-4 shrink-0" />
-                        <span>{formatDate(item.startDate)}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <MapPin className="h-4 w-4 shrink-0" />
-                        <span className="line-clamp-1">
-                          {item.location?.city || "TBA"},{" "}
-                          {item.location?.country || ""}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Ticket className="h-4 w-4 shrink-0" />
-                        <span>
-                          {typeof item.category === "object" &&
-                          item.category !== null &&
-                          "name" in item.category
-                            ? item.category.name
-                            : item.category || "General"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mt-auto">
-                      <Link
-                        href={`/event_detail?id=${item._id}`}
-                        className="w-full"
-                      >
-                        <Button variant="outline" className="w-full">
-                          Details
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="ghost"
-                        className="w-full text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => removeFromWishlist(item._id)}
-                        disabled={isRemoving[item._id]}
-                      >
-                        {isRemoving[item._id] ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <Heart className="h-4 w-4 mr-2 fill-current" />
-                        )}
-                        Remove
-                      </Button>
-                    </div>
+                  <div className="text-xs text-gray-500">
+                    {formatTimeRange(event.startTime, event.endTime)}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+
+                {/* Action Button */}
+                {!isEventSoldOut(event) ? (
+                  <Link href={`/event_detail?id=${event._id}`} passHref>
+                    <Button className="w-full bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white font-semibold py-2.5 rounded-lg transition-all duration-200 hover:shadow-lg transform hover:scale-[1.02]">
+                      Get Tickets
+                    </Button>
+                  </Link>
+                ) : (
+                  <Link href={`/event_detail?id=${event._id}`} passHref>
+                    <Button
+                      variant="outline"
+                      className="w-full border-red-500 text-red-500 hover:bg-red-50 font-semibold py-2.5 rounded-lg"
+                    >
+                      Sold Out
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
