@@ -87,6 +87,7 @@ function GuestInvitationContent() {
       } else {
         setError(result.message || "Failed to update status");
       }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       setError("An error occurred while updating status");
     } finally {
@@ -249,11 +250,6 @@ function GuestInvitationContent() {
                   &quot;{invitation.message}&quot;
                 </p>
               )}
-
-              <p>
-                {invitation.event.description ||
-                  "We would be honored to have you join us."}
-              </p>
 
               <p>
                 This invitation admits <strong>{invitation.ticketCount}</strong>{" "}
