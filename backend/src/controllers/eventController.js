@@ -19,6 +19,7 @@ const createEvent = async (req, res) => {
     location,
     ticketTypes,
     capacity,
+    organizer,
     tags,
     ageRestriction,
   } = req.body;
