@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Image from "next/image";
-import { ChevronRight, Heart, ImageIcon } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useWishlist } from "@/hooks/useWishlist"; // Import hook
 
-import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
 import EventCard from "./eventCard";
@@ -45,17 +43,16 @@ type Event = {
   isSoldOut?: boolean;
 };
 
-export default function UpcomingEvents() {
+export default function UpcomingEvents({ count }: { count?: number }) {
   const {
     wishlist,
     toggleWishlist,
     isLoading: isWishlistLoading,
   } = useWishlist();
   const [events, setEvents] = useState<Event[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+
   const [isLoading, setIsLoading] = useState(true);
-  const [showSoldOut, setShowSoldOut] = useState<boolean>(true);
-  const [sortBy, setSortBy] = useState<string>("newest");
+
   const [isHovered, setIsHovered] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -110,6 +107,7 @@ export default function UpcomingEvents() {
     return null;
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isTicketTypeAvailable = (ticket: any) => {
     const now = new Date();
     // Check if ticket is explicitly unavailable or quantity is 0
@@ -145,7 +143,6 @@ export default function UpcomingEvents() {
     return !hasAvailableTickets;
   };
 
-  // ----------------------- Data fetching -----------------------
   useEffect(() => {
     const fetchEvents = async () => {
       try {
@@ -157,15 +154,9 @@ export default function UpcomingEvents() {
         if (!response.ok) throw new Error("Failed to fetch events");
         const data = await response.json();
 
-        // Sort by published date (createdAt) descending (newest first)
-        // Note: The API might not return createdAt if not selected, but usually it does.
-        // If createdAt is missing, fallback to startDate or _id (which contains timestamp)
         const allEvents = data.data || data.events || [];
 
-        // Sort by creation date (newest first) to find "Featured" candidates
-        // We assume "Featured" here means "Recently Published" but skipping the very newest ones
-        // which are shown in the top carousel.
-        // If createdAt is not available, we'll use _id timestamp or startDate as proxy
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sortedByNewest = [...allEvents].sort((a: any, b: any) => {
           const dateA = a.createdAt
             ? new Date(a.createdAt).getTime()
@@ -176,11 +167,9 @@ export default function UpcomingEvents() {
           return dateB - dateA;
         });
 
-        // Take indices [2, 10] (3rd to 11th events)
-        // Slice is 0-indexed, so 3rd event is index 2.
-        // slice(2, 11) returns elements at indices 2, 3, 4, 5, 6, 7, 8, 9, 10 (9 events total)
-        const featuredEvents = sortedByNewest.slice(0, 11);
+        const featuredEvents = sortedByNewest.slice(count, 11);
         setEvents(featuredEvents);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (err) {
         toast.error("Failed to load featured events");
       } finally {
@@ -189,24 +178,30 @@ export default function UpcomingEvents() {
     };
 
     fetchEvents();
-  }, []);
+  }, [count]);
 
   useEffect(() => {
-    if (!carouselRef.current || filteredEvents.length === 0 || isHovered)
-      return;
+    if (!carouselRef.current || events.length === 0 || isHovered) return;
 
-    const container = carouselRef.current;
+    const scrollContainer = carouselRef.current;
+    const scrollWidth = scrollContainer.scrollWidth;
+    const clientWidth = scrollContainer.clientWidth;
+    const maxScroll = scrollWidth - clientWidth;
+
+    if (maxScroll <= 0) return; // No need to scroll if content fits
+
     const interval = setInterval(() => {
-      const max = container.scrollWidth - container.clientWidth;
-      if (container.scrollLeft >= max) {
-        container.scrollTo({ left: 0, behavior: "smooth" });
+      if (scrollContainer.scrollLeft >= maxScroll) {
+        // Reset to beginning when reaching the end
+        scrollContainer.scrollTo({ left: 0, behavior: "smooth" });
       } else {
-        container.scrollBy({ left: 336, behavior: "smooth" });
+        // Scroll by one card width (320px + 16px gap = 336px)
+        scrollContainer.scrollBy({ left: 336, behavior: "smooth" });
       }
-    }, 10000);
+    }, 10000); // Auto-scroll every 10 seconds
 
     return () => clearInterval(interval);
-  }, [filteredEvents.length, isHovered]);
+  }, [events.length, isHovered]);
 
   // ----------------------- Formatting helpers -----------------------
   const formatTimeWithAmPm = (time24?: string) => {

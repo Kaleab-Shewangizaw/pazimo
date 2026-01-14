@@ -3,7 +3,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 
 // Lazy load components
-const EventCarousel = lazy(() => import("@/components/event-carousel"));
+
 const CategoryIcons = lazy(() => import("@/components/category-icons"));
 const UpcomingEvents = lazy(() => import("@/components/upcoming-events"));
 const TrendingEvents = lazy(() => import("@/components/trending-events"));
@@ -35,7 +35,7 @@ export default function Page() {
       {/* Upcoming Events (Carousel) */}
       {isClient ? (
         <Suspense fallback={<EventCarouselSkeleton />}>
-          <EventCarousel />
+          <UpcomingEvents count={0} />
         </Suspense>
       ) : (
         <EventCarouselSkeleton />
@@ -57,7 +57,7 @@ export default function Page() {
             <div className="h-96 bg-gray-100 animate-pulse rounded-lg mx-4 sm:mx-8 md:mx-16  my-8 mt-4" />
           }
         >
-          <UpcomingEvents />
+          <UpcomingEvents count={2} />
         </Suspense>
       ) : (
         <div className="h-96 bg-gray-100 animate-pulse rounded-lg mx-4 sm:mx-8 md:mx-16 my-8" />
