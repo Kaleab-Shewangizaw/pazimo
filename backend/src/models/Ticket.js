@@ -93,13 +93,13 @@ const TicketSchema = new mongoose.Schema(
         "confirmed",
         "declined",
       ],
-      default: "active",
+      default: this.isInvitation ? "pending" : "active",
     },
 
     paymentStatus: {
       type: String,
       enum: ["pending", "completed", "failed"],
-      default: "completed",
+      default: "pending",
     },
 
     paymentDate: {

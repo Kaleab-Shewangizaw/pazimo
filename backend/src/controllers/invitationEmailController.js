@@ -7,12 +7,22 @@ const createTransporter = () => {
   }
 
   return nodemailer.createTransport({
-    host: "smtp.zoho.com",
-    port: 587,
-    secure: false, // Use TLS
+    //     host: "smtp.zoho.com",
+    //     port: 587,
+    //     secure: false, // Use TLS
+    //     auth: {
+    //       user: process.env.EMAIL_USER_ZOHO,
+    //       pass: process.env.EMAIL_PASS_ZOHO,
+    //     },
+    //   });
+    // };
+
+    service: "gmail",
+
+    // Use TLS
     auth: {
-      user: process.env.EMAIL_USER_ZOHO,
-      pass: process.env.EMAIL_PASS_ZOHO,
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
   });
 };
@@ -189,6 +199,8 @@ const createEmailTemplate = (
     `;
   }
 
+  const displayMessage = message || invitation.message;
+
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -265,16 +277,16 @@ const createEmailTemplate = (
 
               <!-- Organizer Message -->
               ${
-                message
+                displayMessage
                   ? `<p
                 style="margin:16px auto 0;max-width:520px;font-size:16px;line-height:1.6;color:#4b5563;position:relative;z-index:1;">
-                ${message}
+                ${displayMessage}
               </p>`
                   : ""
               }
 
               <!-- Confetti and shapes below messages -->
-              <svg width="100%" height="250" style="position:absolute;top:200px;right:0;pointer-events:none;z-index:0;">
+              <svg width="100%" height="250" style="position:absolute;top=200px;right=0;pointer-events:none;z-index:0;">
                 <circle cx="20" cy="30" r="6" fill="#f59e0b" opacity="0.4" />
                 <rect x="60" y="40" width="8" height="8" fill="#f472b6" opacity="0.3" />
                 <polygon points="100,10 110,30 90,30" fill="#60a5fa" opacity="0.3" />

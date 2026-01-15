@@ -131,10 +131,8 @@ export default function AttendeesModal({
                           : `${usedCount}/${total}`;
 
                         const displayStatus =
-                          isGuestPending && attendee.status !== "declined"
-                            ? "-"
-                            : attendee.status.charAt(0).toUpperCase() +
-                              attendee.status.slice(1);
+                          attendee.status.charAt(0).toUpperCase() +
+                          attendee.status.slice(1);
 
                         return (
                           <tr key={attendee.id} className="hover:bg-gray-50">
@@ -152,24 +150,20 @@ export default function AttendeesModal({
                               </div>
                             </td>
                             <td className="px-3 py-3">
-                              {displayStatus === "-" ? (
-                                <span className="text-gray-400">-</span>
-                              ) : (
-                                <span
-                                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    attendee.status === "confirmed" ||
-                                    attendee.status === "active" ||
-                                    attendee.status === "used"
-                                      ? "bg-green-100 text-green-800"
-                                      : attendee.status === "declined" ||
-                                        attendee.status === "cancelled"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-yellow-100 text-yellow-800"
-                                  }`}
-                                >
-                                  {displayStatus}
-                                </span>
-                              )}
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  attendee.status === "confirmed" ||
+                                  attendee.status === "active" ||
+                                  attendee.status === "used"
+                                    ? "bg-green-100 text-green-800"
+                                    : attendee.status === "declined" ||
+                                      attendee.status === "cancelled"
+                                    ? "bg-red-100 text-red-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                                }`}
+                              >
+                                {displayStatus}
+                              </span>
                             </td>
                             <td className="px-3 py-3">
                               <div className="text-sm text-gray-900">

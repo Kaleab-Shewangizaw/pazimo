@@ -855,7 +855,9 @@ export function useInvitationPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const tickets = (data.tickets || []).filter((t: any) => t.isInvitation);
+        const tickets = (data.tickets || []).filter(
+          (t: any) => t.isInvitation || t.price === 0
+        );
 
         // Fetch invitation records to match with tickets for correct usage data
         let invitations: any[] = [];
@@ -887,7 +889,18 @@ export function useInvitationPage() {
             : ticket.guestEmail || ticket.guestPhone || "No Contact";
 
           // Find matching invitation to get correct original amount for old tickets
+          // Improved matching logic: Prefer linking via ticketId found in rsvpLink
           const matchingInv = invitations.find((inv) => {
+            // Check for direct ticket ID match within the RSVP link
+            if (inv.rsvpLink && ticket.ticketId) {
+              const rsvpTicketId = inv.rsvpLink.split("inv=")[1];
+              if (rsvpTicketId === ticket.ticketId) {
+                return true;
+              }
+            }
+
+            // Fallback to strict email/phone matching if ticket ID link is missing
+            // Only use this fallback if we can't match by ID, to prevent partial matches
             const invEmail = (inv.guestEmail || "").toLowerCase().trim();
             const invPhone = (inv.guestPhone || "").trim();
             const tEmail = (ticket.guestEmail || ticket.user?.email || "")
@@ -898,6 +911,10 @@ export function useInvitationPage() {
               ticket.user?.phoneNumber ||
               ""
             ).trim();
+
+            // Only match if contact info is present
+            if (!invEmail && !invPhone) return false;
+
             return (
               (invEmail && tEmail && invEmail === tEmail) ||
               (invPhone && tPhone && invPhone === tPhone)
@@ -916,18 +933,34 @@ export function useInvitationPage() {
             originalAmount = Math.max(originalAmount, derivedQty);
           }
 
-          let unifiedStatus = "pending";
-          if (ticket.ticketCount === 0 && originalAmount > 0) {
+          let unifiedStatus = ticket.status || "pending";
+
+          if (matchingInv && matchingInv.rsvpStatus === "declined") {
+            unifiedStatus = "declined";
+          } else if (ticket.ticketCount === 0 && originalAmount > 0) {
             unifiedStatus = "used";
-          } else {
-            unifiedStatus = "confirmed";
+          } else if (unifiedStatus === "active") {
+            // Only convert "active" to "confirmed" if it is NOT pending an RSVP.
+            // A paid ticket (not an invitation by flag) is confirmed.
+            // A guest invitation should rely on rsvpStatus, which defaults to pending.
+            if (
+              ticket.isInvitation &&
+              (!matchingInv || matchingInv.rsvpStatus === "pending")
+            ) {
+              unifiedStatus = "pending";
+            } else {
+              unifiedStatus = "confirmed";
+            }
+          } else if (unifiedStatus === "cancelled") {
+            unifiedStatus = "declined";
           }
 
           return {
             id: ticket._id,
             customerName: name,
             contact: contact,
-            guestType: ticket.isInvitation ? "Guest" : "Paid",
+            guestType:
+              ticket.isInvitation || ticket.price === 0 ? "Guest" : "Paid",
             confirmedAt:
               ticket.status === "pending" || ticket.status === "cancelled"
                 ? "Pending"

@@ -679,7 +679,11 @@ const processGuestInvitation = async (ticketId) => {
         ? event.location
         : event.location?.address || "See map";
 
-    const smsMessage = `Hi ${ticket.guestName},\n\nEvent: ${event.title}\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
+    const smsMessage = `Hi ${ticket.guestName},\n\n${
+      message ? message.trim() + "\n\n" : ""
+    }Event: ${
+      event.title
+    }\nDate and Time: ${eventDate} ${eventTime}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
     await sendSMS(ticket.guestPhone, smsMessage);
   }
@@ -819,6 +823,7 @@ const createInvitationTicket = async (req, res) => {
     }
 
     // Create the ticket
+    console.log("Saving Ticket with message:", message);
     const ticket = await Ticket.create({
       event: eventId,
       isInvitation: true,
@@ -875,6 +880,7 @@ const createInvitationTicket = async (req, res) => {
         uniqueId: ticket.ticketId,
         actionLink: rsvpLink,
         actionText: "Confirm Attendance",
+        message: message || "", // Include message in data object as well
       };
 
       const qrCodeUrl = ticket.qrCode;

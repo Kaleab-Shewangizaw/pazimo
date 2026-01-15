@@ -66,7 +66,7 @@ const initiateInvitationPayment = async (req, res) => {
       contact: invitationData.contact,
       method: invitationData.contactType, // "email" or "phone"
       invitationType: invitationData.guestType || invitationData.type, // "guest" or "paid" or "bulk_invitation_fee"
-      message: invitationData.message,
+      message: invitationData.message, // Ensure message is saved in Payment model
       price: amount,
       eventId:
         invitationData.eventId ||
@@ -442,9 +442,10 @@ const handlePaymentSuccess = async (payment) => {
         ticketCount: ticketDetails.qrCodeCount || 1,
         purchaseQuantity: ticketDetails.qrCodeCount || 1,
         price: 0,
-        status: "active",
+        status: "pending",
         paymentStatus: "completed",
         paymentReference: payment.transactionId,
+        message: payment.message || "",
       });
 
       const qrCodeBase64 = ticket.qrCode;
@@ -468,6 +469,7 @@ const handlePaymentSuccess = async (payment) => {
         qrCodeData: qrCodeBase64,
         rsvpLink,
         paymentReference: payment.transactionId,
+        message: payment.message || "",
       });
 
       // 3. Send SMS or Email
@@ -486,17 +488,26 @@ const handlePaymentSuccess = async (payment) => {
           guestName: payment.guestName,
           ticketType: ticketDetails.ticketType || "Guest Ticket",
           uniqueId: ticketId,
+          actionLink: rsvpLink,
+          actionText: "Confirm Attendance",
         };
+
+        const eventImage =
+          event.coverImages && event.coverImages.length > 0
+            ? event.coverImages[0]
+            : "";
 
         const emailHtml = createEmailTemplate(
           eventData,
           invitationData,
-          qrCodeBase64
+          qrCodeBase64,
+          eventImage,
+          payment.message
         );
 
         await sendInvitationEmail({
           to: payment.contact,
-          subject: `Your Ticket for ${event.title}`,
+          subject: `You're invited to ${event.title}!`,
           body: emailHtml,
         });
       } else if (payment.method === "phone") {

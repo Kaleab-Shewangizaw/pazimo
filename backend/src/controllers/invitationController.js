@@ -199,9 +199,10 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           ticketCount: invitation.amount, // Use amount from bulk data
           purchaseQuantity: invitation.amount,
           price: 0, // Free ticket
-          status: "active",
+          status: "pending", // Fixed: Should be pending until they confirm
           paymentStatus: "completed",
           paymentReference: paymentReference || invitation.paymentReference,
+          message: invitation.message || "", // Include message
         });
         uniqueId = ticket.ticketId;
         qrCodeBase64 = ticket.qrCode;
