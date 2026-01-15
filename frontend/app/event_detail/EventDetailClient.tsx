@@ -1223,6 +1223,31 @@ export default function EventDetailClient() {
         </div>
       </div>
 
+      {/* Simple Footer for Event Detail Page */}
+      <footer className="mt-12 border-t border-gray-200 py-8 bg-white">
+        <div className="container mx-auto px-4 flex flex-col items-center justify-center gap-4">
+          <div className="relative h-8 w-32 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
+            <Image
+              src="/logo.png"
+              alt="Pazimo Logo"
+              fill
+              className="object-contain"
+            />
+          </div>
+          <p className="text-sm text-gray-500">
+            &copy; {new Date().getFullYear()} Pazimo. All rights reserved.
+          </p>
+          <div className="flex gap-6">
+            <a
+              href="/privacy"
+              className="text-sm text-gray-500 hover:text-blue-600 transition-colors"
+            >
+              Privacy Policy
+            </a>
+          </div>
+        </div>
+      </footer>
+
       <Dialog
         open={showTicketModal || shouldShowTicketModal}
         onOpenChange={(open) => {
