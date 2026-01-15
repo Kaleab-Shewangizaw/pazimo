@@ -1237,7 +1237,7 @@ export default function EventDetailClient() {
           <p className="text-sm text-gray-500">
             &copy; {new Date().getFullYear()} Pazimo. All rights reserved.
           </p>
-          <div className="flex gap-6">
+          <div className="flex gap-6 mb-10 md:mb-0">
             <a
               href="/privacy"
               className="text-sm text-gray-500 hover:text-blue-600 transition-colors"
