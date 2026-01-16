@@ -845,7 +845,7 @@ const updateProfile = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { firstName, lastName, email, phoneNumber },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     ).select("-password");
 
     res.status(200).json({
@@ -890,7 +890,7 @@ const updatePhoneNumber = async (req, res) => {
         phoneNumber,
         isPhoneVerified: false, // Reset verification status when phone number changes
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     user.password = undefined;
@@ -936,7 +936,7 @@ const verifyPhoneNumber = async (req, res) => {
     const user = await User.findByIdAndUpdate(
       userId,
       { isPhoneVerified: true },
-      { new: true }
+      { new: true },
     );
 
     user.password = undefined;
@@ -1057,7 +1057,7 @@ const sendOtp = async (req, res) => {
     const { phoneNumber } = req.body;
 
     const response = await fetch(
-      `https://api.geezsms.com/api/v1/sms/otp?token=aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw&shortcode_id=825&phone=${phoneNumber}`
+      `https://api.geezsms.com/api/v1/sms/otp?token=aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw&shortcode_id=825&phone=${phoneNumber}`,
     );
     const result = await response.json();
 
@@ -1144,10 +1144,17 @@ const unifiedAuth = async (req, res) => {
     // 3. If no customer account found (either no accounts at all, or only admin/organizer accounts)
     // Create NEW Customer Account
     try {
+      //check if the email is already in use
+      const emailalreadyInuse = await User.findOne({ email });
+
       const newUser = await User.create({
         firstName,
         lastName,
-        email: email || `user_${phoneNumber}_${Date.now()}@temp.com`, // Ensure unique email if not provided
+        email: emailalreadyInuse
+          ? "customerpazimo" +
+            String(Math.floor(Math.random() * 1000000)).padStart(6, "0") +
+            "@gmail.com"
+          : email, // Ensure unique email if not provided
         phoneNumber,
         password,
         role: "customer",
@@ -1173,7 +1180,8 @@ const unifiedAuth = async (req, res) => {
         },
       });
     } catch (err) {
-      // Handle duplicate email error
+      //if the duplicated email is customerpazimo@gmail.com pass the catch error
+      // users who didn't procide their email will have the customerpazimo@gmail.com
       if (err.code === 11000 && err.keyPattern.email) {
         return res.status(400).json({
           status: "error",

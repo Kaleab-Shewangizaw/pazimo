@@ -117,7 +117,7 @@ const isEventSoldOut = (event: any) => {
   // Check if all tickets are unavailable (sold out, unavailable, or out of date range)
   if (event.ticketTypes && Array.isArray(event.ticketTypes)) {
     return event.ticketTypes.every(
-      (ticket: any) => !isTicketTypeAvailable(ticket)
+      (ticket: any) => !isTicketTypeAvailable(ticket),
     );
   }
 
@@ -145,12 +145,12 @@ export default function LargeEventCarousel() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&bannerStatus=true&sort=-createdAt&limit=3`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&bannerStatus=true&sort=-createdAt&limit=10`,
         {
           headers: {
             Accept: "application/json",
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -163,7 +163,8 @@ export default function LargeEventCarousel() {
       // Transform the data to match the expected format
       const transformedEvents = data.data
         .filter(
-          (event: any) => event.bannerStatus === true && event.isPublic === true
+          (event: any) =>
+            event.bannerStatus === true && event.isPublic === true,
         )
         .map((event: any) => {
           // Debug log for each event's images
@@ -226,13 +227,13 @@ export default function LargeEventCarousel() {
                   return now >= s && now <= e;
                 }
                 return false;
-              }
+              },
             );
             if (activeWaveTickets.length > 0) {
               activeWaveTickets.sort(
                 (a: any, b: any) =>
                   new Date(b.startDate).getTime() -
-                  new Date(a.startDate).getTime()
+                  new Date(a.startDate).getTime(),
               );
               priceLabel =
                 activeWaveTickets[0].price > 0
@@ -246,7 +247,7 @@ export default function LargeEventCarousel() {
             }
           } else if (event.ticketTypes && event.ticketTypes.length > 0) {
             priceLabel = `From ${Math.min(
-              ...event.ticketTypes.map((t: any) => t.price)
+              ...event.ticketTypes.map((t: any) => t.price),
             )} ETB`;
           }
 
@@ -371,7 +372,7 @@ export default function LargeEventCarousel() {
     if (!isAnimating) {
       setIsAnimating(true);
       setCurrentIndex((prevIndex) =>
-        prevIndex === featuredEvents.length - 1 ? 0 : prevIndex + 1
+        prevIndex === featuredEvents.length - 1 ? 0 : prevIndex + 1,
       );
       setTimeout(() => setIsAnimating(false), 500);
     }
@@ -381,7 +382,7 @@ export default function LargeEventCarousel() {
     if (!isAnimating) {
       setIsAnimating(true);
       setCurrentIndex((prevIndex) =>
-        prevIndex === 0 ? featuredEvents.length - 1 : prevIndex - 1
+        prevIndex === 0 ? featuredEvents.length - 1 : prevIndex - 1,
       );
       setTimeout(() => setIsAnimating(false), 500);
     }
@@ -684,7 +685,7 @@ export default function LargeEventCarousel() {
                   <p className="text-white/80 text-xs sm:text-sm">
                     {formatTimeRange(
                       currentEvent.startTime,
-                      currentEvent.endTime
+                      currentEvent.endTime,
                     )}
                   </p>
                 </div>
