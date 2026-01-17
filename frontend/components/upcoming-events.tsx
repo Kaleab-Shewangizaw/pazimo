@@ -148,7 +148,7 @@ export default function UpcomingEvents({ count }: { count?: number }) {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`,
         );
 
         if (!response.ok) throw new Error("Failed to fetch events");
@@ -168,7 +168,10 @@ export default function UpcomingEvents({ count }: { count?: number }) {
         });
 
         const featuredEvents = sortedByNewest.slice(count, 11);
-        setEvents(featuredEvents);
+        const publicEvents = featuredEvents.filter(
+          (event: Event) => event.isPublic,
+        );
+        setEvents(publicEvents);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (err) {
         toast.error("Failed to load featured events");
