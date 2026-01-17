@@ -44,7 +44,7 @@ export default function AdminEditEventPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [currentCoverImage, setCurrentCoverImage] = useState<string | null>(
-    null
+    null,
   );
   const [formData, setFormData] = useState({
     title: "",
@@ -88,7 +88,7 @@ export default function AdminEditEventPage() {
   const fetchEventData = async () => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`,
       );
       if (!response.ok) throw new Error("Failed to fetch event");
 
@@ -145,7 +145,7 @@ export default function AdminEditEventPage() {
       setCurrentCoverImage(
         event.coverImage
           ? `${process.env.NEXT_PUBLIC_API_URL}/uploads/${event.coverImage}`
-          : null
+          : null,
       );
     } catch (error) {
       console.error("Error fetching event:", error);
@@ -159,13 +159,13 @@ export default function AdminEditEventPage() {
   const fetchCategories = async () => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/categories`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/categories`,
       );
       if (!response.ok) throw new Error("Failed to fetch categories");
 
       const data = await response.json();
       const publishedCategories = data.data.filter(
-        (cat: Category) => cat.isPublished
+        (cat: Category) => cat.isPublished,
       );
       setCategories(publishedCategories);
     } catch (error) {
@@ -175,7 +175,7 @@ export default function AdminEditEventPage() {
   };
 
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { name, value } = e.target;
     if (name.startsWith("location.")) {
@@ -207,7 +207,7 @@ export default function AdminEditEventPage() {
   const handleTicketTypeChange = (
     index: number,
     field: string,
-    value: string | boolean
+    value: string | boolean,
   ) => {
     const newTicketTypes = [...formData.ticketTypes];
     newTicketTypes[index] = {
@@ -362,13 +362,13 @@ export default function AdminEditEventPage() {
         // Append age restriction as JSON string
         formDataToSend.append(
           "ageRestriction",
-          JSON.stringify(updateData.ageRestriction)
+          JSON.stringify(updateData.ageRestriction),
         );
 
         // Append ticket types as JSON string
         formDataToSend.append(
           "ticketTypes",
-          JSON.stringify(updateData.ticketTypes)
+          JSON.stringify(updateData.ticketTypes),
         );
 
         // Append the cover image file
@@ -382,7 +382,7 @@ export default function AdminEditEventPage() {
               Authorization: `Bearer ${token}`,
             },
             body: formDataToSend,
-          }
+          },
         );
       } else {
         response = await fetch(
@@ -394,7 +394,7 @@ export default function AdminEditEventPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify(updateData),
-          }
+          },
         );
       }
 
@@ -408,7 +408,7 @@ export default function AdminEditEventPage() {
     } catch (error) {
       console.error("Error updating event:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to update event"
+        error instanceof Error ? error.message : "Failed to update event",
       );
     } finally {
       setIsSubmitting(false);
@@ -611,7 +611,10 @@ export default function AdminEditEventPage() {
                   }
                 />
                 <div className="grid gap-1.5 leading-none">
-                  <Label htmlFor="public-toggle" className="font-medium cursor-pointer">
+                  <Label
+                    htmlFor="public-toggle"
+                    className="font-medium cursor-pointer"
+                  >
                     {formData.isPublic ? "Public Event" : "Private Event"}
                   </Label>
                   <p className="text-sm text-gray-500">
@@ -630,7 +633,10 @@ export default function AdminEditEventPage() {
                     setFormData((prev) => ({ ...prev, isSoldOut: checked }))
                   }
                 />
-                <Label htmlFor="sold-out-toggle" className="font-medium cursor-pointer">
+                <Label
+                  htmlFor="sold-out-toggle"
+                  className="font-medium cursor-pointer"
+                >
                   Mark as Sold Out
                 </Label>
               </div>
@@ -794,7 +800,7 @@ export default function AdminEditEventPage() {
                             handleTicketTypeChange(
                               index,
                               "price",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           placeholder="0.00"
@@ -811,7 +817,7 @@ export default function AdminEditEventPage() {
                             handleTicketTypeChange(
                               index,
                               "quantity",
-                              e.target.value
+                              e.target.value,
                             )
                           }
                           placeholder="0"
@@ -827,7 +833,7 @@ export default function AdminEditEventPage() {
                           handleTicketTypeChange(
                             index,
                             "description",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         placeholder="Ticket description"
