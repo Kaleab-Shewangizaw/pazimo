@@ -77,6 +77,7 @@ export default function AdminEditEventPage() {
     capacity: "",
     tags: "",
     isSoldOut: false,
+    isPublic: true,
   });
 
   useEffect(() => {
@@ -139,6 +140,7 @@ export default function AdminEditEventPage() {
         capacity: event.capacity?.toString() || "",
         tags: event.tags?.join(", ") || "",
         isSoldOut: event.isSoldOut || false,
+        isPublic: event.isPublic !== undefined ? event.isPublic : true,
       });
       setCurrentCoverImage(
         event.coverImage
@@ -315,6 +317,7 @@ export default function AdminEditEventPage() {
           .map((tag) => tag.trim())
           .filter(Boolean),
         isSoldOut: formData.isSoldOut,
+        isPublic: formData.isPublic,
         ageRestriction: formData.ageRestriction.hasRestriction
           ? {
               hasRestriction: true,
@@ -351,6 +354,7 @@ export default function AdminEditEventPage() {
         formDataToSend.append("capacity", formData.capacity);
         formDataToSend.append("tags", formData.tags);
         formDataToSend.append("isSoldOut", String(formData.isSoldOut));
+        formDataToSend.append("isPublic", String(formData.isPublic));
 
         // Append location as JSON string
         formDataToSend.append("location", JSON.stringify(formData.location));
@@ -597,17 +601,39 @@ export default function AdminEditEventPage() {
               />
             </div>
 
-            <div className="flex items-center space-x-2 p-4 border rounded-lg bg-gray-50">
-              <Switch
-                id="sold-out-toggle"
-                checked={formData.isSoldOut}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({ ...prev, isSoldOut: checked }))
-                }
-              />
-              <Label htmlFor="sold-out-toggle" className="font-medium">
-                Mark as Sold Out
-              </Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2 p-4 border rounded-lg bg-gray-50">
+                <Switch
+                  id="public-toggle"
+                  checked={formData.isPublic}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, isPublic: checked }))
+                  }
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <Label htmlFor="public-toggle" className="font-medium cursor-pointer">
+                    {formData.isPublic ? "Public Event" : "Private Event"}
+                  </Label>
+                  <p className="text-sm text-gray-500">
+                    {formData.isPublic
+                      ? "Visible to everyone"
+                      : "Only accessible via link"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2 p-4 border rounded-lg bg-gray-50">
+                <Switch
+                  id="sold-out-toggle"
+                  checked={formData.isSoldOut}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, isSoldOut: checked }))
+                  }
+                />
+                <Label htmlFor="sold-out-toggle" className="font-medium cursor-pointer">
+                  Mark as Sold Out
+                </Label>
+              </div>
             </div>
 
             {/* Cover Image */}
