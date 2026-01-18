@@ -120,7 +120,7 @@ export default function EventDetailClient() {
   const [selectedTicketType, setSelectedTicketType] = useState<string>("");
   const [ticketQuantity, setTicketQuantity] = useState(1);
   const [purchasedTickets, setPurchasedTickets] = useState<PurchasedTicket[]>(
-    []
+    [],
   );
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [shouldShowTicketModal, setShouldShowTicketModal] = useState(false);
@@ -151,7 +151,7 @@ export default function EventDetailClient() {
     const fetchProvider = async () => {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`,
         );
         if (response.ok) {
           const data = await response.json();
@@ -229,13 +229,13 @@ export default function EventDetailClient() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId || ""}`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId || ""}`,
       );
       if (!response.ok) throw new Error("Failed to fetch");
       const data = await response.json();
       setEvent(data.data);
       const firstAvailableTicket = data.data.ticketTypes.find(
-        (ticket: TicketType) => ticket.available !== false
+        (ticket: TicketType) => ticket.available !== false,
       );
       if (firstAvailableTicket)
         setSelectedTicketType(firstAvailableTicket.name);
@@ -249,11 +249,11 @@ export default function EventDetailClient() {
   const downloadQRCode = (
     qrCodeDataUrl: string,
     ticketId: string,
-    ticketType: string
+    ticketType: string,
   ) => {
     downloadHighQualityQR(
       qrCodeDataUrl,
-      `ticket-${ticketId}-${ticketType}.png`
+      `ticket-${ticketId}-${ticketType}.png`,
     );
     toast.success(`QR code for ${ticketType} downloaded!`);
   };
@@ -265,7 +265,7 @@ export default function EventDetailClient() {
     }
 
     const selectedType = ticketsToDisplay.find(
-      (t) => t.name === selectedTicketType
+      (t) => t.name === selectedTicketType,
     );
     if (!selectedType) return;
 
@@ -302,7 +302,7 @@ export default function EventDetailClient() {
   const verifyAndShowTickets = async (txRef: string) => {
     try {
       const ticketsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`,
       );
       if (ticketsResponse.ok) {
         const ticketsData = await ticketsResponse.json();
@@ -332,7 +332,7 @@ export default function EventDetailClient() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ transactionId: currentTransactionId }),
-          }
+          },
         );
         toast.info("Payment cancelled");
       } catch {}
@@ -350,7 +350,7 @@ export default function EventDetailClient() {
       attempts++;
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`,
         );
         const data = await response.json();
 
@@ -382,13 +382,17 @@ export default function EventDetailClient() {
     }
 
     // Default email if not provided
-    const finalEmail = santimForm.email || "customerpazimo@gmail.com";
+    const finalEmail =
+      santimForm.email ||
+      "customerpazimo" +
+        String(Math.floor(Math.random() * 1000000)).padStart(6, "0") +
+        "@gmail.com";
 
     setIsSantimLoading(true);
 
     try {
       const selectedType = ticketsToDisplay.find(
-        (t) => t.name === selectedTicketType
+        (t) => t.name === selectedTicketType,
       );
       if (!selectedType) throw new Error("Ticket type not found");
 
@@ -410,7 +414,7 @@ export default function EventDetailClient() {
                 email: finalEmail,
                 phoneNumber: formattedPhone,
               }),
-            }
+            },
           );
 
           if (authResponse.ok) {
@@ -518,7 +522,7 @@ export default function EventDetailClient() {
 
           while (attempts < maxAttempts && !verified) {
             const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`
+              `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`,
             );
             const data = await response.json();
 
@@ -603,18 +607,18 @@ export default function EventDetailClient() {
     }
 
     const hasAvailableTickets = event.ticketTypes.some(
-      (t) => t.available !== false && t.quantity > 0
+      (t) => t.available !== false && t.quantity > 0,
     );
     return !hasAvailableTickets;
   };
 
   const ticketsToDisplay = event.ticketTypes.filter(
-    (ticket) => ticket.available !== false
+    (ticket) => ticket.available !== false,
   );
 
   const calculateTotal = () => {
     const selectedType = ticketsToDisplay.find(
-      (t) => t.name === selectedTicketType
+      (t) => t.name === selectedTicketType,
     );
     return selectedType ? selectedType.price * ticketQuantity : 0;
   };
@@ -1323,7 +1327,7 @@ export default function EventDetailClient() {
                       className="h-8 w-8 rounded-full"
                       onClick={() =>
                         setCurrentTicketIndex(
-                          Math.max(0, currentTicketIndex - 1)
+                          Math.max(0, currentTicketIndex - 1),
                         )
                       }
                       disabled={currentTicketIndex === 0}
@@ -1350,8 +1354,8 @@ export default function EventDetailClient() {
                         setCurrentTicketIndex(
                           Math.min(
                             purchasedTickets.length - 1,
-                            currentTicketIndex + 1
-                          )
+                            currentTicketIndex + 1,
+                          ),
                         )
                       }
                       disabled={
@@ -1374,7 +1378,7 @@ export default function EventDetailClient() {
                 downloadQRCode(
                   ticket.qrCode,
                   ticket.ticketId,
-                  ticket.ticketType
+                  ticket.ticketType,
                 );
               }}
             >
