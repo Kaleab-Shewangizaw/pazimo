@@ -346,21 +346,15 @@ export default function SentInvitationsTable({
                     // If no ticket exists yet, it's a pending invitation without a ticket
                     const isGuestPending = !ticket;
 
-                    const displayTicketType = isGuestPending
-                      ? "-"
-                      : ticket?.ticketType ||
-                        invitation.ticketType ||
-                        "Regular";
-                    const displayUsage = isGuestPending ? "-" : usage;
-                    const displayStatus =
-                      isGuestPending && invitation.rsvpStatus !== "declined"
-                        ? "-"
-                        : unifiedStatus;
+                    const displayTicketType =
+                      ticket?.ticketType || invitation.ticketType || "Regular";
+                    const displayUsage = isGuestPending ? "0/1" : usage;
+                    const displayStatus = unifiedStatus;
 
-                    // Ticket count for display - only show if ticket exists
+                    // Ticket count for display
                     const displayTicketCount = ticket
                       ? ticket.purchaseQuantity || ticket.ticketCount || 1
-                      : invitation.qrCodeCount;
+                      : invitation.qrCodeCount || 1;
 
                     return (
                       <tr

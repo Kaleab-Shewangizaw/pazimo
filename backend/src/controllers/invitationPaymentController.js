@@ -230,10 +230,11 @@ const checkInvitationPaymentStatus = async (req, res) => {
     }
 
     let status;
-    let santimStatus = null;
+    let providerResponse = null;
 
     if (payment.provider === "chapa") {
       const verifyResponse = await ChapaService.verify(transactionId);
+      providerResponse = verifyResponse;
       console.log(
         `Chapa Verify Response for ${transactionId}:`,
         verifyResponse
@@ -244,9 +245,10 @@ const checkInvitationPaymentStatus = async (req, res) => {
       }
     } else {
       // Check with SantimPay
-      santimStatus = await SantimPayService.checkTransactionStatus(
+      const santimStatus = await SantimPayService.checkTransactionStatus(
         transactionId
       );
+      providerResponse = santimStatus;
       console.log(
         `SantimPay Invitation Status Response for ${transactionId}:`,
         JSON.stringify(santimStatus, null, 2)
@@ -255,11 +257,13 @@ const checkInvitationPaymentStatus = async (req, res) => {
       if (status) status = status.toUpperCase();
     }
 
-    if (status === "COMPLETED" || status === "SUCCESS") {
+    const updatedStatus = (status || "").toUpperCase();
+
+    if (updatedStatus === "COMPLETED" || updatedStatus === "SUCCESS") {
       // Atomic update to prevent race condition
       const updatedPayment = await Payment.findOneAndUpdate(
         { transactionId, status: { $ne: "PAID" } },
-        { status: "PAID", santimPayResponse: santimStatus },
+        { status: "PAID", santimPayResponse: providerResponse },
         { new: true }
       );
 
@@ -269,38 +273,31 @@ const checkInvitationPaymentStatus = async (req, res) => {
       }
 
       return res.status(200).json({ success: true, status: "PAID" });
-    } else if (status === "FAILED") {
-      payment.status = "FAILED";
-      await payment.save();
+    } else if (
+      updatedStatus === "FAILED" ||
+      updatedStatus === "CANCELLED" ||
+      updatedStatus === "EXPIRED"
+    ) {
+      if (payment.status !== "FAILED" && payment.status !== "CANCELLED") {
+        payment.status = updatedStatus === "FAILED" ? "FAILED" : "CANCELLED";
+        await payment.save();
 
-      // Cleanup pending invitations
-      if (
-        payment.ticketDetails &&
-        payment.ticketDetails.pendingInvitationIds &&
-        Array.isArray(payment.ticketDetails.pendingInvitationIds)
-      ) {
-        await Invitation.deleteMany({
-          invitationId: { $in: payment.ticketDetails.pendingInvitationIds },
-        });
+        // Cleanup pending invitations
+        if (
+          payment.ticketDetails?.pendingInvitationIds &&
+          Array.isArray(payment.ticketDetails.pendingInvitationIds)
+        ) {
+          const pendingIds = payment.ticketDetails.pendingInvitationIds;
+          await Invitation.deleteMany({ invitationId: { $in: pendingIds } });
+          console.log(
+            `Deleted ${pendingIds.length} pending invitations for failed/cancelled payment ${transactionId}`
+          );
+        }
       }
 
-      return res.status(200).json({ success: true, status: "FAILED" });
-    } else if (status === "CANCELLED" || status === "EXPIRED") {
-      payment.status = "CANCELLED";
-      await payment.save();
-
-      // Cleanup pending invitations
-      if (
-        payment.ticketDetails &&
-        payment.ticketDetails.pendingInvitationIds &&
-        Array.isArray(payment.ticketDetails.pendingInvitationIds)
-      ) {
-        await Invitation.deleteMany({
-          invitationId: { $in: payment.ticketDetails.pendingInvitationIds },
-        });
-      }
-
-      return res.status(200).json({ success: true, status: "CANCELLED" });
+      return res
+        .status(200)
+        .json({ success: true, status: payment.status || "FAILED" });
     }
 
     return res.status(200).json({ success: true, status: "PENDING" });
@@ -327,30 +324,43 @@ const invitationWebhook = async (req, res) => {
       return res.status(404).send("Payment record not found");
     }
 
-    if (payload.status === "COMPLETED" || payload.status === "SUCCESS") {
+    if (status === "COMPLETED" || status === "SUCCESS") {
       const updatedPayment = await Payment.findOneAndUpdate(
         { transactionId, status: { $ne: "PAID" } },
-        { status: "PAID", santimPayResponse: payload },
+        { status: "PAID", santimPayResponse: santimStatus },
         { new: true }
       );
 
       if (updatedPayment) {
+        // Trigger Success Logic only if we updated the status
         await handlePaymentSuccess(updatedPayment);
       }
-    } else {
-      payment.status = "FAILED";
-      await payment.save();
+    } else if (
+      status === "FAILED" ||
+      status === "CANCELLED" ||
+      status === "EXPIRED"
+    ) {
+      if (payment.status !== "FAILED" && payment.status !== "CANCELLED") {
+        payment.status = status === "FAILED" ? "FAILED" : "CANCELLED";
+        await payment.save();
 
-      // Cleanup pending invitations
-      if (
-        payment.ticketDetails &&
-        payment.ticketDetails.pendingInvitationIds &&
-        Array.isArray(payment.ticketDetails.pendingInvitationIds)
-      ) {
-        await Invitation.deleteMany({
-          invitationId: { $in: payment.ticketDetails.pendingInvitationIds },
-        });
+        // Cleanup pending invitations
+        if (
+          payment.ticketDetails?.pendingInvitationIds &&
+          Array.isArray(payment.ticketDetails.pendingInvitationIds)
+        ) {
+          const pendingIds = payment.ticketDetails.pendingInvitationIds;
+          await Invitation.deleteMany({ invitationId: { $in: pendingIds } });
+          console.log(
+            `Webhook: Deleted ${pendingIds.length} pending invitations for failed/cancelled payment ${transactionId}`
+          );
+        }
       }
+    } else {
+      // Just save the latest status if it's not final, but don't delete yet
+      // Maybe updated to PENDING from provider
+      // payment.status = status; // Optional: don't overwrite unless necessary
+      // await payment.save();
     }
 
     res.status(200).send("OK");
@@ -378,20 +388,22 @@ const cancelInvitationPayment = async (req, res) => {
         .json({ success: false, message: "Cannot cancel a paid transaction" });
     }
 
-    payment.status = "CANCELLED";
-    await payment.save();
+    // Only update if not already final
+    if (payment.status !== "FAILED" && payment.status !== "CANCELLED") {
+      payment.status = "CANCELLED";
+      await payment.save();
 
-    // Delete pending invitations associated with this cancelled payment
-    if (
-      payment.ticketDetails &&
-      payment.ticketDetails.pendingInvitationIds &&
-      Array.isArray(payment.ticketDetails.pendingInvitationIds)
-    ) {
-      const pendingIds = payment.ticketDetails.pendingInvitationIds;
-      await Invitation.deleteMany({ invitationId: { $in: pendingIds } });
-      console.log(
-        `Deleted ${pendingIds.length} pending invitations for cancelled payment ${transactionId}`
-      );
+      // Delete pending invitations associated with this cancelled payment
+      if (
+        payment.ticketDetails?.pendingInvitationIds &&
+        Array.isArray(payment.ticketDetails.pendingInvitationIds)
+      ) {
+        const pendingIds = payment.ticketDetails.pendingInvitationIds;
+        await Invitation.deleteMany({ invitationId: { $in: pendingIds } });
+        console.log(
+          `Deleted ${pendingIds.length} pending invitations for cancelled payment ${transactionId}`
+        );
+      }
     }
 
     return res

@@ -113,8 +113,8 @@ const createBulkInvitations = async (req, res) => {
     // Fetch pricing for the event type
     const eventType = event.eventType || "public";
     const pricing = await InvitationPricing.findOne({ eventType });
-    const emailPrice = pricing ? pricing.emailPrice : 2; // Default fallback
-    const smsPrice = pricing ? pricing.smsPrice : 5; // Default fallback
+    const emailPrice = pricing ? pricing.emailPrice : 1; // Default fallback
+    const smsPrice = pricing ? pricing.smsPrice : 1; // Default fallback
 
     // Calculate costs
     let totalCost = 0;
@@ -279,7 +279,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
           invitationData,
           qrCodeBase64,
           eventImage,
-          invitation.message
+          invitation.message,
         );
 
         await sendInvitationEmail({
@@ -332,13 +332,15 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
         }\nDate: ${dateTimeStr}\nLocation: ${location}\n\nRSVP Link: ${rsvpLink}`;
 
         // Call SMS API (GeezSMS)
-        let phone = invitation.guestPhone.replace("+", "");
+        let phone = invitation.guestPhone.replace(/\s+/g, "").replace("+", "");
         // Ensure phone starts with 251
         if (phone.startsWith("0")) {
           phone = "251" + phone.substring(1);
         } else if (!phone.startsWith("251")) {
           phone = "251" + phone;
         }
+
+        console.log(`Sending SMS to ${phone} for bulk invite: ${message}`);
 
         await axios
           .post("https://api.geezsms.com/api/v1/sms/send", {
@@ -348,7 +350,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
               process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
           })
           .catch((err) =>
-            console.error("SMS Error:", err.response?.data || err.message)
+            console.error("SMS Error:", err.response?.data || err.message),
           );
       }
 
@@ -363,7 +365,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
 
       await Invitation.findOneAndUpdate(
         { invitationId: invId },
-        { status: "failed" }
+        { status: "failed" },
       );
     }
   }
@@ -692,7 +694,7 @@ const createAndSendProfessionalInvitation = async (data) => {
         invitationData,
         qrCodeBase64,
         eventImage,
-        message
+        message,
       );
 
       await sendInvitationEmail({
@@ -760,7 +762,7 @@ const createAndSendProfessionalInvitation = async (data) => {
             process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
         })
         .catch((err) =>
-          console.error("SMS Error:", err.response?.data || err.message)
+          console.error("SMS Error:", err.response?.data || err.message),
         );
     }
 

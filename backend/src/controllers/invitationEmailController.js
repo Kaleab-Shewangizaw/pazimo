@@ -31,7 +31,7 @@ const createEmailTemplate = (
   invitation,
   qrCodeUrl,
   eventImage,
-  message
+  message,
 ) => {
   // Format date and time
   const eventDate = new Date(event.date).toLocaleDateString("en-US", {
@@ -83,7 +83,7 @@ const createEmailTemplate = (
         year: "numeric",
         month: "short",
         day: "numeric",
-      }
+      },
     );
 
     return `
@@ -190,8 +190,8 @@ const createEmailTemplate = (
       </p>
       <!-- Unique identifier to prevent Gmail clipping/threading -->
       <div style="display:none; opacity:0; font-size:1px; color:#000000;">${new Date().getTime()}-${Math.random()
-      .toString(36)
-      .substring(7)}</div>
+        .toString(36)
+        .substring(7)}</div>
     </div>
   </div>
 </body>
