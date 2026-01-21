@@ -726,12 +726,12 @@ export default function LargeEventCarousel() {
                   {currentEvent.rating.toFixed(1)}
                 </span>
               </div>
-              <div className="flex items-center gap-1 sm:gap-2">
+        {/* <div className="flex items-center gap-1 sm:gap-2">
                 <Users className="h-3 w-3 sm:h-4 sm:w-4 text-amber-300" />
                 <span className="text-xs sm:text-sm font-medium text-white">
                   {currentEvent.attendees.toLocaleString()}+ attending
                 </span>
-              </div>
+              </div> */}
               {/* Age Restriction */}
               {currentEvent.originalEvent.ageRestriction?.hasRestriction && (
                 <div className="flex items-center gap-1 sm:gap-2">
