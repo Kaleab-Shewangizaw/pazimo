@@ -276,10 +276,8 @@ export default function LargeEventCarousel() {
             categories: [event.category?.name || "Uncategorized"],
             organization:
               event.organizer?.organization ||
-              `${event.organizer?.firstName || ""} ${
-                event.organizer?.lastName || ""
-              }`.trim() ||
-              "Event Organization",
+              event.title ||
+              "Event Organizer",
             originalEvent: event,
           };
         });
