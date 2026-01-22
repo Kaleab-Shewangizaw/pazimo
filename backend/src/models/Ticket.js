@@ -139,7 +139,7 @@ const TicketSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 TicketSchema.pre("save", async function (next) {
@@ -156,22 +156,23 @@ TicketSchema.pre("save", async function (next) {
     } else if (this.user) {
       // Fetch user details if not already populated
       if (this.user.firstName && this.user.lastName) {
-        userName = `${this.user.firstName} ${this.user.lastName}`;
+        userName = `${this.user.firstName} ${this.user.lastName ? this.user.lastName : ""}`;
       } else {
         const user = await User.findById(this.user).select(
-          "firstName lastName"
+          "firstName lastName",
         );
         if (user) {
-          userName = `${user.firstName} ${user.lastName}`;
+          userName = `${user.firstName} ${user.lastName ? user.lastName : ""}`;
         }
       }
     }
 
     const payload = JSON.stringify({
-      ticketId: this.ticketId,
-      guest_name: guestName,
-      type: type,
-      ticketType: this.ticketType,
+      tid: this.ticketId,
+      nm: userName || guestName,
+      tp: type,
+      tip: this.ticketType,
+      qty: this.purchaseQuantity,
     });
 
     // 1. Generate BASE SVG QR
@@ -188,7 +189,7 @@ TicketSchema.pre("save", async function (next) {
     // 2. Convert squares → circles
     svg = svg.replace(
       /<rect([^>]*)width="1" height="1"/g,
-      '<circle$1 r="0.5" cx="0.5" cy="0.5"'
+      '<circle$1 r="0.5" cx="0.5" cy="0.5"',
     );
 
     // 3. Load logo
@@ -242,17 +243,17 @@ TicketSchema.pre("save", async function (next) {
     // 4. Finder eye styling (blue rounded)
     svg = svg.replace(
       /<rect x="0" y="0" width="7" height="7"[^>]*>/g,
-      `<rect x="0" y="0" width="7" height="7" rx="2" ry="2" fill="#115db1"/>`
+      `<rect x="0" y="0" width="7" height="7" rx="2" ry="2" fill="#115db1"/>`,
     );
 
     svg = svg.replace(
       /<rect x="1" y="1" width="5" height="5"[^>]*>/g,
-      `<rect x="1" y="1" width="5" height="5" rx="1.5" ry="1.5" fill="white"/>`
+      `<rect x="1" y="1" width="5" height="5" rx="1.5" ry="1.5" fill="white"/>`,
     );
 
     svg = svg.replace(
       /<rect x="2" y="2" width="3" height="3"[^>]*>/g,
-      `<rect x="2" y="2" width="3" height="3" rx="1" ry="1" fill="#115db1"/>`
+      `<rect x="2" y="2" width="3" height="3" rx="1" ry="1" fill="#115db1"/>`,
     );
 
     // 5. Inject logo safely before </svg>
@@ -260,7 +261,7 @@ TicketSchema.pre("save", async function (next) {
 
     // 6. Save as base64
     this.qrCode = `data:image/svg+xml;base64,${Buffer.from(svg).toString(
-      "base64"
+      "base64",
     )}`;
 
     next();
