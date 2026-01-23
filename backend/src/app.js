@@ -21,6 +21,7 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const webhookRoutes = require("./routes/webhookRoutes");
 const invitationRoutes = require("./routes/invitationRoutes");
+const campaignRoutes = require("./routes/campaigns");
 const invitationPricingRoutes = require("./routes/invitationPricingRoutes");
 const shortUrlRoutes = require("./routes/shortUrlRoutes");
 const rsvpRoutes = require("../routes/rsvp");
@@ -63,7 +64,7 @@ app.use(cors(corsOptions));
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-  })
+  }),
 );
 app.use(morgan("dev"));
 app.use(express.json({ limit: "50mb" }));
@@ -98,8 +99,8 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/webhooks", webhookRoutes);
-app.use("/api", invitationRoutes);
-app.api = invitationRoutes;
+app.use("/api/invitations", invitationRoutes);
+app.use("/api/campaigns", campaignRoutes);
 app.use("/api/invitation-pricing", invitationPricingRoutes);
 app.use("/api/short", shortUrlRoutes);
 app.use("/api/rsvp", rsvpRoutes);
