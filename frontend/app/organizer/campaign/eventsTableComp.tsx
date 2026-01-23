@@ -1,7 +1,11 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import {
+  DialogClose,
+  DialogFooter,
+  DialogHeader,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { Event } from "@/types/event";
 import {
@@ -12,13 +16,28 @@ import {
   DialogTrigger,
 } from "@radix-ui/react-dialog";
 import { ScrollArea } from "@radix-ui/react-scroll-area";
-import { Megaphone, Trash, User } from "lucide-react";
+import { Megaphone, Ticket, Trash, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
+type Ticket = {
+  _id: string;
+  isOnDoor: boolean;
+  isInvitation: boolean;
+  user: {
+    fullName: string;
+    phoneNumber: string;
+  };
+};
+
+type UniqueUser = {
+  username: string;
+  phone: string;
+};
+
 export default function TableComp({ event }: { event: Event }) {
   const selectedEventId = event._id;
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
 
   useEffect(() => {
     const fetchTickets = async () => {
@@ -57,12 +76,12 @@ export default function TableComp({ event }: { event: Event }) {
     fetchTickets();
   }, [selectedEventId]);
 
-  const filterTickets = () => {
+  const filterTickets = (): UniqueUser[] => {
     const filteredTickets = tickets.filter((ticket) => {
       return !ticket.isOnDoor && !ticket.isInvitation;
     });
 
-    const uniqueSet = new Set();
+    const uniqueSet = new Set<string>();
     filteredTickets.forEach((ticket) => {
       const userObj = {
         username: ticket.user.fullName,
@@ -71,7 +90,9 @@ export default function TableComp({ event }: { event: Event }) {
       uniqueSet.add(JSON.stringify(userObj));
     });
 
-    const result = Array.from(uniqueSet).map((item) => JSON.parse(item));
+    const result = Array.from(uniqueSet).map(
+      (item) => JSON.parse(item) as UniqueUser,
+    );
     return result;
   };
 
@@ -184,9 +205,9 @@ export default function TableComp({ event }: { event: Event }) {
               <p className="text-xs text-gray-500">Selected for campaign</p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" className="px-6">
-                Cancel
-              </Button>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
               <Button className="bg-blue-600 hover:bg-blue-700 px-6 shadow-md shadow-blue-200">
                 Launch Campaign
               </Button>
