@@ -1,10 +1,12 @@
 import { Megaphone } from "lucide-react";
+import TableComp from "./eventsTableComp";
+import { Event } from "@/types/event";
 
 export default function EventsTable({
   events,
   isLoading,
 }: {
-  events: any[];
+  events: Event[];
   isLoading: boolean;
 }) {
   const emptyEvents = !isLoading && events.length === 0;
@@ -33,30 +35,7 @@ export default function EventsTable({
 
       <div className="h-150 overflow-y-auto">
         {events.map((event) => (
-          <div
-            key={event._id}
-            className="group flex items-center justify-between p-5 mb-4 
-             bg-white border border-gray-200 rounded-xl shadow-sm 
-             hover:shadow-md hover:border-blue-300 transition-all duration-200"
-          >
-            <div className="flex flex-col gap-1">
-              <h3 className="font-bold text-xl text-gray-800 tracking-tight">
-                {event.title}
-              </h3>
-              <p className="text-sm text-gray-500">200 phone numbers</p>
-            </div>
-
-            <button
-              className="flex items-center justify-center p-2 rounded-lg
-               bg-blue-600 text-white shadow-lg shadow-blue-200
-               hover:bg-blue-700 hover:scale-105 active:scale-95
-               transition-all duration-200 cursor-pointer"
-              aria-label="Promote event"
-            >
-              {/* size={32} provides a strong visual presence, while strokeWidth ensures it stays clean */}
-              <Megaphone size={32} strokeWidth={2.25} />
-            </button>
-          </div>
+          <TableComp key={event._id} event={event} />
         ))}
       </div>
     </div>
