@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import {
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,9 +22,7 @@ import {
   Trash,
   Loader2,
   Upload,
-  FileSpreadsheet,
   Check,
-  Calendar,
 } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { toast } from "sonner";
@@ -73,9 +72,13 @@ export default function CustomCampaignModal({
   const [transactionId, setTransactionId] = useState<string | null>(null);
   const [isPooling, setIsPooling] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isFinalizingRef = useRef(false);
 
   // Load Initial Data (Draft)
   useEffect(() => {
+    if (isOpen) {
+      isFinalizingRef.current = false;
+    }
     if (isOpen && initialData) {
       setCampaignTitle(initialData.title || "My Campaign");
       setMessage(initialData.message || "");
@@ -111,12 +114,20 @@ export default function CustomCampaignModal({
     if (isOpen && !initialData) {
       // Create Mode: Load initialUsers
       if (initialUsers) {
-        const normalizedInit = initialUsers.map((u) => ({
-          ...u,
-          phone: normalizeEthiopianPhone(u.phone) || u.phone,
-          source: u.source || "manual", // Default them to manual/top-customer
-        }));
+        const normalizedInit = initialUsers
+          .filter((u) => normalizeEthiopianPhone(u.phone)) // Strict Filter: Only valid phones
+          .map((u) => ({
+            ...u,
+            phone: normalizeEthiopianPhone(u.phone) as string,
+            source: u.source || "manual", // Default them to manual/top-customer
+          }));
         setManualUsers(normalizedInit);
+
+        if (initialUsers.length > normalizedInit.length) {
+          toast.warning(
+            `Skipped ${initialUsers.length - normalizedInit.length} users with invalid phone numbers.`,
+          );
+        }
       }
     }
 
@@ -135,6 +146,8 @@ export default function CustomCampaignModal({
     if (isPooling && transactionId) {
       interval = setInterval(async () => {
         try {
+          if (isFinalizingRef.current) return; // Prevent overlapping finalization calls
+
           const res = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL}/api/campaigns/payment/status/${transactionId}`,
             {
@@ -146,8 +159,11 @@ export default function CustomCampaignModal({
           const data = await res.json();
           if (data.success && data.status === "PAID") {
             setIsPooling(false);
-            // Finalize
-            finalizeCampaign(transactionId);
+            if (!isFinalizingRef.current) {
+              isFinalizingRef.current = true;
+              // Finalize
+              finalizeCampaign(transactionId);
+            }
           }
         } catch (e) {
           console.error(e);
@@ -190,6 +206,7 @@ export default function CustomCampaignModal({
       }
     } catch (e) {
       toast.error("Network Error finalizing campaign");
+      console.log(e);
     }
   };
 
@@ -403,6 +420,7 @@ export default function CustomCampaignModal({
       }
     } catch (err) {
       toast.error("Payment processing failed");
+      console.log(err);
       setIsSubmitting(false);
     }
   };
@@ -414,7 +432,7 @@ export default function CustomCampaignModal({
     return Array.from(map.values()) as CampaignUser[];
   }, [manualUsers, eventUsers]);
 
-  const cost = allUsers.length * pricing.sms * 1.03;
+  const cost = allUsers.length * pricing.sms;
 
   const toggleEvent = (eventId: string, checked: boolean) => {
     if (checked) {
@@ -427,7 +445,7 @@ export default function CustomCampaignModal({
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => {
+      onOpenChange={() => {
         if (!isSubmitting) onClose();
       }}
     >
@@ -457,7 +475,7 @@ export default function CustomCampaignModal({
               onClick={() => fileInputRef.current?.click()}
             >
               <Upload size={16} className="mr-2" />
-              Import CSV
+              Import EXCl/CSV
             </Button>
           </div>
         </div>
@@ -525,7 +543,7 @@ export default function CustomCampaignModal({
             </div>
 
             <div className="flex-1 px-6 pb-6 pt-2 h-full flex flex-col">
-              <Label className="text-sm font-bold text-gray-700 block mb-2 flex items-center gap-2">
+              <Label className="text-sm font-bold text-gray-700  mb-2 flex items-center gap-2">
                 Campaign Message
                 <span className="text-red-500 text-xs font-normal bg-red-50 px-2 py-0.5 rounded-full">
                   * Required
@@ -770,7 +788,7 @@ export default function CustomCampaignModal({
               <Button
                 onClick={processPayment}
                 disabled={isSubmitting || isPooling}
-                className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
+                className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]"
               >
                 {isPooling ? (
                   <>

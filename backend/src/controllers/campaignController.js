@@ -126,6 +126,16 @@ exports.finalizeCampaign = async (req, res) => {
             });
         }
       }
+      
+      // Check if campaign already exists for this paymentId (IDEMPOTENCY)
+      const existingPaidCampaign = await Campaign.findOne({ paymentId });
+      if (existingPaidCampaign) {
+          return res.status(200).json({ 
+              success: true, 
+              data: existingPaidCampaign, 
+              message: "Campaign already created (Duplicate Request)" 
+          });
+      }
     }
 
     // If reusing a draft

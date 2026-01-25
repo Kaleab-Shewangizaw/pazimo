@@ -10,32 +10,42 @@ export default function CampaignPage() {
   // Fetch Tickets when Event Changes
 
   return (
-    <div className="px-4 flex flex-col w-full ">
-      <div className="w-full flex items-between py-4 border-y-1 border-gray-300 mb-4">
+    <div className="px-4 flex flex-col w-full h-[calc(100vh-4rem)] overflow-hidden">
+      <div className="w-full flex items-between py-2  mb-0 shrink-0">
         {currentPage ? (
           <div className="text-xl font-semibold">Create Campaign</div>
         ) : (
           <div className="text-xl font-semibold">Campaign History </div>
         )}
         <div className="ml-auto">
-          {currentPage ? (
-            <button
-              onClick={() => setCurrentPage(false)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
-            >
-              View Campaign History
-            </button>
-          ) : (
+          <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
             <button
               onClick={() => setCurrentPage(true)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition"
+              className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${
+                currentPage
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
             >
-              Create New Campaign
+              Overview
             </button>
-          )}
+            <button
+              onClick={() => setCurrentPage(false)}
+              className={`px-3 py-1 text-sm font-medium rounded-md transition-all ${
+                !currentPage
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              History
+            </button>
+          </div>
         </div>
       </div>
-      {currentPage ? <CreateCampaignPage /> : <CampaignHistoryPage />}
+
+      <div className="flex-1 min-h-0">
+        {currentPage ? <CreateCampaignPage /> : <CampaignHistoryPage />}
+      </div>
     </div>
   );
 }
