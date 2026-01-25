@@ -157,12 +157,24 @@ export default function CustomCampaignModal({
             },
           );
           const data = await res.json();
-          if (data.success && data.status === "PAID") {
-            setIsPooling(false);
-            if (!isFinalizingRef.current) {
-              isFinalizingRef.current = true;
-              // Finalize
-              finalizeCampaign(transactionId);
+
+          if (data.success) {
+            if (data.status === "PAID") {
+              setIsPooling(false);
+              if (!isFinalizingRef.current) {
+                isFinalizingRef.current = true;
+                // Finalize
+                finalizeCampaign(transactionId);
+              }
+            } else if (
+              data.status === "CANCELLED" ||
+              data.status === "FAILED"
+            ) {
+              setIsPooling(false);
+              setIsSubmitting(false);
+              toast.error(
+                `Payment ${data.status.toLowerCase()}. Please try again.`,
+              );
             }
           }
         } catch (e) {
@@ -376,6 +388,12 @@ export default function CustomCampaignModal({
 
     // Phone construction same as bulk invite
     let finalPhone = paymentPhone;
+
+    // Remove leading 0 if present to ensure clean 251 prefix addition
+    if (finalPhone.startsWith("0")) {
+      finalPhone = finalPhone.substring(1);
+    }
+
     if (!finalPhone.startsWith("251")) finalPhone = "251" + finalPhone;
 
     setIsSubmitting(true);
@@ -780,8 +798,12 @@ export default function CustomCampaignModal({
             <div className="flex-1 justify-end gap-3 flex">
               <Button
                 variant="outline"
-                onClick={() => setShowPaymentDialog(false)}
-                disabled={isSubmitting || isPooling}
+                onClick={() => {
+                  setShowPaymentDialog(false);
+                  setIsSubmitting(false); // Reset loading state
+                  setIsPooling(false); // Stop polling
+                  setTransactionId(null); // Clear transaction
+                }}
               >
                 Back
               </Button>

@@ -57,12 +57,10 @@ exports.finalizeCampaign = async (req, res) => {
     // Security Check: Verify Payment
     if (price > 0) {
       if (!paymentId) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message: "Payment required for paid campaigns",
-          });
+        return res.status(400).json({
+          success: false,
+          message: "Payment required for paid campaigns",
+        });
       }
 
       const payment = await Payment.findOne({ transactionId: paymentId });
@@ -85,12 +83,10 @@ exports.finalizeCampaign = async (req, res) => {
               payment.status = "PAID";
               await payment.save();
             } else {
-              return res
-                .status(402)
-                .json({
-                  success: false,
-                  message: "Payment not verified (Chapa).",
-                });
+              return res.status(402).json({
+                success: false,
+                message: "Payment not verified (Chapa).",
+              });
             }
           } else {
             // Santim Logic
@@ -109,32 +105,28 @@ exports.finalizeCampaign = async (req, res) => {
               payment.status = "PAID";
               await payment.save();
             } else {
-              return res
-                .status(402)
-                .json({
-                  success: false,
-                  message: "Payment not verified. Status: " + providerStatus,
-                });
+              return res.status(402).json({
+                success: false,
+                message: "Payment not verified. Status: " + providerStatus,
+              });
             }
           }
         } catch (e) {
-          return res
-            .status(402)
-            .json({
-              success: false,
-              message: "Payment verification failed. Please contact support.",
-            });
+          return res.status(402).json({
+            success: false,
+            message: "Payment verification failed. Please contact support.",
+          });
         }
       }
-      
+
       // Check if campaign already exists for this paymentId (IDEMPOTENCY)
       const existingPaidCampaign = await Campaign.findOne({ paymentId });
       if (existingPaidCampaign) {
-          return res.status(200).json({ 
-              success: true, 
-              data: existingPaidCampaign, 
-              message: "Campaign already created (Duplicate Request)" 
-          });
+        return res.status(200).json({
+          success: true,
+          data: existingPaidCampaign,
+          message: "Campaign already created (Duplicate Request)",
+        });
       }
     }
 
@@ -162,13 +154,11 @@ exports.finalizeCampaign = async (req, res) => {
     // Process SMS Sending (Async)
     processCampaignSMS(campaign);
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: campaign,
-        message: "Campaign created and processing started",
-      });
+    res.status(201).json({
+      success: true,
+      data: campaign,
+      message: "Campaign created and processing started",
+    });
   } catch (error) {
     console.error("Campaign Creation Error:", error);
     res.status(500).json({ success: false, message: error.message });
@@ -198,12 +188,10 @@ exports.deleteCampaign = async (req, res) => {
     });
 
     if (!campaign)
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Draft not found or cannot delete active campaign",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Draft not found or cannot delete active campaign",
+      });
 
     res.status(200).json({ success: true, message: "Deleted" });
   } catch (error) {
@@ -313,12 +301,10 @@ exports.initiatePayment = async (req, res) => {
     });
   } catch (error) {
     console.error("Initiate Campaign Payment Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "Payment service unavailable",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "Payment service unavailable",
+    });
   }
 };
 
@@ -333,7 +319,11 @@ exports.checkPaymentStatus = async (req, res) => {
         .json({ success: false, message: "Payment not found" });
 
     // Use service to verify if still pending (optional, here we trust DB or poll verify)
-    if (payment.status !== "PAID") {
+    if (
+      payment.status !== "PAID" &&
+      payment.status !== "CANCELLED" &&
+      payment.status !== "FAILED"
+    ) {
       if (payment.provider === "chapa") {
         try {
           const response = await ChapaService.verify(transactionId);
@@ -343,13 +333,42 @@ exports.checkPaymentStatus = async (req, res) => {
           ) {
             payment.status = "PAID";
             await payment.save();
+          } else if (
+            response.status === "success" &&
+            (response.data.status === "failed" ||
+              response.data.status === "expired")
+          ) {
+            payment.status = "FAILED";
+            await payment.save();
           }
         } catch (e) {
           console.error("Chapa verify error", e.message);
         }
       } else {
-        // Santim Logic
-        // Already handled by webhook mostly, but could verify manually here if sdk supports
+        // Santim Logic - Check Status
+        try {
+          const providerData =
+            await SantimPayService.checkTransactionStatus(transactionId);
+          const providerStatus = (
+            providerData.status ||
+            providerData.paymentStatus ||
+            ""
+          ).toUpperCase();
+
+          if (providerStatus === "COMPLETED" || providerStatus === "SUCCESS") {
+            payment.status = "PAID";
+            await payment.save();
+          } else if (
+            providerStatus === "CANCELLED" ||
+            providerStatus === "FAILED" ||
+            providerStatus === "EXPIRED"
+          ) {
+            payment.status = "CANCELLED";
+            await payment.save();
+          }
+        } catch (e) {
+          console.error("Santim verify error", e.message);
+        }
       }
     }
 
