@@ -1,5 +1,8 @@
 const User = require("../models/User");
 const OrganizerRegistration = require("../models/OrganizerRegistration");
+const Ticket = require("../models/Ticket");
+const mongoose = require("mongoose");
+const Event = require("../models/Event");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
@@ -149,7 +152,7 @@ exports.signUp = async (req, res) => {
         role: user.role,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     // Return success response
@@ -276,7 +279,7 @@ exports.updateProfile = async (req, res) => {
         email,
         phoneNumber,
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     ).select("-password");
 
     if (!user) {
@@ -465,6 +468,115 @@ exports.updateRegistrationStatus = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || "Failed to update registration status",
+    });
+  }
+};
+
+// Get Top Customers for Organizer
+exports.getTopCustomers = async (req, res) => {
+  try {
+    const { organizerId } = req.params;
+    const { limit = 10 } = req.query;
+
+    if (!organizerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Organizer ID is required",
+      });
+    }
+
+    const topCustomers = await Ticket.aggregate([
+      // 1. Lookup events to filter by organizer
+      {
+        $lookup: {
+          from: "events",
+          localField: "event",
+          foreignField: "_id",
+          as: "eventDetails",
+        },
+      },
+      { $unwind: "$eventDetails" },
+      // 2. Filter tickets for this organizer's events and ensure they are active/used
+      {
+        $match: {
+          "eventDetails.organizer": new mongoose.Types.ObjectId(organizerId),
+          status: { $in: ["active", "used", "confirmed"] },
+        },
+      },
+      // 3. Lookup user info to get phone number if user field exists
+      {
+        $lookup: {
+          from: "users",
+          localField: "user",
+          foreignField: "_id",
+          as: "userData",
+        },
+      },
+      {
+        $addFields: {
+          userObj: { $arrayElemAt: ["$userData", 0] },
+        },
+      },
+      // 4. Normalize Phone and Name
+      {
+        $addFields: {
+          finalPhone: {
+            $ifNull: ["$userObj.phoneNumber", "$guestPhone"],
+          },
+          finalName: {
+            $ifNull: [
+              { $concat: ["$userObj.firstName", " ", "$userObj.lastName"] },
+              "$guestName",
+              "Guest",
+            ],
+          },
+          qty: {
+            $ifNull: ["$purchaseQuantity", "$ticketCount", 1],
+          },
+        },
+      },
+      // 5. Group by Phone
+      {
+        $group: {
+          _id: "$finalPhone",
+          name: { $first: "$finalName" },
+          totalTickets: { $sum: "$qty" },
+          totalSpent: { $sum: "$price" },
+          eventsAttended: { $addToSet: "$event" },
+          lastEventDate: { $max: "$eventDetails.startDate" },
+        },
+      },
+      // 6. Filter out null phones (shouldn't happen for valid tickets but safe to have)
+      {
+        $match: {
+          _id: { $ne: null },
+        },
+      },
+      // 7. Sort by totalTickets desc
+      { $sort: { totalTickets: -1 } },
+      // 8. Limit
+      { $limit: parseInt(limit) },
+    ]);
+
+    const formatted = topCustomers.map((c) => ({
+      phone: c._id,
+      name: c.name,
+      totalTickets: c.totalTickets,
+      totalSpent: c.totalSpent,
+      eventsCount: c.eventsAttended.length,
+      lastActive: c.lastEventDate,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: formatted,
+    });
+  } catch (error) {
+    console.error("Get Top Customers Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch top customers",
+      error: error.message,
     });
   }
 };
