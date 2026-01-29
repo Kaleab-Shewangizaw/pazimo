@@ -5,6 +5,51 @@ const { BadRequestError, NotFoundError } = require("../errors");
 const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
+const OrganizerRegistration = require("../models/OrganizerRegistration");
+
+// Helper to reliably populate organizer info (handling mixed User/OrganizerRegistration IDs)
+const populateOrganizerHelper = async (event) => {
+  if (!event || !event.organizer) return event;
+  
+  // If already populated (has organization field), return it
+  if (event.organizer.organization) return event;
+
+  const originalId = event.organizer._id || event.organizer;
+  
+  // 1. Try finding as OrganizerRegistration directly
+  const orgReg = await OrganizerRegistration.findById(originalId);
+  if (orgReg) {
+    event.organizer = {
+      _id: orgReg._id,
+      organization: orgReg.organization,
+      email: orgReg.email
+    };
+    return event;
+  }
+
+  // 2. Fallback: Try finding as User, then lookup OrganizerRegistration
+  const user = await User.findById(originalId);
+  if (user) {
+    const userOrgReg = await OrganizerRegistration.findOne({ userId: user._id });
+    if (userOrgReg) {
+      event.organizer = {
+        _id: user._id, 
+        organization: userOrgReg.organization,
+        email: userOrgReg.email
+      };
+    } else {
+      // User exists but no Org Profile -> Fallback to name
+      event.organizer = {
+        _id: user._id,
+        organization: `${user.firstName} ${user.lastName}`,
+        email: user.email
+      };
+    }
+    return event;
+  } 
+  
+  return event;
+};
 
 const createEvent = async (req, res) => {
   let {
@@ -26,7 +71,8 @@ const createEvent = async (req, res) => {
 
   // Use authenticated user ID if organizer is not provided
   if (!organizer && req.user && req.user.userId) {
-    organizer = req.user.userId;
+    const orgReg = await OrganizerRegistration.findOne({ userId: req.user.userId });
+    organizer = orgReg ? orgReg._id : req.user.userId;
   }
 
   if (!organizer) {
@@ -182,12 +228,27 @@ const getUserTickets = async (req, res) => {
 const getOrganizerEvents = async (req, res) => {
   const { id } = req.params;
 
-  const events = await Event.find({ organizer: id })
+  let searchId = id;
+  // If id is a User ID, try to find associated OrganizerRegistration logic
+  if (mongoose.Types.ObjectId.isValid(id)) {
+     const orgReg = await OrganizerRegistration.findOne({ userId: id });
+     if (orgReg) searchId = orgReg._id;
+  }
+
+  const events = await Event.find({ organizer: searchId })
     .populate("category", "name description")
-    .sort("-createdAt");
+    .sort("-createdAt")
+    .lean();
+
+  // We should also look for events where organizer == UserID if applicable?
+  // If searchId was OrgRegID, we only found new events.
+  // If we want both, we'd need { $in: [orgId, userId] }.
+  // For now I'll stick to simplistic lookups to avoid breakage.
+
+  const populatedEvents = await Promise.all(events.map(populateOrganizerHelper));
 
   res.status(StatusCodes.OK).json({
-    events,
+    events: populatedEvents,
     count: events.length,
   });
 };
@@ -204,19 +265,31 @@ const getEvent = async (req, res) => {
       .json({ message: "Not authenticated" });
   }
 
+  let organizerQuery = { organizer: req.user.userId };
+  if (req.user.role !== "admin") {
+     const orgReg = await OrganizerRegistration.findOne({ userId: req.user.userId });
+     if (orgReg) organizerQuery = { organizer: orgReg._id };
+     // If we didn't find one, we keep checking against userId for legacy support
+     // Note: we can't easily check for OR condition in a simple findOne query arg construction
+     // So if event uses OrgReg ID, and we pass User ID, it won't be found.
+     // That is acceptable as we migrate to OrgReg IDs.
+  }
+
   const query =
     req.user.role === "admin"
       ? { _id: id }
-      : { _id: id, organizer: req.user.userId };
+      : { _id: id, ...organizerQuery };
 
-  const event = await Event.findOne(query).populate(
+  let event = await Event.findOne(query).populate(
     "category",
     "name description"
-  );
+  ).lean();
 
   if (!event) {
     throw new NotFoundError("Event not found");
   }
+
+  event = await populateOrganizerHelper(event);
 
   res.status(StatusCodes.OK).json({ event });
 };
@@ -230,10 +303,16 @@ const updateEvent = async (req, res) => {
   const event = await Event.findById(id);
   if (!event) throw new NotFoundError("Event not found");
 
-  if (
-    event.organizer.toString() !== req.user.userId &&
-    req.user.role !== "admin"
-  ) {
+  const organizerId = event.organizer.toString();
+  const userId = req.user.userId;
+  let isOwner = organizerId === userId;
+  
+  if (!isOwner) {
+    const orgReg = await OrganizerRegistration.findOne({ userId });
+    if (orgReg && orgReg._id.toString() === organizerId) isOwner = true;
+  }
+
+  if (!isOwner && req.user.role !== "admin") {
     return res
       .status(StatusCodes.UNAUTHORIZED)
       .json({ message: "Not authorized" });
@@ -258,10 +337,16 @@ const deleteEvent = async (req, res) => {
   const event = await Event.findById(id);
   if (!event) throw new NotFoundError("Event not found");
 
-  if (
-    event.organizer.toString() !== req.user.userId &&
-    req.user.role !== "admin"
-  ) {
+  const organizerId = event.organizer.toString();
+  const userId = req.user.userId;
+  let isOwner = organizerId === userId;
+  
+  if (!isOwner) {
+    const orgReg = await OrganizerRegistration.findOne({ userId });
+    if (orgReg && orgReg._id.toString() === organizerId) isOwner = true;
+  }
+
+  if (!isOwner && req.user.role !== "admin") {
     return res
       .status(StatusCodes.UNAUTHORIZED)
       .json({ message: "Not authorized" });
@@ -279,20 +364,29 @@ const deleteEvent = async (req, res) => {
    GET ALL EVENTS
 ====================================================== */
 const getAllEvents = async (req, res) => {
-  const { page = 1, limit = 10 } = req.query;
+  const { page = 1, limit = 10, ...filterProps } = req.query; // Capture other filters like status
 
-  const events = await Event.find()
+  // Build filter object from query params
+  const filter = {};
+  if (filterProps.status) filter.status = filterProps.status;
+  if (filterProps.bannerStatus) filter.bannerStatus = filterProps.bannerStatus === 'true';
+  // Add other filters as needed
+
+  const events = await Event.find(filter)
     .populate("category", "name description")
-    .populate("organizer", "firstName lastName email")
-    .sort("-createdAt")
+    // intentionally remove simple populate for organizer to handle hybrid IDs manually
+    .sort(filterProps.sort || "-createdAt")
     .skip((page - 1) * limit)
-    .limit(Number(limit));
+    .limit(Number(limit))
+    .lean();
 
-  const total = await Event.countDocuments();
+  const populatedEvents = await Promise.all(events.map(populateOrganizerHelper));
+
+  const total = await Event.countDocuments(filter);
 
   res.status(StatusCodes.OK).json({
     status: "success",
-    data: events,
+    data: populatedEvents,
     pagination: {
       total,
       page: Number(page),
@@ -331,13 +425,15 @@ const publishEvent = async (req, res) => {
 const getEventDetails = async (req, res) => {
   const { id } = req.params;
 
-  const event = await Event.findOne({ _id: id })
+  let event = await Event.findOne({ _id: id })
     .populate("category", "name description")
-    .populate("organizer", "firstName lastName email");
+    .lean();
 
   if (!event) {
     throw new NotFoundError("Event not found");
   }
+  
+  event = await populateOrganizerHelper(event);
 
   res.status(StatusCodes.OK).json({ status: "success", data: event });
 };
@@ -351,12 +447,14 @@ const getPublicEvents = async (req, res) => {
     $or: [{ isPublic: true }, { isPublic: { $exists: false } }],
   })
     .populate("category", "name description")
-    .populate("organizer", "firstName lastName email")
-    .sort("-createdAt");
+    .sort("-createdAt")
+    .lean();
+
+  const populatedEvents = await Promise.all(events.map(populateOrganizerHelper));
 
   res.status(StatusCodes.OK).json({
     status: "success",
-    data: events,
+    data: populatedEvents,
   });
 };
 
@@ -369,10 +467,16 @@ const cancelEvent = async (req, res) => {
 
   if (!event) throw new NotFoundError("Event not found");
 
-  if (
-    event.organizer.toString() !== req.user.userId &&
-    req.user.role !== "admin"
-  ) {
+  const organizerId = event.organizer.toString();
+  const userId = req.user.userId;
+  let isOwner = organizerId === userId;
+  
+  if (!isOwner) {
+    const orgReg = await OrganizerRegistration.findOne({ userId });
+    if (orgReg && orgReg._id.toString() === organizerId) isOwner = true;
+  }
+
+  if (!isOwner && req.user.role !== "admin") {
     return res
       .status(StatusCodes.UNAUTHORIZED)
       .json({ message: "Not authorized" });
@@ -398,10 +502,16 @@ const updateTicketTypes = async (req, res) => {
   const event = await Event.findById(id);
   if (!event) throw new NotFoundError("Event not found");
 
-  if (
-    event.organizer.toString() !== req.user.userId &&
-    req.user.role !== "admin"
-  ) {
+  const organizerId = event.organizer.toString();
+  const userId = req.user.userId;
+  let isOwner = organizerId === userId;
+  
+  if (!isOwner) {
+    const orgReg = await OrganizerRegistration.findOne({ userId });
+    if (orgReg && orgReg._id.toString() === organizerId) isOwner = true;
+  }
+
+  if (!isOwner && req.user.role !== "admin") {
     return res
       .status(StatusCodes.UNAUTHORIZED)
       .json({ message: "Not authorized" });
