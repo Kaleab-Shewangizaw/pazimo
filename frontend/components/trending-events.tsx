@@ -275,7 +275,9 @@ export default function LargeEventCarousel() {
             attendees: event.capacity,
             categories: [event.category?.name || "Uncategorized"],
             organization:
-              event.organizer?.organization || "Event Organizer",
+              event.organizer?.organization ||
+              event.title ||
+              "Event Organizer",
             originalEvent: event,
           };
         });

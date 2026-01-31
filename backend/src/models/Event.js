@@ -57,7 +57,7 @@ const EventSchema = new mongoose.Schema(
     },
     organizer: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "OrganizerRegistration",
+      ref: "User",
       required: false,
     },
     coverImages: {

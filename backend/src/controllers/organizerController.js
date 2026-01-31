@@ -77,8 +77,7 @@ exports.signUp = async (req, res) => {
       lastName,
       email,
       phoneNumber: phone,
-      password: await bcrypt.hash(password, 10),
-      organization,
+      password,
       role: "organizer",
       isActive: false, // Set organizer as inactive by default
       isPhoneVerified: false, // Set phone as unverified by default
