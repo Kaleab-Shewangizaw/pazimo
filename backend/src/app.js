@@ -4,8 +4,6 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const path = require("path");
 require("dotenv").config();
-// const xss = require('xss-clean');
-// const rateLimiter = require('express-rate-limit');
 const { StatusCodes } = require("http-status-codes");
 
 const authRoutes = require("./routes/authRoutes");
@@ -28,67 +26,67 @@ const rsvpRoutes = require("../routes/rsvp");
 const qrTicketRoutes = require("./routes/tickets");
 const santimPayRoutes = require("./routes/santimPayRoutes");
 const paymentConfigRoutes = require("./routes/paymentConfigRoutes");
-const {
-  sendInvitationEmail,
-} = require("./controllers/invitationEmailController");
+const { sendInvitationEmail } = require("./controllers/invitationEmailController");
 const { sendSMS } = require("./utils/sms");
 
 const app = express();
 
-// CORS configuration
+// ------------------- CORS ------------------- //
+const allowedOrigins = [
+  "https://pazimo-ktzi.vercel.app",
+  "https://www.pazimo-ktzi.vercel.app",
+  "https://pazimo.vercel.app",
+  "https://www.pazimo.vercel.app",
+  "https://pazimo-front-end.vercel.app",
+  "https://www.pazimo-front-end.vercel.app",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 const corsOptions = {
-  origin: [
-    "https://pazimo-ktzi.vercel.app",
-    "https://www.pazimo-ktzi.vercel.app",
-    "https://pazimo.vercel.app",
-    "https://www.pazimo.vercel.app",
-    "https://pazimo-front-end.vercel.app",
-    "https://www.pazimo-front-end.vercel.app",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://pazimo.com",
-    "https://www.pazimo.com",
-    "https://organizer.pazimo.com",
-    "https://www.organizer.pazimo.com",
-    "https://www.pazimo-organizer.vercel.app",
-    "https://pazimo-organizer.vercel.app",
-    process.env.FRONTEND_URL,
-  ].filter(Boolean), // Allow both frontend URLs and filter out undefined
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow non-browser requests (Postman, curl)
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true); // 
+    } else {
+      console.log("Blocked CORS request from:", origin);
+      callback(new Error("CORS not allowed by server")); 
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
-  maxAge: 600, // Cache preflight request for 10 minutes
+  maxAge: 600,
 };
 
-// Middleware
+// Apply CORS middleware globally
 app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests for all routes
+app.options("*", cors(corsOptions));
+
+// ------------------- Middleware ------------------- //
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
-  }),
+  })
 );
 app.use(morgan("dev"));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
-// app.use(xss());
 
-// Rate limiting
-// const limiter = rateLimiter({
-//   windowMs: 15 * 60 * 1000, // 15 minutes
-//   max: 100, // limit each IP to 100 requests per windowMs
+// Debug middleware to log requests (optional)
+// app.use((req, res, next) => {
+//   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+//   console.log('Headers:', req.headers);
+//   next();
 // });
-// app.use(limiter);
 
-// Debug middleware to log requests
-app.use((req, res, next) => {
-  // console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  // console.log('Headers:', req.headers);
-  next();
-});
-
-// Mount routes
+// ------------------- Routes ------------------- //
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/events", eventRoutes);
@@ -135,14 +133,13 @@ app.get("/api/test", (req, res) => {
   res.json({ message: "API is working!" });
 });
 
-// Health check route
+// Health check
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 // 404 handler
 app.use((req, res) => {
-  // console.log('404 Not Found:', req.method, req.path);
   res.status(StatusCodes.NOT_FOUND).json({
     message: "Route not found",
     path: req.path,
