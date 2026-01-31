@@ -47,6 +47,7 @@ export default function AdminEditEventPage() {
     null,
   );
   const [formData, setFormData] = useState({
+    organizer: "",
     title: "",
     description: "",
     startDate: "",
@@ -96,6 +97,7 @@ export default function AdminEditEventPage() {
       const event = data.data;
 
       setFormData({
+        organizer: event.organizer || "",
         title: event.title || "",
         description: event.description || "",
         startDate: event.startDate
@@ -303,6 +305,7 @@ export default function AdminEditEventPage() {
       }
 
       const updateData = {
+        organizer: formData.organizer,
         title: formData.title,
         description: formData.description,
         startDate: formData.startDate,
@@ -344,6 +347,7 @@ export default function AdminEditEventPage() {
         const formDataToSend = new FormData();
 
         // Append all fields as expected by backend
+        formDataToSend.append("organizer", formData.organizer);
         formDataToSend.append("title", formData.title);
         formDataToSend.append("description", formData.description);
         formDataToSend.append("startDate", formData.startDate);
@@ -447,12 +451,22 @@ export default function AdminEditEventPage() {
             <CardTitle>Event Information</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6">
-            <div className="grid gap-2">
+          <div className="grid gap-2">
               <Label htmlFor="title">Event Title</Label>
               <Input
                 id="title"
                 name="title"
                 value={formData.title}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="organizer">Organizer</Label>
+              <Input
+                id="organizer"
+                name="organizer"
+                value={formData.organizer}
                 onChange={handleInputChange}
                 required
               />
