@@ -38,6 +38,8 @@ const app = express();
 // CORS configuration
 const corsOptions = {
   origin: [
+    "https://pazimo-ktzi.vercel.app/",
+    "https://www.pazimo-ktzi.vercel.app/",
     "https://pazimo.vercel.app",
     "https://www.pazimo.vercel.app",
     "https://pazimo-front-end.vercel.app",
