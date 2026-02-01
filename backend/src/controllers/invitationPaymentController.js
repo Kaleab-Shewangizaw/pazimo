@@ -121,6 +121,34 @@ const initiateChapaInvitationPayment = async (req, res) => {
       successUrl ||
       `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success`;
 
+    // Map payment method to Chapa supported types (case-sensitive)
+    let chapaType = "telebirr"; // Default
+    if (reqPaymentMethod) {
+      const methodInput = reqPaymentMethod.toLowerCase().trim();
+      if (methodInput === "mpesa") {
+        chapaType = "mpesa";
+      } else if (methodInput === "telebirr") {
+        chapaType = "telebirr";
+      } else if (
+        methodInput.includes("cbe") ||
+        methodInput === "cbebirr" ||
+        methodInput === "commercial bank of ethiopia"
+      ) {
+        // Covers 'cbe', 'cbebirr', or full name
+        chapaType = "cbebirr";
+      } else if (
+        methodInput.includes("awash") ||
+        methodInput === "awashbirr" ||
+        methodInput === "awash bank"
+      ) {
+        // Covers 'awash', 'awashbirr', or 'awash bank'
+        chapaType = "awashbirr";
+      } else if (methodInput === "amole") {
+        chapaType = "Amole";
+      } 
+      // Add other mappings if necessary, or let it fall through if strict match is expected elsewhere
+    }
+
     // Initiate Chapa Direct Charge
     let response;
     try {
@@ -134,7 +162,7 @@ const initiateChapaInvitationPayment = async (req, res) => {
         amount: String(amount),
         currency: "ETB",
         mobile: chapaMobile,
-        type: reqPaymentMethod || "telebirr", // Default to telebirr if not provided
+        type: chapaType,
         email:
           invitationData.contactType === "email"
             ? invitationData.contact

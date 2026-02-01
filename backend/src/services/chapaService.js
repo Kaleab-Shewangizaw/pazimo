@@ -3,9 +3,9 @@ const { Chapa } = require("chapa-nodejs");
 const SUPPORTED_CHAPA_METHODS = [
   "telebirr",
   "mpesa",
-  "CBEBirr",
+  "cbebirr",
   "Coopay-Ebirr",
-  "AwashBirr",
+  "awashbirr",
   "yaya",
   "Amole",
 ];
