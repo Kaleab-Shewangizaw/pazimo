@@ -47,7 +47,7 @@ export default function AdminEditEventPage() {
     null,
   );
   const [formData, setFormData] = useState({
-    organizer: "",
+    organizer: {},
     title: "",
     description: "",
     startDate: "",
