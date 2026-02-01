@@ -24,47 +24,47 @@ const {
 
 // Invitation Payment Routes
 router.post(
-  "/invitations/payment/initiate",
+  "/payment/initiate",
   protect,
   initiateInvitationPayment
 );
 router.post(
-  "/invitations/payment/initiate/chapa",
+  "/payment/initiate/chapa",
   protect,
   initiateChapaInvitationPayment
 );
-router.post("/invitations/payment/cancel", protect, cancelInvitationPayment);
+router.post("/payment/cancel", protect, cancelInvitationPayment);
 router.get(
-  "/invitations/payment/status/:transactionId",
+  "/payment/status/:transactionId",
   checkInvitationPaymentStatus
 );
-router.post("/invitations/payment/webhook", invitationWebhook);
+router.post("/payment/webhook", invitationWebhook);
 
 // Create pending invitation (Single)
-router.post("/invitations/pending", protect, createPendingInvitation);
+router.post("/pending", protect, createPendingInvitation);
 
 // Bulk create invitations (Step 1: Create pending)
-router.post("/invitations/bulk-create", protect, createBulkInvitations);
+router.post("/bulk-create", protect, createBulkInvitations);
 
 // Send invitations / Process paid (Step 2: Generate QR & Send)
-router.post("/invitations/send", protect, processPaidInvitationsEndpoint);
+router.post("/send", protect, processPaidInvitationsEndpoint);
 router.post(
-  "/invitations/process-paid",
+  "/process-paid",
   protect,
   processPaidInvitationsEndpoint
 );
 
 // Verify invitation scan
-router.post("/invitations/verify", verifyInvitation);
+router.post("/verify", verifyInvitation);
 
 // Get Invitation by ID (Public)
-router.get("/invitations/:id", getInvitationById);
+router.get("/:id", getInvitationById);
 
 // Update Invitation Status (Public - for guest confirmation)
-router.patch("/invitations/:id/status", updateInvitationStatus);
+router.patch("/:id/status", updateInvitationStatus);
 
 // Create invitation (Legacy/Single) - Updated to match new schema if possible, or keep as is but might need frontend update
-router.post("/invitations", protect, async (req, res) => {
+router.post("/", protect, async (req, res) => {
   try {
     // Map legacy fields if necessary or expect new fields
     let type = req.body.type || req.body.contactType || "email";
@@ -96,7 +96,7 @@ router.post("/invitations", protect, async (req, res) => {
 });
 
 // Get invitations by organizer
-router.get("/invitations/organizer/:organizerId", protect, async (req, res) => {
+router.get("/organizer/:organizerId", protect, async (req, res) => {
   try {
     const invitations = await Invitation.find({
       organizerId: req.params.organizerId,

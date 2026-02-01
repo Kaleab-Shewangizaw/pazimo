@@ -47,7 +47,7 @@ export default function AdminEditEventPage() {
     null,
   );
   const [formData, setFormData] = useState({
-    organizer: {},
+    organizer: "",
     title: "",
     description: "",
     startDate: "",
@@ -462,14 +462,17 @@ export default function AdminEditEventPage() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="organizer">Organizer</Label>
-              <Input
-                id="organizer"
-                name="organizer"
-                value={formData.organizer}
-                onChange={handleInputChange}
-                required
-              />
+              <Label>Organizer ID</Label>
+  <Input
+    id="organizer"
+    name="organizer"
+    value={ formData.organizer || ""}
+    onChange={(e) =>
+      setFormData((prev) => ({ ...prev, organizer: e.target.value.trim() }))
+    }
+    placeholder="Paste organizer user ID (24 hex chars)"
+    required
+  />
             </div>
 
             <div className="grid gap-2">
