@@ -1113,9 +1113,20 @@ const checkInTicket = async (req, res) => {
     const { ticketId } = req.params;
     const { count = 1 } = req.body; // Default to 1 if not provided
 
-    let ticket = await Ticket.findOne({ ticketId });
+    // Authenticate user and get user id from middleware
+    if (!req.user || !req.user.userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    let ticket = await Ticket.findOne({ ticketId }).populate("event");
     if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
-      ticket = await Ticket.findById(ticketId);
+      ticket = await Ticket.findById(ticketId).populate("event");
     }
 
     if (!ticket) {
@@ -1124,6 +1135,26 @@ const checkInTicket = async (req, res) => {
         message: "Ticket not found",
       });
     }
+
+    // Check authorization: Admin or Event Organizer
+    const event = ticket.event;
+    if (!event) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Event associated with this ticket not found",
+      });
+    }
+
+    const organizerId = event.organizer ? event.organizer.toString() : null;
+
+    if (userRole !== "admin" && organizerId !== userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "You are not authorized to check in tickets for this event",
+      });
+    }
+
+    
 
     if (
       ticket.status === "used" ||

@@ -400,7 +400,7 @@ router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
 router.get("/public/details/:id", getPublicTicketDetails);
 router.post("/payment/cancel", cancelPaymentIntent);
-router.patch("/:ticketId/check-in", checkInTicket);
+router.patch("/:ticketId/check-in", authenticateUser, checkInTicket);
 router.post("/validate-qr", validateQRCode);
 
 // All other routes use authentication
