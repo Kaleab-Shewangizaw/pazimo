@@ -275,6 +275,31 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       orderId ||
       `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // Map payment method to Chapa supported types (case-sensitive)
+    let chapaType = "telebirr"; // Default
+    if (method) {
+      const methodInput = method.toLowerCase().trim();
+      if (methodInput === "mpesa") {
+        chapaType = "mpesa";
+      } else if (methodInput === "telebirr") {
+        chapaType = "telebirr";
+      } else if (
+        methodInput.includes("cbe") ||
+        methodInput === "cbebirr" ||
+        methodInput === "commercial bank of ethiopia"
+      ) {
+        chapaType = "cbebirr";
+      } else if (
+        methodInput.includes("awash") ||
+        methodInput === "awashbirr" ||
+        methodInput === "awash bank"
+      ) {
+        chapaType = "awashbirr";
+      } else if (methodInput === "amole") {
+        chapaType = "Amole";
+      }
+    }
+
     // Call Chapa Direct Charge
     let response;
     try {
@@ -288,7 +313,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         amount: String(amount),
         currency: "ETB",
         mobile: chapaMobile,
-        type: method, // "telebirr", "mpesa", etc.
+        type: chapaType,
         email: user ? user.email : "guest@example.com",
         first_name: ticketDetails.fullName.split(" ")[0],
         last_name: ticketDetails.fullName.split(" ")[1] || "User",
