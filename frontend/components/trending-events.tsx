@@ -181,32 +181,8 @@ export default function LargeEventCarousel() {
                   }`
               : "/placeholder.svg?height=600&width=400&text=Event+Poster";
 
-          console.log("Processed image URL:", imageUrl); // Debug log
+          console.log("Processed image URL:", imageUrl); 
 
-          // return {
-          //   id: event._id,
-          //   title: event.title,
-          //   description: event.description,
-          //   date: new Date(event.startDate).toLocaleDateString(),
-          //   time: new Date(event.startDate).toLocaleTimeString(),
-          //   location: event.location.city,
-          //   venue: event.location.address,
-          //   image: imageUrl,
-          //   price:
-          //     event.ticketTypes && event.ticketTypes.length > 0
-          //       ? `From ${Math.min(...event.ticketTypes.map((t: any) => t.price))} ETB`
-          //       : "Free",
-          //   rating: 4.5,
-          //   attendees: event.capacity,
-          //   categories: [event.category?.name || "Uncategorized"],
-          //   organization:
-          //     event.organizer?.organization ||
-          //     event.organizer?.firstName + " " + event.organizer?.lastName ||
-          //     "Event Organization",
-          //   originalEvent: event, // Keep original event data for sold out check
-          // }
-
-          // Compute wave-aware price for featured card
           const now = new Date();
           const hasWave = (t: any) =>
             !!(t?.startDate && t?.endDate) ||
@@ -275,6 +251,7 @@ export default function LargeEventCarousel() {
             attendees: event.capacity,
             categories: [event.category?.name || "Uncategorized"],
             organization:
+              event.organizer?.organizerProfile?.organization ||
               event.organizer?.organization ||
               event.title ||
               "Event Organizer",

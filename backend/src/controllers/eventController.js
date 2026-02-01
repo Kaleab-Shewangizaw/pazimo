@@ -317,7 +317,14 @@ const getAllEvents = async (req, res) => {
 
   const events = await Event.find()
     .populate("category", "name description")
-    .populate("organizer", "firstName lastName email")
+    .populate({
+      path: "organizer",
+      select: "firstName lastName email",
+      populate: {
+        path: "organizerProfile",
+        select: "organization",
+      },
+    })
     .sort("-createdAt")
     .skip((page - 1) * limit)
     .limit(Number(limit));
@@ -367,7 +374,14 @@ const getEventDetails = async (req, res) => {
 
   const event = await Event.findOne({ _id: id })
     .populate("category", "name description")
-    .populate("organizer", "firstName lastName email");
+    .populate({
+      path: "organizer",
+      select: "firstName lastName email",
+      populate: {
+        path: "organizerProfile",
+        select: "organization",
+      },
+    });
 
   if (!event) {
     throw new NotFoundError("Event not found");
@@ -385,7 +399,14 @@ const getPublicEvents = async (req, res) => {
     $or: [{ isPublic: true }, { isPublic: { $exists: false } }],
   })
     .populate("category", "name description")
-    .populate("organizer", "firstName lastName email")
+    .populate({
+      path: "organizer",
+      select: "firstName lastName email",
+      populate: {
+        path: "organizerProfile",
+        select: "organization",
+      },
+    })
     .sort("-createdAt");
 
   res.status(StatusCodes.OK).json({

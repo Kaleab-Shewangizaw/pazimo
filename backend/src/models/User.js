@@ -209,5 +209,13 @@ userSchema.virtual("fullName").get(function () {
   return `${this.firstName} ${this.lastName}`;
 });
 
+// Virtual for organizer profile
+userSchema.virtual("organizerProfile", {
+  ref: "OrganizerRegistration",
+  localField: "_id",
+  foreignField: "userId",
+  justOne: true,
+});
+
 const User = mongoose.model("User", userSchema);
 module.exports = User;
