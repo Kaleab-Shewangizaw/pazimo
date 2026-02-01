@@ -1,6 +1,6 @@
 "use client";
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,7 @@ export default function AdminEditEventPage() {
   const params = useParams();
   const eventId = params.id as string;
   const { token } = useAdminAuthStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -47,7 +48,6 @@ export default function AdminEditEventPage() {
     null,
   );
   const [formData, setFormData] = useState({
-    organizer: "",
     title: "",
     description: "",
     startDate: "",
@@ -97,7 +97,7 @@ export default function AdminEditEventPage() {
       const event = data.data;
 
       setFormData({
-        organizer: event.organizer || "",
+        
         title: event.title || "",
         description: event.description || "",
         startDate: event.startDate
@@ -305,7 +305,7 @@ export default function AdminEditEventPage() {
       }
 
       const updateData = {
-        organizer: formData.organizer,
+        
         title: formData.title,
         description: formData.description,
         startDate: formData.startDate,
@@ -347,7 +347,6 @@ export default function AdminEditEventPage() {
         const formDataToSend = new FormData();
 
         // Append all fields as expected by backend
-        formDataToSend.append("organizer", formData.organizer);
         formDataToSend.append("title", formData.title);
         formDataToSend.append("description", formData.description);
         formDataToSend.append("startDate", formData.startDate);
@@ -461,19 +460,7 @@ export default function AdminEditEventPage() {
                 required
               />
             </div>
-            <div className="grid gap-2">
-              <Label>Organizer ID</Label>
-  <Input
-    id="organizer"
-    name="organizer"
-    value={ formData.organizer || ""}
-    onChange={(e) =>
-      setFormData((prev) => ({ ...prev, organizer: e.target.value.trim() }))
-    }
-    placeholder="Paste organizer user ID (24 hex chars)"
-    required
-  />
-            </div>
+           
 
             <div className="grid gap-2">
               <Label htmlFor="description">Description</Label>
@@ -686,7 +673,7 @@ export default function AdminEditEventPage() {
               )}
               <div className="flex items-center gap-4">
                 <Input
-                  id="coverImage"
+                  ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   onChange={handleCoverImageChange}
@@ -695,7 +682,7 @@ export default function AdminEditEventPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => document.getElementById("coverImage")?.click()}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   {currentCoverImage || coverImage

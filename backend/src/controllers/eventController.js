@@ -239,7 +239,41 @@ const updateEvent = async (req, res) => {
       .json({ message: "Not authorized" });
   }
 
+
+  if (req.file) {
+    req.body.coverImages = [`/uploads/${req.file.filename}`];
+  }
+
+  try {
+    if (typeof req.body.location === "string") {
+      req.body.location = JSON.parse(req.body.location);
+    }
+    if (typeof req.body.ageRestriction === "string") {
+      req.body.ageRestriction = JSON.parse(req.body.ageRestriction);
+    }
+    if (typeof req.body.ticketTypes === "string") {
+      req.body.ticketTypes = JSON.parse(req.body.ticketTypes);
+    }
+    if (typeof req.body.tags === "string") {
+      
+    }
+  } catch (error) {
+    console.error("Error parsing JSON fields in updateEvent:", error);
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      status: "fail",
+      message: "Invalid JSON format for location, ageRestriction, or ticketTypes",
+    });
+  }
+
+
+  if (req.body.tags && typeof req.body.tags === "string") {
+     req.body.tags = req.body.tags.split(",").map((t) => t.trim()).filter(Boolean);
+  }
+
   Object.assign(event, req.body);
+  
+ 
+    
   event.updatedAt = new Date();
 
   await event.save();
