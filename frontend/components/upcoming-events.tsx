@@ -9,7 +9,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import EventCard from "./eventCard";
 
-type Event = {
+export type Event = {
   _id: string;
   title: string;
   description: string;
@@ -43,15 +43,21 @@ type Event = {
   isSoldOut?: boolean;
 };
 
-export default function UpcomingEvents({ count }: { count?: number }) {
+export default function UpcomingEvents({
+  count,
+  initialEvents,
+}: {
+  count?: number;
+  initialEvents?: Event[];
+}) {
   const {
     wishlist,
     toggleWishlist,
     isLoading: isWishlistLoading,
   } = useWishlist();
-  const [events, setEvents] = useState<Event[]>([]);
+  const [events, setEvents] = useState<Event[]>(initialEvents || []);
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialEvents);
 
   const [isHovered, setIsHovered] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -144,6 +150,7 @@ export default function UpcomingEvents({ count }: { count?: number }) {
   };
 
   useEffect(() => {
+    if (initialEvents) return;
     const fetchEvents = async () => {
       try {
         setIsLoading(true);
@@ -181,7 +188,7 @@ export default function UpcomingEvents({ count }: { count?: number }) {
     };
 
     fetchEvents();
-  }, [count]);
+  }, [count, initialEvents]);
 
   useEffect(() => {
     if (!carouselRef.current || events.length === 0 || isHovered) return;

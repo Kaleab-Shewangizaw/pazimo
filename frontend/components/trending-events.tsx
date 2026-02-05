@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { toast } from "sonner";
 
-type FeaturedEvent = {
+export type FeaturedEvent = {
   id: string;
   title: string;
   description: string;
@@ -124,11 +124,17 @@ const isEventSoldOut = (event: any) => {
   return false;
 };
 
-export default function LargeEventCarousel() {
+export default function LargeEventCarousel({
+  initialEvents,
+}: {
+  initialEvents?: FeaturedEvent[];
+}) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [featuredEvents, setFeaturedEvents] = useState<FeaturedEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [featuredEvents, setFeaturedEvents] = useState<FeaturedEvent[]>(
+    initialEvents || [],
+  );
+  const [isLoading, setIsLoading] = useState(!initialEvents);
 
   // Swipe functionality states
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -138,8 +144,10 @@ export default function LargeEventCarousel() {
   const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchFeaturedEvents();
-  }, []);
+    if (!initialEvents) {
+      fetchFeaturedEvents();
+    }
+  }, [initialEvents]);
 
   const fetchFeaturedEvents = async () => {
     try {
@@ -546,9 +554,9 @@ export default function LargeEventCarousel() {
           alt={currentEvent.title}
           fill
           className="object-contain bg-black"
-          priority
-          sizes="100vw"
-          quality={90}
+          priority={true} // Priority for LCP
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 85vw"
+          quality={85} // Reduced slightly for performance
           onError={(e) => {
             console.error("Image failed to load:", currentEvent.image);
             const target = e.target as HTMLImageElement;

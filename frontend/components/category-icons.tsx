@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Music,
   Users,
@@ -13,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 
-interface Category {
+export interface Category {
   _id: string;
   name: string;
   description: string;
@@ -21,10 +22,16 @@ interface Category {
   isPublished: boolean;
 }
 
-export default function CategoryIcons() {
+export default function CategoryIcons({
+  initialCategories,
+}: {
+  initialCategories?: Category[];
+}) {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [categories, setCategories] = useState<Category[]>(
+    initialCategories || [],
+  );
+  const [isLoading, setIsLoading] = useState(!initialCategories);
   const [currentIndex, setCurrentIndex] = useState(0);
   const maxVisibleCards = { mobile: 3, tablet: 4, desktop: 5, large: 6 };
   const [visibleCards, setVisibleCards] = useState(maxVisibleCards.desktop);
@@ -291,8 +298,10 @@ export default function CategoryIcons() {
   }, [categories.length, visibleCards, isDragging, nextSlide]);
 
   useEffect(() => {
-    fetchCategories();
-  }, []);
+    if (!initialCategories) {
+      fetchCategories();
+    }
+  }, [initialCategories]);
 
   const fetchCategories = async () => {
     try {
@@ -362,11 +371,12 @@ export default function CategoryIcons() {
                   const colors = getColorsForCategory(index);
 
                   return (
-                    <div
+                    <button
                       key={category._id}
-                      className="flex flex-col items-center group cursor-pointer flex-shrink-0 px-2"
+                      className="flex flex-col items-center group cursor-pointer flex-shrink-0 px-2 border-none bg-transparent m-0 p-0"
                       style={{ width: `${100 / visibleCards}%` }}
                       onClick={() => handleCategoryClick(category._id)}
+                      aria-label={`Filter by ${category.name}`}
                     >
                       <div className="relative">
                         <div
@@ -376,10 +386,12 @@ export default function CategoryIcons() {
                           className={`relative w-20 h-20 ${colors.bg} ${colors.hover} rounded-full flex items-center justify-center transition-all duration-300 shadow-lg overflow-hidden`}
                         >
                           {category.image ? (
-                            <img
+                            <Image
                               src={`${process.env.NEXT_PUBLIC_API_URL}${category.image}`}
                               alt={category.name}
-                              className="w-full h-full object-cover"
+                              fill
+                              sizes="80px"
+                              className="object-cover"
                             />
                           ) : (
                             getIconForCategory(category.name)
@@ -397,7 +409,7 @@ export default function CategoryIcons() {
                           className={`h-0.5 ${colors.bg} scale-x-0 group-hover:scale-x-100 transition-transform duration-300 mt-1 rounded-full`}
                         />
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -409,10 +421,11 @@ export default function CategoryIcons() {
               const colors = getColorsForCategory(index);
 
               return (
-                <div
+                <button
                   key={category._id}
-                  className="flex flex-col items-center group cursor-pointer"
+                  className="flex flex-col items-center group cursor-pointer border-none bg-transparent m-0 p-0"
                   onClick={() => handleCategoryClick(category._id)}
+                  aria-label={`Filter by ${category.name}`}
                 >
                   <div className="relative">
                     <div
@@ -422,10 +435,12 @@ export default function CategoryIcons() {
                       className={`relative w-20 h-20 ${colors.bg} ${colors.hover} rounded-full flex items-center justify-center transition-all duration-300 shadow-lg overflow-hidden`}
                     >
                       {category.image ? (
-                        <img
+                        <Image
                           src={`${process.env.NEXT_PUBLIC_API_URL}${category.image}`}
                           alt={category.name}
-                          className="w-full h-full object-cover"
+                          fill
+                          sizes="80px"
+                          className="object-cover"
                         />
                       ) : (
                         getIconForCategory(category.name)
@@ -443,7 +458,7 @@ export default function CategoryIcons() {
                       className={`h-0.5 ${colors.bg} scale-x-0 group-hover:scale-x-100 transition-transform duration-300 mt-1 rounded-full`}
                     />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -478,11 +493,12 @@ export default function CategoryIcons() {
                 const colors = getColorsForCategory(index);
 
                 return (
-                  <div
+                  <button
                     key={category._id}
-                    className="flex flex-col items-center group cursor-pointer flex-shrink-0 px-4"
+                    className="flex flex-col items-center group cursor-pointer flex-shrink-0 px-4 border-none bg-transparent m-0 p-0"
                     style={{ width: `${100 / visibleCards}%` }}
                     onClick={() => handleCategoryClick(category._id)}
+                    aria-label={`Filter by ${category.name}`}
                   >
                     <div className="relative">
                       <div
@@ -492,10 +508,12 @@ export default function CategoryIcons() {
                         className={`relative w-24 h-24 ${colors.bg} ${colors.hover} rounded-full flex items-center justify-center transition-all duration-300 shadow-lg overflow-hidden`}
                       >
                         {category.image ? (
-                          <img
+                          <Image
                             src={`${process.env.NEXT_PUBLIC_API_URL}${category.image}`}
                             alt={category.name}
-                            className="w-full h-full object-cover"
+                            fill
+                            sizes="96px"
+                            className="object-cover"
                           />
                         ) : (
                           getIconForCategory(category.name)
@@ -513,7 +531,7 @@ export default function CategoryIcons() {
                         className={`h-0.5 ${colors.bg} scale-x-0 group-hover:scale-x-100 transition-transform duration-300 mt-1 rounded-full`}
                       />
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

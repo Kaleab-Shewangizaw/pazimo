@@ -79,29 +79,31 @@ export default function EventCard({
             <ImageIcon className="w-16 h-16 text-gray-300 absolute z-0" />
 
             {event.coverImages && event.coverImages.length > 0 && (
-              <Image
-                src={
-                  event.coverImages[0].startsWith("http")
-                    ? event.coverImages[0]
-                    : `${process.env.NEXT_PUBLIC_API_URL}${
-                        event.coverImages[0].startsWith("/")
-                          ? event.coverImages[0]
-                          : `/${event.coverImages[0]}`
-                      }`
-                }
-                alt={event.title}
-                fill
-                className="object-cover transition-transform duration-500 group-hover:scale-110"
-                sizes="320px"
-                quality={90}
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
+              <Link href={`event_detail?id=${event._id}`} className="block w-full h-full relative">
+                <Image
+                  src={
+                    event.coverImages[0].startsWith("http")
+                      ? event.coverImages[0]
+                      : `${process.env.NEXT_PUBLIC_API_URL}${
+                          event.coverImages[0].startsWith("/")
+                            ? event.coverImages[0]
+                            : `/${event.coverImages[0]}`
+                        }`
+                  }
+                  alt={event.title}
+                  fill
+                  className="object-cover transition-transform duration-500 group-hover:scale-110"
+                  sizes="(max-width: 640px) 320px, 320px"
+                  quality={85}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              </Link>
             )}
 
             {/* Gradient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10 pointer-events-none" />
           </div>
 
           {/* Wishlist Button */}
@@ -147,9 +149,11 @@ export default function EventCard({
             <p className="text-gray-500 text-sm font-medium mb-1">
               {event.location.city}, {event.location.country}
             </p>
-            <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight group-hover:text-[#1a2d5a] transition-colors">
-              {event.title}
-            </h3>
+            <Link href={`event_detail?id=${event._id}`}>
+              <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight group-hover:text-[#1a2d5a] transition-colors">
+                {event.title}
+              </h3>
+            </Link>
           </div>
 
           <div className="flex items-center justify-between mb-4">
