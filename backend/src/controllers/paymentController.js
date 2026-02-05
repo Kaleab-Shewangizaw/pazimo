@@ -10,6 +10,9 @@ class PaymentController {
   async checkPaymentStatus(req, res) {
     try {
       const { txn } = req.query;
+      console.log(`\n[PAYMENT-STATUS] ============================================`);
+      console.log(`[PAYMENT-STATUS] Checking status for txn: ${txn}`);
+      
       if (!txn) {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
@@ -20,6 +23,7 @@ class PaymentController {
       const payment = await Payment.findOne({ transactionId: txn });
 
       if (!payment) {
+        console.log(`[PAYMENT-STATUS] ❌ Payment record NOT FOUND for txn: ${txn}`);
         return res.status(StatusCodes.NOT_FOUND).json({
           success: false,
           status: "NOT_FOUND",
@@ -27,7 +31,9 @@ class PaymentController {
         });
       }
 
-      // If pending, check with Provider directly
+      console.log(`[PAYMENT-STATUS] Found payment - Current status: ${payment.status}, Provider: ${payment.provider}`);
+
+      // If pending, check with Provider directly - WITH RETRY LOGIC
       if (payment.status === "PENDING") {
         try {
           console.log(
@@ -37,30 +43,49 @@ class PaymentController {
           );
 
           if (payment.provider === "chapa") {
-            // Check Chapa Status
-            const verifyResponse = await ChapaService.verify(txn);
-            console.log(`Chapa Verify Response for ${txn}:`, verifyResponse);
+            // Check Chapa Status with retry
+            let verifyResponse;
+            let attempts = 0;
+            const maxAttempts = 3;
+            
+            while (attempts < maxAttempts) {
+              try {
+                verifyResponse = await ChapaService.verify(txn);
+                console.log(`Chapa Verify Response for ${txn} (attempt ${attempts + 1}):`, verifyResponse);
+                
+                if (verifyResponse.status === "success" && verifyResponse.data) {
+                  const chapaStatus = verifyResponse.data.status;
 
-            if (verifyResponse.status === "success" && verifyResponse.data) {
-              // Chapa status: 'success', 'failed', 'pending'
-              // Note: Chapa verify usually returns success if the transaction was successful.
-              // If it's pending, it might not return success or might return a different status.
-              // Assuming verifyResponse.data.status holds the actual transaction status if available,
-              // or verifyResponse.status itself indicates success of the verification call which implies payment success for 'verify'.
-
-              // According to Chapa docs, verify returns the transaction details.
-              // We should check verifyResponse.data.status
-              const chapaStatus = verifyResponse.data.status;
-
-              if (chapaStatus === "success") {
-                payment.status = "PAID";
-                await payment.save();
-                await processSuccessfulPayment(payment);
-              } else if (chapaStatus === "failed") {
-                payment.status = "FAILED";
-                await payment.save();
+                  if (chapaStatus === "success") {
+                    payment.status = "PAID";
+                    await payment.save();
+                    console.log(`Payment ${txn} marked as PAID, creating tickets...`);
+                    await processSuccessfulPayment(payment);
+                    break; // Exit retry loop
+                  } else if (chapaStatus === "failed") {
+                    payment.status = "FAILED";
+                    await payment.save();
+                    break;
+                  } else {
+                    // Status is still pending, retry
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                    }
+                  }
+                } else {
+                  attempts++;
+                  if (attempts < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                  }
+                }
+              } catch (verifyError) {
+                console.error(`Chapa verify attempt ${attempts + 1} failed:`, verifyError.message);
+                attempts++;
+                if (attempts < maxAttempts) {
+                  await new Promise(resolve => setTimeout(resolve, 1000));
+                }
               }
-              // If 'pending', do nothing
             }
           } else {
             // Default to SantimPay
@@ -109,8 +134,14 @@ class PaymentController {
         const ticket = await Ticket.findOne({ paymentReference: txn });
         if (ticket) {
           ticketId = ticket.ticketId;
+          console.log(`[PAYMENT-STATUS] ✅ Ticket found: ${ticketId}`);
+        } else {
+          console.log(`[PAYMENT-STATUS] ⚠️ Payment PAID but ticket NOT found yet`);
         }
       }
+
+      console.log(`[PAYMENT-STATUS] Returning status: ${status}${ticketId ? `, ticketId: ${ticketId}` : ''}`);
+      console.log(`[PAYMENT-STATUS] ============================================\n`);
 
       return res.status(StatusCodes.OK).json({
         success: true,
@@ -119,7 +150,7 @@ class PaymentController {
         ticketId: ticketId,
       });
     } catch (error) {
-      console.error("Check payment status error:", error);
+      console.error("[PAYMENT-STATUS] ❌ Error:", error);
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         success: false,
         error: "Failed to check payment status",

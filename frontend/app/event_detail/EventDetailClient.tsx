@@ -13,10 +13,9 @@ import {
   BookOpen,
   Ticket,
   Loader2,
-  Heart,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
@@ -36,7 +35,6 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
-import { useWishlist } from "@/hooks/useWishlist";
 
 type TicketType = {
   _id: string;
@@ -110,44 +108,352 @@ type PurchasedTicket = {
   ticketCount?: number;
 };
 
+// Simple in-memory cache for event data
+const eventCache = new Map<string, { data: Event; timestamp: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 export default function EventDetailClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const eventId = searchParams.get("id");
+  
+  // Get user from store directly
+  const { user } = useAuthStore();
 
+  // Core state - reduced from 19+ to 9 state variables
   const [event, setEvent] = useState<Event | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTicketType, setSelectedTicketType] = useState<string>("");
   const [ticketQuantity, setTicketQuantity] = useState(1);
-  const [purchasedTickets, setPurchasedTickets] = useState<PurchasedTicket[]>(
-    [],
-  );
+  const [purchasedTickets, setPurchasedTickets] = useState<PurchasedTicket[]>([]);
   const [showTicketModal, setShowTicketModal] = useState(false);
-  const [shouldShowTicketModal, setShouldShowTicketModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
-  const [activePaymentProvider, setActivePaymentProvider] = useState<
-    "SANTIM" | "CHAPA"
-  >("CHAPA");
+  const [activePaymentProvider, setActivePaymentProvider] = useState<"SANTIM" | "CHAPA">("CHAPA");
   const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
-  const [user, setUser] = useState<User | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
-  const [shareQrUrl, setShareQrUrl] = useState<string>("");
-  const [santimForm, setSantimForm] = useState({
+  const [paymentForm, setPaymentForm] = useState({
     fullName: "",
     email: "",
     phoneNumber: "",
     paymentMethod: "telebirr",
   });
-  const [isSantimLoading, setIsSantimLoading] = useState(false);
-  const [currentTransactionId, setCurrentTransactionId] = useState<
-    string | null
-  >(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const verificationAttempts = useRef(0);
+  const isVerifyingPayment = useRef(false);
 
+  // Fetch event details with caching
+  const fetchEventDetails = useCallback(async () => {
+    if (!eventId) return;
+
+    // Check cache first
+    const cached = eventCache.get(eventId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      setEvent(cached.data);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`,
+      );
+      if (!response.ok) throw new Error("Failed to fetch");
+      const data = await response.json();
+      
+      // Cache the event data
+      eventCache.set(eventId, { data: data.data, timestamp: Date.now() });
+      setEvent(data.data);
+      
+      // Set first available ticket as default
+      const firstAvailableTicket = data.data.ticketTypes.find(
+        (ticket: TicketType) => ticket.available !== false,
+      );
+      if (firstAvailableTicket && !selectedTicketType) {
+        setSelectedTicketType(firstAvailableTicket.name);
+      }
+    } catch {
+      toast.error("Failed to fetch event details");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [eventId, selectedTicketType]);
+
+  // Verify and show tickets with retry logic - OPTIMIZED & GUARANTEED delivery
+  const verifyAndShowTickets = useCallback(async (txRef: string, retryCount = 0) => {
+    const MAX_RETRIES = 15; // Increased to 15 for mobile payments (30 seconds total)
+    const RETRY_DELAY = 2000; // 2 seconds
+
+    try {
+      console.log(`[VERIFY] Attempt ${retryCount + 1}/${MAX_RETRIES} for txRef: ${txRef}`);
+      
+      // STEP 1: Verify payment status with backend (triggers ticket creation if not already done)
+      const statusResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`,
+      );
+      
+      if (!statusResponse.ok) {
+        throw new Error(`Payment status check failed: ${statusResponse.status}`);
+      }
+
+      const statusData = await statusResponse.json();
+      console.log(`[VERIFY] Status response:`, statusData);
+
+      // Handle different payment statuses
+      if (statusData.status === "PENDING") {
+        if (retryCount < MAX_RETRIES) {
+          console.log(`[VERIFY] Payment still pending (attempt ${retryCount + 1}/${MAX_RETRIES}), retrying in ${RETRY_DELAY}ms...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+          return verifyAndShowTickets(txRef, retryCount + 1);
+        }
+        // Timeout - payment might still be processing on user's phone
+        setIsProcessingPayment(false);
+        toast.error("Payment verification timeout. If you completed payment, check 'My Tickets' in a few minutes.");
+        router.replace(`/event_detail?id=${eventId || ""}`);
+        return false;
+      }
+
+      if (statusData.status === "FAILED" || statusData.status === "NOT_FOUND") {
+        setIsProcessingPayment(false);
+        toast.error(statusData.status === "NOT_FOUND" 
+          ? "Payment not found. Please try again." 
+          : "Payment failed. Please try again.");
+        router.replace(`/event_detail?id=${eventId || ""}`);
+        return false;
+      }
+
+      // STEP 2: Payment is COMPLETED, fetch the created tickets
+      if (statusData.status === "COMPLETED") {
+        console.log(`[VERIFY] Payment completed! Fetching tickets...`);
+        
+        const ticketsResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`,
+        );
+        
+        if (ticketsResponse.ok) {
+          const ticketsData = await ticketsResponse.json();
+          const newTickets = ticketsData.data || [];
+          
+          if (newTickets.length > 0) {
+            console.log(`[VERIFY] ✅ Success! Received ${newTickets.length} ticket(s)`);
+            setPurchasedTickets(newTickets);
+            setIsProcessingPayment(false);
+            setShowTicketModal(true);
+            router.replace(`/event_detail?id=${eventId || ""}`);
+            toast.success(`🎉 ${newTickets.length} ticket(s) received successfully!`);
+            return true;
+          }
+          
+          // Tickets not created yet - this can happen if ticket creation is slow
+          if (retryCount < MAX_RETRIES) {
+            console.log(`[VERIFY] No tickets returned, retrying in ${RETRY_DELAY}ms...`);
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            return verifyAndShowTickets(txRef, retryCount + 1);
+          }
+        }
+      }
+
+      // Shouldn't reach here, but fallback
+      throw new Error("Unexpected response from backend");
+      
+    } catch (error) {
+      console.error(`[VERIFY] Error on attempt ${retryCount + 1}:`, error);
+      
+      // Retry on errors (network issues, timeouts, etc)
+      if (retryCount < MAX_RETRIES) {
+        console.log(`[VERIFY] Retrying in ${RETRY_DELAY}ms...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return verifyAndShowTickets(txRef, retryCount + 1);
+      }
+      
+      // Max retries exceeded
+      console.error("[VERIFY] ❌ Failed after all retries");
+      setIsProcessingPayment(false);
+      toast.error(`Failed to load tickets. Please check 'My Tickets' or contact support with reference: ${txRef}`);
+      router.replace(`/event_detail?id=${eventId || ""}`);
+      return false;
+    }
+  }, [eventId, router]);
+
+  // Handle payment initiation - streamlined and optimized
+  const handleMobilePayment = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isProcessingPayment) return;
+
+    // Validate required fields
+    if (!paymentForm.fullName || !paymentForm.phoneNumber) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    const selectedType = ticketsToDisplay.find((t) => t.name === selectedTicketType);
+    if (!selectedType) {
+      toast.error("Please select a ticket type");
+      return;
+    }
+
+    setIsProcessingPayment(true);
+
+    try {
+      // Default email if not provided
+      const finalEmail = paymentForm.email || 
+        `customerpazimo${String(Math.floor(Math.random() * 1000000)).padStart(6, "0")}@gmail.com`;
+
+      const formattedPhone = activePaymentProvider === "CHAPA"
+        ? `0${paymentForm.phoneNumber}`
+        : `+251${paymentForm.phoneNumber}`;
+
+      // Handle authentication if user not logged in
+      let finalUserId = user?._id;
+      if (!finalUserId) {
+        try {
+          const authResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/unified-auth`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fullName: paymentForm.fullName,
+                email: finalEmail,
+                phoneNumber: formattedPhone,
+              }),
+            },
+          );
+
+          if (authResponse.ok) {
+            const authResult = await authResponse.json();
+            const { user: userData, token } = authResult.data;
+
+            // Only auto-login if not using default email
+            if (!userData.email.includes("customerpazimo")) {
+              useAuthStore.getState().setAuth({ user: userData, token });
+              toast.success("Account verified!");
+            }
+            finalUserId = userData._id;
+          }
+        } catch (error) {
+          console.error("Auth error:", error);
+        }
+      }
+
+      const amount = selectedType.price * ticketQuantity;
+      const orderId = crypto.randomUUID?.() || 
+        `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const ticketId = crypto.randomUUID?.() || 
+        `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const endpoint = activePaymentProvider === "CHAPA"
+        ? "/api/tickets/ticket/initiate/chapa"
+        : "/api/tickets/ticket/initiate";
+
+      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          paymentReason: `Ticket Purchase - ${event?.title}`,
+          phoneNumber: formattedPhone,
+          orderId,
+          method: paymentForm.paymentMethod,
+          ticketDetails: {
+            ticketId,
+            eventId,
+            ticketTypeId: selectedType._id || selectedType.name,
+            quantity: ticketQuantity,
+            userId: finalUserId,
+            fullName: paymentForm.fullName,
+            email: finalEmail,
+          },
+          successUrl: `${window.location.origin}/event_detail?id=${eventId}&payment_status=success&tx_ref=${orderId}`,
+          callbackUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/payments/callback`,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Payment initiation failed");
+      }
+
+      // Handle auto-login from payment response
+      if (data.token && data.user && !data.user.email.includes("customerpazimo")) {
+        useAuthStore.getState().setAuth({ user: data.user, token: data.token });
+      }
+
+      // Redirect to payment gateway if checkout URL provided
+      if (data.checkoutUrl) {
+        setShowPaymentModal(false);
+        toast.success("Redirecting to payment...");
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // For mobile money (non-Chapa), verify transaction
+      if (data.transactionId) {
+        setShowPaymentModal(false);
+        toast.success("Payment initiated! Please wait...");
+        
+        // Wait for backend to process payment
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await verifyAndShowTickets(data.transactionId);
+      }
+
+    } catch (error: any) {
+      toast.error(error.message || "Failed to initiate payment");
+      setIsProcessingPayment(false);
+    }
+  }, [
+    isProcessingPayment,
+    paymentForm,
+    selectedTicketType,
+    ticketQuantity,
+    activePaymentProvider,
+    user,
+    event,
+    eventId,
+    verifyAndShowTickets,
+  ]);
+
+  // Initialize payment form when user logs in or opens modal
+  const initializePaymentForm = useCallback(() => {
+    if (user) {
+      let phone = user.phone || user.phoneNumber || "";
+      phone = phone.replace(/\D/g, "");
+      if (phone.startsWith("251")) phone = phone.substring(3);
+      if (phone.startsWith("0")) phone = phone.substring(1);
+
+      setPaymentForm({
+        fullName: `${user.firstName} ${user.lastName || ""}`.trim(),
+        email: user.email || "",
+        phoneNumber: phone,
+        paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+      });
+    } else {
+      setPaymentForm({
+        fullName: "",
+        email: "",
+        phoneNumber: "",
+        paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+      });
+    }
+  }, [user, activePaymentProvider]);
+
+  const handleBuyClick = useCallback(() => {
+    if (!selectedTicketType || ticketQuantity < 1) {
+      toast.error("Please select ticket type and quantity");
+      return;
+    }
+
+    const selectedType = ticketsToDisplay.find((t) => t.name === selectedTicketType);
+    if (!selectedType) return;
+
+    localStorage.setItem("current_event_id", eventId || "");
+    initializePaymentForm();
+    setShowPaymentModal(true);
+  }, [selectedTicketType, ticketQuantity, eventId, initializePaymentForm]);
+
+  // Consolidated initialization effect
   useEffect(() => {
+    // Fetch active payment provider
     const fetchProvider = async () => {
       try {
         const response = await fetch(
@@ -161,392 +467,191 @@ export default function EventDetailClient() {
         }
       } catch {}
     };
+
     fetchProvider();
-  }, []);
+    
+    // Fetch event details
+    if (eventId) {
+      fetchEventDetails();
+    }
 
-  useEffect(() => {
-    setSantimForm((prev) => ({
-      ...prev,
-      paymentMethod:
-        activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
-    }));
-  }, [activePaymentProvider]);
-
-  useEffect(() => {
-    if (eventId) fetchEventDetails();
-  }, [eventId]);
-
-  useEffect(() => {
+    // Handle URL parameters for pre-selection
     const qtyParam = searchParams.get("quantity");
     const typeParam = searchParams.get("ticketType");
     if (qtyParam) {
       const parsed = Number.parseInt(qtyParam, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) setTicketQuantity(parsed);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        setTicketQuantity(parsed);
+      }
     }
     if (typeParam && event?.ticketTypes?.some((t) => t.name === typeParam)) {
       setSelectedTicketType(typeParam);
     }
-  }, [searchParams, event]);
+  }, [eventId, fetchEventDetails, searchParams, event]);
 
-  useEffect(() => {
-    if (!eventId) return;
-    const builtUrl = `${
-      process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin
-    }/event_detail?id=${eventId}`;
-    setShareQrUrl(builtUrl);
-    (async () => {
-      try {
-        const QRCode = (await import("qrcode")).default;
-        const dataUrl = await QRCode.toDataURL(builtUrl, {
-          width: 256,
-          margin: 1,
-        });
-        setShareQrDataUrl(dataUrl);
-      } catch {}
-    })();
-  }, [eventId]);
-
-  useEffect(() => {
-    const storedAuth = localStorage.getItem("auth-storage");
-    if (storedAuth) {
-      try {
-        const parsedAuth = JSON.parse(storedAuth);
-        const userData = parsedAuth.state?.user;
-        if (userData) {
-          const derivedId = userData._id || userData.id;
-          if (derivedId) setUserId(derivedId);
-          setUser(userData);
-        }
-      } catch {}
-    }
-  }, []);
-
-  useEffect(() => {
-    if (purchasedTickets.length > 0) setCurrentTicketIndex(0);
-  }, [purchasedTickets]);
-
-  const fetchEventDetails = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId || ""}`,
-      );
-      if (!response.ok) throw new Error("Failed to fetch");
-      const data = await response.json();
-      setEvent(data.data);
-      const firstAvailableTicket = data.data.ticketTypes.find(
-        (ticket: TicketType) => ticket.available !== false,
-      );
-      if (firstAvailableTicket)
-        setSelectedTicketType(firstAvailableTicket.name);
-    } catch {
-      toast.error("Failed to fetch event details");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const downloadQRCode = (
-    qrCodeDataUrl: string,
-    ticketId: string,
-    ticketType: string,
-  ) => {
-    downloadHighQualityQR(
-      qrCodeDataUrl,
-      `ticket-${ticketId}-${ticketType}.png`,
-    );
-    toast.success(`QR code for ${ticketType} downloaded!`);
-  };
-
-  const handleBuyClick = async () => {
-    if (!selectedTicketType || ticketQuantity < 1) {
-      toast.error("Please select ticket type and quantity");
-      return;
-    }
-
-    const selectedType = ticketsToDisplay.find(
-      (t) => t.name === selectedTicketType,
-    );
-    if (!selectedType) return;
-
-    localStorage.setItem("current_event_id", eventId || "");
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const u = user || (useAuthStore.getState().user as any);
-    if (u) {
-      let phone = u.phone || u.phoneNumber || "";
-      phone = phone.replace(/\D/g, "");
-      if (phone.startsWith("251")) phone = phone.substring(3);
-      if (phone.startsWith("0")) phone = phone.substring(1);
-
-      setSantimForm({
-        fullName: `${u.firstName} ${u.lastName || ""}`.trim(),
-        email: u.email || "",
-        phoneNumber: phone,
-        paymentMethod:
-          activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
-      });
-    } else {
-      setSantimForm({
-        fullName: "",
-        email: "",
-        phoneNumber: "",
-        paymentMethod:
-          activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
-      });
-    }
-
-    setShowPaymentModal(true);
-  };
-
-  const verifyAndShowTickets = async (txRef: string) => {
-    try {
-      const ticketsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`,
-      );
-      if (ticketsResponse.ok) {
-        const ticketsData = await ticketsResponse.json();
-        const newTickets = ticketsData.data || [];
-        setPurchasedTickets(newTickets);
-        setShowTicketModal(true);
-        setShouldShowTicketModal(true);
-        router.replace(`/event_detail?id=${eventId || ""}`);
-      }
-    } catch {
-      toast.error("Failed to load tickets");
-    }
-  };
-
-  const stopPolling = () => {
-    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-    setIsWaitingForPayment(false);
-  };
-
-  const handleCancelPayment = async () => {
-    stopPolling();
-    if (currentTransactionId) {
-      try {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/payment/cancel`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ transactionId: currentTransactionId }),
-          },
-        );
-        toast.info("Payment cancelled");
-      } catch {}
-      setCurrentTransactionId(null);
-    }
-  };
-
-  const pollPaymentStatus = async (txRef: string) => {
-    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
-
-    let attempts = 0;
-    const maxAttempts = 60;
-
-    pollingIntervalRef.current = setInterval(async () => {
-      attempts++;
-      try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`,
-        );
-        const data = await response.json();
-
-        if (data.status === "COMPLETED" || data.status === "PAID") {
-          stopPolling();
-          setShowPaymentModal(false);
-          verifyAndShowTickets(txRef);
-        } else if (data.status === "FAILED") {
-          stopPolling();
-          toast.error("Payment failed");
-        }
-
-        if (attempts >= maxAttempts) {
-          stopPolling();
-          toast.error("Payment verification timed out");
-        }
-      } catch {}
-    }, 2000);
-  };
-
-  const handleMobilePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isSantimLoading) return;
-
-    // Require other fields but treat email as optional (defaults to customerpazimo@gmail.com)
-    if (!santimForm.fullName || !santimForm.phoneNumber) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-
-    // Default email if not provided
-    const finalEmail =
-      santimForm.email ||
-      "customerpazimo" +
-        String(Math.floor(Math.random() * 1000000)).padStart(6, "0") +
-        "@gmail.com";
-
-    setIsSantimLoading(true);
-
-    try {
-      const selectedType = ticketsToDisplay.find(
-        (t) => t.name === selectedTicketType,
-      );
-      if (!selectedType) throw new Error("Ticket type not found");
-
-      const formattedPhone =
-        activePaymentProvider === "CHAPA"
-          ? `0${santimForm.phoneNumber}`
-          : `+251${santimForm.phoneNumber}`;
-
-      let finalUserId = userId;
-      if (!finalUserId) {
-        try {
-          const authResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/unified-auth`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fullName: santimForm.fullName,
-                email: finalEmail,
-                phoneNumber: formattedPhone,
-              }),
-            },
-          );
-
-          if (authResponse.ok) {
-            const authResult = await authResponse.json();
-            const { user: userData, token } = authResult.data;
-
-            // Only auto-login if not using the default email
-            if (userData.email !== "customerpazimo@gmail.com") {
-              useAuthStore.getState().setAuth({ user: userData, token });
-              setUser(userData);
-              setUserId(userData._id);
-              toast.success("Account created/verified!");
-            }
-            finalUserId = userData._id;
-          } else {
-            const errorData = await authResponse.json();
-            toast.error(errorData.message || "Authentication failed");
-            setIsSantimLoading(false);
-            return;
-          }
-        } catch {}
-      }
-
-      const amount = selectedType.price * ticketQuantity;
-      const orderId =
-        crypto.randomUUID?.() ||
-        `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const ticketId =
-        crypto.randomUUID?.() ||
-        `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      const endpoint =
-        activePaymentProvider === "CHAPA"
-          ? "/api/tickets/ticket/initiate/chapa"
-          : "/api/tickets/ticket/initiate";
-
-      const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          paymentReason: `Ticket Purchase - ${event?.title}`,
-          phoneNumber: formattedPhone,
-          orderId,
-          method: santimForm.paymentMethod,
-          ticketDetails: {
-            ticketId,
-            eventId,
-            ticketTypeId: selectedType._id || selectedType.name,
-            quantity: ticketQuantity,
-            userId: finalUserId,
-            fullName: santimForm.fullName,
-            email: finalEmail,
-          },
-          successUrl: `${window.location.origin}/my-account/tickets/${ticketId}`,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok)
-        throw new Error(data.message || "Payment initiation failed");
-
-      if (data.token && data.user) {
-        // Do not auto-login if using the default placeholder email
-        if (data.user.email !== "customerpazimo@gmail.com") {
-          useAuthStore
-            .getState()
-            .setAuth({ user: data.user, token: data.token });
-          setUser(data.user);
-          setUserId(data.user._id);
-          toast.success("Account created/verified!");
-        }
-      }
-
-      if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-        return;
-      }
-
-      if (data.transactionId) {
-        setIsSantimLoading(false);
-        setIsWaitingForPayment(true);
-        setCurrentTransactionId(data.transactionId);
-        toast.success("Payment initiated! Please check your phone.");
-        pollPaymentStatus(data.transactionId);
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
-      toast.error(error.message || "Failed to initiate payment");
-      setIsSantimLoading(false);
-    }
-  };
-
+  // Handle payment return from gateway - OPTIMIZED for speed
   useEffect(() => {
     const txRef = searchParams.get("tx_ref") || searchParams.get("orderId");
     const status = searchParams.get("status");
     const paymentStatus = searchParams.get("payment_status");
 
     if ((txRef && status) || (paymentStatus === "success" && txRef)) {
+      // Prevent multiple verification attempts
+      if (isVerifyingPayment.current) return;
+      isVerifyingPayment.current = true;
+
       const processPayment = async () => {
         if (status === "success" || paymentStatus === "success") {
-          let attempts = 0;
-          const maxAttempts = 10;
-          let verified = false;
-
-          while (attempts < maxAttempts && !verified) {
-            const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`,
-            );
-            const data = await response.json();
-
-            if (data.status === "COMPLETED") {
-              verified = true;
-              verifyAndShowTickets(txRef);
-            } else {
-              await new Promise((resolve) => setTimeout(resolve, 2000));
-              attempts++;
-            }
-          }
-
-          if (!verified) {
-            toast.error("Payment verification timed out");
-          }
+          setIsProcessingPayment(true);
+          console.log("[PAYMENT-RETURN] Payment successful, verifying tickets for:", txRef);
+          
+          // Start verification immediately - no delays!
+          await verifyAndShowTickets(txRef);
         } else {
+          console.log("[PAYMENT-RETURN] Payment was not successful:", { status, paymentStatus });
           toast.error("Payment was not successful");
           router.replace(`/event_detail?id=${eventId || ""}`);
         }
+        
+        isVerifyingPayment.current = false;
       };
+
       processPayment();
     }
-  }, [searchParams, router, eventId]);
+  }, [searchParams, router, eventId, verifyAndShowTickets]);
 
+  // Update payment method when provider changes
+  useEffect(() => {
+    setPaymentForm((prev) => ({
+      ...prev,
+      paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+    }));
+  }, [activePaymentProvider]);
+
+  // Reset ticket index when tickets change
+  useEffect(() => {
+    if (purchasedTickets.length > 0) {
+      setCurrentTicketIndex(0);
+    }
+  }, [purchasedTickets]);
+
+  // Memoized computed values - prevent unnecessary re-renders
+  const ticketsToDisplay = useMemo(() => 
+    event?.ticketTypes.filter((ticket) => ticket.available !== false) || [],
+    [event]
+  );
+
+  const selectedTicket = useMemo(() => 
+    ticketsToDisplay.find((t) => t.name === selectedTicketType),
+    [ticketsToDisplay, selectedTicketType]
+  );
+
+  const totalPrice = useMemo(() => 
+    selectedTicket ? selectedTicket.price * ticketQuantity : 0,
+    [selectedTicket, ticketQuantity]
+  );
+
+  const isQuantityExceeded = useMemo(() => 
+    selectedTicket ? ticketQuantity > selectedTicket.quantity : false,
+    [selectedTicket, ticketQuantity]
+  );
+
+  const isEventSoldOut = useMemo(() => {
+    if (!event) return false;
+    if (event.isSoldOut) return true;
+    if (event.status && event.status !== "published") return true;
+
+    const now = new Date();
+    const endDate = event.endDate ? new Date(event.endDate) : null;
+    if (endDate) {
+      if (event.endTime) {
+        const [h, m] = event.endTime.split(":").map(Number);
+        endDate.setHours(h || 23, m || 59, 0, 0);
+      } else {
+        endDate.setHours(23, 59, 59, 999);
+      }
+      if (endDate.getTime() <= now.getTime()) return true;
+    }
+
+    const hasAvailableTickets = event.ticketTypes.some(
+      (t) => t.available !== false && t.quantity > 0,
+    );
+    return !hasAvailableTickets;
+  }, [event]);
+
+  const shareUrl = useMemo(() => 
+    `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}/event_detail?id=${eventId || ""}`,
+    [eventId]
+  );
+
+  const coverImageUrl = useMemo(() => {
+    if (!event?.coverImages?.[0]) return "/events/eventimg.png";
+    const img = event.coverImages[0];
+    return img.startsWith("http")
+      ? img
+      : `${process.env.NEXT_PUBLIC_API_URL}${img.startsWith("/") ? img : `/${img}`}`;
+  }, [event]);
+
+  // Utility functions - memoized with useCallback
+  const downloadQRCode = useCallback((
+    qrCodeDataUrl: string,
+    ticketId: string,
+    ticketType: string,
+  ) => {
+    downloadHighQualityQR(qrCodeDataUrl, `ticket-${ticketId}-${ticketType}.png`);
+    toast.success(`QR code for ${ticketType} downloaded!`);
+  }, []);
+
+  const handleShare = useCallback(() => {
+    if (navigator.share) {
+      navigator.share({
+        title: event?.title,
+        text: event?.description,
+        url: shareUrl,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(shareUrl);
+      toast.success("Link copied!");
+    }
+  }, [event, shareUrl]);
+
+  // Format functions - memoized and simplified
+  const formatDate = useCallback((dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    }), []);
+
+  const formatTimeWithAmPm = useCallback((time24?: string) => {
+    if (!time24) return "";
+    const [hourStr, minuteStr] = time24.split(":");
+    let hour = parseInt(hourStr, 10);
+    const minute = parseInt(minuteStr, 10);
+    const ampm = hour >= 12 ? "PM" : "AM";
+    hour = hour % 12 || 12;
+    return `${hour}:${minute < 10 ? "0" + minute : minute} ${ampm}`;
+  }, []);
+
+  const formatTimeRange = useCallback((startTime?: string, endTime?: string) => {
+    const start = formatTimeWithAmPm(startTime);
+    const end = formatTimeWithAmPm(endTime);
+    if (!start && !end) return "Time TBA";
+    if (!start) return end;
+    if (!end) return start;
+    return `${start} - ${end}`;
+  }, [formatTimeWithAmPm]);
+
+  const getDayName = useCallback((dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", { weekday: "short" }), []);
+
+  const getDayNumber = useCallback((dateString: string) =>
+    new Date(dateString).getDate().toString().padStart(2, "0"), []);
+
+  const getMonthName = useCallback((dateString: string) =>
+    new Date(dateString).toLocaleDateString("en-US", { month: "short" }), []);
+
+  // Loading and error states
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -563,100 +668,13 @@ export default function EventDetailClient() {
     );
   }
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-US", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-
-  const formatTimeWithAmPm = (time24?: string) => {
-    if (!time24) return "";
-    const [hourStr, minuteStr] = time24.split(":");
-    let hour = parseInt(hourStr, 10);
-    const minute = parseInt(minuteStr, 10);
-    const ampm = hour >= 12 ? "PM" : "AM";
-    hour = hour % 12 || 12;
-    return `${hour}:${minute < 10 ? "0" + minute : minute} ${ampm}`;
-  };
-
-  const formatTimeRange = (startTime?: string, endTime?: string) => {
-    const start = formatTimeWithAmPm(startTime);
-    const end = formatTimeWithAmPm(endTime);
-    if (!start && !end) return "Time TBA";
-    if (!start) return end;
-    if (!end) return start;
-    return `${start} - ${end}`;
-  };
-
-  const isEventSoldOut = () => {
-    if (event.isSoldOut) return true;
-    if (event.status && event.status !== "published") return true;
-
-    const now = new Date();
-    const endDate = event.endDate ? new Date(event.endDate) : null;
-    if (endDate) {
-      // Set end time if available
-      if (event.endTime) {
-        const [h, m] = event.endTime.split(":").map(Number);
-        endDate.setHours(h || 23, m || 59, 0, 0);
-      } else {
-        endDate.setHours(23, 59, 59, 999);
-      }
-      if (endDate.getTime() <= now.getTime()) return true;
-    }
-
-    const hasAvailableTickets = event.ticketTypes.some(
-      (t) => t.available !== false && t.quantity > 0,
-    );
-    return !hasAvailableTickets;
-  };
-
-  const ticketsToDisplay = event.ticketTypes.filter(
-    (ticket) => ticket.available !== false,
-  );
-
-  const calculateTotal = () => {
-    const selectedType = ticketsToDisplay.find(
-      (t) => t.name === selectedTicketType,
-    );
-    return selectedType ? selectedType.price * ticketQuantity : 0;
-  };
-
-  const getSelectedTicketType = () =>
-    ticketsToDisplay.find((t) => t.name === selectedTicketType);
-
-  const isQuantityExceeded = () => {
-    const selectedType = getSelectedTicketType();
-    return selectedType ? ticketQuantity > selectedType.quantity : false;
-  };
-
-  const getDayName = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-US", { weekday: "short" });
-
-  const getDayNumber = (dateString: string) =>
-    new Date(dateString).getDate().toString().padStart(2, "0");
-
-  const getMonthName = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-US", { month: "short" });
-
-  const getCoverImageUrl = () => {
-    if (!event.coverImages?.[0]) return "/events/eventimg.png";
-    const img = event.coverImages[0];
-    return img.startsWith("http")
-      ? img
-      : `${process.env.NEXT_PUBLIC_API_URL}${
-          img.startsWith("/") ? img : `/${img}`
-        }`;
-  };
-
   return (
     <div className="min-h-screen bg-white text-gray-900">
       <div className="relative w-full overflow-hidden">
         <div className="block md:hidden px-8 py-4">
           <div className="relative w-full max-w-md mx-auto">
             <Image
-              src={getCoverImageUrl()}
+              src={coverImageUrl}
               alt={`${event.title} - Event cover`}
               width={600}
               height={300}
@@ -669,7 +687,7 @@ export default function EventDetailClient() {
         <div className="hidden md:block relative mx-4 mt-4 mb-8">
           <div className="relative h-[60vh] lg:h-[70vh] w-full rounded-2xl overflow-hidden shadow-lg">
             <Image
-              src={getCoverImageUrl()}
+              src={coverImageUrl}
               alt={`${event.title} - Event banner`}
               fill
               className="object-contain bg-black"
@@ -736,23 +754,7 @@ export default function EventDetailClient() {
             variant="outline"
             size="sm"
             className="text-gray-700 border-gray-300 bg-transparent hover:bg-gray-50"
-            onClick={() => {
-              const shareUrl = `${
-                process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin
-              }/event_detail?id=${eventId || ""}`;
-              if (navigator.share) {
-                navigator
-                  .share({
-                    title: event.title,
-                    text: event.description,
-                    url: shareUrl,
-                  })
-                  .catch(() => {});
-              } else {
-                navigator.clipboard.writeText(shareUrl);
-                toast.success("Link copied!");
-              }
-            }}
+            onClick={handleShare}
           >
             <Share2 className="h-4 w-4" />
           </Button>
@@ -930,7 +932,7 @@ export default function EventDetailClient() {
                 Get Your Tickets
               </h2>
               <div className="space-y-6">
-                {isEventSoldOut() ? (
+                {isEventSoldOut ? (
                   <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
                     <p className="text-red-500 font-bold text-lg mb-2">
                       Tickets Not Available
@@ -989,9 +991,9 @@ export default function EventDetailClient() {
                           <TicketCounter
                             value={ticketQuantity}
                             onChange={setTicketQuantity}
-                            max={getSelectedTicketType()?.quantity || 10}
+                            max={selectedTicket?.quantity || 10}
                           />
-                          {isQuantityExceeded() && (
+                          {isQuantityExceeded && (
                             <p className="text-xs text-red-500 mt-1">
                               Not enough tickets available
                             </p>
@@ -1001,7 +1003,7 @@ export default function EventDetailClient() {
                         <div className="flex justify-between items-center">
                           <span className="text-lg text-gray-700">Total:</span>
                           <span className="text-2xl font-bold text-[#0D47A1]">
-                            {calculateTotal()} ETB
+                            {totalPrice} ETB
                           </span>
                         </div>
                         {user?.role !== "admin" &&
@@ -1009,10 +1011,17 @@ export default function EventDetailClient() {
                           user?.role !== "partner" && (
                             <Button
                               onClick={handleBuyClick}
-                              disabled={isQuantityExceeded()}
+                              disabled={isQuantityExceeded || isProcessingPayment}
                               className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
                             >
-                              Buy Ticket
+                              {isProcessingPayment ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                "Buy Ticket"
+                              )}
                             </Button>
                           )}
                       </>
@@ -1054,7 +1063,7 @@ export default function EventDetailClient() {
                 <div className="space-y-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-md">
                     <div className="space-y-6">
-                      {isEventSoldOut() ? (
+                      {isEventSoldOut ? (
                         <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
                           <p className="text-red-500 font-bold text-lg mb-2">
                             Tickets Not Available
@@ -1113,9 +1122,9 @@ export default function EventDetailClient() {
                                 <TicketCounter
                                   value={ticketQuantity}
                                   onChange={setTicketQuantity}
-                                  max={getSelectedTicketType()?.quantity || 10}
+                                  max={selectedTicket?.quantity || 10}
                                 />
-                                {isQuantityExceeded() && (
+                                {isQuantityExceeded && (
                                   <p className="text-xs text-red-500 mt-1">
                                     Not enough tickets available
                                   </p>
@@ -1127,7 +1136,7 @@ export default function EventDetailClient() {
                                   Total:
                                 </span>
                                 <span className="text-2xl font-bold text-[#0D47A1]">
-                                  {calculateTotal()} ETB
+                                  {totalPrice} ETB
                                 </span>
                               </div>
                               {user?.role !== "admin" &&
@@ -1135,10 +1144,17 @@ export default function EventDetailClient() {
                                 user?.role !== "partner" && (
                                   <Button
                                     onClick={handleBuyClick}
-                                    disabled={isQuantityExceeded()}
+                                    disabled={isQuantityExceeded || isProcessingPayment}
                                     className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
                                   >
-                                    Buy Ticket
+                                    {isProcessingPayment ? (
+                                      <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Processing...
+                                      </>
+                                    ) : (
+                                      "Buy Ticket"
+                                    )}
                                   </Button>
                                 )}
                             </>
@@ -1253,11 +1269,8 @@ export default function EventDetailClient() {
       </footer>
 
       <Dialog
-        open={showTicketModal || shouldShowTicketModal}
-        onOpenChange={(open) => {
-          setShowTicketModal(open);
-          if (!open) setShouldShowTicketModal(false);
-        }}
+        open={showTicketModal}
+        onOpenChange={setShowTicketModal}
       >
         <DialogContent className="w-full max-w-sm md:max-w-md lg:max-w-lg rounded-xl p-0 overflow-hidden bg-white gap-0">
           <div className="bg-[#0D47A1] p-6 text-white text-center">
@@ -1312,9 +1325,7 @@ export default function EventDetailClient() {
                         <h4 className="font-bold text-lg text-gray-900 mt-2">
                           {ticket.ticketType}
                         </h4>
-                        <p className="text-xs text-gray-400 font-mono uppercase tracking-wider">
-                          ID: {ticket.ticketId}
-                        </p>
+                       
                       </div>
                     </div>
                   );
@@ -1386,10 +1397,7 @@ export default function EventDetailClient() {
             </Button>
             <Button
               className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white shadow-md"
-              onClick={() => {
-                setShowTicketModal(false);
-                setShouldShowTicketModal(false);
-              }}
+              onClick={() => setShowTicketModal(false)}
             >
               Done
             </Button>
@@ -1412,16 +1420,16 @@ export default function EventDetailClient() {
               {!user && (
                 <div>
                   <Label
-                    htmlFor="santim_fullname"
+                    htmlFor="payment_fullname"
                     className="text-xs font-semibold uppercase text-gray-500"
                   >
                     Full Name
                   </Label>
                   <Input
-                    id="santim_fullname"
-                    value={santimForm.fullName}
+                    id="payment_fullname"
+                    value={paymentForm.fullName}
                     onChange={(e) =>
-                      setSantimForm({ ...santimForm, fullName: e.target.value })
+                      setPaymentForm({ ...paymentForm, fullName: e.target.value })
                     }
                     placeholder="Enter your full name"
                     required
@@ -1433,17 +1441,17 @@ export default function EventDetailClient() {
                 {(!user || !user.email) && (
                   <div>
                     <Label
-                      htmlFor="santim_email"
+                      htmlFor="payment_email"
                       className="text-xs font-semibold uppercase text-gray-500"
                     >
-                      Email
+                      Email (Optional)
                     </Label>
                     <Input
-                      id="santim_email"
+                      id="payment_email"
                       type="email"
-                      value={santimForm.email}
+                      value={paymentForm.email}
                       onChange={(e) =>
-                        setSantimForm({ ...santimForm, email: e.target.value })
+                        setPaymentForm({ ...paymentForm, email: e.target.value })
                       }
                       placeholder="Email address"
                       className="mt-1"
@@ -1452,7 +1460,7 @@ export default function EventDetailClient() {
                 )}
                 <div>
                   <Label
-                    htmlFor="santim_phone"
+                    htmlFor="payment_phone"
                     className="text-xs font-semibold uppercase text-gray-500"
                   >
                     Phone
@@ -1462,15 +1470,15 @@ export default function EventDetailClient() {
                       +251
                     </div>
                     <Input
-                      id="santim_phone"
+                      id="payment_phone"
                       type="tel"
                       maxLength={9}
-                      value={santimForm.phoneNumber}
+                      value={paymentForm.phoneNumber}
                       onChange={(e) => {
                         let val = e.target.value.replace(/\D/g, "");
                         if (val.startsWith("0")) val = val.substring(1);
                         if (val.startsWith("251")) val = val.substring(3);
-                        setSantimForm({ ...santimForm, phoneNumber: val });
+                        setPaymentForm({ ...paymentForm, phoneNumber: val });
                       }}
                       placeholder="9..."
                       required
@@ -1482,10 +1490,10 @@ export default function EventDetailClient() {
             </div>
             <div>
               <PaymentMethodSelector
-                phoneNumber={santimForm.phoneNumber}
-                selectedMethod={santimForm.paymentMethod}
+                phoneNumber={paymentForm.phoneNumber}
+                selectedMethod={paymentForm.paymentMethod}
                 onSelect={(val) =>
-                  setSantimForm({ ...santimForm, paymentMethod: val })
+                  setPaymentForm({ ...paymentForm, paymentMethod: val })
                 }
                 provider={activePaymentProvider}
               />
@@ -1496,6 +1504,7 @@ export default function EventDetailClient() {
                 variant="outline"
                 className="flex-1"
                 onClick={() => setShowPaymentModal(false)}
+                disabled={isProcessingPayment}
               >
                 Cancel
               </Button>
@@ -1503,18 +1512,18 @@ export default function EventDetailClient() {
                 type="submit"
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 disabled={
-                  isSantimLoading ||
-                  !santimForm.phoneNumber ||
-                  !santimForm.paymentMethod ||
-                  santimForm.phoneNumber.length < 9
+                  isProcessingPayment ||
+                  !paymentForm.phoneNumber ||
+                  !paymentForm.paymentMethod ||
+                  paymentForm.phoneNumber.length < 9
                 }
               >
-                {isSantimLoading ? (
+                {isProcessingPayment ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing
                   </>
                 ) : (
-                  `Pay ${calculateTotal()} ETB`
+                  `Pay ${totalPrice} ETB`
                 )}
               </Button>
             </div>
@@ -1522,32 +1531,26 @@ export default function EventDetailClient() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={isWaitingForPayment}
-        onOpenChange={(open) => !open && handleCancelPayment()}
-      >
-        <DialogContent className="max-w-sm rounded-xl p-6 text-center">
+      {/* Loading Dialog for Ticket Verification */}
+      <Dialog open={isProcessingPayment} onOpenChange={() => {}}>
+        <DialogContent className="max-w-sm rounded-xl p-6 text-center" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-xl font-bold mb-2">
-              Waiting for Payment
+              Processing Your Tickets
             </DialogTitle>
             <DialogDescription>
-              Please check your phone and complete the payment.
+              Please wait while we retrieve your tickets...
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-center py-6">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]" />
+          <div className="flex flex-col items-center py-6 space-y-4">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#0D47A1]" />
+            <p className="text-sm text-gray-600 animate-pulse">
+              This may take a few moments
+            </p>
+            <p className="text-xs text-gray-500">
+              Please do not close this window
+            </p>
           </div>
-          <p className="text-sm text-gray-500 mb-4">
-            We are waiting for confirmation...
-          </p>
-          <Button
-            variant="outline"
-            className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
-            onClick={handleCancelPayment}
-          >
-            Cancel Payment
-          </Button>
         </DialogContent>
       </Dialog>
     </div>

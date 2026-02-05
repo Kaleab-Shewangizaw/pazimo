@@ -33,15 +33,37 @@ const validateSignature = (signature, payload) => {
 
 // Helper to process successful payment and create ticket
 const processSuccessfulPayment = async (payment) => {
-  console.log("Processing successful payment:", payment.transactionId);
-  if (payment.status !== "PAID") return null;
+  const startTime = Date.now();
+  console.log(`\n[TICKET-CREATE] ============================================`);
+  console.log(`[TICKET-CREATE] Starting ticket creation for txn: ${payment.transactionId}`);
+  console.log(`[TICKET-CREATE] Payment status: ${payment.status}, Provider: ${payment.provider || 'unknown'}`);
+  
+  if (payment.status !== "PAID") {
+    console.log(`[TICKET-CREATE] ❌ Payment status is ${payment.status}, not PAID. Aborting.`);
+    console.log(`[TICKET-CREATE] ============================================\n`);
+    return null;
+  }
 
   const { eventId, ticketType, seatNumber, userId, ticketCount, ticketId } =
     payment.ticketDetails;
 
+  console.log(`[TICKET-CREATE] Ticket details:`, {
+    ticketId,
+    eventId,
+    ticketType,
+    ticketCount: ticketCount || 1,
+  });
+
   // Check if ticket already exists (idempotency)
   const existingTicket = await Ticket.findOne({ ticketId });
-  if (existingTicket) return existingTicket;
+  if (existingTicket) {
+    console.log(`[TICKET-CREATE] ⚠️ Ticket ${ticketId} already exists. Returning existing ticket.`);
+    console.log(`[TICKET-CREATE] Total time: ${Date.now() - startTime}ms`);
+    console.log(`[TICKET-CREATE] ============================================\n`);
+    return existingTicket;
+  }
+
+  console.log(`[TICKET-CREATE] No existing ticket found. Creating new ticket...`);
 
   // Find the event and verify ticket type
   const event = await Event.findById(eventId);
@@ -191,7 +213,7 @@ const processSuccessfulPayment = async (payment) => {
 
       const message = `Hi ${userName} 👋
 Your ticket for ${eventTitle} is confirmed 🎟️
-Admits: ${admitCount} person
+Admits: ${admitCount} person${admitCount > 1 ? 's' : ''}
 
 Access your ticket here:
 ${ticketLink}
@@ -210,6 +232,9 @@ Pazimo`;
     console.error("Failed to send confirmation SMS:", smsError);
   }
 
+  console.log(`[TICKET-CREATE] ✅ Ticket ${ticket.ticketId} created successfully for txn: ${payment.transactionId}`);
+  console.log(`[TICKET-CREATE] Total time: ${Date.now() - startTime}ms`);
+  console.log(`[TICKET-CREATE] ============================================\n`);
   return ticket;
 };
 
@@ -1371,58 +1396,47 @@ const validateQRCode = async (req, res) => {
 const getPublicTicketDetails = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`\n[TICKET-FETCH] ============================================`);
+    console.log(`[TICKET-FETCH] Fetching tickets for ID: ${id}`);
 
-    let tickets = [];
+    // Optimized: Single query with $or instead of 3 sequential queries
+    const query = {
+      $or: [
+        { ticketId: id }, // Search by ticketId (string)
+        { paymentReference: id }, // Search by transaction reference
+      ],
+    };
 
-    // 1. Try finding by ticketId (string)
-    const ticketById = await Ticket.findOne({ ticketId: id })
+    // Add ObjectId search only if id is a valid ObjectId
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      query.$or.push({ _id: id });
+    }
+
+    console.log(`[TICKET-FETCH] Query:`, JSON.stringify(query, null, 2));
+
+    const tickets = await Ticket.find(query)
       .populate(
         "event",
         "title startDate endDate location organizer coverImages"
       )
-      .populate("user", "firstName lastName email");
+      .populate("user", "firstName lastName email")
+      .lean(); // Use lean() for faster queries since we don't need Mongoose documents
 
-    if (ticketById) {
-      tickets.push(ticketById);
-    }
+    console.log(`[TICKET-FETCH] Found ${tickets?.length || 0} ticket(s)`);
 
-    // 2. If not found, check if id is a valid ObjectId (for _id lookup)
-    if (tickets.length === 0 && mongoose.Types.ObjectId.isValid(id)) {
-      const ticket = await Ticket.findById(id)
-        .populate(
-          "event",
-          "title startDate endDate location organizer coverImages"
-        )
-        .populate("user", "firstName lastName email");
-
-      if (ticket) {
-        tickets.push(ticket);
-      }
-    }
-
-    // 3. If still not found, try finding by paymentReference
-    if (tickets.length === 0) {
-      const txTickets = await Ticket.find({ paymentReference: id })
-        .populate(
-          "event",
-          "title startDate endDate location organizer coverImages"
-        )
-        .populate("user", "firstName lastName email");
-
-      if (txTickets && txTickets.length > 0) {
-        tickets = txTickets;
-      }
-    }
-
-    if (tickets.length === 0) {
+    if (!tickets || tickets.length === 0) {
+      console.log(`[TICKET-FETCH] ❌ No tickets found`);
+      console.log(`[TICKET-FETCH] ============================================\n`);
       return res
         .status(StatusCodes.NOT_FOUND)
         .json({ success: false, message: "Ticket not found" });
     }
 
+    console.log(`[TICKET-FETCH] ✅ Returning ${tickets.length} ticket(s)`);
+    console.log(`[TICKET-FETCH] ============================================\n`);
     res.status(StatusCodes.OK).json({ success: true, data: tickets });
   } catch (error) {
-    console.error("Get public ticket details error:", error);
+    console.error("[TICKET-FETCH] ❌ Error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: "Failed to fetch ticket details",

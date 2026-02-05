@@ -118,6 +118,7 @@ const TicketSchema = new mongoose.Schema(
 
     paymentReference: {
       type: String,
+      index: true, 
     },
 
     checkedIn: {
