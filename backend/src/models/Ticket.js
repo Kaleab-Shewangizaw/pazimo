@@ -143,6 +143,9 @@ const TicketSchema = new mongoose.Schema(
   },
 );
 
+// Add compound index for efficient event ticket queries
+TicketSchema.index({ event: 1, createdAt: -1 });
+
 TicketSchema.pre("save", async function (next) {
   if (this.qrCode) return next();
 

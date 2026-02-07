@@ -1057,7 +1057,8 @@ const getEventTickets = async (req, res) => {
 
     const tickets = await Ticket.find({ event: eventId })
       .populate("user", "firstName lastName email phoneNumber")
-      .sort("-createdAt");
+      .sort({ createdAt: -1 })
+      .allowDiskUse(true);
 
     // Fetch event to get ticket types for calculation
     const eventForCalc = await Event.findById(eventId).select("ticketTypes");
