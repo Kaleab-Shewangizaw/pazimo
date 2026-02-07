@@ -844,7 +844,7 @@ export function useInvitationPage() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}?limit=1000`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -855,9 +855,37 @@ export function useInvitationPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const tickets = (data.tickets || []).filter(
+        let tickets = (data.tickets || []).filter(
           (t: any) => t.isInvitation || t.price === 0
         );
+
+        // If there are more pages, fetch all
+        if (data.hasMore) {
+          let page = 2;
+          let hasMore = true;
+          while (hasMore) {
+            const nextResponse = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}?page=${page}&limit=500`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            if (nextResponse.ok) {
+              const nextData = await nextResponse.json();
+              const nextTickets = (nextData.tickets || []).filter(
+                (t: any) => t.isInvitation || t.price === 0
+              );
+              tickets = [...tickets, ...nextTickets];
+              hasMore = nextData.hasMore || false;
+              page++;
+            } else {
+              hasMore = false;
+            }
+          }
+        }
 
         // Fetch invitation records to match with tickets for correct usage data
         let invitations: any[] = [];

@@ -193,22 +193,33 @@ export default function OrganizerDetailPage({
 
   const fetchEventTickets = async (eventId: string) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}`,
-        {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      let allTickets: any[] = [];
+      let page = 1;
+      let hasMore = true;
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch event tickets");
+      // Fetch all pages
+      while (hasMore) {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}?page=${page}&limit=500`,
+          {
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch event tickets");
+        }
+
+        const data = await response.json();
+        allTickets = [...allTickets, ...(data.tickets || [])];
+        hasMore = data.hasMore || false;
+        page++;
       }
 
-      const data = await response.json();
-      return data.tickets || [];
+      return allTickets;
     } catch (error) {
       console.error("Error fetching event tickets:", error);
       toast.error("Failed to fetch event tickets");

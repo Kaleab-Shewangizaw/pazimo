@@ -140,19 +140,30 @@ export default function TicketsPage() {
 
       try {
         setLoadingTickets(true);
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEvent._id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        let allTickets: any[] = [];
+        let page = 1;
+        let hasMore = true;
 
-        if (!response.ok) throw new Error("Failed to fetch tickets");
+        // Fetch all pages
+        while (hasMore) {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEvent._id}?page=${page}&limit=500`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
 
-        const data = await response.json();
-        setTickets(data.tickets || []);
+          if (!response.ok) throw new Error("Failed to fetch tickets");
+
+          const data = await response.json();
+          allTickets = [...allTickets, ...(data.tickets || [])];
+          hasMore = data.hasMore || false;
+          page++;
+        }
+
+        setTickets(allTickets);
       } catch (error) {
         console.error("Error fetching tickets:", error);
         toast.error("Failed to fetch tickets");

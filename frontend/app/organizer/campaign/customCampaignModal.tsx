@@ -266,14 +266,35 @@ export default function CustomCampaignModal({
       const uniqueMap = new Map<string, CampaignUser>();
 
       try {
-        // Fetch in parallel
-        const promises = selectedEventIds.map((id) =>
-          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${id}`, {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          }).then((r) => r.json()),
-        );
+        // Helper function to fetch all tickets for one event
+        const fetchAllTicketsForEvent = async (id: string) => {
+          let allTickets: any[] = [];
+          let page = 1;
+          let hasMore = true;
+
+          while (hasMore) {
+            const response = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${id}?page=${page}&limit=500`,
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+                },
+              }
+            );
+            if (response.ok) {
+              const data = await response.json();
+              allTickets = [...allTickets, ...(data.tickets || [])];
+              hasMore = data.hasMore || false;
+              page++;
+            } else {
+              hasMore = false;
+            }
+          }
+          return { tickets: allTickets };
+        };
+
+        // Fetch in parallel for each event
+        const promises = selectedEventIds.map((id) => fetchAllTicketsForEvent(id));
 
         const results = await Promise.all(promises);
 

@@ -105,18 +105,28 @@ export default function EventInvitationsPage() {
 
   const fetchTickets = async () => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
+      let allTickets: any[] = [];
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}?page=${page}&limit=500`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          allTickets = [...allTickets, ...(data.tickets || [])];
+          hasMore = data.hasMore || false;
+          page++;
+        } else {
+          hasMore = false;
         }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        setEventTickets(data.tickets || []);
-      } else {
-        setEventTickets([]);
       }
+
+      setEventTickets(allTickets);
     } catch {
       setEventTickets([]);
     }

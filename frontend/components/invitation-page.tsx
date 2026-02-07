@@ -1026,19 +1026,34 @@ export default function InvitationPage() {
       // 1. Fetch Tickets (Confirmed Attendees)
       let ticketAttendees: any[] = [];
       try {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
+        let allTickets: any[] = [];
+        let page = 1;
+        let hasMore = true;
 
-        if (response.ok) {
-          const data = await response.json();
-          const tickets = data.tickets || [];
+        // Fetch all pages
+        while (hasMore) {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}?page=${page}&limit=500`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            allTickets = [...allTickets, ...(data.tickets || [])];
+            hasMore = data.hasMore || false;
+            page++;
+          } else {
+            hasMore = false;
+          }
+        }
+
+        if (allTickets.length > 0) {
+          const tickets = allTickets;
           
           // Filter for invitation tickets only
           const guestTickets = tickets.filter((t: any) => t.isInvitation);

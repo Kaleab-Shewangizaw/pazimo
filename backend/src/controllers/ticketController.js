@@ -1040,6 +1040,9 @@ const getUserTickets = async (req, res) => {
 const getEventTickets = async (req, res) => {
   try {
     const { eventId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 500;
+    const skip = (page - 1) * limit;
 
     // If authentication is present, verify organizer access
     if (req.user && req.user.userId && req.user.userId !== "bypass") {
@@ -1055,13 +1058,17 @@ const getEventTickets = async (req, res) => {
       }
     }
 
+    const totalCount = await Ticket.countDocuments({ event: eventId });
+
     const tickets = await Ticket.find({ event: eventId })
       .populate("user", "firstName lastName email phoneNumber")
       .sort({ createdAt: -1 })
-      .allowDiskUse(true);
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     // Fetch event to get ticket types for calculation
-    const eventForCalc = await Event.findById(eventId).select("ticketTypes");
+    const eventForCalc = await Event.findById(eventId).select("ticketTypes").lean();
 
     const totalTicketsSold = tickets.reduce((sum, t) => {
       if (t.isInvitation === true) return sum;
@@ -1096,7 +1103,15 @@ const getEventTickets = async (req, res) => {
 
     res
       .status(StatusCodes.OK)
-      .json({ tickets, count: tickets.length, totalTicketsSold });
+      .json({ 
+        tickets, 
+        count: tickets.length, 
+        totalCount,
+        totalTicketsSold,
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        hasMore: skip + tickets.length < totalCount
+      });
   } catch (error) {
     console.error("Get event tickets error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

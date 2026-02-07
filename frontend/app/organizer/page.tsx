@@ -189,18 +189,32 @@ export default function OrganizerDashboard() {
 
       for (const event of events) {
         try {
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event._id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
+          let allRawTickets: any[] = [];
+          let page = 1;
+          let hasMore = true;
+
+          // Fetch all pages for this event
+          while (hasMore) {
+            const res = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event._id}?page=${page}&limit=500`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+              }
+            );
+            if (res.ok) {
+              const data = await res.json();
+              allRawTickets = [...allRawTickets, ...(data.tickets || [])];
+              hasMore = data.hasMore || false;
+              page++;
+            } else {
+              hasMore = false;
             }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const rawTickets = data.tickets || [];
+          }
+
+          const rawTickets = allRawTickets;
 
             // Filter to match admin/tickets page logic
             // Include all tickets that have a price > 0, regardless of status

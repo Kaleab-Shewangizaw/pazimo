@@ -61,22 +61,34 @@ export default function TableComp({ event }: { event: Event }) {
         if (!token) return;
 
         // Fetch Tickets
-        const ticketsResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        );
+        let allTickets: any[] = [];
+        let page = 1;
+        let hasMore = true;
 
-        if (ticketsResponse.ok) {
-          const data = await ticketsResponse.json();
-          setTickets(data.tickets || []);
-        } else {
-          setTickets([]);
-          toast.error("Failed to load tickets");
+        while (hasMore) {
+          const ticketsResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=${page}&limit=500`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            },
+          );
+
+          if (ticketsResponse.ok) {
+            const data = await ticketsResponse.json();
+            allTickets = [...allTickets, ...(data.tickets || [])];
+            hasMore = data.hasMore || false;
+            page++;
+          } else {
+            hasMore = false;
+            if (page === 1) {
+              toast.error("Failed to load tickets");
+            }
+          }
         }
+
+        setTickets(allTickets);
 
         // Fetch Pricing
         const pricingResponse = await fetch(

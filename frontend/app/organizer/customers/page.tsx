@@ -118,22 +118,35 @@ export default function CustomersPage() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        let allTickets: Ticket[] = [];
+        let page = 1;
+        let hasMore = true;
 
-        if (response.ok) {
-          const data = await response.json();
-          setTickets(data.tickets || []);
-        } else {
-          setTickets([]);
-          toast.error("Failed to load tickets");
+        // Fetch all pages
+        while (hasMore) {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=${page}&limit=500`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            allTickets = [...allTickets, ...(data.tickets || [])];
+            hasMore = data.hasMore || false;
+            page++;
+          } else {
+            hasMore = false;
+            if (page === 1) {
+              toast.error("Failed to load tickets");
+            }
+          }
         }
+
+        setTickets(allTickets);
       } catch (error) {
         console.error("Error fetching tickets:", error);
         toast.error("Error loading customers");
