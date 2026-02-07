@@ -91,6 +91,14 @@ export default function TicketsPage() {
   // Data State
   const [events, setEvents] = useState<Event[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  
+  // Statistics State
+  const [statistics, setStatistics] = useState({
+    totalRevenue: 0,
+    totalTickets: 0,
+    onDoorRevenue: 0,
+    onDoorTickets: 0,
+  });
 
   // Loading State
   const [loadingEvents, setLoadingEvents] = useState(true);
@@ -140,30 +148,26 @@ export default function TicketsPage() {
 
       try {
         setLoadingTickets(true);
-        let allTickets: any[] = [];
-        let page = 1;
-        let hasMore = true;
+        // Fetch only the first page initially
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEvent._id}?page=1&limit=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
-        // Fetch all pages
-        while (hasMore) {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEvent._id}?page=${page}&limit=500`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
+        if (!response.ok) throw new Error("Failed to fetch tickets");
 
-          if (!response.ok) throw new Error("Failed to fetch tickets");
-
-          const data = await response.json();
-          allTickets = [...allTickets, ...(data.tickets || [])];
-          hasMore = data.hasMore || false;
-          page++;
-        }
-
-        setTickets(allTickets);
+        const data = await response.json();
+        setTickets(data.tickets || []);
+        setStatistics(data.statistics || {
+          totalRevenue: 0,
+          totalTickets: 0,
+          onDoorRevenue: 0,
+          onDoorTickets: 0,
+        });
       } catch (error) {
         console.error("Error fetching tickets:", error);
         toast.error("Failed to fetch tickets");
@@ -323,22 +327,23 @@ export default function TicketsPage() {
     return quantity;
   };
 
-  // Revenue Calculations
-  const totalRevenue = filteredTickets.reduce(
+  // Revenue Calculations - Use backend statistics for overall stats
+  // But still calculate from filtered tickets for display
+  const filteredRevenue = filteredTickets.reduce(
     (sum, t) => sum + (Number(t.price) || 0),
     0
   );
-  const totalTicketsCount = filteredTickets.reduce(
+  const filteredTicketsCount = filteredTickets.reduce(
     (sum, t) => sum + getTicketQuantity(t),
     0
   );
 
-  const onDoorTickets = filteredTickets.filter((t) => !!t.isOnDoor);
-  const onDoorRevenue = onDoorTickets.reduce(
+  const onDoorTicketsFiltered = filteredTickets.filter((t) => !!t.isOnDoor);
+  const onDoorRevenueFiltered = onDoorTicketsFiltered.reduce(
     (sum, t) => sum + (Number(t.price) || 0),
     0
   );
-  const onDoorTicketsCount = onDoorTickets.reduce(
+  const onDoorTicketsCountFiltered = onDoorTicketsFiltered.reduce(
     (sum, t) => sum + getTicketQuantity(t),
     0
   );
@@ -508,10 +513,10 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
             <h3 className="text-2xl font-bold text-gray-900">
-              ETB {totalRevenue.toLocaleString()}
+              ETB {statistics.totalRevenue.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {totalTicketsCount} tickets
+              From {statistics.totalTickets} tickets
             </p>
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -523,10 +528,10 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
             <h3 className="text-2xl font-bold text-gray-900">
-              ETB {onDoorRevenue.toLocaleString()}
+              ETB {statistics.onDoorRevenue.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {onDoorTicketsCount} tickets
+              From {statistics.onDoorTickets} tickets
             </p>
           </div>
           <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">

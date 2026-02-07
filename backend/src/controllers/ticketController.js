@@ -267,17 +267,29 @@ const getAllTicketsAdmin = async (req, res) => {
         .json({ message: "Access denied: Admins only" });
     }
 
-    // ✅ Fetch tickets with event & user data
+    // Add pagination support
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+    const skip = (page - 1) * limit;
+
+    // Get total count efficiently
+    const totalCount = await Ticket.countDocuments();
+
+    // ✅ Fetch tickets with event & user data - OPTIMIZED with pagination and lean queries
     const tickets = await Ticket.find()
+      .select('ticketId event user guestName guestEmail guestPhone ticketType price status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor')
       .populate({
         path: "event",
-        select: "title startDate endDate location organizer ticketTypes",
+        select: "title organizer ticketTypes",
         populate: {
           path: "organizer",
-          select: "name email",
+          select: "name email firstName lastName",
         },
       })
       .populate("user", "firstName lastName email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
     // Format the tickets data
@@ -286,9 +298,11 @@ const getAllTicketsAdmin = async (req, res) => {
       event: ticket.event
         ? {
             title: ticket.event.title,
+            _id: ticket.event._id,
             organizer: ticket.event.organizer
               ? {
-                  name: ticket.event.organizer.name,
+                  name: ticket.event.organizer.name || `${ticket.event.organizer.firstName || ''} ${ticket.event.organizer.lastName || ''}`.trim(),
+                  _id: ticket.event.organizer._id
                 }
               : null,
           }
@@ -296,59 +310,53 @@ const getAllTicketsAdmin = async (req, res) => {
       user: ticket.user
         ? {
             name: `${ticket.user.firstName} ${ticket.user.lastName}`,
+            email: ticket.user.email,
           }
-        : null,
+        : ticket.guestName ? {
+            name: ticket.guestName,
+            email: ticket.guestEmail,
+          } : null,
     }));
 
-    // ✅ Calculate total sold and revenue
-    // Filter out invitations for sold count
-    const purchasedTickets = tickets.filter(
-      (t) =>
-        t.isInvitation !== true &&
-        t.paymentStatus === "completed" &&
-        !["cancelled", "expired", "pending"].includes(t.status)
-    );
-    const totalSold = purchasedTickets.reduce((sum, t) => {
-      let quantity = t.purchaseQuantity || t.ticketCount || 1;
-
-      // Check if ticket was bought before Dec 14, 2025
-      const cutoffDate = new Date("2025-12-14");
-      const ticketDate = new Date(t.createdAt || t.purchaseDate);
-
-      if (ticketDate < cutoffDate) {
-        // Fallback: calculate from price
-        if (t.event && t.event.ticketTypes) {
-          const type = t.event.ticketTypes.find(
-            (tt) =>
-              tt.name === t.ticketType ||
-              tt._id.toString() === t.ticketType ||
-              (tt.name &&
-                t.ticketType &&
-                tt.name.toLowerCase() === t.ticketType.toLowerCase())
-          );
-          if (type && type.price > 0 && t.price > 0) {
-            const expectedPrice = quantity * type.price;
-            if (Math.abs(expectedPrice - t.price) > 1) {
-              const calculatedQty = Math.round(t.price / type.price);
-              if (calculatedQty > 0) return sum + calculatedQty;
+    // ✅ Calculate total sold and revenue - Use aggregation for better performance
+    const stats = await Ticket.aggregate([
+      {
+        $match: {
+          isInvitation: { $ne: true },
+          paymentStatus: "completed",
+          status: { $nin: ["cancelled", "expired", "pending"] }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalSold: { 
+            $sum: { 
+              $ifNull: [
+                { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
+                1
+              ]
             }
-          }
+          },
+          totalRevenue: { $sum: "$price" }
         }
       }
-      return sum + quantity;
-    }, 0);
+    ]);
 
-    // Calculate Total Revenue (Gross) - All tickets with price > 0
-    const totalRevenue = tickets.reduce(
-      (sum, t) => sum + (t.price && t.price > 0 ? t.price : 0),
-      0
-    );
+    const totalSold = stats.length > 0 ? stats[0].totalSold : 0;
+    const totalRevenue = stats.length > 0 ? stats[0].totalRevenue : 0;
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: formattedTickets,
       totalSold,
       totalRevenue,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        hasMore: skip + tickets.length < totalCount,
+      },
     });
   } catch (error) {
     console.error("Admin ticket fetch error:", error);
@@ -1041,7 +1049,7 @@ const getEventTickets = async (req, res) => {
   try {
     const { eventId } = req.params;
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 500;
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Cap at 500
     const skip = (page - 1) * limit;
 
     // If authentication is present, verify organizer access
@@ -1049,7 +1057,7 @@ const getEventTickets = async (req, res) => {
       const event = await Event.findOne({
         _id: eventId,
         organizer: req.user.userId,
-      });
+      }).select('_id').lean();
       if (!event) {
         return res.status(StatusCodes.UNAUTHORIZED).json({
           success: false,
@@ -1058,48 +1066,68 @@ const getEventTickets = async (req, res) => {
       }
     }
 
-    const totalCount = await Ticket.countDocuments({ event: eventId });
+    // Get count and tickets in parallel for better performance
+    const [totalCount, tickets] = await Promise.all([
+      Ticket.countDocuments({ event: eventId }),
+      Ticket.find({ event: eventId })
+        .select('ticketId user guestName guestEmail guestPhone ticketType price status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor')
+        .populate("user", "firstName lastName email phoneNumber")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+    ]);
 
-    const tickets = await Ticket.find({ event: eventId })
-      .populate("user", "firstName lastName email phoneNumber")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-
-    // Fetch event to get ticket types for calculation
-    const eventForCalc = await Event.findById(eventId).select("ticketTypes").lean();
-
-    const totalTicketsSold = tickets.reduce((sum, t) => {
-      if (t.isInvitation === true) return sum;
-
-      let quantity = t.purchaseQuantity || t.ticketCount || 1;
-
-      // Check if ticket was bought before Dec 14, 2025
-      const cutoffDate = new Date("2025-12-14");
-      const ticketDate = new Date(t.createdAt || t.purchaseDate);
-
-      if (ticketDate < cutoffDate) {
-        if (eventForCalc && eventForCalc.ticketTypes) {
-          const type = eventForCalc.ticketTypes.find(
-            (tt) =>
-              tt.name === t.ticketType ||
-              tt._id.toString() === t.ticketType ||
-              (tt.name &&
-                t.ticketType &&
-                tt.name.toLowerCase() === t.ticketType.toLowerCase())
-          );
-          if (type && type.price > 0 && t.price > 0) {
-            const expectedPrice = quantity * type.price;
-            if (Math.abs(expectedPrice - t.price) > 1) {
-              const calculatedQty = Math.round(t.price / type.price);
-              if (calculatedQty > 0) return sum + calculatedQty;
+    // Calculate statistics using aggregation for better performance
+    const statsPromise = Ticket.aggregate([
+      { $match: { event: new mongoose.Types.ObjectId(eventId), price: { $gt: 0 } } },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$price" },
+          totalTickets: {
+            $sum: {
+              $ifNull: [
+                { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
+                1
+              ]
+            }
+          },
+          onDoorRevenue: {
+            $sum: {
+              $cond: [{ $eq: ["$isOnDoor", true] }, "$price", 0]
+            }
+          },
+          onDoorTickets: {
+            $sum: {
+              $cond: [
+                { $eq: ["$isOnDoor", true] },
+                {
+                  $ifNull: [
+                    { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
+                    1
+                  ]
+                },
+                0
+              ]
             }
           }
         }
       }
-      return sum + quantity;
-    }, 0);
+    ]);
+
+    const stats = await statsPromise;
+    const statistics = stats.length > 0 ? {
+      totalRevenue: stats[0].totalRevenue || 0,
+      totalTickets: stats[0].totalTickets || 0,
+      onDoorRevenue: stats[0].onDoorRevenue || 0,
+      onDoorTickets: stats[0].onDoorTickets || 0
+    } : {
+      totalRevenue: 0,
+      totalTickets: 0,
+      onDoorRevenue: 0,
+      onDoorTickets: 0
+    };
 
     res
       .status(StatusCodes.OK)
@@ -1107,7 +1135,7 @@ const getEventTickets = async (req, res) => {
         tickets, 
         count: tickets.length, 
         totalCount,
-        totalTicketsSold,
+        statistics,
         currentPage: page,
         totalPages: Math.ceil(totalCount / limit),
         hasMore: skip + tickets.length < totalCount

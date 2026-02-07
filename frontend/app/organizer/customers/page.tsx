@@ -56,6 +56,15 @@ export default function CustomersPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  
+  // Statistics State
+  const [statistics, setStatistics] = useState({
+    totalRevenue: 0,
+    totalTickets: 0,
+    onDoorRevenue: 0,
+    onDoorTickets: 0,
+  });
+  
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,35 +127,28 @@ export default function CustomersPage() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        let allTickets: Ticket[] = [];
-        let page = 1;
-        let hasMore = true;
-
-        // Fetch all pages
-        while (hasMore) {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=${page}&limit=500`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (response.ok) {
-            const data = await response.json();
-            allTickets = [...allTickets, ...(data.tickets || [])];
-            hasMore = data.hasMore || false;
-            page++;
-          } else {
-            hasMore = false;
-            if (page === 1) {
-              toast.error("Failed to load tickets");
-            }
+        // Fetch only the first page initially
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=1&limit=100`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           }
-        }
+        );
 
-        setTickets(allTickets);
+        if (response.ok) {
+          const data = await response.json();
+          setTickets(data.tickets || []);
+          setStatistics(data.statistics || {
+            totalRevenue: 0,
+            totalTickets: 0,
+            onDoorRevenue: 0,
+            onDoorTickets: 0,
+          });
+        } else {
+          toast.error("Failed to load tickets");
+        }
       } catch (error) {
         console.error("Error fetching tickets:", error);
         toast.error("Error loading customers");
@@ -314,10 +316,10 @@ export default function CustomersPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
             <h3 className="text-2xl font-bold text-gray-900">
-              ETB {totalRevenue.toLocaleString()}
+              ETB {statistics.totalRevenue.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {totalTicketsCount} tickets
+              From {statistics.totalTickets} tickets
             </p>
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -344,15 +346,15 @@ export default function CustomersPage() {
         ))}
 
         {/* On-Door Sales */}
-        {onDoorTicketsCount > 0 && (
+        {statistics.onDoorTickets > 0 && (
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
               <h3 className="text-2xl font-bold text-gray-900">
-                ETB {onDoorRevenue.toLocaleString()}
+                ETB {statistics.onDoorRevenue.toLocaleString()}
               </h3>
               <p className="text-xs text-gray-500 mt-1">
-                From {onDoorTicketsCount} tickets
+                From {statistics.onDoorTickets} tickets
               </p>
             </div>
             <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">

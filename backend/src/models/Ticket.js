@@ -143,8 +143,12 @@ const TicketSchema = new mongoose.Schema(
   },
 );
 
-// Add compound index for efficient event ticket queries
-TicketSchema.index({ event: 1, createdAt: -1 });
+// Add compound indexes for efficient queries
+TicketSchema.index({ event: 1, createdAt: -1 }); // For event ticket queries
+TicketSchema.index({ status: 1, paymentStatus: 1 }); // For filtering by status
+TicketSchema.index({ isInvitation: 1, paymentStatus: 1, status: 1 }); // For stats calculations
+TicketSchema.index({ createdAt: -1 }); // For admin ticket listing
+TicketSchema.index({ user: 1, createdAt: -1 }); // For user ticket queries
 
 TicketSchema.pre("save", async function (next) {
   if (this.qrCode) return next();
