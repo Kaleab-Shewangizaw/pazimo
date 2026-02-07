@@ -216,69 +216,61 @@ export default function OrganizerDashboard() {
 
           const rawTickets = allRawTickets;
 
-            // Filter to match admin/tickets page logic
-            // Include all tickets that have a price > 0, regardless of status
-            const allTickets = rawTickets.filter((t: any) => {
-              return t.price && t.price > 0;
-            });
+          // Filter to match admin/tickets page logic
+          // Include all tickets that have a price > 0, regardless of status
+          const allTickets = rawTickets.filter((t: any) => {
+            return t.price && t.price > 0;
+          });
 
-            // Helper to calculate ticket quantity
-            const getTicketQuantity = (ticket: any) => {
-              let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
+          // Helper to calculate ticket quantity
+          const getTicketQuantity = (ticket: any) => {
+            let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
-              // Check if ticket was bought before Dec 14, 2025
-              const cutoffDate = new Date("2025-12-14");
-              const ticketDate = new Date(
-                ticket.createdAt || ticket.purchaseDate
-              );
+            // Check if ticket was bought before Dec 14, 2025
+            const cutoffDate = new Date("2025-12-14");
+            const ticketDate = new Date(
+              ticket.createdAt || ticket.purchaseDate
+            );
 
-              if (ticketDate < cutoffDate) {
-                if (event.ticketTypes && ticket.price > 0) {
-                  const type = event.ticketTypes.find(
-                    (t: any) =>
-                      t.name === ticket.ticketType ||
-                      (t.name &&
-                        ticket.ticketType &&
-                        t.name.toLowerCase() ===
-                          ticket.ticketType.toLowerCase())
-                  );
-                  if (type && type.price > 0) {
-                    const expectedPrice = quantity * type.price;
-                    if (Math.abs(expectedPrice - ticket.price) > 1) {
-                      const calculated = Math.round(ticket.price / type.price);
-                      if (calculated > 0) return calculated;
-                    }
+            if (ticketDate < cutoffDate) {
+              if (event.ticketTypes && ticket.price > 0) {
+                const type = event.ticketTypes.find(
+                  (t: any) =>
+                    t.name === ticket.ticketType ||
+                    (t.name &&
+                      ticket.ticketType &&
+                      t.name.toLowerCase() ===
+                        ticket.ticketType.toLowerCase())
+                );
+                if (type && type.price > 0) {
+                  const expectedPrice = quantity * type.price;
+                  if (Math.abs(expectedPrice - ticket.price) > 1) {
+                    const calculated = Math.round(ticket.price / type.price);
+                    if (calculated > 0) return calculated;
                   }
                 }
               }
+            }
 
-              return quantity;
-            };
+            return quantity;
+          };
 
-            // Map tickets to include calculated quantity
-            const processedTickets = allTickets.map((t: any) => ({
-              ...t,
-              calculatedQuantity: getTicketQuantity(t),
-            }));
+          // Map tickets to include calculated quantity
+          const processedTickets = allTickets.map((t: any) => ({
+            ...t,
+            calculatedQuantity: getTicketQuantity(t),
+          }));
 
-            console.log(`Event ${event.title} tickets:`, processedTickets);
+          console.log(`Event ${event.title} tickets:`, processedTickets);
 
-            // Store all tickets (for analytics and total counts)
-            allTicketsMap[event._id] = processedTickets;
+          // Store all tickets (for analytics and total counts)
+          allTicketsMap[event._id] = processedTickets;
 
-            // Filter for active tickets only (for revenue calculations)
-            const activeTickets = processedTickets.filter(
-              (t: any) => t.status === "active"
-            );
-            ticketsMap[event._id] = activeTickets;
-          } else {
-            console.log(
-              `Failed to fetch tickets for event ${event.title}:`,
-              res.status
-            );
-            ticketsMap[event._id] = [];
-            allTicketsMap[event._id] = [];
-          }
+          // Filter for active tickets only (for revenue calculations)
+          const activeTickets = processedTickets.filter(
+            (t: any) => t.status === "active"
+          );
+          ticketsMap[event._id] = activeTickets;
         } catch (error) {
           console.error(
             `Error fetching tickets for event ${event.title}:`,
