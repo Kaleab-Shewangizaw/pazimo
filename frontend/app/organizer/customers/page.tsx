@@ -67,9 +67,15 @@ export default function CustomersPage() {
   
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  
+  // Server-side pagination state
+  const [serverPage, setServerPage] = useState(1);
+  const [hasMoreTickets, setHasMoreTickets] = useState(false);
+  const [totalTicketCount, setTotalTicketCount] = useState(0);
 
   // Fetch Events
   useEffect(() => {
@@ -127,7 +133,8 @@ export default function CustomersPage() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // Fetch only the first page initially
+        // Reset pagination and fetch first page
+        setServerPage(1);
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=1&limit=100`,
           {
@@ -146,6 +153,8 @@ export default function CustomersPage() {
             onDoorRevenue: 0,
             onDoorTickets: 0,
           });
+          setHasMoreTickets(data.hasMore || false);
+          setTotalTicketCount(data.totalCount || 0);
         } else {
           toast.error("Failed to load tickets");
         }
@@ -165,6 +174,40 @@ export default function CustomersPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedEventId, searchQuery]);
+
+  const handleLoadMore = async () => {
+    if (!selectedEventId || !hasMoreTickets || isLoadingMore) return;
+
+    try {
+      setIsLoadingMore(true);
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const nextPage = serverPage + 1;
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=${nextPage}&limit=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setTickets((prev) => [...prev, ...(data.tickets || [])]);
+        setHasMoreTickets(data.hasMore || false);
+        setServerPage(nextPage);
+      } else {
+        toast.error("Failed to load more tickets");
+      }
+    } catch (error) {
+      console.error("Error loading more tickets:", error);
+      toast.error("Error loading more customers");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   const selectedEvent = events.find((e) => e._id === selectedEventId);
 
@@ -259,10 +302,15 @@ export default function CustomersPage() {
   );
 
   const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
-  const paginatedTickets = filteredTickets.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  
+  // Only use client-side pagination when searching
+  const isSearching = searchQuery.trim().length > 0;
+  const paginatedTickets = isSearching
+    ? filteredTickets.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+      )
+    : filteredTickets;
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
@@ -517,7 +565,8 @@ export default function CustomersPage() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Pagination or Load More */}
+        {isSearching && totalPages > 1 ? (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
@@ -547,7 +596,33 @@ export default function CustomersPage() {
               </Button>
             </div>
           </div>
-        )}
+        ) : !isSearching && hasMoreTickets ? (
+          <div className="px-6 py-6 border-t border-gray-200 flex flex-col items-center gap-3 bg-gray-50">
+            <p className="text-sm text-gray-600">
+              Showing {tickets.length} of {totalTicketCount} tickets
+            </p>
+            <Button
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
+              className="w-full max-w-xs"
+            >
+              {isLoadingMore ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading more...
+                </>
+              ) : (
+                "Load More Tickets"
+              )}
+            </Button>
+          </div>
+        ) : !isSearching && tickets.length > 0 ? (
+          <div className="px-6 py-4 border-t border-gray-200 text-center bg-gray-50">
+            <p className="text-sm text-gray-600">
+              All {tickets.length} tickets loaded
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

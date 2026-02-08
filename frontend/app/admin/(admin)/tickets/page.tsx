@@ -103,11 +103,17 @@ export default function TicketsPage() {
   // Loading State
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [loadingTickets, setLoadingTickets] = useState(false);
+  const [loadingMoreTickets, setLoadingMoreTickets] = useState(false);
 
   // Filter/Pagination State
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
+  
+  // Server-side pagination state
+  const [serverPage, setServerPage] = useState(1);
+  const [hasMoreTickets, setHasMoreTickets] = useState(false);
+  const [totalTicketCount, setTotalTicketCount] = useState(0);
 
   // Fetch Events on Mount
   useEffect(() => {
@@ -148,7 +154,8 @@ export default function TicketsPage() {
 
       try {
         setLoadingTickets(true);
-        // Fetch only the first page initially
+        // Reset pagination and fetch first page
+        setServerPage(1);
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEvent._id}?page=1&limit=100`,
           {
@@ -168,6 +175,8 @@ export default function TicketsPage() {
           onDoorRevenue: 0,
           onDoorTickets: 0,
         });
+        setHasMoreTickets(data.hasMore || false);
+        setTotalTicketCount(data.totalCount || 0);
       } catch (error) {
         console.error("Error fetching tickets:", error);
         toast.error("Failed to fetch tickets");
@@ -201,6 +210,37 @@ export default function TicketsPage() {
     setTickets([]);
     setSearchQuery("");
     setCurrentPage(1);
+    setServerPage(1);
+    setHasMoreTickets(false);
+  };
+
+  const handleLoadMore = async () => {
+    if (!selectedEvent || !token || !hasMoreTickets || loadingMoreTickets) return;
+
+    try {
+      setLoadingMoreTickets(true);
+      const nextPage = serverPage + 1;
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEvent._id}?page=${nextPage}&limit=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to load more tickets");
+
+      const data = await response.json();
+      setTickets((prev) => [...prev, ...(data.tickets || [])]);
+      setHasMoreTickets(data.hasMore || false);
+      setServerPage(nextPage);
+    } catch (error) {
+      console.error("Error loading more tickets:", error);
+      toast.error("Failed to load more tickets");
+    } finally {
+      setLoadingMoreTickets(false);
+    }
   };
 
   const handleCheckIn = async (ticketId: string) => {
@@ -291,10 +331,14 @@ export default function TicketsPage() {
     );
   });
 
-  const paginatedTickets = filteredTickets.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  // Only use client-side pagination when searching
+  const isSearching = searchQuery.trim().length > 0;
+  const paginatedTickets = isSearching
+    ? filteredTickets.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+      )
+    : filteredTickets;
   const totalTicketPages = Math.ceil(filteredTickets.length / itemsPerPage);
 
   // Helper to calculate ticket quantity
@@ -686,8 +730,8 @@ export default function TicketsPage() {
             </Table>
           </div>
 
-          {/* Tickets Pagination */}
-          {totalTicketPages > 1 && (
+          {/* Tickets Pagination or Load More */}
+          {isSearching && totalTicketPages > 1 ? (
             <div className="flex items-center justify-end space-x-2 py-4">
               <Button
                 variant="outline"
@@ -711,7 +755,31 @@ export default function TicketsPage() {
                 Next
               </Button>
             </div>
-          )}
+          ) : !isSearching && hasMoreTickets ? (
+            <div className="flex flex-col items-center gap-3 py-6">
+              <div className="text-sm text-gray-600">
+                Showing {tickets.length} of {totalTicketCount} tickets
+              </div>
+              <Button
+                onClick={handleLoadMore}
+                disabled={loadingMoreTickets}
+                className="w-full max-w-xs"
+              >
+                {loadingMoreTickets ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Loading more...
+                  </>
+                ) : (
+                  "Load More Tickets"
+                )}
+              </Button>
+            </div>
+          ) : !isSearching && tickets.length > 0 ? (
+            <div className="text-center py-4 text-sm text-gray-600">
+              All {tickets.length} tickets loaded
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </div>
