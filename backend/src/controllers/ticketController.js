@@ -1066,16 +1066,23 @@ const getEventTickets = async (req, res) => {
       }
     }
 
-    // Get count and tickets in parallel for better performance
-    const [totalCount, tickets] = await Promise.all([
+    const eventDetails = await Event.findById(eventId)
+      .select("ticketTypes")
+      .lean();
+
+    // Get count, paginated tickets, and paid tickets for stats
+    const [totalCount, tickets, paidTickets] = await Promise.all([
       Ticket.countDocuments({ event: eventId }),
       Ticket.find({ event: eventId })
-        .select('ticketId user guestName guestEmail guestPhone ticketType price status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor')
+        .select("ticketId user guestName guestEmail guestPhone ticketType price status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor")
         .populate("user", "firstName lastName email phoneNumber")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .lean()
+        .lean(),
+      Ticket.find({ event: eventId, price: { $gt: 0 } })
+        .select("ticketType price createdAt purchaseDate ticketCount purchaseQuantity isOnDoor")
+        .lean(),
     ]);
 
     // Format tickets to ensure consistent user.name field
@@ -1096,55 +1103,84 @@ const getEventTickets = async (req, res) => {
           } : null,
     }));
 
-    // Calculate statistics using aggregation for better performance
-    const statsPromise = Ticket.aggregate([
-      { $match: { event: new mongoose.Types.ObjectId(eventId), price: { $gt: 0 } } },
-      {
-        $group: {
-          _id: null,
-          totalRevenue: { $sum: "$price" },
-          totalTickets: {
-            $sum: {
-              $ifNull: [
-                { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
-                1
-              ]
-            }
-          },
-          onDoorRevenue: {
-            $sum: {
-              $cond: [{ $eq: ["$isOnDoor", true] }, "$price", 0]
-            }
-          },
-          onDoorTickets: {
-            $sum: {
-              $cond: [
-                { $eq: ["$isOnDoor", true] },
-                {
-                  $ifNull: [
-                    { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
-                    1
-                  ]
-                },
-                0
-              ]
-            }
+    const getTicketQuantity = (ticket) => {
+      let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+      const cutoffDate = new Date("2025-12-14");
+      const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate);
+
+      if (
+        ticketDate < cutoffDate &&
+        eventDetails?.ticketTypes &&
+        eventDetails.ticketTypes.length > 0 &&
+        ticket.price > 0
+      ) {
+        const type = eventDetails.ticketTypes.find(
+          (tt) =>
+            tt.name === ticket.ticketType ||
+            (tt._id && tt._id.toString() === ticket.ticketType) ||
+            (tt.name &&
+              ticket.ticketType &&
+              tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
+        );
+
+        if (type && type.price > 0) {
+          const expectedPrice = quantity * type.price;
+          if (Math.abs(expectedPrice - ticket.price) > 1) {
+            const calculatedQty = Math.round(ticket.price / type.price);
+            if (calculatedQty > 0) return calculatedQty;
           }
         }
       }
-    ]);
 
-    const stats = await statsPromise;
-    const statistics = stats.length > 0 ? {
-      totalRevenue: stats[0].totalRevenue || 0,
-      totalTickets: stats[0].totalTickets || 0,
-      onDoorRevenue: stats[0].onDoorRevenue || 0,
-      onDoorTickets: stats[0].onDoorTickets || 0
-    } : {
-      totalRevenue: 0,
-      totalTickets: 0,
-      onDoorRevenue: 0,
-      onDoorTickets: 0
+      return quantity;
+    };
+
+    const ticketTypeMap = new Map();
+    const totals = paidTickets.reduce(
+      (acc, ticket) => {
+        const quantity = getTicketQuantity(ticket);
+        const pricePerTicket = quantity > 0 ? ticket.price / quantity : 0;
+        const key = `${ticket.ticketType}|${ticket.isOnDoor ? "ondoor" : "online"}|${pricePerTicket}`;
+
+        if (!ticketTypeMap.has(key)) {
+          ticketTypeMap.set(key, {
+            ticketType: ticket.ticketType,
+            isOnDoor: !!ticket.isOnDoor,
+            pricePerTicket,
+            totalSold: 0,
+            totalRevenue: 0,
+          });
+        }
+
+        const entry = ticketTypeMap.get(key);
+        entry.totalSold += quantity;
+        entry.totalRevenue += ticket.price || 0;
+
+        acc.totalRevenue += ticket.price || 0;
+        acc.totalTickets += quantity;
+        if (ticket.isOnDoor) {
+          acc.onDoorRevenue += ticket.price || 0;
+          acc.onDoorTickets += quantity;
+        }
+
+        return acc;
+      },
+      { totalRevenue: 0, totalTickets: 0, onDoorRevenue: 0, onDoorTickets: 0 }
+    );
+
+    const ticketTypeBreakdown = Array.from(ticketTypeMap.values());
+    const onlineRevenue = totals.totalRevenue - totals.onDoorRevenue;
+    const onlineTickets = totals.totalTickets - totals.onDoorTickets;
+
+    const statistics = {
+      totalRevenue: totals.totalRevenue,
+      totalTickets: totals.totalTickets,
+      onDoorRevenue: totals.onDoorRevenue,
+      onDoorTickets: totals.onDoorTickets,
+      onlineRevenue,
+      onlineTickets,
+      ticketTypeBreakdown,
     };
 
     res

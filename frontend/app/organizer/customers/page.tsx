@@ -63,6 +63,9 @@ export default function CustomersPage() {
     totalTickets: 0,
     onDoorRevenue: 0,
     onDoorTickets: 0,
+    onlineRevenue: 0,
+    onlineTickets: 0,
+    ticketTypeBreakdown: [] as TicketTypeBreakdown[],
   });
   
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
@@ -147,11 +150,20 @@ export default function CustomersPage() {
         if (response.ok) {
           const data = await response.json();
           setTickets(data.tickets || []);
-          setStatistics(data.statistics || {
+          const defaultStats = {
             totalRevenue: 0,
             totalTickets: 0,
             onDoorRevenue: 0,
             onDoorTickets: 0,
+            onlineRevenue: 0,
+            onlineTickets: 0,
+            ticketTypeBreakdown: [],
+          };
+          const incomingStats = data.statistics || {};
+          setStatistics({
+            ...defaultStats,
+            ...incomingStats,
+            ticketTypeBreakdown: incomingStats.ticketTypeBreakdown || [],
           });
           setHasMoreTickets(data.hasMore || false);
           setTotalTicketCount(data.totalCount || 0);
@@ -258,48 +270,14 @@ export default function CustomersPage() {
   });
 
   // Group tickets by type, ondoor/online, and single ticket price
-  type TicketGroup = {
+  type TicketTypeBreakdown = {
     ticketType: string;
     isOnDoor: boolean;
     pricePerTicket: number;
     totalSold: number;
+    totalRevenue: number;
   };
-  const ticketGroups: TicketGroup[] = [];
-  const groupMap = new Map<string, TicketGroup>();
-  filteredTickets.forEach((ticket) => {
-    const quantity = getTicketQuantity(ticket);
-    // Calculate price per single ticket
-    const pricePerTicket =
-      ticket.price && quantity > 0 ? ticket.price / quantity : 0;
-    const key = `${ticket.ticketType}|${
-      ticket.isOnDoor ? "ondoor" : "online"
-    }|${pricePerTicket}`;
-    if (!groupMap.has(key)) {
-      groupMap.set(key, {
-        ticketType: ticket.ticketType,
-        isOnDoor: !!ticket.isOnDoor,
-        pricePerTicket,
-        totalSold: 0,
-      });
-    }
-    groupMap.get(key)!.totalSold += quantity;
-  });
-  ticketGroups.push(...groupMap.values());
-
-  // On-door sales
-  const onDoorTickets = filteredTickets.filter((t) => !!t.isOnDoor);
-  const onDoorRevenue = onDoorTickets.reduce((sum, t) => sum + t.price, 0);
-  const onDoorTicketsCount = onDoorTickets.reduce(
-    (sum, t) => sum + getTicketQuantity(t),
-    0
-  );
-
-  // Totals
-  const totalRevenue = filteredTickets.reduce((sum, t) => sum + t.price, 0);
-  const totalTicketsCount = filteredTickets.reduce(
-    (sum, t) => sum + getTicketQuantity(t),
-    0
-  );
+  const ticketGroups = statistics.ticketTypeBreakdown;
 
   const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
   
