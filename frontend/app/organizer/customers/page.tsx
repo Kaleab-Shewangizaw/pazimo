@@ -251,9 +251,19 @@ export default function CustomersPage() {
     return quantity;
   };
 
+  // Special handling for event 69850bb726e5a027f6b03279
+  const SPECIAL_EVENT_ID = "69850bb726e5a027f6b03279";
+  const CUSTOM_ONDOOR_AMOUNT = 793000;
+  const isSpecialEvent = selectedEventId === SPECIAL_EVENT_ID;
+
   // Filter paid tickets only (exclude free/invitation)
   const filteredTickets = tickets.filter((ticket) => {
     if (!ticket.price || ticket.price <= 0) return false;
+
+    // For special event, hide the manual ondoor sales entry from the table
+    if (isSpecialEvent && ticket.isOnDoor && ticket.price === CUSTOM_ONDOOR_AMOUNT) {
+      return false;
+    }
 
     const searchLower = searchQuery.toLowerCase();
     const name = ticket.user
@@ -277,7 +287,14 @@ export default function CustomersPage() {
     totalSold: number;
     totalRevenue: number;
   };
-  const ticketGroups = statistics.ticketTypeBreakdown;
+  
+  // Filter out ondoor tickets from breakdown for special event
+  const ticketGroups = isSpecialEvent 
+    ? statistics.ticketTypeBreakdown.filter(group => !group.isOnDoor)
+    : statistics.ticketTypeBreakdown;
+  
+  // Total revenue is already correct from backend (includes the ondoor sales)
+  const displayTotalRevenue = statistics.totalRevenue;
 
   const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
   
@@ -342,7 +359,7 @@ export default function CustomersPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
             <h3 className="text-2xl font-bold text-gray-900">
-              ETB {statistics.totalRevenue.toLocaleString()}
+              ETB {displayTotalRevenue.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
               From {statistics.totalTickets} tickets
@@ -372,7 +389,14 @@ export default function CustomersPage() {
         ))}
 
         {/* On-Door Sales */}
-        {statistics.onDoorTickets > 0 && (
+        {isSpecialEvent ? (
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+            <p className="text-sm font-medium text-gray-500 mb-2">Ondoor Sales</p>
+            <h3 className="text-2xl font-bold text-gray-900">
+              ETB {CUSTOM_ONDOOR_AMOUNT.toLocaleString()}
+            </h3>
+          </div>
+        ) : statistics.onDoorTickets > 0 ? (
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
@@ -387,7 +411,7 @@ export default function CustomersPage() {
               <DollarSign className="h-6 w-6 text-blue-600" />
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Customers Table */}
