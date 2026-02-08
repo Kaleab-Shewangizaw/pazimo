@@ -177,14 +177,41 @@ const getUserTickets = async (req, res) => {
 };
 
 /* ======================================================
-   GET ORGANIZER EVENTS
+   GET ORGANIZER EVENTS (OPTIMIZED)
 ====================================================== */
 const getOrganizerEvents = async (req, res) => {
   const { id } = req.params;
+  const includeTickets = req.query.includeTickets === 'true';
 
+  // Use lean() for better performance since we're just reading data
   const events = await Event.find({ organizer: id })
     .populate("category", "name description")
-    .sort("-createdAt");
+    .select("-__v") // Exclude version key
+    .sort("-createdAt")
+    .lean(); // Convert to plain JavaScript objects
+
+  // Optionally include tickets if requested
+  if (includeTickets && events.length > 0) {
+    const eventIds = events.map(e => e._id);
+    
+    // Fetch tickets for all events in one query
+    const tickets = await Ticket.find({ event: { $in: eventIds } })
+      .select('event price purchaseQuantity ticketCount isInvitation status paymentStatus')
+      .lean();
+    
+    // Group tickets by event
+    const ticketsByEvent = tickets.reduce((acc, ticket) => {
+      const eventId = ticket.event.toString();
+      if (!acc[eventId]) acc[eventId] = [];
+      acc[eventId].push(ticket);
+      return acc;
+    }, {});
+    
+    // Add tickets to events
+    events.forEach(event => {
+      event.tickets = ticketsByEvent[event._id.toString()] || [];
+    });
+  }
 
   res.status(StatusCodes.OK).json({
     events,

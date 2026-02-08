@@ -174,7 +174,7 @@ const updateWithdrawalStatus = async (req, res) => {
   }
 };
 
-// Get all withdrawals (admin)
+// Get all withdrawals (admin) - OPTIMIZED
 const getAllWithdrawals = async (req, res) => {
   try {
     const { status, organizerId, page = 1, limit = 10 } = req.query;
@@ -185,20 +185,54 @@ const getAllWithdrawals = async (req, res) => {
     if (status && status !== "all") query.status = status;
     if (organizerId) query.organizer = organizerId;
 
-    // Get withdrawals with pagination
-    const withdrawals = await Withdrawal.find(query)
-      .populate("organizer", "firstName lastName email")
-      .populate("processedBy", "firstName lastName email")
-      .sort("-createdAt")
-      .skip(skip)
-      .limit(parseInt(limit));
+    // Use Promise.all for parallel queries
+    const [withdrawals, total, stats] = await Promise.all([
+      // Get withdrawals with pagination using lean()
+      Withdrawal.find(query)
+        .populate("organizer", "firstName lastName email")
+        .populate("processedBy", "firstName lastName email")
+        .sort("-createdAt")
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      
+      // Get total count
+      Withdrawal.countDocuments(query),
+      
+      // Get aggregated stats
+      Withdrawal.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+            totalAmount: { $sum: "$amount" }
+          }
+        }
+      ])
+    ]);
 
-    // Get total count
-    const total = await Withdrawal.countDocuments(query);
+    // Format stats
+    const statsFormatted = {
+      pending: { count: 0, amount: 0 },
+      approved: { count: 0, amount: 0 },
+      completed: { count: 0, amount: 0 },
+      rejected: { count: 0, amount: 0 }
+    };
+
+    stats.forEach(stat => {
+      if (statsFormatted[stat._id]) {
+        statsFormatted[stat._id] = {
+          count: stat.count,
+          amount: stat.totalAmount
+        };
+      }
+    });
 
     res.status(StatusCodes.OK).json({
       status: "success",
       data: withdrawals,
+      stats: statsFormatted,
       pagination: {
         total,
         page: parseInt(page),
@@ -215,7 +249,7 @@ const getAllWithdrawals = async (req, res) => {
   }
 };
 
-// Get organizer's withdrawals
+// Get organizer's withdrawals - OPTIMIZED
 const getOrganizerWithdrawals = async (req, res) => {
   try {
     if (!req.user) {
@@ -234,19 +268,53 @@ const getOrganizerWithdrawals = async (req, res) => {
     const query = { organizer: organizerId };
     if (status && status !== "all") query.status = status;
 
-    // Get withdrawals with pagination
-    const withdrawals = await Withdrawal.find(query)
-      .populate("processedBy", "firstName lastName email")
-      .sort("-createdAt")
-      .skip(skip)
-      .limit(parseInt(limit));
+    // Use Promise.all for parallel queries
+    const [withdrawals, total, stats] = await Promise.all([
+      // Get withdrawals with pagination using lean()
+      Withdrawal.find(query)
+        .populate("processedBy", "firstName lastName email")
+        .sort("-createdAt")
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean(),
+      
+      // Get total count
+      Withdrawal.countDocuments(query),
+      
+      // Get aggregated stats for this organizer
+      Withdrawal.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 },
+            totalAmount: { $sum: "$amount" }
+          }
+        }
+      ])
+    ]);
 
-    // Get total count
-    const total = await Withdrawal.countDocuments(query);
+    // Format stats
+    const statsFormatted = {
+      pending: { count: 0, amount: 0 },
+      approved: { count: 0, amount: 0 },
+      completed: { count: 0, amount: 0 },
+      rejected: { count: 0, amount: 0 }
+    };
+
+    stats.forEach(stat => {
+      if (statsFormatted[stat._id]) {
+        statsFormatted[stat._id] = {
+          count: stat.count,
+          amount: stat.totalAmount
+        };
+      }
+    });
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: withdrawals,
+      stats: statsFormatted,
       pagination: {
         total,
         page: parseInt(page),

@@ -23,6 +23,11 @@ router.get("/profile", authenticateUser, organizerController.getProfile);
 router.put("/profile", authenticateUser, organizerController.updateProfile);
 router.put("/security", authenticateUser, organizerController.updatePassword);
 router.get(
+  "/:organizerId/dashboard",
+  protect,
+  organizerController.getOrganizerDashboard,
+);
+router.get(
   "/:organizerId/top-customers",
   protect,
   organizerController.getTopCustomers,

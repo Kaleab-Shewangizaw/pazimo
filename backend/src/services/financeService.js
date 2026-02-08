@@ -1,8 +1,181 @@
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
+const mongoose = require("mongoose");
 
 const calculateOrganizerBalance = async (organizerId) => {
+  // Use aggregation pipeline for much faster calculation
+  const balanceData = await Ticket.aggregate([
+    {
+      $lookup: {
+        from: "events",
+        localField: "event",
+        foreignField: "_id",
+        as: "eventData"
+      }
+    },
+    {
+      $unwind: "$eventData"
+    },
+    {
+      $match: {
+        "eventData.organizer": new mongoose.Types.ObjectId(organizerId),
+        price: { $gt: 0 },
+        status: { $nin: ["cancelled", "failed", "expired"] },
+        $or: [
+          { paymentStatus: { $exists: false } },
+          { paymentStatus: { $nin: ["cancelled", "failed"] } }
+        ]
+      }
+    },
+    {
+      $facet: {
+        revenue: [
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: "$price" },
+              totalTickets: { $sum: 1 }
+            }
+          }
+        ],
+        statusBreakdown: [
+          {
+            $group: {
+              _id: "$status",
+              revenue: { $sum: "$price" }
+            }
+          }
+        ],
+        eventBreakdown: [
+          {
+            $group: {
+              _id: {
+                eventId: "$eventData._id",
+                eventTitle: "$eventData.title"
+              },
+              totalRevenue: { $sum: "$price" },
+              ticketsSold: { $sum: 1 },
+              onDoorRevenue: {
+                $sum: { $cond: ["$isOnDoor", "$price", 0] }
+              },
+              onlineRevenue: {
+                $sum: { $cond: [{ $not: "$isOnDoor" }, "$price", 0] }
+              },
+              onDoorTickets: {
+                $sum: { $cond: ["$isOnDoor", 1, 0] }
+              },
+              onlineTickets: {
+                $sum: { $cond: [{ $not: "$isOnDoor" }, 1, 0] }
+              }
+            }
+          }
+        ],
+        eventCount: [
+          {
+            $group: {
+              _id: "$eventData._id"
+            }
+          },
+          {
+            $count: "total"
+          }
+        ]
+      }
+    }
+  ]);
+
+  // Get withdrawal stats in parallel
+  const withdrawalStats = await Withdrawal.aggregate([
+    {
+      $match: {
+        organizer: new mongoose.Types.ObjectId(organizerId)
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        pendingAmount: {
+          $sum: { $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0] }
+        },
+        approvedAmount: {
+          $sum: {
+            $cond: [
+              { $in: ["$status", ["approved", "completed"]] },
+              "$amount",
+              0
+            ]
+          }
+        }
+      }
+    }
+  ]);
+
+  // Extract results
+  const revenueData = balanceData[0]?.revenue[0] || { totalRevenue: 0, totalTickets: 0 };
+  const totalRevenue = revenueData.totalRevenue;
+  const totalTicketsSold = revenueData.totalTickets;
+
+  // Calculate commission and organizer revenue
+  const pazimoCommission = totalRevenue * 0.03;
+  const organizerRevenue = totalRevenue * 0.97;
+
+  // Get withdrawal amounts
+  const withdrawalData = withdrawalStats[0] || { pendingAmount: 0, approvedAmount: 0 };
+  const pendingAmount = withdrawalData.pendingAmount;
+  const approvedAmount = withdrawalData.approvedAmount;
+
+  // Calculate available balance
+  const availableBalance = organizerRevenue - (pendingAmount + approvedAmount);
+
+  // Format status breakdown
+  const statusBreakdown = {};
+  (balanceData[0]?.statusBreakdown || []).forEach(item => {
+    statusBreakdown[item._id] = item.revenue;
+  });
+
+  // Format revenue breakdown by event
+  const revenueBreakdown = (balanceData[0]?.eventBreakdown || []).map(item => ({
+    eventId: item._id.eventId,
+    eventTitle: item._id.eventTitle,
+    totalRevenue: item.totalRevenue,
+    totalTicketsSold: item.ticketsSold,
+    onDoorRevenue: item.onDoorRevenue,
+    onDoorTicketsSold: item.onDoorTickets,
+    onlineRevenue: item.onlineRevenue,
+    onlineTicketsSold: item.onlineTickets
+  }));
+
+  const totalEvents = balanceData[0]?.eventCount[0]?.total || 0;
+
+  // Log for debugging
+  console.log(`💰 Balance calculated for organizer ${organizerId}:`, {
+    totalEvents,
+    totalTicketsSold,
+    totalRevenue,
+    organizerRevenue,
+    availableBalance
+  });
+
+  return {
+    totalRevenue,
+    organizerRevenue,
+    pazimoCommission,
+    pendingWithdrawals: pendingAmount,
+    approvedWithdrawals: approvedAmount,
+    availableBalance,
+    revenueBreakdown,
+    statusBreakdown,
+    summary: {
+      totalEvents,
+      totalTicketsSold,
+      averageTicketPrice: totalTicketsSold > 0 ? totalRevenue / totalTicketsSold : 0
+    }
+  };
+};
+
+// Legacy version kept for reference
+const calculateOrganizerBalanceLegacy = async (organizerId) => {
   // Get all events by this organizer
   const events = await Event.find({ organizer: organizerId });
   const eventIds = events.map((event) => event._id);
@@ -219,4 +392,5 @@ const calculateOrganizerBalance = async (organizerId) => {
 
 module.exports = {
   calculateOrganizerBalance,
+  calculateOrganizerBalanceLegacy,
 };

@@ -1078,6 +1078,24 @@ const getEventTickets = async (req, res) => {
         .lean()
     ]);
 
+    // Format tickets to ensure consistent user.name field
+    const formattedTickets = tickets.map((ticket) => ({
+      ...ticket,
+      user: ticket.user
+        ? {
+            name: `${ticket.user.firstName || ''} ${ticket.user.lastName || ''}`.trim(),
+            firstName: ticket.user.firstName,
+            lastName: ticket.user.lastName,
+            email: ticket.user.email,
+            phoneNumber: ticket.user.phoneNumber,
+          }
+        : ticket.guestName ? {
+            name: ticket.guestName,
+            email: ticket.guestEmail,
+            phoneNumber: ticket.guestPhone,
+          } : null,
+    }));
+
     // Calculate statistics using aggregation for better performance
     const statsPromise = Ticket.aggregate([
       { $match: { event: new mongoose.Types.ObjectId(eventId), price: { $gt: 0 } } },
@@ -1132,13 +1150,13 @@ const getEventTickets = async (req, res) => {
     res
       .status(StatusCodes.OK)
       .json({ 
-        tickets, 
-        count: tickets.length, 
+        tickets: formattedTickets, 
+        count: formattedTickets.length, 
         totalCount,
         statistics,
         currentPage: page,
         totalPages: Math.ceil(totalCount / limit),
-        hasMore: skip + tickets.length < totalCount
+        hasMore: skip + formattedTickets.length < totalCount
       });
   } catch (error) {
     console.error("Get event tickets error:", error);
@@ -1155,17 +1173,108 @@ const getOrganizerTickets = async (req, res) => {
   try {
     const userId = req.user.userId;
 
+    // Add pagination support
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500); // Cap at 500
+    const skip = (page - 1) * limit;
+
     // Find all events by this organizer
-    const events = await Event.find({ organizer: userId }).select("_id");
+    const events = await Event.find({ organizer: userId }).select("_id").lean();
     const eventIds = events.map((e) => e._id);
 
-    // Find tickets for these events
-    const tickets = await Ticket.find({ event: { $in: eventIds } })
-      .populate("event", "title")
-      .populate("user", "firstName lastName email phoneNumber")
-      .lean();
+    // Get count and tickets in parallel for better performance
+    const [totalCount, tickets] = await Promise.all([
+      Ticket.countDocuments({ event: { $in: eventIds } }),
+      Ticket.find({ event: { $in: eventIds } })
+        .select('ticketId event user guestName guestEmail guestPhone ticketType price status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor')
+        .populate("event", "title")
+        .populate("user", "firstName lastName email phoneNumber")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+    ]);
 
-    res.status(StatusCodes.OK).json({ success: true, tickets });
+    // Format tickets to ensure consistent user.name field
+    const formattedTickets = tickets.map((ticket) => ({
+      ...ticket,
+      user: ticket.user
+        ? {
+            name: `${ticket.user.firstName || ''} ${ticket.user.lastName || ''}`.trim(),
+            firstName: ticket.user.firstName,
+            lastName: ticket.user.lastName,
+            email: ticket.user.email,
+            phoneNumber: ticket.user.phoneNumber,
+          }
+        : ticket.guestName ? {
+            name: ticket.guestName,
+            email: ticket.guestEmail,
+            phoneNumber: ticket.guestPhone,
+          } : null,
+    }));
+
+    // Calculate statistics for the organizer's tickets
+    const stats = await Ticket.aggregate([
+      { $match: { event: { $in: eventIds }, price: { $gt: 0 } } },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$price" },
+          totalTickets: {
+            $sum: {
+              $ifNull: [
+                { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
+                1
+              ]
+            }
+          },
+          onDoorRevenue: {
+            $sum: {
+              $cond: [{ $eq: ["$isOnDoor", true] }, "$price", 0]
+            }
+          },
+          onDoorTickets: {
+            $sum: {
+              $cond: [
+                { $eq: ["$isOnDoor", true] },
+                {
+                  $ifNull: [
+                    { $ifNull: ["$purchaseQuantity", "$ticketCount"] },
+                    1
+                  ]
+                },
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const statistics = stats.length > 0 ? {
+      totalRevenue: stats[0].totalRevenue || 0,
+      totalTickets: stats[0].totalTickets || 0,
+      onDoorRevenue: stats[0].onDoorRevenue || 0,
+      onDoorTickets: stats[0].onDoorTickets || 0
+    } : {
+      totalRevenue: 0,
+      totalTickets: 0,
+      onDoorRevenue: 0,
+      onDoorTickets: 0
+    };
+
+    res.status(StatusCodes.OK).json({ 
+      success: true, 
+      tickets: formattedTickets,
+      count: formattedTickets.length,
+      totalCount,
+      statistics,
+      pagination: {
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        hasMore: skip + formattedTickets.length < totalCount
+      }
+    });
   } catch (error) {
     console.error("Get organizer tickets error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

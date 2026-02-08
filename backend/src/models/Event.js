@@ -151,6 +151,12 @@ EventSchema.virtual("tickets", {
   justOne: false,
 });
 
+// Add indexes for better query performance
+EventSchema.index({ organizer: 1, createdAt: -1 }); // For organizer event queries
+EventSchema.index({ status: 1, startDate: 1 }); // For filtering published/active events
+EventSchema.index({ category: 1, status: 1 }); // For category-based filtering
+EventSchema.index({ createdAt: -1 }); // For sorting by creation date
+
 const Event = mongoose.model("Event", EventSchema);
 
 module.exports = Event;

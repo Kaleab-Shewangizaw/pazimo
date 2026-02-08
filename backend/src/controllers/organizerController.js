@@ -580,3 +580,395 @@ exports.getTopCustomers = async (req, res) => {
     });
   }
 };
+
+// Get organizer dashboard stats (OPTIMIZED)
+exports.getOrganizerDashboard = async (req, res) => {
+  try {
+    const organizerId = req.params.organizerId || req.user?.userId;
+
+    if (!organizerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Organizer ID is required",
+      });
+    }
+
+    // Use aggregation to get all dashboard data efficiently
+    const dashboardData = await Event.aggregate([
+      {
+        $match: {
+          organizer: new mongoose.Types.ObjectId(organizerId),
+        },
+      },
+      {
+        $lookup: {
+          from: "tickets",
+          localField: "_id",
+          foreignField: "event",
+          as: "tickets",
+        },
+      },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "categoryData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$categoryData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          // Filter tickets with price > 0
+          paidTickets: {
+            $filter: {
+              input: "$tickets",
+              as: "ticket",
+              cond: { $gt: ["$$ticket.price", 0] },
+            },
+          },
+          // Calculate ticket stats
+          ticketStats: {
+            total: { $size: "$tickets" },
+            active: {
+              $size: {
+                $filter: {
+                  input: "$tickets",
+                  as: "ticket",
+                  cond: { $eq: ["$$ticket.status", "active"] },
+                },
+              },
+            },
+            used: {
+              $size: {
+                $filter: {
+                  input: "$tickets",
+                  as: "ticket",
+                  cond: { $eq: ["$$ticket.status", "used"] },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          revenue: { $sum: "$paidTickets.price" },
+          organizerRevenue: { $multiply: [{ $sum: "$paidTickets.price" }, 0.97] },
+          pazimoCommission: { $multiply: [{ $sum: "$paidTickets.price" }, 0.03] },
+          category: {
+            _id: "$categoryData._id",
+            name: "$categoryData.name",
+            description: "$categoryData.description",
+          },
+        },
+      },
+      {
+        $project: {
+          title: 1,
+          description: 1,
+          category: 1,
+          startDate: 1,
+          endDate: 1,
+          startTime: 1,
+          endTime: 1,
+          location: 1,
+          coverImages: 1,
+          ticketTypes: 1,
+          status: 1,
+          capacity: 1,
+          tags: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          tickets: 1,
+          ticketStats: 1,
+          revenue: 1,
+          organizerRevenue: 1,
+          pazimoCommission: 1,
+        },
+      },
+      {
+        $sort: { createdAt: -1 },
+      },
+    ]);
+
+    // Get withdrawal data in parallel
+    const withdrawalData = await Withdrawal.aggregate([
+      {
+        $match: {
+          organizer: new mongoose.Types.ObjectId(organizerId),
+        },
+      },
+      {
+        $facet: {
+          withdrawals: [
+            { $sort: { createdAt: -1 } },
+            { $limit: 10 }, // Get recent withdrawals
+          ],
+          stats: [
+            {
+              $group: {
+                _id: null,
+                totalWithdrawn: {
+                  $sum: {
+                    $cond: [
+                      { $in: ["$status", ["approved", "completed"]] },
+                      "$amount",
+                      0,
+                    ],
+                  },
+                },
+                pendingWithdrawals: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    // Calculate overall stats
+    const totalRevenue = dashboardData.reduce((sum, e) => sum + (e.revenue || 0), 0);
+    const organizerRevenue = dashboardData.reduce((sum, e) => sum + (e.organizerRevenue || 0), 0);
+    const pazimoCommission = dashboardData.reduce((sum, e) => sum + (e.pazimoCommission || 0), 0);
+
+    const withdrawalStats = withdrawalData[0]?.stats[0] || {
+      totalWithdrawn: 0,
+      pendingWithdrawals: 0,
+    };
+
+    const availableBalance = organizerRevenue - withdrawalStats.totalWithdrawn - withdrawalStats.pendingWithdrawals;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        events: dashboardData,
+        withdrawals: withdrawalData[0]?.withdrawals || [],
+        balance: {
+          totalRevenue,
+          organizerRevenue,
+          pazimoCommission,
+          totalWithdrawn: withdrawalStats.totalWithdrawn,
+          pendingWithdrawals: withdrawalStats.pendingWithdrawals,
+          availableBalance,
+        },
+        stats: {
+          totalEvents: dashboardData.length,
+          publishedEvents: dashboardData.filter(e => e.status === "published").length,
+          draftEvents: dashboardData.filter(e => e.status === "draft").length,
+          completedEvents: dashboardData.filter(e => new Date(e.endDate) < new Date()).length,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching organizer dashboard:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch organizer dashboard",
+    });
+  }
+};
+
+// Get organizer dashboard stats (OPTIMIZED)
+exports.getOrganizerDashboard = async (req, res) => {
+  try {
+    const organizerId = req.params.organizerId || req.user?.userId;
+
+    if (!organizerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Organizer ID is required",
+      });
+    }
+
+    // Use aggregation to get all dashboard data efficiently
+    const dashboardData = await Event.aggregate([
+      {
+        $match: {
+          organizer: new mongoose.Types.ObjectId(organizerId),
+        },
+      },
+      {
+        $lookup: {
+          from: "tickets",
+          localField: "_id",
+          foreignField: "event",
+          as: "tickets",
+        },
+      },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "category",
+          foreignField: "_id",
+          as: "categoryData",
+        },
+      },
+      {
+        $unwind: {
+          path: "$categoryData",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      {
+        $addFields: {
+          // Filter tickets with price > 0
+          paidTickets: {
+            $filter: {
+              input: "$tickets",
+              as: "ticket",
+              cond: { $gt: ["$$ticket.price", 0] },
+            },
+          },
+          // Calculate ticket stats
+          ticketStats: {
+            total: { $size: "$tickets" },
+            active: {
+              $size: {
+                $filter: {
+                  input: "$tickets",
+                  as: "ticket",
+                  cond: { $eq: ["$$ticket.status", "active"] },
+                },
+              },
+            },
+            used: {
+              $size: {
+                $filter: {
+                  input: "$tickets",
+                  as: "ticket",
+                  cond: { $eq: ["$$ticket.status", "used"] },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          revenue: { $sum: "$paidTickets.price" },
+          organizerRevenue: { $multiply: [{ $sum: "$paidTickets.price" }, 0.97] },
+          pazimoCommission: { $multiply: [{ $sum: "$paidTickets.price" }, 0.03] },
+          category: {
+            _id: "$categoryData._id",
+            name: "$categoryData.name",
+            description: "$categoryData.description",
+          },
+        },
+      },
+      {
+        $project: {
+          title: 1,
+          description: 1,
+          category: 1,
+          startDate: 1,
+          endDate: 1,
+          startTime: 1,
+          endTime: 1,
+          location: 1,
+          coverImages: 1,
+          ticketTypes: 1,
+          status: 1,
+          capacity: 1,
+          tags: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          tickets: 1,
+          ticketStats: 1,
+          revenue: 1,
+          organizerRevenue: 1,
+          pazimoCommission: 1,
+        },
+      },
+      {
+        $sort: { createdAt: -1 },
+      },
+    ]);
+
+    // Get withdrawal data in parallel
+    const withdrawalData = await Withdrawal.aggregate([
+      {
+        $match: {
+          organizer: new mongoose.Types.ObjectId(organizerId),
+        },
+      },
+      {
+        $facet: {
+          withdrawals: [
+            { $sort: { createdAt: -1 } },
+            { $limit: 10 }, // Get recent withdrawals
+          ],
+          stats: [
+            {
+              $group: {
+                _id: null,
+                totalWithdrawn: {
+                  $sum: {
+                    $cond: [
+                      { $in: ["$status", ["approved", "completed"]] },
+                      "$amount",
+                      0,
+                    ],
+                  },
+                },
+                pendingWithdrawals: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    // Calculate overall stats
+    const totalRevenue = dashboardData.reduce((sum, e) => sum + (e.revenue || 0), 0);
+    const organizerRevenue = dashboardData.reduce((sum, e) => sum + (e.organizerRevenue || 0), 0);
+    const pazimoCommission = dashboardData.reduce((sum, e) => sum + (e.pazimoCommission || 0), 0);
+
+    const withdrawalStats = withdrawalData[0]?.stats[0] || {
+      totalWithdrawn: 0,
+      pendingWithdrawals: 0,
+    };
+
+    const availableBalance = organizerRevenue - withdrawalStats.totalWithdrawn - withdrawalStats.pendingWithdrawals;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        events: dashboardData,
+        withdrawals: withdrawalData[0]?.withdrawals || [],
+        balance: {
+          totalRevenue,
+          organizerRevenue,
+          pazimoCommission,
+          totalWithdrawn: withdrawalStats.totalWithdrawn,
+          pendingWithdrawals: withdrawalStats.pendingWithdrawals,
+          availableBalance,
+        },
+        stats: {
+          totalEvents: dashboardData.length,
+          publishedEvents: dashboardData.filter(e => e.status === "published").length,
+          draftEvents: dashboardData.filter(e => e.status === "draft").length,
+          completedEvents: dashboardData.filter(e => new Date(e.endDate) < new Date()).length,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching organizer dashboard:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch organizer dashboard",
+    });
+  }
+};

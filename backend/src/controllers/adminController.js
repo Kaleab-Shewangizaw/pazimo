@@ -4,104 +4,141 @@ const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const { StatusCodes } = require("http-status-codes");
 
-// Get admin dashboard statistics
+// Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
   try {
-    // Get total users
-    const totalUsers = await User.countDocuments();
+    // Run all count queries in parallel for better performance
+    const [
+      totalUsers,
+      totalEvents,
+      activeEvents,
+      activeOrganizers,
+      revenueStats,
+      withdrawalStats,
+    ] = await Promise.all([
+      User.countDocuments(),
+      Event.countDocuments(),
+      Event.countDocuments({ status: "published" }),
+      User.countDocuments({ role: "organizer" }),
+      // Use aggregation to calculate revenue and ticket counts in one query
+      Ticket.aggregate([
+        {
+          $facet: {
+            // Calculate gross revenue (only tickets with price > 0)
+            revenue: [
+              {
+                $match: {
+                  price: { $gt: 0 },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  grossRevenue: { $sum: "$price" },
+                },
+              },
+            ],
+            // Calculate total tickets sold (ALL non-invitation tickets, including free)
+            ticketsSold: [
+              {
+                $match: {
+                  isInvitation: { $ne: true },
+                  status: { $nin: ["cancelled", "failed", "expired"] },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  total: {
+                    $sum: {
+                      $cond: [
+                        { $gt: ["$purchaseQuantity", 0] },
+                        "$purchaseQuantity",
+                        { $cond: [{ $gt: ["$ticketCount", 0] }, "$ticketCount", 1] },
+                      ],
+                    },
+                  },
+                  count: { $sum: 1 },
+                },
+              },
+            ],
+            // Get total ticket records for debugging
+            allTickets: [
+              {
+                $group: {
+                  _id: null,
+                  totalRecords: { $sum: 1 },
+                  invitationCount: {
+                    $sum: { $cond: [{ $eq: ["$isInvitation", true] }, 1, 0] },
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ]),
+      // Use aggregation for withdrawal stats
+      Withdrawal.aggregate([
+        {
+          $facet: {
+            withdrawn: [
+              {
+                $match: {
+                  status: { $in: ["approved", "completed"] },
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  total: { $sum: "$amount" },
+                },
+              },
+            ],
+            pending: [
+              {
+                $match: {
+                  status: "pending",
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  count: { $sum: 1 },
+                  amount: { $sum: "$amount" },
+                },
+              },
+            ],
+          },
+        },
+      ]),
+    ]);
 
-    // Get total events
-    const totalEvents = await Event.countDocuments();
+    // Extract aggregation results
+    const grossRevenue = revenueStats[0]?.revenue[0]?.grossRevenue || 0;
+    const totalTicketsSold = revenueStats[0]?.ticketsSold[0]?.total || 0;
+    const ticketRecordsCount = revenueStats[0]?.ticketsSold[0]?.count || 0;
+    const allTicketsData = revenueStats[0]?.allTickets[0] || {};
 
-    // Get active events (published)
-    const activeEvents = await Event.countDocuments({ status: "published" });
-
-    // Get total revenue from tickets (Gross Revenue - matching withdrawalController logic)
-    // Include all tickets that have a price > 0
-    const tickets = await Ticket.find({
-      price: { $gt: 0 },
-    }).populate("event");
-
-    // Calculate Revenue (Gross Revenue - matching withdrawalController logic)
-    // We now include ALL tickets to match the dashboard display as requested.
-    const validTickets = tickets.filter((t) => {
-      // We exclude tickets with no price
-      if (!t.price || t.price <= 0) return false;
-
-      // We DO NOT filter by status, paymentStatus, or isInvitation anymore
-      return true;
+    // Log for debugging
+    console.log('📊 Admin Dashboard Stats:', {
+      totalTicketRecords: allTicketsData.totalRecords || 0,
+      invitationCount: allTicketsData.invitationCount || 0,
+      validTicketRecords: ticketRecordsCount,
+      totalQuantitySold: totalTicketsSold,
+      grossRevenue
     });
 
-    const grossRevenue = validTickets.reduce(
-      (sum, t) => sum + (t.price || 0),
-      0
-    );
-
-    // Use Gross Revenue as Total Revenue for consistency
-    const totalRevenue = grossRevenue;
+    const totalWithdrawn = withdrawalStats[0]?.withdrawn[0]?.total || 0;
+    const pendingWithdrawalsAmount =
+      withdrawalStats[0]?.pending[0]?.amount || 0;
+    const pendingWithdrawals = withdrawalStats[0]?.pending[0]?.count || 0;
 
     // Calculate breakdown based on Gross Revenue
+    const totalRevenue = grossRevenue;
     const organizerRevenue = grossRevenue * 0.97;
     const pazimoCommission = grossRevenue * 0.03;
 
-    const totalTicketsSold = tickets.reduce((sum, ticket) => {
-      // Exclude invitations from sold count if needed, or keep consistent with revenue
-      if (ticket.isInvitation === true) return sum;
-
-      let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
-
-      // Check if ticket was bought before Dec 14, 2025
-      const cutoffDate = new Date("2025-12-14");
-      const ticketDate = new Date(ticket.createdAt || ticket.purchaseDate);
-
-      if (ticketDate < cutoffDate) {
-        // Strict check: if price doesn't match quantity * unit_price, recalculate
-        if (ticket.event && ticket.event.ticketTypes) {
-          const type = ticket.event.ticketTypes.find(
-            (tt) =>
-              tt.name === ticket.ticketType ||
-              tt._id.toString() === ticket.ticketType ||
-              (tt.name &&
-                ticket.ticketType &&
-                tt.name.toLowerCase() === ticket.ticketType.toLowerCase())
-          );
-
-          if (type && type.price > 0 && ticket.price > 0) {
-            const expectedPrice = quantity * type.price;
-            // If the difference is significant (more than 1 unit of currency/rounding error)
-            if (Math.abs(expectedPrice - ticket.price) > 1) {
-              const calculatedQty = Math.round(ticket.price / type.price);
-              if (calculatedQty > 0) {
-                quantity = calculatedQty;
-              }
-            }
-          }
-        }
-      }
-
-      return sum + quantity;
-    }, 0);
-
-    // Get active organizers
-    const activeOrganizers = await User.countDocuments({ role: "organizer" });
-
-    // Get withdrawal stats
-    const withdrawals = await Withdrawal.find({});
-
-    const totalWithdrawn = withdrawals
-      .filter((w) => w.status === "approved" || w.status === "completed")
-      .reduce((sum, w) => sum + (w.amount || 0), 0);
-
-    const pendingWithdrawalsAmount = withdrawals
-      .filter((w) => w.status === "pending")
-      .reduce((sum, w) => sum + (w.amount || 0), 0);
-
-    const pendingWithdrawals = withdrawals.filter(
-      (w) => w.status === "pending"
-    ).length;
-
     // Calculate available balance (Global)
-    // Available = Total Organizer Revenue (97%) - Total Withdrawn - Pending Withdrawals
     const availableBalance =
       organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount;
 
