@@ -599,7 +599,7 @@ export default function CustomersPage() {
         ) : !isSearching && hasMoreTickets ? (
           <div className="px-6 py-6 border-t border-gray-200 flex flex-col items-center gap-3 bg-gray-50">
             <p className="text-sm text-gray-600">
-              Showing {tickets.length} of {totalTicketCount} tickets
+              Showing {tickets.length} of {totalTicketCount} rows
             </p>
             <Button
               onClick={handleLoadMore}

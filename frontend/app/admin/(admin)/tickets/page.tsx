@@ -758,7 +758,7 @@ export default function TicketsPage() {
           ) : !isSearching && hasMoreTickets ? (
             <div className="flex flex-col items-center gap-3 py-6">
               <div className="text-sm text-gray-600">
-                Showing {tickets.length} of {totalTicketCount} tickets
+                Showing {tickets.length} of {totalTicketCount} rows
               </div>
               <Button
                 onClick={handleLoadMore}
