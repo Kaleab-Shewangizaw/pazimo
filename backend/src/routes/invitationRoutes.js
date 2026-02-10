@@ -111,10 +111,10 @@ router.get("/organizer/:organizerId", protect, async (req, res) => {
 });
 
 // Get invitations by event ID
-router.get("/invitations/event/:eventId", protect, getInvitationsByEvent);
+router.get("/event/:eventId", protect, getInvitationsByEvent);
 
 // Get all invitations (Admin or specific organizer)
-router.get("/invitations", protect, async (req, res) => {
+router.get("/", protect, async (req, res) => {
   try {
     // Admins can see all invitations, others can see only theirs
     const query =
@@ -130,9 +130,9 @@ router.get("/invitations", protect, async (req, res) => {
 });
 
 // Get all invitations (Admin)
-router.get("/invitations/admin/all", protect, getAllInvitations);
+router.get("/admin/all", protect, getAllInvitations);
 
 // Delete invitation (Admin/Organizer)
-router.delete("/invitations/:id", protect, deleteInvitation);
+router.delete("/:id", protect, deleteInvitation);
 
 module.exports = router;

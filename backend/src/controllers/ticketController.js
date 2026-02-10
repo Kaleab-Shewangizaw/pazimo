@@ -220,40 +220,33 @@ const processSuccessfulPayment = async (payment) => {
 
   // Create the ticket
   const ticket = await Ticket.create(ticketData);
-  console.log(`[TICKET-CREATE] ✅ Ticket created: ${ticket._id}`);
-  console.log(`[TICKET-CREATE] Ticket.user field: ${ticket.user}`);
-  console.log(`[TICKET-CREATE] Ticket.ticketId: ${ticket.ticketId}`);
-  console.log("[TICKET-CREATE]", ticket); // Log the created ticket
+  console.log(`[TICKET-CREATE] ✅ Ticket created: ${ticket._id} for ${finalUserId ? 'user' : 'guest'}`);
 
-  // Update event ticket quantity
-  ticketTypeInfo.quantity -= ticketCount || 1;
-  await event.save();
+  // ⚡ OPTIMIZATION: Use atomic operations to avoid multiple DB queries
+  // Update event ticket quantity and user tickets in parallel
+  const updatePromises = [];
+  
+  // Update event ticket quantity atomically
+  updatePromises.push(
+    Event.updateOne(
+      { _id: eventId, 'ticketTypes._id': ticketTypeInfo._id },
+      { $inc: { 'ticketTypes.$.quantity': -(ticketCount || 1) } }
+    )
+  );
 
-  // If user exists, add ticket to user's history
+  // If user exists, add ticket to user's history atomically
   if (finalUserId) {
-    const updateResult = await User.findByIdAndUpdate(
-      finalUserId,
-      { $push: { tickets: ticket._id } },
-      { new: true }
+    updatePromises.push(
+      User.updateOne(
+        { _id: finalUserId },
+        { $push: { tickets: ticket._id } }
+      )
     );
-    
-    if (updateResult) {
-      console.log(`[TICKET-CREATE] ✅ Added ticket ${ticket._id} to user ${finalUserId} history`);
-      console.log(`[TICKET-CREATE] User ${finalUserId} now has ${updateResult.tickets?.length || 0} tickets total`);
-    } else {
-      console.log(`[TICKET-CREATE] ❌ FAILED to update user ${finalUserId} - user not found!`);
-    }
-    
-    // Verify it was added
-    const verifyUser = await User.findById(finalUserId).select('tickets email phoneNumber');
-    if (verifyUser) {
-      const hasTicket = verifyUser.tickets?.some(t => t.toString() === ticket._id.toString());
-      console.log(`[TICKET-CREATE] Verification: User ${finalUserId} has ticket in array: ${hasTicket}`);
-      console.log(`[TICKET-CREATE] User email: ${verifyUser.email}, phone: ${verifyUser.phoneNumber}`);
-    } else {
-      console.log(`[TICKET-CREATE] ❌ CRITICAL: User ${finalUserId} does not exist in database!`);
-    }
   }
+  
+  // ⚡ Execute both updates in parallel
+  await Promise.all(updatePromises);
+  console.log(`[TICKET-CREATE] ✅ Updated event & user records`);
 
   // ⚡ Send SMS Confirmation ASYNCHRONOUSLY (non-blocking)
   // This prevents SMS delays from blocking ticket delivery
@@ -295,7 +288,7 @@ Pazimo`;
       });
   }
   
-  // ⚡ Send welcome SMS with credentials if new user was created
+  // ⚡ Send welcome SMS with credentials if new user was created (async, non-blocking)
   if (user && payment.newUserCreated) {
     const welcomeMessage = `Welcome to Pazimo! 🎉
 
@@ -319,8 +312,8 @@ Pazimo`;
       });
   }
 
-  console.log(`[TICKET-CREATE] ✅ Ticket ${ticket.ticketId} created successfully for txn: ${payment.transactionId}`);
-  console.log(`[TICKET-CREATE] Total time: ${Date.now() - startTime}ms`);
+  const totalTime = Date.now() - startTime;
+  console.log(`[TICKET-CREATE] ✅ Ticket ${ticket.ticketId} created successfully in ${totalTime}ms`);
   console.log(`[TICKET-CREATE] ============================================\n`);
   return ticket;
 };
