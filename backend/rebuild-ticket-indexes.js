@@ -13,7 +13,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Ticket = require('./src/models/Ticket');
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/pazimo';
+const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pazimo';
 
 async function rebuildIndexes() {
   try {
