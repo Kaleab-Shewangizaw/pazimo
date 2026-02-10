@@ -97,13 +97,19 @@ function PaymentSuccessContent() {
               toast.error("Payment successful, but failed to send invitation.");
             }
           }
-        } else if (data.status === "FAILED" || data.status === "CANCELLED") {
+        } else if (data.status === "CANCELLED" || data.status === "CANCELED") {
+          console.log(`[Payment] Payment cancelled`);
           setStatus("failed");
+          toast.error("Payment was cancelled");
+        } else if (data.status === "FAILED") {
+          console.log(`[Payment] Payment failed`);
+          setStatus("failed");
+          toast.error("Payment failed. Please try again.");
         } else {
-          // ⚡ OPTIMIZED: Adaptive polling - fast at first, slower later
-          // Polls: 0.3s, 0.3s, 0.5s, 0.5s, 1s, 1s, 2s, 2s, then 2s intervals
-          if (pollCount < 25) { // Reduced from 30
-            const delays = [300, 300, 500, 500, 1000, 1000, 2000, 2000]; // Faster initial polls
+          // ⚡ OPTIMIZED: Adaptive polling - fast at first, then slow down
+          // Polls: 0.5s, 0.5s, 1s, 1s, 1.5s, 1.5s, 2s, 2s, then 2s intervals
+          if (pollCount < 20) { // Increased from 25
+            const delays = [500, 500, 1000, 1000, 1500, 1500, 2000, 2000]; // Faster initial polls
             const delay = delays[pollCount] || 2000; // Default to 2s after initial fast polls
             console.log(`[Payment] Still pending, retrying in ${delay}ms...`);
             setTimeout(() => setPollCount((prev) => prev + 1), delay);

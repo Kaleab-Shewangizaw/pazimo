@@ -137,9 +137,11 @@ export default function EventDetailClient() {
     paymentMethod: "telebirr",
   });
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [currentTxRef, setCurrentTxRef] = useState<string | null>(null);
 
   const verificationAttempts = useRef(0);
   const isVerifyingPayment = useRef(false);
+  const cancelPaymentRef = useRef(false);
 
   // Fetch event details with caching
   const fetchEventDetails = useCallback(async () => {
@@ -180,11 +182,24 @@ export default function EventDetailClient() {
   }, [eventId, selectedTicketType]);
 
   // Verify and show tickets with retry logic - OPTIMIZED & GUARANTEED delivery
-  const verifyAndShowTickets = useCallback(async (txRef: string, retryCount = 0) => {
-    const MAX_RETRIES = 15; // Increased to 15 for mobile payments (30 seconds total)
-    const RETRY_DELAY = 2000; // 2 seconds
+  const verifyAndShowTickets = useCallback(async (txRef: string, retryCount = 0, canceledRef?: React.MutableRefObject<boolean>) => {
+    const MAX_RETRIES = 20; // Increased retries but with faster polling
+    // Adaptive retry delays: Start fast, then slow down
+    const getRetryDelay = (attempt: number) => {
+      if (attempt < 3) return 500;  // First 3 attempts: 0.5s (1.5s total)
+      if (attempt < 6) return 1000; // Next 3 attempts: 1s (3s total) 
+      if (attempt < 10) return 1500; // Next 4 attempts: 1.5s (6s total)
+      return 2000; // Remaining: 2s
+    };
 
     try {
+      // Check if user canceled
+      if (canceledRef?.current) {
+        console.log(`[VERIFY] User canceled payment verification`);
+        setIsProcessingPayment(false);
+        return false;
+      }
+
       console.log(`[VERIFY] Attempt ${retryCount + 1}/${MAX_RETRIES} for txRef: ${txRef}`);
       
       // STEP 1: Verify payment status with backend (triggers ticket creation if not already done)
@@ -198,27 +213,42 @@ export default function EventDetailClient() {
 
       const statusData = await statusResponse.json();
       console.log(`[VERIFY] Status response:`, statusData);
+      console.log(`[VERIFY] status field value: "${statusData.status}" (type: ${typeof statusData.status})`);
       console.log(`[VERIFY] newUserCredentials present:`, !!statusData.newUserCredentials);
 
-      // Handle different payment statuses
-      if (statusData.status === "PENDING") {
-        if (retryCount < MAX_RETRIES) {
-          console.log(`[VERIFY] Payment still pending (attempt ${retryCount + 1}/${MAX_RETRIES}), retrying in ${RETRY_DELAY}ms...`);
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-          return verifyAndShowTickets(txRef, retryCount + 1);
-        }
-        // Timeout - payment might still be processing on user's phone
+      // ⚡ CRITICAL FIX: Handle CANCELLED and FAILED immediately
+      if (statusData.status === "CANCELLED" || statusData.status === "CANCELED") {
         setIsProcessingPayment(false);
-        toast.error("Payment verification timeout. If you completed payment, check 'My Tickets' in a few minutes.");
+        toast.error("Payment was cancelled. Please try again if you wish to purchase tickets.");
         router.replace(`/event_detail?id=${eventId || ""}`);
         return false;
       }
 
-      if (statusData.status === "FAILED" || statusData.status === "NOT_FOUND") {
+      if (statusData.status === "FAILED") {
         setIsProcessingPayment(false);
-        toast.error(statusData.status === "NOT_FOUND" 
-          ? "Payment not found. Please try again." 
-          : "Payment failed. Please try again.");
+        toast.error("Payment failed. Please check your payment method and try again.");
+        router.replace(`/event_detail?id=${eventId || ""}`);
+        return false;
+      }
+
+      if (statusData.status === "NOT_FOUND") {
+        setIsProcessingPayment(false);
+        toast.error("Payment not found. Please try again.");
+        router.replace(`/event_detail?id=${eventId || ""}`);
+        return false;
+      }
+
+      // Handle pending status with adaptive retry
+      if (statusData.status === "PENDING") {
+        if (retryCount < MAX_RETRIES) {
+          const delay = getRetryDelay(retryCount);
+          console.log(`[VERIFY] Payment still pending (attempt ${retryCount + 1}/${MAX_RETRIES}), retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return verifyAndShowTickets(txRef, retryCount + 1, canceledRef);
+        }
+        // Timeout - payment might still be processing on user's phone
+        setIsProcessingPayment(false);
+        toast.error("Payment verification timeout. If you completed payment, check 'My Tickets' in a few minutes.");
         router.replace(`/event_detail?id=${eventId || ""}`);
         return false;
       }
@@ -295,9 +325,10 @@ export default function EventDetailClient() {
           
           // Tickets not created yet - this can happen if ticket creation is slow
           if (retryCount < MAX_RETRIES) {
-            console.log(`[VERIFY] No tickets returned, retrying in ${RETRY_DELAY}ms...`);
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-            return verifyAndShowTickets(txRef, retryCount + 1);
+            const delay = getRetryDelay(retryCount);
+            console.log(`[VERIFY] No tickets returned, retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return verifyAndShowTickets(txRef, retryCount + 1, canceledRef);
           }
         }
       }
@@ -310,9 +341,10 @@ export default function EventDetailClient() {
       
       // Retry on errors (network issues, timeouts, etc)
       if (retryCount < MAX_RETRIES) {
-        console.log(`[VERIFY] Retrying in ${RETRY_DELAY}ms...`);
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        return verifyAndShowTickets(txRef, retryCount + 1);
+        const delay = getRetryDelay(retryCount);
+        console.log(`[VERIFY] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return verifyAndShowTickets(txRef, retryCount + 1, canceledRef);
       }
       
       // Max retries exceeded
@@ -535,10 +567,20 @@ export default function EventDetailClient() {
       const processPayment = async () => {
         if (status === "success" || paymentStatus === "success") {
           setIsProcessingPayment(true);
+          setCurrentTxRef(txRef);
+          cancelPaymentRef.current = false;
           console.log("[PAYMENT-RETURN] Payment successful, verifying tickets for:", txRef);
           
           // Start verification immediately - no delays!
-          await verifyAndShowTickets(txRef);
+          await verifyAndShowTickets(txRef, 0, cancelPaymentRef);
+        } else if (status === "cancelled" || status === "canceled" || paymentStatus === "cancelled") {
+          console.log("[PAYMENT-RETURN] Payment was cancelled:", { status, paymentStatus });
+          toast.error("Payment was cancelled");
+          router.replace(`/event_detail?id=${eventId || ""}`);
+        } else if (status === "failed" || paymentStatus === "failed") {
+          console.log("[PAYMENT-RETURN] Payment failed:", { status, paymentStatus });
+          toast.error("Payment failed. Please try again.");
+          router.replace(`/event_detail?id=${eventId || ""}`);
         } else {
           console.log("[PAYMENT-RETURN] Payment was not successful:", { status, paymentStatus });
           toast.error("Payment was not successful");
@@ -1580,8 +1622,37 @@ export default function EventDetailClient() {
               This may take a few moments
             </p>
             <p className="text-xs text-gray-500">
-              Please do not close this window
+              Checking payment status...
             </p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                cancelPaymentRef.current = true;
+                setIsProcessingPayment(false);
+                
+                // Cancel the payment on backend
+                if (currentTxRef) {
+                  try {
+                    await fetch(
+                      `${process.env.NEXT_PUBLIC_API_URL}/api/payments/cancel`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ transactionId: currentTxRef }),
+                      }
+                    );
+                    toast.info("Payment verification cancelled. You can try again.");
+                  } catch (error) {
+                    console.error("Failed to cancel payment:", error);
+                  }
+                }
+                
+                router.replace(`/event_detail?id=${eventId || ""}`);
+              }}
+              className="mt-4 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              Cancel
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
