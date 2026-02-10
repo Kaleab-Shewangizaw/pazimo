@@ -143,12 +143,21 @@ const TicketSchema = new mongoose.Schema(
   },
 );
 
-// Add compound indexes for efficient queries
-TicketSchema.index({ event: 1, createdAt: -1 }); // For event ticket queries
-TicketSchema.index({ status: 1, paymentStatus: 1 }); // For filtering by status
-TicketSchema.index({ isInvitation: 1, paymentStatus: 1, status: 1 }); // For stats calculations
-TicketSchema.index({ createdAt: -1 }); // For admin ticket listing
-TicketSchema.index({ user: 1, createdAt: -1 }); // For user ticket queries
+// ⚡ OPTIMIZED INDEXES for 2000+ attendee events
+// Note: ticketId already has unique index from schema definition above
+
+// Compound indexes (order matters - most selective first)
+TicketSchema.index({ event: 1, status: 1, createdAt: -1 }); // Event tickets with status filter
+TicketSchema.index({ event: 1, checkedIn: 1, status: 1 }); // QR scanning - checked in filter
+TicketSchema.index({ event: 1, paymentStatus: 1, price: 1 }); // Revenue/stats calculations
+TicketSchema.index({ user: 1, createdAt: -1 }); // User ticket queries
+TicketSchema.index({ user: 1, status: 1 }); // User active tickets
+TicketSchema.index({ isInvitation: 1, paymentStatus: 1, status: 1 }); // Invitation stats
+TicketSchema.index({ event: 1, isOnDoor: 1, createdAt: -1 }); // On-door vs online filter
+TicketSchema.index({ guestPhone: 1 }, { sparse: true }); // Guest ticket lookup
+TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
+TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
+TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
 
 TicketSchema.pre("save", async function (next) {
   if (this.qrCode) return next();
