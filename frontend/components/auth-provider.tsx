@@ -12,19 +12,28 @@ export default function AuthProvider({
 
   useEffect(() => {
     // Initialize auth state from persisted storage
-    const storedUser = localStorage.getItem('auth-storage')
-    if (storedUser) {
-      try {
-        const { state } = JSON.parse(storedUser)
-        if (state.user && state.token) {
-          useAuthStore.setState({
-            user: state.user,
-            token: state.token,
-            isAuthenticated: true
-          })
+    // Wrapped in try-catch to prevent crashes
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const storedUser = localStorage.getItem('auth-storage')
+        if (storedUser) {
+          const { state } = JSON.parse(storedUser)
+          if (state?.user && state?.token) {
+            useAuthStore.setState({
+              user: state.user,
+              token: state.token,
+              isAuthenticated: true
+            })
+          }
         }
-      } catch (error) {
-        console.error('Failed to parse stored auth state:', error)
+      }
+    } catch (error) {
+      console.error('Failed to restore auth state:', error)
+      // Clear corrupted storage
+      try {
+        localStorage.removeItem('auth-storage')
+      } catch (e) {
+        // Ignore if localStorage is not available
       }
     }
   }, [])

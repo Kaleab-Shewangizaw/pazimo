@@ -108,12 +108,17 @@ export default function InvitationPage() {
 
   useEffect(() => {
     const checkAuth = () => {
-      const authState = localStorage.getItem("auth-storage");
-      if (!authState) {
+      // Safe localStorage access
+      if (typeof window === 'undefined' || !window.localStorage) {
         return false;
       }
 
       try {
+        const authState = localStorage.getItem("auth-storage");
+        if (!authState) {
+          return false;
+        }
+
         const { state } = JSON.parse(authState);
         const { user, token, isAuthenticated } = state;
 

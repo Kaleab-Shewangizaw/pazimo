@@ -39,17 +39,21 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const storedAuth = localStorage.getItem("auth-storage")
+    // Safe localStorage access with proper checks
     let token = ""
     let userId = ""
-    if (storedAuth) {
-      try {
-        const parsedAuth = JSON.parse(storedAuth)
-        token = parsedAuth.state?.token
-        userId = parsedAuth.state?.user?._id
-      } catch (e) {
-        console.error("Failed to parse auth state from localStorage", e)
+    
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const storedAuth = localStorage.getItem("auth-storage")
+        if (storedAuth) {
+          const parsedAuth = JSON.parse(storedAuth)
+          token = parsedAuth.state?.token
+          userId = parsedAuth.state?.user?._id
+        }
       }
+    } catch (e) {
+      console.error("Failed to parse auth state from localStorage", e)
     }
 
     if (!token || !userId) return

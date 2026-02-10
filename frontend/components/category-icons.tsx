@@ -267,6 +267,9 @@ export default function CategoryIcons({
 
   // Update visible cards based on screen size
   useEffect(() => {
+    // SSR check - only run in browser
+    if (typeof window === 'undefined') return;
+
     const handleResize = () => {
       const width = window.innerWidth;
       if (width < 640) {

@@ -6,6 +6,7 @@ import LayoutWrapper from "@/components/layout-wrapper"
 import { Toaster } from "sonner"
 import AuthProvider from "@/components/auth-provider"
 import "@/lib/disableInspect"
+import "@/lib/errorLogger" // Initialize error logging
 import type { Metadata, Viewport } from "next"
 import { Rubik } from "next/font/google"
 

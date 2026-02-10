@@ -40,6 +40,9 @@ export default function AdminSidebar({
 
   // Close mobile menu on window resize to desktop
   useEffect(() => {
+    // SSR check - only run in browser
+    if (typeof window === 'undefined') return;
+
     const handleResize = () => {
       if (window.innerWidth >= 1024 && open) {
         // Only close if it's currently open and desktop size
