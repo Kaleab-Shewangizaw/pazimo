@@ -52,10 +52,11 @@ class PaymentController {
             while (attempts < maxAttempts) {
               try {
                 verifyResponse = await ChapaService.verify(txn);
-                console.log(`Chapa Verify Response for ${txn} (attempt ${attempts + 1}):`, verifyResponse);
+                console.log(`Chapa Verify Response for ${txn} (attempt ${attempts + 1}):`, JSON.stringify(verifyResponse, null, 2));
                 
                 if (verifyResponse.status === "success" && verifyResponse.data) {
                   const chapaStatus = verifyResponse.data.status;
+                  console.log(`[DEBUG] Chapa returned status: "${chapaStatus}" (type: ${typeof chapaStatus})`);
 
                   if (chapaStatus === "success") {
                     payment.status = "PAID";
@@ -63,23 +64,39 @@ class PaymentController {
                     console.log(`Payment ${txn} marked as PAID, creating tickets...`);
                     await processSuccessfulPayment(payment);
                     break; // Exit retry loop
-                  } else if (chapaStatus === "failed") {
+                  } else if (
+                    chapaStatus === "failed" || 
+                    chapaStatus.includes("failed") ||
+                    chapaStatus.includes("failure")
+                  ) {
                     payment.status = "FAILED";
                     await payment.save();
+                    console.log(`Payment ${txn} marked as FAILED (Chapa status: ${chapaStatus})`);
+                    break;
+                  } else if (
+                    chapaStatus === "cancelled" || 
+                    chapaStatus === "canceled" ||
+                    chapaStatus.includes("cancel")
+                  ) {
+                    payment.status = "CANCELLED";
+                    await payment.save();
+                    console.log(`Payment ${txn} marked as CANCELLED (Chapa status: ${chapaStatus})`);
                     break;
                   } else {
                     // Status is still pending, retry
+                    console.log(`[DEBUG] Payment still pending, status: "${chapaStatus}"`);
                     attempts++;
                     if (attempts < maxAttempts) {
-                      // ⚡ Reduced delay: 300ms, 600ms instead of 1s, 1s
-                      const backoff = Math.min(300 * Math.pow(2, attempts - 1), 600);
+                      // ⚡ Reduced delay: 200ms, 400ms instead of 1s, 1s
+                      const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
                       await new Promise(resolve => setTimeout(resolve, backoff));
                     }
                   }
                 } else {
+                  console.log(`[DEBUG] Chapa response doesn't have success status or data:`, verifyResponse);
                   attempts++;
                   if (attempts < maxAttempts) {
-                    const backoff = Math.min(300 * Math.pow(2, attempts - 1), 600);
+                    const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
                     await new Promise(resolve => setTimeout(resolve, backoff));
                   }
                 }
@@ -87,7 +104,7 @@ class PaymentController {
                 console.error(`Chapa verify attempt ${attempts + 1} failed:`, verifyError.message);
                 attempts++;
                 if (attempts < maxAttempts) {
-                  const backoff = Math.min(300 * Math.pow(2, attempts - 1), 600);
+                  const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
                   await new Promise(resolve => setTimeout(resolve, backoff));
                 }
               }
@@ -113,10 +130,17 @@ class PaymentController {
             } else if (
               remoteStatus === "FAILED" ||
               remoteStatus === "CANCELLED" ||
+              remoteStatus === "CANCELED" ||
               remoteStatus === "EXPIRED"
             ) {
-              payment.status = "FAILED";
+              // Map all failure statuses properly
+              if (remoteStatus === "CANCELLED" || remoteStatus === "CANCELED") {
+                payment.status = "CANCELLED";
+              } else {
+                payment.status = "FAILED";
+              }
               await payment.save();
+              console.log(`Payment ${txn} marked as ${payment.status}`);
             }
           }
         } catch (err) {
@@ -129,13 +153,21 @@ class PaymentController {
       }
 
       // Map internal status to frontend expected status
-      // Frontend expects: "COMPLETED" for success
+      // Frontend expects: "COMPLETED" for success, "CANCELLED" for cancelled
       let status = payment.status;
       let ticketId = null;
       let newUserCredentials = null;
 
       if (status === "PAID") {
         status = "COMPLETED";
+      } else if (status === "CANCELLED") {
+        status = "CANCELLED"; // Keep CANCELLED as is for frontend
+      } else if (status === "FAILED") {
+        status = "FAILED"; // Keep FAILED as is for frontend
+      }
+
+      // Only fetch ticket if payment was successful
+      if (status === "COMPLETED") {
         // Find the ticket associated with this transaction
         const ticket = await Ticket.findOne({ paymentReference: txn });
         if (ticket) {
@@ -187,9 +219,6 @@ class PaymentController {
       console.log(`[PAYMENT-STATUS] Returning status: ${status}${ticketId ? `, ticketId: ${ticketId}` : ''}`);
       console.log(`[PAYMENT-STATUS] newUserCredentials:`, newUserCredentials ? `email: ${newUserCredentials.email}, password: SET` : 'null');
       console.log(`[PAYMENT-STATUS] ============================================\n`);
-      console.log(`[PAYMENT-STATUS] Returning status: ${status}${ticketId ? `, ticketId: ${ticketId}` : ''}`);
-      console.log(`[PAYMENT-STATUS] newUserCredentials:`, newUserCredentials ? `email: ${newUserCredentials.email}, password: SET` : 'null');
-      console.log(`[PAYMENT-STATUS] ============================================\n`);
 
       return res.status(StatusCodes.OK).json({
         success: true,
@@ -203,6 +232,53 @@ class PaymentController {
       return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
         success: false,
         error: "Failed to check payment status",
+      });
+    }
+  }
+
+  async cancelPayment(req, res) {
+    try {
+      const { transactionId } = req.body;
+      console.log(`\n[PAYMENT-CANCEL] ============================================`);
+      console.log(`[PAYMENT-CANCEL] Canceling payment for txn: ${transactionId}`);
+      
+      if (!transactionId) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          error: "Transaction ID is required",
+        });
+      }
+
+      const payment = await Payment.findOne({ transactionId });
+
+      if (!payment) {
+        console.log(`[PAYMENT-CANCEL] ❌ Payment record NOT FOUND for txn: ${transactionId}`);
+        return res.status(StatusCodes.NOT_FOUND).json({
+          success: false,
+          error: "Payment record not found",
+        });
+      }
+
+      // Only cancel if payment is still pending
+      if (payment.status === "PENDING") {
+        payment.status = "CANCELLED";
+        await payment.save();
+        console.log(`[PAYMENT-CANCEL] ✅ Payment ${transactionId} marked as CANCELLED`);
+      } else {
+        console.log(`[PAYMENT-CANCEL] ⚠️ Payment ${transactionId} status is already ${payment.status}`);
+      }
+
+      console.log(`[PAYMENT-CANCEL] ============================================\n`);
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: "Payment cancelled successfully",
+        status: payment.status,
+      });
+    } catch (error) {
+      console.error("[PAYMENT-CANCEL] ❌ Error:", error);
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        error: "Failed to cancel payment",
       });
     }
   }

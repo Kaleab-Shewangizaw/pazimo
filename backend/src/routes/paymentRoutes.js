@@ -10,4 +10,11 @@ const { authenticateUser } = require("../middlewares/auth");
  */
 router.get("/status", paymentController.checkPaymentStatus);
 
+/**
+ * @route POST /api/payments/cancel
+ * @desc Cancel a pending payment
+ * @access Public
+ */
+router.post("/cancel", paymentController.cancelPayment);
+
 module.exports = router;
