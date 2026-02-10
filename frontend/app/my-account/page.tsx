@@ -57,15 +57,56 @@ export default function MyAccount() {
     if (!user) {
       router.push("/sign-in");
     } else {
-      setFormData({
-        firstName: user.firstName || "",
-        lastName: user.lastName || "",
-        email: user.email || "",
-        phoneNumber: user.phoneNumber || "",
-      });
-      setTimeout(() => setIsLoading(false), 300); // Smooth loading transition
+      // ⚡ Fetch fresh user data from backend to ensure we have all fields (including phoneNumber)
+      const fetchUserData = async () => {
+        try {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.status === "success" && data.data) {
+              // Update auth store with fresh data
+              setUser(data.data);
+              setFormData({
+                firstName: data.data.firstName || "",
+                lastName: data.data.lastName || "",
+                email: data.data.email || "",
+                phoneNumber: data.data.phoneNumber || "",
+              });
+            }
+          } else {
+            // Fallback to cached user data
+            setFormData({
+              firstName: user.firstName || "",
+              lastName: user.lastName || "",
+              email: user.email || "",
+              phoneNumber: user.phoneNumber || "",
+            });
+          }
+        } catch (error) {
+          console.error("Failed to fetch user data:", error);
+          // Fallback to cached user data
+          setFormData({
+            firstName: user.firstName || "",
+            lastName: user.lastName || "",
+            email: user.email || "",
+            phoneNumber: user.phoneNumber || "",
+          });
+        } finally {
+          setTimeout(() => setIsLoading(false), 300);
+        }
+      };
+      
+      fetchUserData();
     }
-  }, [user, router]);
+  }, [user, router, token, setUser]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

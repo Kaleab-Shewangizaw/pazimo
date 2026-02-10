@@ -66,8 +66,18 @@ router.post("/ticket/initiate", async (req, res) => {
 
     console.log(`[PAYMENT-INIT] Received userId from frontend: ${userId}`);
 
+    // ⚡ CRITICAL: If userId is provided (logged-in user), fetch the user object
+    if (userId) {
+      user = await User.findById(userId);
+      if (user) {
+        console.log(`[PAYMENT-INIT] ✅ Fetched logged-in user: ${user._id}, phone: ${user.phoneNumber}`);
+      } else {
+        console.error(`[PAYMENT-INIT] ❌ User ${userId} not found in database!`);
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+    }
     // If no userId provided (guest checkout), try to find or create user
-    if (!userId) {
+    else {
       const email = ticketDetails.email;
       const phone = phoneNumber; // Use the payment phone number
 
@@ -154,11 +164,14 @@ router.post("/ticket/initiate", async (req, res) => {
     console.log("SantimPay payment initiated:", response);
 
     // Save a “pending” payment record in your DB
+    // For logged-in users: use account phone for SMS, store payment phone separately
+    // For guest users: use payment phone for account creation and SMS
     await Payment.create({
       transactionId: transactionId,
       status: "PENDING",
-      guestName: ticketDetails.fullName,
-      contact: phoneNumber,
+      guestName: user ? user.firstName : ticketDetails.fullName, // Use firstName for logged-in users
+      contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber, // Use account phone for logged-in users
+      paymentPhone: phoneNumber, // Store payment phone separately
       method: method,
       price: amount,
       eventId: ticketDetails.eventId,
@@ -231,7 +244,18 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
     
     console.log(`[CHAPA-INIT] Received userId from frontend: ${userId}`);
 
-    if (!userId) {
+    // ⚡ CRITICAL: If userId is provided (logged-in user), fetch the user object
+    if (userId) {
+      user = await User.findById(userId);
+      if (user) {
+        console.log(`[CHAPA-INIT] ✅ Fetched logged-in user: ${user._id}, phone: ${user.phoneNumber}`);
+      } else {
+        console.error(`[CHAPA-INIT] ❌ User ${userId} not found in database!`);
+        return res.status(404).json({ success: false, error: "User not found" });
+      }
+    }
+    // If no userId provided (guest checkout), try to find or create user
+    else if (!userId) {
       const email = ticketDetails.email;
       const phone = phoneNumber;
 
@@ -386,11 +410,14 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
     console.log("Chapa payment initiated:", response);
 
     // Save Payment Record
+    // For logged-in users: use account phone for SMS, store payment phone separately
+    // For guest users: use payment phone for account creation and SMS
     await Payment.create({
       transactionId: transactionId,
       status: "PENDING",
-      guestName: ticketDetails.fullName,
-      contact: phoneNumber,
+      guestName: user ? user.firstName : ticketDetails.fullName, // Use firstName for logged-in users
+      contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber, // Use account phone for logged-in users
+      paymentPhone: phoneNumber, // Store payment phone separately
       method: method,
       provider: "chapa",
       price: amount,
@@ -400,6 +427,8 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         ...ticketDetails,
         ticketType: ticketDetails.ticketTypeId,
         ticketCount: ticketDetails.quantity,
+        userId: userId, // ⚡ CRITICAL: Also save in ticketDetails for redundancy
+        email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
       },
     });
 

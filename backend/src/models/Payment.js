@@ -8,7 +8,8 @@ const Payment = new mongoose.Schema({
     default: "PENDING",
   },
   guestName: String,
-  contact: String,
+  contact: String, // For logged-in users: account phone; For guests: payment phone
+  paymentPhone: String, // The actual phone number used for payment (always stored)
   method: String, // "email" or "sms"
   provider: {
     type: String,

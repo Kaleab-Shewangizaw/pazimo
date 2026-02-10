@@ -106,6 +106,8 @@ const processSuccessfulPayment = async (payment) => {
 
   // Handle User vs Guest
   let finalUserId = payment.userId || userId;
+  let user = null; // ⚡ Declare user variable in outer scope
+  
   console.log(`[TICKET-CREATE] ============================================`);
   console.log(`[TICKET-CREATE] Initial finalUserId: ${finalUserId}`);
   console.log(`[TICKET-CREATE] payment.userId: ${payment.userId}`);
@@ -115,16 +117,15 @@ const processSuccessfulPayment = async (payment) => {
   console.log(`[TICKET-CREATE] ============================================`);
 
   if (!finalUserId) {
-    // Try to find existing user by phone or email
+    // ⚡ GUEST CHECKOUT ONLY: Try to find existing user by phone or email
+    // For logged-in users, finalUserId is already set, so this block is skipped
     const rawEmail = payment.ticketDetails?.email;
     const rawPhone = payment.contact;
 
     const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
     const phone = rawPhone ? rawPhone.replace(/\s+/g, "") : null;
 
-    console.log(`[TICKET-CREATE] Searching for user by phone: ${phone} or email: ${email}`);
-
-    let user = null;
+    console.log(`[TICKET-CREATE] GUEST CHECKOUT - Searching for user by phone: ${phone} or email: ${email}`);
 
     // Check by PHONE first (Priority 1 - most reliable)
     if (phone) {
@@ -197,6 +198,12 @@ const processSuccessfulPayment = async (payment) => {
 
   console.log(`[TICKET-CREATE] Final resolved userId: ${finalUserId}`);
 
+  // ⚡ Fetch user object if we have finalUserId but no user object (logged-in users)
+  if (finalUserId && !user) {
+    user = await User.findById(finalUserId).select('firstName lastName phoneNumber email');
+    console.log(`[TICKET-CREATE] Fetched user for SMS: ${user ? `${user.firstName} (${user.phoneNumber})` : 'NOT FOUND'}`);
+  }
+
   if (finalUserId) {
     ticketData.user = finalUserId;
     ticketData.isInvitation = false;
@@ -250,16 +257,14 @@ const processSuccessfulPayment = async (payment) => {
 
   // ⚡ Send SMS Confirmation ASYNCHRONOUSLY (non-blocking)
   // This prevents SMS delays from blocking ticket delivery
-  const smsPhone =
-    payment.contact ||
-    ticketData.guestPhone ||
-    (user ? user.phoneNumber : null);
+  // Priority: Use payment.contact which is already set correctly:
+  //   - For logged-in users: account phone (user.phoneNumber)
+  //   - For guest users: payment phone
+  const smsPhone = payment.contact || (user ? user.phoneNumber : null);
   
   if (smsPhone) {
-    const userName =
-      payment.guestName ||
-      ticketData.guestName ||
-      (user ? user.firstName : "Customer");
+    // Priority: For logged-in users, use firstName only, not full name
+    const userName = user ? user.firstName : (payment.guestName || "Customer");
     const eventTitle = event.title;
     const admitCount = ticketCount || 1;
     const ticketLink = `${
