@@ -106,7 +106,13 @@ const processSuccessfulPayment = async (payment) => {
 
   // Handle User vs Guest
   let finalUserId = payment.userId || userId;
-  console.log(`Initial finalUserId: ${finalUserId}`);
+  console.log(`[TICKET-CREATE] ============================================`);
+  console.log(`[TICKET-CREATE] Initial finalUserId: ${finalUserId}`);
+  console.log(`[TICKET-CREATE] payment.userId: ${payment.userId}`);
+  console.log(`[TICKET-CREATE] payment.ticketDetails.userId: ${userId}`);
+  console.log(`[TICKET-CREATE] payment.contact: ${payment.contact}`);
+  console.log(`[TICKET-CREATE] payment.ticketDetails.email: ${payment.ticketDetails?.email}`);
+  console.log(`[TICKET-CREATE] ============================================`);
 
   if (!finalUserId) {
     // Try to find existing user by phone or email
@@ -114,33 +120,44 @@ const processSuccessfulPayment = async (payment) => {
     const rawPhone = payment.contact;
 
     const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
-    // Normalize phone: remove spaces, dashes, etc. if needed, but keep consistent with DB
     const phone = rawPhone ? rawPhone.replace(/\s+/g, "") : null;
 
-    console.log(`Searching for user by email: ${email} or phone: ${phone}`);
+    console.log(`[TICKET-CREATE] Searching for user by phone: ${phone} or email: ${email}`);
 
     let user = null;
 
-    // Check by email first (Priority 1)
-    if (email) {
-      user = await User.findOne({ email: email });
+    // Check by PHONE first (Priority 1 - most reliable)
+    if (phone) {
+      user = await User.findOne({ phoneNumber: phone });
+      console.log(`[TICKET-CREATE] Searched by phone "${phone}": ${user ? `FOUND user ${user._id}` : 'NOT FOUND'}`);
     }
 
-    // If not found by email, check by phone (Priority 2)
-    if (!user && phone) {
-      user = await User.findOne({ phoneNumber: phone });
+    // If not found by phone, check by EMAIL (Priority 2)
+    if (!user && email) {
+      user = await User.findOne({ email: email });
+      console.log(`[TICKET-CREATE] Searched by email "${email}": ${user ? `FOUND user ${user._id}` : 'NOT FOUND'}`);
     }
 
     if (user) {
-      console.log(`Found existing user: ${user._id}`);
+      console.log(`[TICKET-CREATE] ✅ Found EXISTING user: ${user._id}`);
       finalUserId = user._id;
+      
+      // ⚡ IMPORTANT: Mark for auto-login even if user exists
+      // This allows guest buyers to auto-login to their existing account
+      if (!payment.userId) {
+        // Only set credentials if payment wasn't initiated by authenticated user
+        payment.newUserCreated = true; // Reuse flag to mean "send credentials"
+        payment.newUserEmail = user.email;
+        payment.newUserPassword = phone; // Phone is always the password
+        await payment.save();
+        console.log(`[TICKET-CREATE] ✅ Set auto-login credentials for existing user ${user._id}`);
+      }
     } else if (email && phone) {
-      // Create new user if we have both email and phone
+      // Create new user ONLY if we have both email and phone
       try {
         const splitName = (payment.guestName || "Guest User").split(" ");
         const firstName = splitName[0];
         const lastName = splitName.slice(1).join(" ") || "User";
-        // Use phone number as password as requested
         const password = phone;
 
         user = await User.create({
@@ -154,19 +171,36 @@ const processSuccessfulPayment = async (payment) => {
           isActive: true,
         });
         finalUserId = user._id;
-        console.log(`Auto-created user ${user._id} for ticket purchase`);
+        console.log(`[TICKET-CREATE] ✅ AUTO-CREATED NEW USER ${user._id} for ticket`);
+        
+        // ⚡ Mark payment with newUserCreated flag for auto-login
+        payment.newUserCreated = true;
+        payment.newUserEmail = email;
+        payment.newUserPassword = password;
+        payment.userId = user._id; // ⚡ CRITICAL: Update payment.userId
+        await payment.save();
+        console.log(`[TICKET-CREATE] ✅ Updated payment.userId to ${user._id}`);
+        
       } catch (err) {
-        console.error("Failed to auto-create user:", err.message);
-        // Fallback to guest if user creation fails
+        console.error(`[TICKET-CREATE] ❌ Failed to auto-create user:`, err.message);
+        // If creation fails due to duplicate, try finding the user
+        if (err.code === 11000) {
+          user = await User.findOne({ $or: [{ email: email }, { phoneNumber: phone }] });
+          if (user) {
+            finalUserId = user._id;
+            console.log(`[TICKET-CREATE] Found existing user after duplicate error: ${user._id}`);
+          }
+        }
       }
     }
   }
 
-  console.log(`Final resolved userId: ${finalUserId}`);
+  console.log(`[TICKET-CREATE] Final resolved userId: ${finalUserId}`);
 
   if (finalUserId) {
     ticketData.user = finalUserId;
     ticketData.isInvitation = false;
+    console.log(`[TICKET-CREATE] ✅ Ticket will be created for USER: ${finalUserId}`);
   } else {
     // If no user, treat as guest ticket (invitation style)
     ticketData.isInvitation = true;
@@ -179,8 +213,10 @@ const processSuccessfulPayment = async (payment) => {
 
   // Create the ticket
   const ticket = await Ticket.create(ticketData);
-  console.log(`Ticket created: ${ticket._id}`);
-  console.log("Created Ticket:", ticket); // Log the created ticket
+  console.log(`[TICKET-CREATE] ✅ Ticket created: ${ticket._id}`);
+  console.log(`[TICKET-CREATE] Ticket.user field: ${ticket.user}`);
+  console.log(`[TICKET-CREATE] Ticket.ticketId: ${ticket.ticketId}`);
+  console.log("[TICKET-CREATE]", ticket); // Log the created ticket
 
   // Update event ticket quantity
   ticketTypeInfo.quantity -= ticketCount || 1;
@@ -188,30 +224,49 @@ const processSuccessfulPayment = async (payment) => {
 
   // If user exists, add ticket to user's history
   if (finalUserId) {
-    await User.findByIdAndUpdate(finalUserId, {
-      $push: { tickets: ticket._id },
-    });
-    console.log(`Added ticket to user ${finalUserId} history`);
+    const updateResult = await User.findByIdAndUpdate(
+      finalUserId,
+      { $push: { tickets: ticket._id } },
+      { new: true }
+    );
+    
+    if (updateResult) {
+      console.log(`[TICKET-CREATE] ✅ Added ticket ${ticket._id} to user ${finalUserId} history`);
+      console.log(`[TICKET-CREATE] User ${finalUserId} now has ${updateResult.tickets?.length || 0} tickets total`);
+    } else {
+      console.log(`[TICKET-CREATE] ❌ FAILED to update user ${finalUserId} - user not found!`);
+    }
+    
+    // Verify it was added
+    const verifyUser = await User.findById(finalUserId).select('tickets email phoneNumber');
+    if (verifyUser) {
+      const hasTicket = verifyUser.tickets?.some(t => t.toString() === ticket._id.toString());
+      console.log(`[TICKET-CREATE] Verification: User ${finalUserId} has ticket in array: ${hasTicket}`);
+      console.log(`[TICKET-CREATE] User email: ${verifyUser.email}, phone: ${verifyUser.phoneNumber}`);
+    } else {
+      console.log(`[TICKET-CREATE] ❌ CRITICAL: User ${finalUserId} does not exist in database!`);
+    }
   }
 
-  // Send SMS Confirmation
-  try {
-    const smsPhone =
-      payment.contact ||
-      ticketData.guestPhone ||
-      (user ? user.phoneNumber : null);
-    if (smsPhone) {
-      const userName =
-        payment.guestName ||
-        ticketData.guestName ||
-        (user ? user.firstName : "Customer");
-      const eventTitle = event.title;
-      const admitCount = ticketCount || 1;
-      const ticketLink = `${
-        process.env.FRONTEND_URL || "https://pazimo.com"
-      }/ticket/${ticket.ticketId}`;
+  // ⚡ Send SMS Confirmation ASYNCHRONOUSLY (non-blocking)
+  // This prevents SMS delays from blocking ticket delivery
+  const smsPhone =
+    payment.contact ||
+    ticketData.guestPhone ||
+    (user ? user.phoneNumber : null);
+  
+  if (smsPhone) {
+    const userName =
+      payment.guestName ||
+      ticketData.guestName ||
+      (user ? user.firstName : "Customer");
+    const eventTitle = event.title;
+    const admitCount = ticketCount || 1;
+    const ticketLink = `${
+      process.env.FRONTEND_URL || "https://pazimo.com"
+    }/ticket/${ticket.ticketId}`;
 
-      const message = `Hi ${userName} 👋
+    const message = `Hi ${userName} 👋
 Your ticket for ${eventTitle} is confirmed 🎟️
 Admits: ${admitCount} person${admitCount > 1 ? 's' : ''}
 
@@ -221,15 +276,42 @@ ${ticketLink}
 ⚠️ Keep this link safe it gives direct access to your ticket.
 Pazimo`;
 
-      const smsResult = await sendSMS(smsPhone, message);
-      if (smsResult.success) {
-        console.log(`SMS sent to ${smsPhone}`);
-      } else {
-        console.error(`Failed to send SMS to ${smsPhone}: ${smsResult.error}`);
-      }
-    }
-  } catch (smsError) {
-    console.error("Failed to send confirmation SMS:", smsError);
+    // ⚡ Send SMS in background - don't wait for it!
+    sendSMS(smsPhone, message)
+      .then((smsResult) => {
+        if (smsResult.success) {
+          console.log(`[SMS] ✅ Sent to ${smsPhone} (${smsResult.duration}ms, ${smsResult.attempts} attempts)`);
+        } else {
+          console.error(`[SMS] ❌ Failed to send to ${smsPhone}: ${smsResult.error}`);
+        }
+      })
+      .catch((smsError) => {
+        console.error("[SMS] ❌ Unexpected error sending SMS:", smsError);
+      });
+  }
+  
+  // ⚡ Send welcome SMS with credentials if new user was created
+  if (user && payment.newUserCreated) {
+    const welcomeMessage = `Welcome to Pazimo! 🎉
+
+Your account has been created:
+Email: ${payment.newUserEmail}
+Password: ${payment.newUserPassword}
+
+You can now login and manage your tickets at:
+https://pazimo.com/sign-in
+
+Pazimo`;
+    
+    sendSMS(smsPhone, welcomeMessage)
+      .then((smsResult) => {
+        if (smsResult.success) {
+          console.log(`[SMS] ✅ Welcome credentials sent to ${smsPhone}`);
+        }
+      })
+      .catch((err) => {
+        console.error("[SMS] ❌ Failed to send welcome SMS:", err);
+      });
   }
 
   console.log(`[TICKET-CREATE] ✅ Ticket ${ticket.ticketId} created successfully for txn: ${payment.transactionId}`);
@@ -1008,21 +1090,52 @@ const getUserTickets = async (req, res) => {
       });
     }
 
-    console.log(`Fetching tickets for user: ${req.user.userId}`);
+    console.log(`[GET-TICKETS] ============================================`);
+    console.log(`[GET-TICKETS] Fetching tickets for user: ${req.user.userId}`);
 
     // Fetch full user details to get email and phone
     const user = await User.findById(req.user.userId);
     if (!user) {
+      console.log(`[GET-TICKETS] ❌ User NOT FOUND: ${req.user.userId}`);
       return res
         .status(StatusCodes.NOT_FOUND)
         .json({ message: "User not found" });
     }
 
-    // Find tickets linked by ID OR matching email OR matching phone
+    console.log(`[GET-TICKETS] ✅ User found: ${user._id}`);
+    console.log(`[GET-TICKETS] User email: ${user.email}`);
+    console.log(`[GET-TICKETS] User phone: ${user.phoneNumber}`);
+    console.log(`[GET-TICKETS] User.tickets array length: ${user.tickets?.length || 0}`);
+    if (user.tickets?.length > 0) {
+      console.log(`[GET-TICKETS] User.tickets array:`, user.tickets.slice(0, 3).map(t => t.toString()));
+    }
+
+    // PRIORITY 1: Find tickets by their IDs from user.tickets array (most reliable)
+    // PRIORITY 2: Find tickets by user field, email, or phone (for legacy tickets)
     const query = {
-      $or: [{ user: user._id }],
+      $or: [],
     };
 
+    // Add user.tickets IDs to query (Primary method)
+    if (user.tickets && user.tickets.length > 0) {
+      // Ensure all IDs are proper ObjectIds
+      const mongoose = require("mongoose");
+      const ticketIds = user.tickets.map(id => {
+        if (mongoose.Types.ObjectId.isValid(id)) {
+          return typeof id === 'string' ? mongoose.Types.ObjectId(id) : id;
+        }
+        return id;
+      });
+      
+      query.$or.push({ _id: { $in: ticketIds } });
+      console.log(`[GET-TICKETS] Searching by ticket IDs from user.tickets array (${ticketIds.length} IDs)`);
+      console.log(`[GET-TICKETS] First 3 ticket IDs:`, ticketIds.slice(0, 3).map(id => id.toString()));
+    }
+
+    // Add user field to query (Secondary method)
+    query.$or.push({ user: user._id });
+
+    // Add email and phone match (Tertiary method for guest tickets)
     if (user.email) {
       query.$or.push({ guestEmail: user.email.toLowerCase() });
     }
@@ -1030,17 +1143,76 @@ const getUserTickets = async (req, res) => {
       query.$or.push({ guestPhone: user.phoneNumber });
     }
 
+    console.log(`[GET-TICKETS] Query:`, JSON.stringify(query, null, 2));
+
     const tickets = await Ticket.find(query)
       .populate("event", "title startDate endDate location")
       .sort("-createdAt");
 
-    console.log(`Found ${tickets.length} tickets for user ${req.user.userId}`);
-    res.status(StatusCodes.OK).json({ tickets, count: tickets.length });
+    console.log(`[GET-TICKETS] ✅ Found ${tickets.length} tickets for user ${req.user.userId}`);
+    
+    // Additional debugging
+    if (tickets.length === 0 && user.tickets?.length > 0) {
+      console.log(`[GET-TICKETS] ⚠️ NO TICKETS FOUND but user has ${user.tickets.length} in tickets array`);
+      console.log(`[GET-TICKETS] Trying direct query by first ticket ID...`);
+      const directTicket = await Ticket.findById(user.tickets[0]);
+      if (directTicket) {
+        console.log(`[GET-TICKETS] ✅ Direct query found ticket:`, {
+          _id: directTicket._id,
+          ticketId: directTicket.ticketId,
+          user: directTicket.user,
+          isInvitation: directTicket.isInvitation,
+          event: directTicket.event,
+        });
+      } else {
+        console.log(`[GET-TICKETS] ❌ Direct query also failed - ticket ${user.tickets[0]} does not exist`);
+      }
+      
+      // Check all tickets in array
+      console.log(`[GET-TICKETS] Checking all ${user.tickets.length} ticket IDs...`);
+      for (let i = 0; i < Math.min(user.tickets.length, 3); i++) {
+        const t = await Ticket.findById(user.tickets[i]);
+        console.log(`[GET-TICKETS] Ticket ${i+1}:`, t ? `EXISTS (${t.ticketId})` : 'NOT FOUND');
+      }
+    }
+    if (tickets.length > 0) {
+      console.log(`[GET-TICKETS] First ticket:`, {
+        _id: tickets[0]._id,
+        ticketId: tickets[0].ticketId,
+        user: tickets[0].user,
+        event: tickets[0].event?.title,
+      });
+    } else {
+      console.log(`[GET-TICKETS] ⚠️ NO TICKETS FOUND - Checking if tickets exist in DB...`);
+      // Check if tickets exist by ID
+      if (user.tickets?.length > 0) {
+        const ticketById = await Ticket.findById(user.tickets[0]);
+        if (ticketById) {
+          console.log(`[GET-TICKETS] ⚠️ Ticket EXISTS in DB:`, {
+            _id: ticketById._id,
+            user: ticketById.user,
+            userMatch: ticketById.user?.toString() === user._id.toString(),
+          });
+        } else {
+          console.log(`[GET-TICKETS] ❌ Ticket ${user.tickets[0]} NOT FOUND in DB`);
+        }
+      }
+    }
+    console.log(`[GET-TICKETS] ============================================`);
+    
+    res.status(StatusCodes.OK).json({ 
+      success: true,
+      tickets, 
+      count: tickets.length 
+    });
   } catch (error) {
-    console.error("Error fetching user tickets:", error);
+    console.error("[GET-TICKETS] ❌ Error fetching user tickets:", error);
     res
       .status(StatusCodes.INTERNAL_SERVER_ERROR)
-      .json({ error: error.message });
+      .json({ 
+        success: false,
+        error: error.message
+      });
   }
 };
 

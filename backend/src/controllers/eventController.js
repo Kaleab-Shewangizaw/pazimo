@@ -397,24 +397,44 @@ const publishEvent = async (req, res) => {
    GET EVENT DETAILS (PUBLIC)
 ====================================================== */
 const getEventDetails = async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  const event = await Event.findOne({ _id: id })
-    .populate("category", "name description")
-    .populate({
-      path: "organizer",
-      select: "firstName lastName email",
-      populate: {
-        path: "organizerProfile",
-        select: "organization",
-      },
+    // Validate ObjectId format
+    const mongoose = require("mongoose");
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({ 
+        status: "error", 
+        message: "Invalid event ID format" 
+      });
+    }
+
+    const event = await Event.findOne({ _id: id })
+      .populate("category", "name description")
+      .populate({
+        path: "organizer",
+        select: "firstName lastName email",
+        populate: {
+          path: "organizerProfile",
+          select: "organization",
+        },
+      });
+
+    if (!event) {
+      return res.status(StatusCodes.NOT_FOUND).json({ 
+        status: "error", 
+        message: "Event not found" 
+      });
+    }
+
+    res.status(StatusCodes.OK).json({ status: "success", data: event });
+  } catch (error) {
+    console.error("[EVENT-DETAILS] Error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to fetch event details",
     });
-
-  if (!event) {
-    throw new NotFoundError("Event not found");
   }
-
-  res.status(StatusCodes.OK).json({ status: "success", data: event });
 };
 
 /* ======================================================

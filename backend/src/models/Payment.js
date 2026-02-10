@@ -35,6 +35,16 @@ const Payment = new mongoose.Schema({
   santimPayResponse: {
     type: Object,
   },
+  newUserCreated: {
+    type: Boolean,
+    default: false,
+  },
+  newUserEmail: {
+    type: String,
+  },
+  newUserPassword: {
+    type: String,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

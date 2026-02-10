@@ -149,11 +149,20 @@ app.use((req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error("Error:", err.stack);
+  // Log error details for debugging
+  console.error("=".repeat(60));
+  console.error("❌ ERROR CAUGHT BY MIDDLEWARE:");
+  console.error("Path:", req.method, req.path);
+  console.error("Error Name:", err.name);
+  console.error("Error Message:", err.message);
+  console.error("Stack Trace:", err.stack);
+  console.error("=".repeat(60));
+  
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
     status: "error",
     message: err.message || "Something went wrong!",
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 

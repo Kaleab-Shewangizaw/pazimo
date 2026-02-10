@@ -198,6 +198,7 @@ export default function EventDetailClient() {
 
       const statusData = await statusResponse.json();
       console.log(`[VERIFY] Status response:`, statusData);
+      console.log(`[VERIFY] newUserCredentials present:`, !!statusData.newUserCredentials);
 
       // Handle different payment statuses
       if (statusData.status === "PENDING") {
@@ -225,6 +226,54 @@ export default function EventDetailClient() {
       // STEP 2: Payment is COMPLETED, fetch the created tickets
       if (statusData.status === "COMPLETED") {
         console.log(`[VERIFY] Payment completed! Fetching tickets...`);
+        
+        // 🔐 AUTO-LOGIN: If backend returns credentials AND user not logged in, log them in
+        if (statusData.newUserCredentials) {
+          console.log(`[AUTO-LOGIN] Received credentials:`, {
+            email: statusData.newUserCredentials.email,
+            hasPassword: !!statusData.newUserCredentials.password
+          });
+          const { useAuthStore } = await import("@/store/authStore");
+          const currentUser = useAuthStore.getState().user;
+          
+          // Only login if not already logged in
+          if (!currentUser?.id && !currentUser?._id) {
+            console.log(`[AUTO-LOGIN] User not logged in, attempting auto-login...`);
+            try {
+              const loginResponse = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/api/auth/unified-auth`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    fullName: "Customer",
+                    email: statusData.newUserCredentials.email,
+                    phoneNumber: statusData.newUserCredentials.password,
+                  }),
+                }
+              );
+              
+              if (loginResponse.ok) {
+                const authData = await loginResponse.json();
+                if (authData.status === "success" && authData.data) {
+                  // Save auth using Zustand store
+                  useAuthStore.getState().setAuth({
+                    user: authData.data.user,
+                    token: authData.data.token,
+                  });
+                  console.log(`[AUTO-LOGIN] ✅ Logged in as ${authData.data.user.email}`);
+                  toast.success("Welcome! You're now logged in.");
+                }
+              } else {
+                console.error(`[AUTO-LOGIN] ❌ Login failed:`, loginResponse.status);
+              }
+            } catch (loginError) {
+              console.error(`[AUTO-LOGIN] ❌ Error during auto-login:`, loginError);
+            }
+          } else {
+            console.log(`[AUTO-LOGIN] User already logged in, skipping.`);
+          }
+        }
         
         const ticketsResponse = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`,
@@ -295,46 +344,24 @@ export default function EventDetailClient() {
     setIsProcessingPayment(true);
 
     try {
-      // Default email if not provided
-      const finalEmail = paymentForm.email || 
+      // Use provided email or generate placeholder email
+      const finalEmail = paymentForm.email || user?.email || 
         `customerpazimo${String(Math.floor(Math.random() * 1000000)).padStart(6, "0")}@gmail.com`;
 
       const formattedPhone = activePaymentProvider === "CHAPA"
         ? `0${paymentForm.phoneNumber}`
         : `+251${paymentForm.phoneNumber}`;
 
-      // Handle authentication if user not logged in
-      let finalUserId = user?._id;
-      if (!finalUserId) {
-        try {
-          const authResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/unified-auth`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fullName: paymentForm.fullName,
-                email: finalEmail,
-                phoneNumber: formattedPhone,
-              }),
-            },
-          );
-
-          if (authResponse.ok) {
-            const authResult = await authResponse.json();
-            const { user: userData, token } = authResult.data;
-
-            // Only auto-login if not using default email
-            if (!userData.email.includes("customerpazimo")) {
-              useAuthStore.getState().setAuth({ user: userData, token });
-              toast.success("Account verified!");
-            }
-            finalUserId = userData._id;
-          }
-        } catch (error) {
-          console.error("Auth error:", error);
-        }
-      }
+      // Backend will handle user creation during payment initiation
+      const finalUserId = user?._id;
+      
+      console.log("[PAYMENT-INIT] ============================================");
+      console.log("[PAYMENT-INIT] User logged in:", !!user);
+      console.log("[PAYMENT-INIT] User ID:", finalUserId);
+      console.log("[PAYMENT-INIT] User email:", user?.email);
+      console.log("[PAYMENT-INIT] Payment email:", finalEmail);
+      console.log("[PAYMENT-INIT] Payment phone:", formattedPhone);
+      console.log("[PAYMENT-INIT] ============================================");
 
       const amount = selectedType.price * ticketQuantity;
       const orderId = crypto.randomUUID?.() || 
@@ -374,9 +401,14 @@ export default function EventDetailClient() {
         throw new Error(data.message || "Payment initiation failed");
       }
 
-      // Handle auto-login from payment response
-      if (data.token && data.user && !data.user.email.includes("customerpazimo")) {
+      // Handle auto-login from payment response for guest users (new or existing)
+      if (data.token && data.user && !user) {
         useAuthStore.getState().setAuth({ user: data.user, token: data.token });
+        // Check if this was a newly created account or existing account
+        const isNewAccount = data.user.email?.includes("customerpazimo") || 
+                             !data.user.email || 
+                             data.message?.includes("created");
+        toast.success(isNewAccount ? "Account created! You'll be logged in after payment." : "Welcome back! Logging you in...");
       }
 
       // Redirect to payment gateway if checkout URL provided
@@ -1444,7 +1476,7 @@ export default function EventDetailClient() {
                       htmlFor="payment_email"
                       className="text-xs font-semibold uppercase text-gray-500"
                     >
-                      Email (Optional)
+                      Email 
                     </Label>
                     <Input
                       id="payment_email"

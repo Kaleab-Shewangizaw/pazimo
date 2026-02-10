@@ -650,9 +650,11 @@ const resetPassword = async (req, res) => {
       data: {
         user: {
           _id: user._id,
+          id: user._id,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
+          phoneNumber: user.phoneNumber,
           role: user.role,
         },
         token: authToken,
@@ -677,9 +679,11 @@ const register = async (req, res) => {
       data: {
         user: {
           _id: user._id,
+          id: user._id,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
+          phoneNumber: user.phoneNumber,
           role: user.role,
         },
         token,
@@ -727,9 +731,11 @@ const login = async (req, res) => {
       data: {
         user: {
           _id: user._id,
+          id: user._id,
           firstName: user.firstName,
           lastName: user.lastName,
           email: user.email,
+          phoneNumber: user.phoneNumber,
           role: user.role,
           isActive: user.isActive,
         },
@@ -1129,6 +1135,7 @@ const unifiedAuth = async (req, res) => {
         data: {
           user: {
             _id: customerUser._id,
+            id: customerUser._id,
             firstName: customerUser.firstName,
             lastName: customerUser.lastName,
             email: customerUser.email,
@@ -1169,6 +1176,7 @@ const unifiedAuth = async (req, res) => {
         data: {
           user: {
             _id: newUser._id,
+            id: newUser._id,
             firstName: newUser.firstName,
             lastName: newUser.lastName,
             email: newUser.email,

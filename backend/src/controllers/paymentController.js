@@ -1,6 +1,7 @@
 const { StatusCodes } = require("http-status-codes");
 const Payment = require("../models/Payment");
 const Ticket = require("../models/Ticket");
+const User = require("../models/User");
 const SantimPayService = require("../services/santimPayService");
 const { processSuccessfulPayment } = require("./ticketController");
 
@@ -43,7 +44,7 @@ class PaymentController {
           );
 
           if (payment.provider === "chapa") {
-            // Check Chapa Status with retry
+            // ⚡ OPTIMIZED: Check Chapa Status with faster retry timing
             let verifyResponse;
             let attempts = 0;
             const maxAttempts = 3;
@@ -70,20 +71,24 @@ class PaymentController {
                     // Status is still pending, retry
                     attempts++;
                     if (attempts < maxAttempts) {
-                      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second before retry
+                      // ⚡ Reduced delay: 300ms, 600ms instead of 1s, 1s
+                      const backoff = Math.min(300 * Math.pow(2, attempts - 1), 600);
+                      await new Promise(resolve => setTimeout(resolve, backoff));
                     }
                   }
                 } else {
                   attempts++;
                   if (attempts < maxAttempts) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const backoff = Math.min(300 * Math.pow(2, attempts - 1), 600);
+                    await new Promise(resolve => setTimeout(resolve, backoff));
                   }
                 }
               } catch (verifyError) {
                 console.error(`Chapa verify attempt ${attempts + 1} failed:`, verifyError.message);
                 attempts++;
                 if (attempts < maxAttempts) {
-                  await new Promise(resolve => setTimeout(resolve, 1000));
+                  const backoff = Math.min(300 * Math.pow(2, attempts - 1), 600);
+                  await new Promise(resolve => setTimeout(resolve, backoff));
                 }
               }
             }
@@ -127,6 +132,7 @@ class PaymentController {
       // Frontend expects: "COMPLETED" for success
       let status = payment.status;
       let ticketId = null;
+      let newUserCredentials = null;
 
       if (status === "PAID") {
         status = "COMPLETED";
@@ -135,12 +141,54 @@ class PaymentController {
         if (ticket) {
           ticketId = ticket.ticketId;
           console.log(`[PAYMENT-STATUS] ✅ Ticket found: ${ticketId}`);
+          console.log(`[PAYMENT-STATUS] Ticket.user: ${ticket.user}`);
+          console.log(`[PAYMENT-STATUS] Payment.userId: ${payment.userId}`);
+          
+          // ⚡ CRITICAL: Verify ticket is linked to user
+          if (ticket.user) {
+            const userCheck = await User.findById(ticket.user).select('_id email tickets');
+            if (userCheck) {
+              console.log(`[PAYMENT-STATUS] ✅ User ${userCheck._id} exists`);
+              console.log(`[PAYMENT-STATUS] User has ${userCheck.tickets?.length || 0} tickets`);
+              const hasTicket = userCheck.tickets?.some(t => t.toString() === ticket._id.toString());
+              console.log(`[PAYMENT-STATUS] User has this ticket in array: ${hasTicket}`);
+            } else {
+              console.log(`[PAYMENT-STATUS] ⚠️ User ${ticket.user} NOT FOUND in database`);
+            }
+          } else {
+            console.log(`[PAYMENT-STATUS] ⚠️ Ticket has no user field!`);
+          }
         } else {
           console.log(`[PAYMENT-STATUS] ⚠️ Payment PAID but ticket NOT found yet`);
+        }
+        
+        // 🔐 AUTO-LOGIN: Always return credentials if ticket has user
+        // Frontend will decide whether to use them based on current auth state
+        console.log(`[PAYMENT-STATUS] ticket exists: ${!!ticket}`);
+        console.log(`[PAYMENT-STATUS] ticket.user: ${ticket?.user}`);
+        
+        if (ticket && ticket.user) {
+          const ticketUser = await User.findById(ticket.user).select('email phoneNumber');
+          if (ticketUser) {
+            newUserCredentials = {
+              email: ticketUser.email,
+              password: ticketUser.phoneNumber, // Phone is always password
+            };
+            console.log(`[PAYMENT-STATUS] ✅ Returning credentials for auto-login`);
+            console.log(`[PAYMENT-STATUS] Email: ${ticketUser.email}, Phone: ${ticketUser.phoneNumber}`);
+          } else {
+            console.log(`[PAYMENT-STATUS] ⚠️ Could not find user ${ticket.user}`);
+          }
+        } else {
+          console.log(`[PAYMENT-STATUS] ℹ️ No ticket or user found`);
         }
       }
 
       console.log(`[PAYMENT-STATUS] Returning status: ${status}${ticketId ? `, ticketId: ${ticketId}` : ''}`);
+      console.log(`[PAYMENT-STATUS] newUserCredentials:`, newUserCredentials ? `email: ${newUserCredentials.email}, password: SET` : 'null');
+      console.log(`[PAYMENT-STATUS] ============================================\n`);
+      console.log(`[PAYMENT-STATUS] Returning status: ${status}${ticketId ? `, ticketId: ${ticketId}` : ''}`);
+      console.log(`[PAYMENT-STATUS] newUserCredentials:`, newUserCredentials ? `email: ${newUserCredentials.email}, password: SET` : 'null');
       console.log(`[PAYMENT-STATUS] ============================================\n`);
 
       return res.status(StatusCodes.OK).json({
@@ -148,6 +196,7 @@ class PaymentController {
         status: status,
         transactionId: payment.transactionId,
         ticketId: ticketId,
+        newUserCredentials: newUserCredentials,
       });
     } catch (error) {
       console.error("[PAYMENT-STATUS] ❌ Error:", error);

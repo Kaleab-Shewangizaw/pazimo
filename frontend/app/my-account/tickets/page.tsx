@@ -180,16 +180,17 @@ export default function TicketsPage() {
       if (storedAuth) {
         try {
           const parsedAuth = JSON.parse(storedAuth);
-          userId = parsedAuth.state?.user?._id;
+          userId = parsedAuth.state?.user?._id || parsedAuth.state?.user?.id;
           token = parsedAuth.state?.token;
-          // console.log(
-          //   "Auth found - User ID:",
-          //   userId,
-          //   "Token exists:",
-          //   !!token
-          // );
+          console.log("[MY-TICKETS] ============================================");
+          console.log("[MY-TICKETS] Full user object:", parsedAuth.state?.user);
+          console.log("[MY-TICKETS] Logged in user ID:", userId);
+          console.log("[MY-TICKETS] User email:", parsedAuth.state?.user?.email);
+          console.log("[MY-TICKETS] User phone:", parsedAuth.state?.user?.phoneNumber);
+          console.log("[MY-TICKETS] Token exists:", !!token);
+          console.log("[MY-TICKETS] ============================================");
         } catch (e) {
-          console.error("Failed to parse auth", e);
+          console.error("[MY-TICKETS] Failed to parse auth", e);
           setLoading(false);
           return;
         }
@@ -197,6 +198,7 @@ export default function TicketsPage() {
 
       if (!userId) {
         console.log("No user ID found, stopping fetch");
+        console.log("Please log out and log in again to fix this issue.");
         setLoading(false);
         return;
       }
@@ -236,31 +238,46 @@ export default function TicketsPage() {
           },
         });
 
-        console.log("API Response Status:", res.status);
-        console.log("API Response OK:", res.ok);
+        console.log("[MY-TICKETS] API Response Status:", res.status);
+        console.log("[MY-TICKETS] API Response OK:", res.ok);
 
         if (!res.ok) {
           const errorText = await res.text();
-          console.log("Error response body:", errorText);
+          console.log("[MY-TICKETS] Error response body:", errorText);
           throw new Error(`HTTP error! status: ${res.status} - ${errorText}`);
         }
 
         const data = await res.json();
-        console.log("API Response Data:", data);
+        console.log("[MY-TICKETS] API Response Data:", data);
+        console.log("[MY-TICKETS] Response keys:", Object.keys(data));
+        console.log("[MY-TICKETS] data.success:", data?.success);
+        console.log("[MY-TICKETS] data.tickets type:", Array.isArray(data?.tickets) ? 'array' : typeof data?.tickets);
+        console.log("[MY-TICKETS] Tickets count in response:", data?.tickets?.length || 0);
+        
+        // Log first ticket if exists
+        if (data?.tickets?.length > 0) {
+          console.log("[MY-TICKETS] First ticket:", data.tickets[0]);
+        }
 
         // Handle different response formats
         let allTickets: any[] = [];
         if (data?.success && Array.isArray(data?.tickets)) {
           allTickets = data.tickets;
+          console.log("[MY-TICKETS] Using data.tickets (success=true)");
         } else if (Array.isArray(data?.tickets)) {
           allTickets = data.tickets;
+          console.log("[MY-TICKETS] Using data.tickets (no success field)");
         } else if (Array.isArray(data?.data)) {
           allTickets = data.data;
+          console.log("[MY-TICKETS] Using data.data");
         } else if (Array.isArray(data)) {
           allTickets = data;
+          console.log("[MY-TICKETS] Using data directly");
+        } else {
+          console.log("[MY-TICKETS] ❌ Could not find tickets array in response");
         }
 
-        console.log("All tickets found:", allTickets.length);
+        console.log("[MY-TICKETS] All tickets extracted:", allTickets.length);
 
         const filteredByStatus = allTickets.filter(
           (t: any) => t.status === "active" || t.status === "used"

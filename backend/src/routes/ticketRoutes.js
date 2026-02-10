@@ -64,22 +64,26 @@ router.post("/ticket/initiate", async (req, res) => {
     let token = null;
     let user = null;
 
+    console.log(`[PAYMENT-INIT] Received userId from frontend: ${userId}`);
+
     // If no userId provided (guest checkout), try to find or create user
     if (!userId) {
       const email = ticketDetails.email;
       const phone = phoneNumber; // Use the payment phone number
 
-      // 1. Check by email first (Priority 1)
-      if (email) {
-        user = await User.findOne({ email: email });
-      }
-
-      // 2. If not found by email, check by phone (Priority 2)
-      if (!user && phone) {
+      // 1. Check by PHONE first (Priority 1 - most reliable)
+      if (phone) {
         user = await User.findOne({ phoneNumber: phone });
+        console.log(`[PAYMENT-INIT] Searched by phone "${phone}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
       }
 
-      // 3. If still not found, create new user
+      // 2. If not found by phone, check by EMAIL (Priority 2)
+      if (!user && email) {
+        user = await User.findOne({ email: email.toLowerCase() });
+        console.log(`[PAYMENT-INIT] Searched by email "${email.toLowerCase()}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
+      }
+
+      // 3. If still not found, create new user (only if BOTH email and phone provided)
       if (!user && email && phone) {
         try {
           const splitName = (ticketDetails.fullName || "Guest User").split(" ");
@@ -91,24 +95,31 @@ router.post("/ticket/initiate", async (req, res) => {
           user = await User.create({
             firstName,
             lastName,
-            email,
+            email: email.toLowerCase(),
             phoneNumber: phone,
             password: password,
             role: "customer",
-            isPhoneVerified: true, // Assume verified since they are paying with it
+            isPhoneVerified: true,
             isActive: true,
           });
-          console.log(`Auto-created user ${user._id} during initiation`);
+          console.log(`[PAYMENT-INIT] ✅ AUTO-CREATED NEW USER ${user._id} with email: ${email.toLowerCase()}, phone: ${phone}`);
         } catch (err) {
-          console.error("Failed to auto-create user:", err.message);
-          // If creation fails (e.g. duplicate email but different phone), we proceed as guest
+          console.error("[PAYMENT-INIT] ❌ Failed to auto-create user:", err.message);
+          // If creation fails (e.g. duplicate), try to find the user again
+          if (err.code === 11000) {
+            user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phoneNumber: phone }] });
+            console.log(`[PAYMENT-INIT] Found existing user after duplicate error: ${user?._id}`);
+          }
         }
       }
 
       if (user) {
         userId = user._id;
-        // Generate token for auto-login
+        // Generate token for auto-login (for BOTH new and existing users)
         token = user.createJWT();
+        console.log(`[PAYMENT-INIT] ✅ Will use user ${userId} for ticket purchase`);
+      } else {
+        console.log(`[PAYMENT-INIT] ⚠️ No user found/created - proceeding as guest`);
       }
     }
     // ------------------------------------
@@ -156,8 +167,12 @@ router.post("/ticket/initiate", async (req, res) => {
         ...ticketDetails,
         ticketType: ticketDetails.ticketTypeId,
         ticketCount: ticketDetails.quantity,
+        userId: userId, // ⚡ CRITICAL: Also save in ticketDetails for redundancy
+        email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
       },
     });
+    
+    console.log(`[PAYMENT-INIT] ✅ Payment created with userId: ${userId}, transactionId: ${transactionId}`);
 
     // Return transactionId so frontend can poll
     res.json({
@@ -213,19 +228,26 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
     let userId = ticketDetails.userId;
     let token = null;
     let user = null;
+    
+    console.log(`[CHAPA-INIT] Received userId from frontend: ${userId}`);
 
     if (!userId) {
       const email = ticketDetails.email;
       const phone = phoneNumber;
 
-      if (email) {
-        user = await User.findOne({ email: email });
-      }
-
-      if (!user && phone) {
+      // 1. Check by PHONE first (Priority 1 - most reliable)
+      if (phone) {
         user = await User.findOne({ phoneNumber: phone });
+        console.log(`[CHAPA-INIT] Searched by phone "${phone}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
       }
 
+      // 2. If not found by phone, check by EMAIL (Priority 2)
+      if (!user && email) {
+        user = await User.findOne({ email: email.toLowerCase() });
+        console.log(`[CHAPA-INIT] Searched by email "${email.toLowerCase()}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
+      }
+
+      // 3. If still not found, create new user (only if BOTH email and phone provided)
       if (!user && email && phone) {
         try {
           const splitName = (ticketDetails.fullName || "Guest User").split(" ");
@@ -236,21 +258,31 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
           user = await User.create({
             firstName,
             lastName,
-            email,
+            email: email.toLowerCase(),
             phoneNumber: phone,
             password: password,
             role: "customer",
             isPhoneVerified: true,
             isActive: true,
           });
+          console.log(`[CHAPA-INIT] ✅ AUTO-CREATED NEW USER ${user._id} with email: ${email.toLowerCase()}, phone: ${phone}`);
         } catch (err) {
-          console.error("Failed to auto-create user:", err.message);
+          console.error("[CHAPA-INIT] ❌ Failed to auto-create user:", err.message);
+          // If creation fails due to duplicate, try to find the user
+          if (err.code === 11000) {
+            user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phoneNumber: phone }] });
+            console.log(`[CHAPA-INIT] Found existing user after duplicate error: ${user?._id}`);
+          }
         }
       }
 
       if (user) {
         userId = user._id;
+        // Generate token for auto-login (for BOTH new and existing users)
         token = user.createJWT();
+        console.log(`[CHAPA-INIT] ✅ Will use user ${userId} for ticket purchase`);
+      } else {
+        console.log(`[CHAPA-INIT] ⚠️ No user found/created - proceeding as guest`);
       }
     }
 
@@ -407,6 +439,33 @@ router.post("/validate-qr", validateQRCode);
 router.use(authenticateUser);
 
 // Protected routes
+router.get("/my-tickets-debug", async (req, res) => {
+  try {
+    const User = require("../models/User");
+    const Ticket = require("../models/Ticket");
+    
+    console.log("[DEBUG] req.user:", req.user);
+    const user = await User.findById(req.user.userId);
+    console.log("[DEBUG] User found:", user ? user._id : "NOT FOUND");
+    console.log("[DEBUG] User tickets array:", user?.tickets);
+    
+    if (user?.tickets?.length > 0) {
+      const firstTicket = await Ticket.findById(user.tickets[0]);
+      console.log("[DEBUG] First ticket:", firstTicket);
+    }
+    
+    res.json({
+      authenticated: !!req.user,
+      userId: req.user?.userId,
+      userExists: !!user,
+      ticketsInArray: user?.tickets?.length || 0,
+      ticketIds: user?.tickets || [],
+    });
+  } catch (error) {
+    res.json({ error: error.message });
+  }
+});
+
 router.post("/", createTicket);
 router.post("/on-door", createOnDoorTicket);
 router.post("/invite", createInvitationTicket);

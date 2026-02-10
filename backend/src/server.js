@@ -53,13 +53,12 @@ process.on("uncaughtException", (err) => {
 
 // Error handling for unhandled promise rejections
 process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION! 💥 Shutting down...");
-  console.error(err.name, err.message);
-  if (server.listening) {
-    server.close(() => {
-      process.exit(1);
-    });
-  } else {
-    process.exit(1);
-  }
+  console.error("⚠️  UNHANDLED REJECTION DETECTED:");
+  console.error("Error Name:", err.name);
+  console.error("Error Message:", err.message);
+  console.error("Stack Trace:", err.stack);
+  console.error("\n⚠️  Server will continue running. Please fix this issue!\n");
+  
+  // DON'T crash the server - just log the error
+  // This prevents customer-facing downtime from non-critical errors
 });

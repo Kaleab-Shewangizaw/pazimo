@@ -7,16 +7,19 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { processInvitation } from "@/lib/invitationUtils";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/authStore";
 
 function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { login } = useAuthStore();
   const txnId = searchParams.get("txn") || searchParams.get("orderId");
   const [status, setStatus] = useState<
     "loading" | "success" | "pending" | "failed"
   >("loading");
   const [pollCount, setPollCount] = useState(0);
   const [isInvitation, setIsInvitation] = useState(false);
+  const [newUserCreated, setNewUserCreated] = useState(false);
 
   useEffect(() => {
     if (!txnId) {
@@ -29,13 +32,56 @@ function PaymentSuccessContent() {
       if (status === "success") return;
 
       try {
+        console.log(`[Payment] Checking status (poll ${pollCount + 1})`);
+        const startTime = Date.now();
+        
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txnId}`
         );
         const data = await response.json();
+        
+        console.log(`[Payment] Status check took ${Date.now() - startTime}ms:`, data);
 
         if (data.success === true) {
           setStatus("success");
+          
+          // ⚡ Auto-login if new user was created
+          if (data.newUserCredentials) {
+            console.log("[Payment] New user created, auto-logging in...");
+            setNewUserCreated(true);
+            
+            try {
+              await login({
+                email: data.newUserCredentials.email,
+                password: data.newUserCredentials.password,
+              });
+              console.log("[Payment] ✅ Auto-login successful");
+              
+              // Verify login worked
+              const authStorage = localStorage.getItem("auth-storage");
+              if (authStorage) {
+                const parsed = JSON.parse(authStorage);
+                console.log("[Payment] ✅ User now logged in:", parsed.state?.user?._id);
+              }
+              
+              toast.success("Welcome to Pazimo! Your account has been created.");
+            } catch (loginError) {
+              console.error("[Payment] Auto-login failed:", loginError);
+              toast.info(
+                `Your account has been created. Login with:\nEmail: ${data.newUserCredentials.email}\nPassword: ${data.newUserCredentials.password}`,
+                { duration: 10000 }
+              );
+            }
+          } else {
+            // User already existed, verify they're logged in
+            const authStorage = localStorage.getItem("auth-storage");
+            if (authStorage) {
+              const parsed = JSON.parse(authStorage);
+              console.log("[Payment] ✅ User already logged in:", parsed.state?.user?._id);
+            } else {
+              console.log("[Payment] ⚠️ User not logged in after payment");
+            }
+          }
 
           // Check for pending invitation
           const storedInvitation = localStorage.getItem(`invitation_${txnId}`);
@@ -54,19 +100,25 @@ function PaymentSuccessContent() {
         } else if (data.status === "FAILED" || data.status === "CANCELLED") {
           setStatus("failed");
         } else {
-          // Still pending, poll again
-          if (pollCount < 20) {
-            // Poll for ~40 seconds (2s interval)
-            setTimeout(() => setPollCount((prev) => prev + 1), 2000);
+          // ⚡ OPTIMIZED: Adaptive polling - fast at first, slower later
+          // Polls: 0.3s, 0.3s, 0.5s, 0.5s, 1s, 1s, 2s, 2s, then 2s intervals
+          if (pollCount < 25) { // Reduced from 30
+            const delays = [300, 300, 500, 500, 1000, 1000, 2000, 2000]; // Faster initial polls
+            const delay = delays[pollCount] || 2000; // Default to 2s after initial fast polls
+            console.log(`[Payment] Still pending, retrying in ${delay}ms...`);
+            setTimeout(() => setPollCount((prev) => prev + 1), delay);
           } else {
+            console.log(`[Payment] Giving up after ${pollCount} attempts`);
             setStatus("pending"); // Give up polling, show pending message
           }
         }
       } catch (error) {
-        console.error("Status check failed", error);
-        // Retry on error
-        if (pollCount < 20) {
-          setTimeout(() => setPollCount((prev) => prev + 1), 2000);
+        console.error("[Payment] Status check failed:", error);
+        // Retry on error with adaptive delay
+        if (pollCount < 30) {
+          const delays = [500, 500, 1000, 1000, 2000, 2000, 3000, 3000];
+          const delay = delays[pollCount] || 3000;
+          setTimeout(() => setPollCount((prev) => prev + 1), delay);
         }
       }
     };
@@ -105,6 +157,8 @@ function PaymentSuccessContent() {
             : status === "success"
             ? isInvitation
               ? "Thank you! Your invitation has been sent successfully."
+              : newUserCreated
+              ? "Thank you for your purchase! Your account has been created and you're now logged in. Your tickets have been sent to your email and SMS."
               : "Thank you for your purchase. Your tickets have been generated and sent to your email."
             : "We couldn't verify your payment. Please contact support if you believe this is an error."}
         </p>
