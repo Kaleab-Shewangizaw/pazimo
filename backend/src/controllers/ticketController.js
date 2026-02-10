@@ -264,15 +264,15 @@ const processSuccessfulPayment = async (payment) => {
       process.env.FRONTEND_URL || "https://pazimo.com"
     }/ticket/${ticket.ticketId}`;
 
-    const message = `Hi ${userName} 👋
-Your ticket for ${eventTitle} is confirmed 🎟️
-Admits: ${admitCount} person${admitCount > 1 ? 's' : ''}
-
-Access your ticket here:
-${ticketLink}
-
-⚠️ Keep this link safe it gives direct access to your ticket.
-Pazimo`;
+    // ⚡ OPTIMIZED: Combine ticket confirmation and credentials into ONE SMS to avoid duplicates
+    let message = `Hi ${userName} 👋\nYour ticket for ${eventTitle} is confirmed 🎟️\nAdmits: ${admitCount} person${admitCount > 1 ? 's' : ''}\n\nAccess your ticket here:\n${ticketLink}`;
+    
+    // If new user created, add credentials to the same message
+    if (user && payment.newUserCreated) {
+      message += `\n\n🔐 Your Account:\nEmail: ${payment.newUserEmail}\nPassword: ${payment.newUserPassword}\n\nLogin at: https://pazimo.com/login`;
+    }
+    
+    message += `\n\n⚠️ Keep this link safe it gives direct access to your ticket.\nPazimo`;
 
     // ⚡ Send SMS in background - don't wait for it!
     sendSMS(smsPhone, message)
@@ -285,30 +285,6 @@ Pazimo`;
       })
       .catch((smsError) => {
         console.error("[SMS] ❌ Unexpected error sending SMS:", smsError);
-      });
-  }
-  
-  // ⚡ Send welcome SMS with credentials if new user was created (async, non-blocking)
-  if (user && payment.newUserCreated) {
-    const welcomeMessage = `Welcome to Pazimo! 🎉
-
-Your account has been created:
-Email: ${payment.newUserEmail}
-Password: ${payment.newUserPassword}
-
-You can now login and manage your tickets at:
-https://pazimo.com/sign-in
-
-Pazimo`;
-    
-    sendSMS(smsPhone, welcomeMessage)
-      .then((smsResult) => {
-        if (smsResult.success) {
-          console.log(`[SMS] ✅ Welcome credentials sent to ${smsPhone}`);
-        }
-      })
-      .catch((err) => {
-        console.error("[SMS] ❌ Failed to send welcome SMS:", err);
       });
   }
 

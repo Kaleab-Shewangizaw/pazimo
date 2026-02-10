@@ -27,7 +27,7 @@ const sendSMS = async (phone, message, retries = 3) => {
               process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw",
           },
           {
-            timeout: 5000, // ⚡ Reduced to 5 seconds (was 15s)
+            timeout: 10000, // ⚡ Increased to 10 seconds for reliability
           }
         );
 

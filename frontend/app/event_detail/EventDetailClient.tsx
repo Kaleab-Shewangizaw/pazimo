@@ -454,10 +454,10 @@ export default function EventDetailClient() {
       // For mobile money (non-Chapa), verify transaction
       if (data.transactionId) {
         setShowPaymentModal(false);
-        toast.success("Payment initiated! Please wait...");
+        toast.success("Payment initiated! Checking status...");
         
-        // Wait for backend to process payment
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // ⚡ Start polling immediately - verifyAndShowTickets has smart polling
+        // It will handle CANCELLED/FAILED quickly and retry PENDING with adaptive delays
         await verifyAndShowTickets(data.transactionId);
       }
 

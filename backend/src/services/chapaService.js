@@ -1,4 +1,5 @@
 const { Chapa } = require("chapa-nodejs");
+const axios = require("axios");
 
 const SUPPORTED_CHAPA_METHODS = [
   "telebirr",
@@ -15,6 +16,9 @@ class ChapaService {
     this.chapa = new Chapa({
       secretKey: process.env.CHAPA_SECRET_KEY,
     });
+    // ⚡ Configure axios with timeout for all Chapa API calls
+    // 20 seconds to account for Ethiopian network conditions
+    axios.defaults.timeout = 20000;
   }
 
   async generateTxRef() {
@@ -49,8 +53,16 @@ class ChapaService {
   }
 
   async verify(tx_ref) {
-    // Chapa SDK expects an object with tx_ref
-    return await this.chapa.verify({ tx_ref });
+    // ⚡ Add explicit timeout to prevent hanging on slow Chapa API
+    // 20 seconds is reasonable for Ethiopian network conditions
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Chapa verify timeout after 20 seconds')), 20000);
+    });
+    
+    const verifyPromise = this.chapa.verify({ tx_ref });
+    
+    // Race between verify and timeout
+    return await Promise.race([verifyPromise, timeoutPromise]);
   }
 }
 
