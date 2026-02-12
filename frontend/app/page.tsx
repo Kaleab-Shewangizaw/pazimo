@@ -177,6 +177,7 @@ export default async function Page() {
 
   return (
     <>
+    
       {/* Trending Events */}
       <Suspense fallback={<TrendingEventsSkeleton />}>
         <TrendingEvents initialEvents={trendingEvents} />

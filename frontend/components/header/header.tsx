@@ -387,19 +387,32 @@ const Header = () => {
           </Link>
 
           {/* Desktop: menu */}
-          <div className="hidden md:flex gap-15">
+          <div className="hidden md:flex gap-8">
             <Link
               href="/"
-              className="text-gray-600 hover:text-black font-medium transition-colors text-md"
+              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
             >
-              Home
+              Discover
             </Link>
             <Link
               href="/event_explore"
-              className="text-gray-600 hover:text-black font-medium transition-colors text-md"
+              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
             >
-              Explore Events
+              Categories
             </Link>
+            <Link
+              href="/event_explore"
+              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
+            >
+              Trending
+            </Link>
+            <Link
+              href="/event_explore"
+              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
+            >
+              Create Event
+            </Link>
+            
           </div>
 
           <div className="flex items-center gap-3">
@@ -606,7 +619,7 @@ const Header = () => {
             ) : (
               <div className="flex items-center gap-3">
                 <Button
-                  className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white border-0 transition-all duration-200 rounded-xl font-medium shadow-lg hover:shadow-xl"
+                  className="bg-gradient-to-r from-blue-600 to-blue-400 rounded-sm hover:from-blue-600 hover:to-blue-500 cursor-pointer text-white border-0 transition-all duration-200  font-medium shadow-lg hover:shadow-xl"
                   onClick={() => router.push("/sign-in")}
                 >
                   Sign In

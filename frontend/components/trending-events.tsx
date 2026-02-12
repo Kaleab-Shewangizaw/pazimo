@@ -6,6 +6,13 @@ import { Calendar, MapPin, Star, Users, Gift, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { toast } from "sonner";
+import { Space_Grotesk } from 'next/font/google';
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700'], // Choose needed weights
+  variable: '--font-space-grotesk', // Define a CSS variable for Tailwind
+});
 
 export type FeaturedEvent = {
   id: string;
@@ -380,83 +387,7 @@ export default function LargeEventCarousel({
     return () => clearInterval(interval);
   }, [nextSlide]);
 
-  // Touch event handlers for swipe functionality
-  // const handleTouchStart = (e: React.TouchEvent) => {
-  //   e.preventDefault()
-  //   setTouchStart(e.targetTouches[0].clientX)
-  //   setTouchEnd(null)
-  //   setIsDragging(true)
-  //   setDragOffset(0)
-  // }
-
-  // const handleTouchMove = (e: React.TouchEvent) => {
-  //   e.preventDefault()
-  //   if (!touchStart) return
-
-  //   const currentTouch = e.targetTouches[0].clientX
-  //   const distance = touchStart - currentTouch
-  //   setDragOffset(-distance * 0.1) // Reduce sensitivity
-  // }
-
-  // const handleTouchEnd = (e: React.TouchEvent) => {
-  //   e.preventDefault()
-  //   if (!touchStart || !touchEnd) return
-
-  //   const distance = touchStart - touchEnd
-  //   const minSwipeDistance = 50
-
-  //   if (Math.abs(distance) > minSwipeDistance) {
-  //     if (distance < 0) { // Swipe right -> go to previous slide
-  //       prevSlide()
-  //     } else { // Swipe left -> go to next slide
-  //       nextSlide()
-  //     }
-  //   }
-
-  //   setTouchStart(null)
-  //   setTouchEnd(null)
-  //   setIsDragging(false)
-  //   setDragOffset(0)
-  // }
-
-  // Mouse event handlers for desktop swipe
-  // const handleMouseDown = (e: React.MouseEvent) => {
-  //   e.preventDefault()
-  //   setTouchStart(e.clientX)
-  //   setTouchEnd(null)
-  //   setIsDragging(true)
-  //   setDragOffset(0)
-  // }
-
-  // const handleMouseMove = (e: React.MouseEvent) => {
-  //   e.preventDefault()
-  //   if (!touchStart || !isDragging) return
-
-  //   const currentX = e.clientX
-  //   const distance = touchStart - currentX
-  //   setDragOffset(-distance * 0.1) // Reduce sensitivity
-  // }
-
-  // const handleMouseUp = (e: React.MouseEvent) => {
-  //   e.preventDefault()
-  //   if (!touchStart) return
-
-  //   const distance = touchStart - e.clientX
-  //   const minSwipeDistance = 50
-
-  //   if (Math.abs(distance) > minSwipeDistance) {
-  //     if (distance < 0) { // Swipe right -> go to previous slide
-  //       prevSlide()
-  //     } else { // Swipe left -> go to next slide
-  //       nextSlide()
-  //     }
-  //   }
-
-  //   setTouchStart(null)
-  //   setTouchEnd(null)
-  //   setIsDragging(false)
-  //   setDragOffset(0)
-  // }
+ 
 
   const handleMouseLeave = () => {
     setTouchStart(null);
@@ -534,7 +465,7 @@ export default function LargeEventCarousel({
   return (
     <section
       ref={carouselRef}
-      className="relative overflow-hidden mx-2 sm:mx-4 md:mx-8 my-4 sm:my-6 rounded-xl min-h-[220px] sm:min-h-[500px] md:min-h-[650px] select-none touch-pan-y"
+      className="relative overflow-hidden min-h-[100vh] sm:min-h-[100vh] md:min-h-[100vh] select-none touch-pan-y"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -553,7 +484,7 @@ export default function LargeEventCarousel({
           }
           alt={currentEvent.title}
           fill
-          className="object-contain bg-black"
+          className="object-cover bg-black"
           priority={true} // Priority for LCP
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 90vw, 85vw"
           quality={85} // Reduced slightly for performance
@@ -566,9 +497,10 @@ export default function LargeEventCarousel({
         />
       </div>
 
-      {/* Enhanced Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-black/20 to-black/10 sm:from-black/85 sm:via-black/60 sm:to-black/30 z-10" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent sm:from-black/70 sm:via-transparent sm:to-black/20 z-10" />
+      {/* Modern Gradient Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-t from-white  via-white/60 md:via-white/80 to-white/40 sm:from-gray-900 sm:via-gray-900/80 sm:to-gray-900/40 z-10" />
+      <div className="absolute inset-0 bg-gradient-to-r from-white/60 to-transparent sm:from-gray-900/90 sm:via-gray-900/60 sm:to-transparent z-10" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-white z-20" />
 
       {/* Sold Out Badge - Mobile Only */}
       {isEventSoldOut(currentEvent.originalEvent) && (
@@ -576,7 +508,7 @@ export default function LargeEventCarousel({
           <div className="bg-red-500 text-white text-sm font-bold px-3 py-2 rounded-lg shadow-lg animate-pulse mb-2">
             SOLD OUT
           </div>
-          <div className="bg-amber-500 text-white font-bold px-3 py-2 rounded-lg shadow-lg text-sm">
+          <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold px-3 py-2 rounded-lg shadow-lg text-sm">
             {currentEvent.price}
           </div>
           {(() => {
@@ -596,7 +528,7 @@ export default function LargeEventCarousel({
             });
             if (active.length > 0 && active[0]?.wave) {
               return (
-                <div className="mt-2 bg-white/90 text-amber-700 text-xs font-semibold px-2 py-1 rounded shadow">
+                <div className="mt-2 bg-white/95 backdrop-blur-sm text-amber-700 text-xs font-semibold px-2 py-1 rounded-lg shadow">
                   {active[0].wave}
                 </div>
               );
@@ -606,20 +538,20 @@ export default function LargeEventCarousel({
         </div>
       )}
 
-      <div className="relative z-20 container mx-auto px-2 sm:px-8 md:px-16 py-3 sm:py-8 md:py-12 h-full">
-        <div className="flex flex-col md:flex-row items-center gap-4 md:gap-12 h-full">
+      <div className="relative z-20 container ml-0 lg:ml-30 sm:mt-[30%] mt-[70%]  md:mt-[15%] mx- md:px-16 w-full 2 sm:px-8  py-3 sm:py-8 md:py-12 h-full">
+        <div className="flex flex-col  md:flex-row items-center justify-between gap-4 md:gap-12 h-full">
           {/* Content Section */}
-          <div className="w-full md:w-3/5 text-white">
+          <div className="max-w-3xl w-full px-10   sm:px-0   text-gray-900 sm:text-white">
             {/* Organization/Presenter */}
-            <div className="mb-2 sm:mb-4">
-              <p className="text-xs sm:text-lg font-semibold text-amber-300 tracking-wide uppercase">
+            <div className="mb-2 sm:mb-4 animate-fade-in">
+              <p className={`${spaceGrotesk.className} text-md sm:text-2xl font-semibold text-blue-600 sm:text-blue-600 tracking-wide`}>
                 {currentEvent.organization} PRESENTS
               </p>
             </div>
 
             {/* Main Event Title */}
-            <h1 className="text-lg sm:text-4xl md:text-5xl lg:text-6xl font-black mb-2 sm:mb-6 leading-tight text-white tracking-tight">
-              {currentEvent.title.toUpperCase()}
+            <h1 className={`${spaceGrotesk.className} text-5xl sm:text-5xl md:text-6xl lg:text-7xl font-black mb-2 sm:mb-6 leading-tight text-gray-900 sm:text-white tracking-tight animate-slide-up`}>
+              {currentEvent.title}
             </h1>
             {(() => {
               const ev = currentEvent.originalEvent;
@@ -642,7 +574,7 @@ export default function LargeEventCarousel({
               ) {
                 const label = active[0].wave || active[0].description;
                 return (
-                  <p className="text-amber-300 text-xs sm:text-sm font-semibold mb-3 sm:mb-4">
+                  <p className="text-amber-600 sm:text-amber-400 text-xs sm:text-sm font-semibold mb-3 sm:mb-4 animate-fade-in">
                     {label}
                   </p>
                 );
@@ -651,21 +583,21 @@ export default function LargeEventCarousel({
             })()}
 
             {/* Event Description */}
-            <div className="mb-2 sm:mb-6 hidden sm:block">
-              <p className="text-xs sm:text-base leading-relaxed line-clamp-3">
+            <div className="mb-2 sm:mb-6  sm:block animate-fade-in max-w-xl">
+              <p className={`${spaceGrotesk.className} text-xl sm:text-2xl  leading-relaxed line-clamp-3 text-black sm:text-white max-w-xl`}>
                 {currentEvent.description}
               </p>
             </div>
 
             {/* Event Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-6 text-xs sm:text-base">
-              <div className="flex items-center gap-2 sm:gap-3 sm:bg-white/10 sm:backdrop-blur-sm rounded-lg p-2 sm:p-3 sm:border sm:border-white/20">
-                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300 flex-shrink-0" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-6 text-xs sm:text-base animate-fade-in">
+              <div className="flex items-center gap-2 sm:gap-3 bg-white/10 sm:bg-white/10 backdrop-blur-md rounded-xl p-2 sm:p-4 border border-white/20 hover:bg-white/20 transition-all duration-300">
+                <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 sm:text-amber-400 flex-shrink-0" />
                 <div>
-                  <p className="text-xs font-semibold text-white sm:text-base">
+                  <p className="text-xs font-semibold text-gray-900 sm:text-white sm:text-base">
                     {currentEvent.date}
                   </p>
-                  <p className="text-white/80 text-xs sm:text-sm">
+                  <p className="text-gray-700 sm:text-white/80 text-xs sm:text-sm">
                     {formatTimeRange(
                       currentEvent.startTime,
                       currentEvent.endTime,
@@ -673,8 +605,8 @@ export default function LargeEventCarousel({
                   </p>
                 </div>
               </div>
-              <div className="hidden sm:flex items-center gap-2 sm:gap-3 bgwhite/10 backdrop-blur-sm rounded-lg p-2 sm:p-3 border border-white/20">
-                <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-amber-300 flex-shrink-0" />
+              <div className=" flex items-center gap-2 sm:gap-3 bg-white/10 backdrop-blur-md rounded-xl p-2 sm:p-4 border border-white/20 hover:bg-white/20 transition-all duration-300">
+                <MapPin className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 flex-shrink-0" />
                 <div>
                   <p className="font-semibold text-white">
                     {currentEvent.venue}
@@ -687,7 +619,7 @@ export default function LargeEventCarousel({
             </div>
 
             {/* Rating, Attendees, and Age Restriction */}
-            <div className="flex items-center gap-3 sm:gap-6 mb-4 sm:mb-8">
+            <div className="flex items-center gap-3 sm:gap-6 mb-4 sm:mb-8 animate-fade-in">
               <div className="flex items-center gap-1 sm:gap-2">
                 <div className="flex">
                   {[...Array(5)].map((_, i) => (
@@ -700,12 +632,12 @@ export default function LargeEventCarousel({
                       stroke={
                         i < Math.floor(currentEvent.rating)
                           ? "#fbbf24"
-                          : "#ffffff"
+                          : "#9ca3af"
                       }
                     />
                   ))}
                 </div>
-                <span className="text-xs sm:text-sm font-medium text-white">
+                <span className="text-xs sm:text-sm font-medium text-gray-900 sm:text-white">
                   {currentEvent.rating.toFixed(1)}
                 </span>
               </div>
@@ -718,8 +650,8 @@ export default function LargeEventCarousel({
               {/* Age Restriction */}
               {currentEvent.originalEvent.ageRestriction?.hasRestriction && (
                 <div className="flex items-center gap-1 sm:gap-2">
-                  <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-blue-300" />
-                  <span className="text-xs sm:text-sm font-medium text-white">
+                  <UserCheck className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500 sm:text-blue-400" />
+                  <span className="text-xs sm:text-sm font-medium text-gray-900 sm:text-white">
                     {currentEvent.originalEvent.ageRestriction.minAge &&
                       !currentEvent.originalEvent.ageRestriction.maxAge &&
                       `${currentEvent.originalEvent.ageRestriction.minAge}+`}
@@ -739,24 +671,24 @@ export default function LargeEventCarousel({
 
             {/* Action Button */}
             {!isEventSoldOut(currentEvent.originalEvent) ? (
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 animate-fade-in">
                 <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
                   <Button
-                    size="sm"
-                    className="pt-2 pb-2 mb-4 bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 text-sm rounded-lg shadow-lg"
+                    size="lg"
+                    className="pt-3 pb-3 mb-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold px-8 text-sm rounded-xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105"
                   >
-                    <Gift className="h-4 w-4 mr-1" />
+                    <Gift className="h-4 w-4 mr-2" />
                     Get Tickets
                   </Button>
                 </Link>
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 animate-fade-in">
                 <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
                   <Button
-                    size="sm"
+                    size="lg"
                     variant="outline"
-                    className="pt-2 pb-2 mb-4 border-red-500 text-red-500 hover:bg-red-50 font-bold px-4 text-sm rounded-lg shadow-lg"
+                    className="pt-3 pb-3 mb-4 border-1 bg-white/70 border-red-500 text-red-500 hover:bg-red-50 font-bold px-8 text-sm rounded-xl shadow-xl"
                   >
                     Sold Out
                   </Button>
@@ -766,48 +698,7 @@ export default function LargeEventCarousel({
           </div>
 
           {/* Desktop Only: Featured Event Card */}
-          <div className="hidden md:block md:w-2/5 flex justify-center md:justify-end">
-            <div className="relative w-[220px] lg:w-[320px] h-[300px] lg:h-[450px] rounded-xl overflow-hidden shadow-2xl transform md:-rotate-2 hover:rotate-0 transition-transform duration-500 bg-white">
-              {/* Sold Out Badge - Top Left on Card (Desktop Only) */}
-              {isEventSoldOut(currentEvent.originalEvent) && (
-                <div className="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded z-30 shadow-lg animate-pulse">
-                  SOLD OUT
-                </div>
-              )}
-
-              {/* Event Poster Image */}
-              <div className="relative h-full w-full">
-                <Image
-                  src={
-                    currentEvent.image ||
-                    "/placeholder.svg?height=300&width=220&text=Event+Poster"
-                  }
-                  alt={currentEvent.title}
-                  fill
-                  className="object-contain bg-black"
-                  sizes="(max-width: 1024px) 220px, 320px"
-                  quality={80}
-                  priority
-                  onError={(e) => {
-                    console.error("Image failed to load:", currentEvent.image);
-                    const target = e.target as HTMLImageElement;
-                    target.src =
-                      "/placeholder.svg?height=300&width=220&text=Event+Poster";
-                  }}
-                />
-
-                {/* Poster Content Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
-
-                {/* Bottom Content */}
-                <div className="absolute bottom-0 left-0 right-0 p-2 lg:p-6 text-white">
-                  <div className="mb-1 lg:mb-3">
-                    {/* <p className="text-white/90 text-xs lg:text-sm mb-1 lg:mb-2 line-clamp-2">{currentEvent.description}</p> */}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          
         </div>
       </div>
     </section>
