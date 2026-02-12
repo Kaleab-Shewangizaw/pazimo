@@ -1,283 +1,10 @@
-// "use client"
-
-// import type React from "react"
-// import Link from "next/link"
-// import { Input } from "@/components/ui/input"
-// import { Button } from "@/components/ui/button"
-// import { Search, User, Menu } from "lucide-react"
-// import { useAuthStore } from "@/store/authStore"
-// import { useRouter } from "next/navigation"
-// import { useState, useEffect } from "react"
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-// import { Drawer, DrawerClose, DrawerContent, DrawerHeader, DrawerTrigger } from "@/components/ui/drawer"
-
-// const Header = () => {
-//   const router = useRouter()
-//   const { user, logout } = useAuthStore()
-//   const [searchTerm, setSearchTerm] = useState("")
-//   const [categories, setCategories] = useState<string[]>([])
-//   const [selectedCategory, setSelectedCategory] = useState<string>("")
-//   const [isFocused, setIsFocused] = useState(false)
-//   const [drawerOpen, setDrawerOpen] = useState(false)
-
-//   useEffect(() => {
-//     async function fetchCategories() {
-//       try {
-//         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events`)
-//         if (!response.ok) throw new Error("Failed to fetch events")
-//         const data = await response.json()
-//         const cats = Array.from(
-//           new Set(data.data.map((event: any) => event.category?.name || "Uncategorized")),
-//         ) as string[]
-//         setCategories(cats)
-//       } catch (e) {
-//         setCategories([])
-//       }
-//     }
-//     fetchCategories()
-//   }, [])
-
-//   const handleLogout = () => {
-//     logout()
-//     router.push("/sign-in")
-//   }
-
-//   const handleUserClick = () => {
-//     if (user?.role === "organizer") {
-//       router.push("/organizer")
-//     }
-//     else {
-//       router.push("/my-account")
-//     }
-//   }
-
-//   const handleSearch = (e: React.FormEvent) => {
-//     e.preventDefault()
-//     const params = []
-//     if (searchTerm.trim()) params.push(`search=${encodeURIComponent(searchTerm.trim())}`)
-//     if (selectedCategory && selectedCategory !== "all") params.push(`category=${encodeURIComponent(selectedCategory)}`)
-//     const query = params.length ? `?${params.join("&")}` : ""
-//     router.push(`/event_explore${query}`)
-//   }
-
-//   return (
-//     <>
-//       {/* Fixed header for mobile, normal for desktop */}
-//       <header className="md:relative fixed top-0 left-0 right-0 z-50 py-4 px-4 sm:px-8 md:px-16 border-b border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm transition-all duration-300 ease-out">
-//         <div className="flex flex-row items-center justify-between md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
-//           {/* Logo */}
-//           <Link href="/" className="flex items-center group">
-//             <img
-//               src="/logo.png"
-//               alt="Pazimo"
-//               className="w-20 md:w-40 lg:w-35 transition-transform duration-200 group-hover:scale-105"
-//             />
-//           </Link>
-
-//           {/* Hamburger for mobile */}
-//           <div className="flex md:hidden items-center">
-//             <Drawer direction="right" open={drawerOpen} onOpenChange={setDrawerOpen}>
-//               <DrawerTrigger asChild>
-//                 <button
-//                   className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
-//                   aria-label="Open menu"
-//                 >
-//                   <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
-//                 </button>
-//               </DrawerTrigger>
-//               <DrawerContent className="w-72 max-w-[85vw] ml-auto rounded-l-xl p-0">
-//                 <DrawerHeader className="border-b border-gray-100">
-//                   <div className="w-full flex justify-center items-center py-4">
-//                     <img src="/logo.png" alt="Pazimo" className="w-24 sm:w-28 mx-auto" />
-//                   </div>
-//                 </DrawerHeader>
-//                 <nav className="flex flex-col gap-2 px-4 py-6">
-//                   <Link
-//                     href="/"
-//                     className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium transition-colors rounded-lg"
-//                     onClick={() => setDrawerOpen(false)}
-//                   >
-//                     Home
-//                   </Link>
-//                   <Link
-//                     href="/event_explore"
-//                     className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium transition-colors rounded-lg"
-//                     onClick={() => setDrawerOpen(false)}
-//                   >
-//                     Explore Events
-//                   </Link>
-//                   {user ? (
-//                     <>
-//                       <button
-//                         className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
-//                         onClick={() => {
-//                           setDrawerOpen(false)
-//                           handleUserClick()
-//                         }}
-//                       >
-//                         My Account
-//                       </button>
-//                       <button
-//                         className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
-//                         onClick={() => {
-//                           setDrawerOpen(false)
-//                           handleLogout()
-//                         }}
-//                       >
-//                         Log out
-//                       </button>
-//                     </>
-//                   ) : (
-//                     <>
-//                       <button
-//                         className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
-//                         onClick={() => {
-//                           setDrawerOpen(false)
-//                           router.push("/sign-in")
-//                         }}
-//                       >
-//                         Sign In
-//                       </button>
-//                       <button
-//                         className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
-//                         onClick={() => {
-//                           setDrawerOpen(false)
-//                           router.push("/sign-up")
-//                         }}
-//                       >
-//                         Sign Up
-//                       </button>
-//                     </>
-//                   )}
-//                 </nav>
-//                 <div className="px-4 pb-6">
-//                   <DrawerClose asChild>
-//                     <button className="w-full px-4 py-3 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors font-medium">
-//                       Close Menu
-//                     </button>
-//                   </DrawerClose>
-//                 </div>
-//               </DrawerContent>
-//             </Drawer>
-//           </div>
-
-//           {/* Desktop: Search and user menu */}
-//           <div className="hidden md:flex flex-1 items-center justify-center gap-6">
-//             {/* Enhanced Search Bar - always visible in this header */}
-//             <div className="w-full md:w-[500px] lg:w-[550px] xl:w-[600px]">
-//               <form
-//                 className={`relative flex items-center rounded-xl border overflow-hidden bg-white transition-all duration-300 ease-out ${
-//                   isFocused
-//                     ? "border-[#FFC107] shadow-lg  transform scale-[1.01]"
-//                     : "border-gray-300 hover:border-yellow-400 hover:shadow-md shadow-sm"
-//                 }`}
-//                 onSubmit={handleSearch}
-//               >
-//                 <div className="flex items-center pl-4 pr-2 border-r border-gray-200 transition-all duration-300 ease-out">
-//                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-//                     <SelectTrigger className="rounded-none border-0 bg-transparent h-10 min-w-[110px] text-gray-600 font-medium text-sm transition-all duration-200 ease-out hover:text-gray-800">
-//                       <SelectValue placeholder="Category" />
-//                     </SelectTrigger>
-//                     <SelectContent className="rounded-xl border shadow-xl animate-in fade-in-0 zoom-in-95 duration-200">
-//                       <SelectItem value="all" className="text-sm transition-colors duration-150 ease-out">
-//                         All Categories
-//                       </SelectItem>
-//                       {categories.map((cat) => (
-//                         <SelectItem key={cat} value={cat} className="text-sm transition-colors duration-150 ease-out">
-//                           {cat}
-//                         </SelectItem>
-//                       ))}
-//                     </SelectContent>
-//                   </Select>
-//                 </div>
-
-//                 <div className="relative flex-1 group">
-//                   <Input
-//                     id="search-input"
-//                     type="text"
-//                     className="relative border-0 focus:ring-0 focus:outline-none h-10 bg-transparent px-4 text-gray-800 text-base font-medium placeholder:text-gray-400 transition-all duration-200 ease-out placeholder:transition-opacity placeholder:duration-300"
-//                     value={searchTerm}
-//                     onChange={(e) => setSearchTerm(e.target.value)}
-//                     onFocus={() => setIsFocused(true)}
-//                     onBlur={() => setIsFocused(false)}
-//                     autoComplete="off"
-//                     placeholder="Search events..."
-//                   />
-//                 </div>
-
-//                 <Button
-//                   type="submit"
-//                   size="icon"
-//                   className="h-10 w-10 bg-[#FFC107] hover:bg-[#FFC101] transition-all duration-300 ease-out rounded-l-none rounded-r-xl hover:shadow-lg hover:shadow-[#1a2d5a]/20 active:scale-95 group"
-//                 >
-//                   <Search className="h-4 w-4 text-white transition-transform duration-200 ease-out group-hover:scale-110 group-active:scale-95" />
-//                 </Button>
-//               </form>
-//             </div>
-
-//             {/* Enhanced User Menu - positioned absolutely to the right */}
-//             <div className="absolute right-4 sm:right-8 md:right-16">
-//               {user ? (
-//                 <div className="flex items-center gap-3">
-//                   <Button
-//                     variant="ghost"
-//                     className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 transition-all duration-200 rounded-xl px-4 py-2 h-auto"
-//                     onClick={handleUserClick}
-//                   >
-//                     <div className="flex items-center gap-2">
-//                       <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
-//                         <User className="h-4 w-4 text-white" />
-//                       </div>
-//                       <div className="flex flex-col items-start">
-//                         <span className="text-sm">{user.firstName}</span>
-//                         {/* Removed organizer specific badge */}
-//                       </div>
-//                     </div>
-//                   </Button>
-//                   <Button
-//                     variant="outline"
-//                     className="text-[#1a2d5a] border-2 border-[#1a2d5a] hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 hover:border-[#ffc107] transition-all duration-200 rounded-xl font-medium bg-transparent"
-//                     onClick={handleLogout}
-//                   >
-//                     Log out
-//                   </Button>
-//                 </div>
-//               ) : (
-//                 <div className="flex items-center gap-3">
-//                   <Button
-//                     variant="ghost"
-//                     className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 transition-all duration-200 rounded-xl"
-//                     onClick={() => router.push("/sign-in")}
-//                   >
-//                     Sign In
-//                   </Button>
-//                   <Button
-//                     className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white border-0 transition-all duration-200 rounded-xl font-medium shadow-lg hover:shadow-xl"
-//                     onClick={() => router.push("/sign-up")}
-//                   >
-//                     Sign Up
-//                   </Button>
-//                 </div>
-//               )}
-//             </div>
-//           </div>
-//         </div>
-//       </header>
-
-//       {/* Spacer div to prevent content from being hidden behind fixed header on mobile */}
-//       <div className="md:hidden h-20" />
-//     </>
-//   )
-// }
-
-// export default Header
 "use client";
 
 import type React from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, User, Menu, X } from "lucide-react";
+import { Search, User, Menu, X, LogOut, UserCircle } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -295,12 +22,22 @@ import {
   DrawerHeader,
   DrawerTrigger,
 } from "@/components/ui/drawer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-interface HeaderProps {
-  variant?: "default" | "signature";
-}
-
-const Header = ({ variant = "default" }: HeaderProps) => {
+const Header = () => {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState("");
@@ -309,14 +46,16 @@ const Header = ({ variant = "default" }: HeaderProps) => {
   const [isFocused, setIsFocused] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
-
-  const isSignature = variant === "signature";
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [visibleResultsCount, setVisibleResultsCount] = useState(5);
 
   useEffect(() => {
     async function fetchCategories() {
       try {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events`
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`
         );
         if (!response.ok) throw new Error("Failed to fetch events");
         const data = await response.json();
@@ -334,6 +73,73 @@ const Header = ({ variant = "default" }: HeaderProps) => {
     }
     fetchCategories();
   }, []);
+
+  // Debounced search effect
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (searchTerm.trim() || selectedCategory) {
+        handleSearchResults();
+      } else {
+        setSearchResults([]);
+      }
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm, selectedCategory]);
+
+  // Reset visible count when search results change
+  useEffect(() => {
+    setVisibleResultsCount(5);
+  }, [searchResults]);
+
+  const handleSearchResults = async () => {
+    if (!searchTerm.trim() && !selectedCategory) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      // Fetch all published events (backend doesn't support text search parameter)
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`
+      );
+      
+      if (!response.ok) throw new Error("Failed to fetch events");
+      const data = await response.json();
+      let results = data.data || [];
+      
+      // Filter out private events
+      results = results.filter((event: any) => !event.isPrivate && !event.isInvitationEvent);
+      
+      // Filter by search term (client-side)
+      if (searchTerm.trim()) {
+        const searchLower = searchTerm.trim().toLowerCase();
+        results = results.filter((event: any) =>
+          event.name?.toLowerCase().includes(searchLower) ||
+          event.title?.toLowerCase().includes(searchLower) ||
+          event.description?.toLowerCase().includes(searchLower) ||
+          event.location?.city?.toLowerCase().includes(searchLower) ||
+          event.location?.address?.toLowerCase().includes(searchLower) ||
+          event.category?.name?.toLowerCase().includes(searchLower)
+        );
+      }
+      
+      // Filter by category
+      if (selectedCategory && selectedCategory !== "all") {
+        results = results.filter((event: any) => 
+          event.category?.name === selectedCategory
+        );
+      }
+      
+      setSearchResults(results);
+    } catch (error) {
+      console.error("Search error:", error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -358,21 +164,37 @@ const Header = ({ variant = "default" }: HeaderProps) => {
     const query = params.length ? `?${params.join("&")}` : "";
     router.push(`/event_explore${query}`);
     setShowMobileSearch(false);
+    setDialogOpen(false);
+  };
+
+  const handleEventClick = (eventId: string) => {
+    router.push(`/event_detail/${eventId}`);
+    setDialogOpen(false);
+    setSearchTerm("");
+    setSelectedCategory("");
+    setSearchResults([]);
+    setVisibleResultsCount(5);
+  };
+
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setSelectedCategory("");
+    setSearchResults([]);
+    setVisibleResultsCount(5);
+  };
+
+  const handleShowMore = () => {
+    setVisibleResultsCount(prev => prev + 5);
   };
 
   return (
     <>
       {/* Fixed header for mobile, normal for desktop */}
       <header
-        className={`md:relative fixed top-0 left-0 right-0 z-50 py-3 px-4 sm:px-8 md:px-16 border-b transition-all duration-300 ease-out
-        ${
-          isSignature
-            ? "bg-[#fdfbf7] border-yellow-600/30 shadow-md shadow-yellow-900/5"
-            : "border-gray-300 md:border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm shadow-sm md:shadow-none"
-        }`}
+        className={`md:relative fixed! bg-white/60 backdrop-blur-2xl top-0 left-0 right-0 z-50 py-3 md:py-4 px-4 sm:px-8 md:px-16 border-b transition-all duration-300 ease-out
+        `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
-          {/* Mobile: Logo, Search Icon/Bar, Hamburger */}
           {/* Mobile: Logo, Search Icon/Bar, Hamburger */}
           <div className="flex md:hidden items-center justify-between w-full gap-3">
             {/* Logo - hide when search is active */}
@@ -481,7 +303,6 @@ const Header = ({ variant = "default" }: HeaderProps) => {
                       <Menu className="h-5 w-5" />
                     </button>
                   </DrawerTrigger>
-                  {/* Rest of drawer content remains the same */}
 
                   <DrawerContent className="w-72 max-w-[85vw] ml-auto rounded-l-xl p-0">
                     <DrawerHeader className="border-b border-gray-100">
@@ -540,15 +361,6 @@ const Header = ({ variant = "default" }: HeaderProps) => {
                           >
                             Sign In
                           </button>
-                          {/* <button
-                            className="text-gray-700 hover:text-[#115db1] hover:bg-blue-50 px-4 py-3 text-base font-medium text-left transition-colors rounded-lg"
-                            onClick={() => {
-                              setDrawerOpen(false)
-                              router.push("/sign-in")
-                            }}
-                          >
-                            Sign Up
-                          </button> */}
                         </>
                       )}
                     </nav>
@@ -566,10 +378,7 @@ const Header = ({ variant = "default" }: HeaderProps) => {
           </div>
 
           {/* Desktop: Logo */}
-          <Link
-            href="/"
-            className="hidden md:flex items-center group flex-shrink-0"
-          >
+          <Link href="/" className="hidden md:flex items-center group">
             <img
               src="/logo.png"
               alt="Pazimo"
@@ -577,110 +386,239 @@ const Header = ({ variant = "default" }: HeaderProps) => {
             />
           </Link>
 
-          {/* Desktop: Search and user menu */}
-          <div className="hidden md:flex flex-1 items-center justify-center gap-6">
-            <div className="w-full md:w-[500px] lg:w-[550px] xl:w-[600px]">
-              <form
-                className={`relative flex items-center rounded-xl border overflow-hidden bg-white transition-all duration-300 ease-out ${
-                  isFocused
-                    ? "border-[#FFC107] shadow-lg transform scale-[1.01]"
-                    : "border-gray-300 hover:border-yellow-400 hover:shadow-md shadow-sm"
-                }`}
-                onSubmit={handleSearch}
-              >
-                <div className="flex items-center pl-3 pr-2 border-r border-gray-200 transition-all duration-300 ease-out">
-                  <Select
-                    value={selectedCategory}
-                    onValueChange={setSelectedCategory}
-                  >
-                    <SelectTrigger className="rounded-none border-0 bg-transparent h-9 min-w-[110px] text-gray-600 font-medium text-sm transition-all duration-200 ease-out hover:text-gray-800">
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl border shadow-xl animate-in fade-in-0 zoom-in-95 duration-200">
-                      <SelectItem
-                        value="all"
-                        className="text-sm transition-colors duration-150 ease-out"
-                      >
-                        All Categories
-                      </SelectItem>
-                      {categories.map((cat) => (
-                        <SelectItem
-                          key={cat}
-                          value={cat}
-                          className="text-sm transition-colors duration-150 ease-out"
-                        >
-                          {cat}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+          {/* Desktop: menu */}
+          <div className="hidden md:flex gap-15">
+            <Link
+              href="/"
+              className="text-gray-600 hover:text-black font-medium transition-colors text-md"
+            >
+              Home
+            </Link>
+            <Link
+              href="/event_explore"
+              className="text-gray-600 hover:text-black font-medium transition-colors text-md"
+            >
+              Explore Events
+            </Link>
+          </div>
 
-                <div className="relative flex-1 group">
-                  <Input
-                    id="search-input"
-                    type="text"
-                    className="relative border-0 focus:ring-0 focus:outline-none h-9 bg-transparent px-3 text-gray-800 text-base font-medium placeholder:text-gray-400 transition-all duration-200 ease-out placeholder:transition-opacity placeholder:duration-300"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                    autoComplete="off"
-                    placeholder="Search events..."
-                  />
-                </div>
-
+          <div className="flex items-center gap-3">
+            {/* Desktop Search Dialog */}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
                 <Button
-                  type="submit"
+                  variant="ghost"
                   size="icon"
-                  className="h-9 w-9 bg-[#FFC107] hover:bg-[#FFC101] transition-all duration-300 ease-out rounded-l-none rounded-r-xl hover:shadow-lg hover:shadow-[#1a2d5a]/20 active:scale-95 group"
+                  className="hidden md:flex p-2 text-gray-700 hover:text-[#115db1] hover:bg-blue-50 transition-all duration-200"
                 >
-                  <Search className="h-4 w-4 text-white transition-transform duration-200 ease-out group-hover:scale-110 group-active:scale-95" />
+                  <Search className="h-5 w-5" />
                 </Button>
-              </form>
-            </div>
-
-            {/* Desktop User Menu */}
-            <div className="absolute right-4 sm:right-8 md:right-16">
-              {user ? (
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="ghost"
-                    className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 transition-all duration-200 rounded-xl px-4 py-2 h-auto"
-                    onClick={handleUserClick}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
-                        <User className="h-4 w-4 text-white" />
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[800px] p-0 gap-0">
+                <DialogHeader className="px-6 pt-6 pb-2">
+                  <DialogTitle className="text-xl font-semibold text-gray-900">
+                    Search Events
+                  </DialogTitle>
+                </DialogHeader>
+                
+                {/* Search Form */}
+                <form onSubmit={handleSearch} className="px-6 pb-4">
+                  <div className="flex  gap-4">
+                    <div className="flex flex-1 gap-3">
+                      <div className="w-[180px]">
+                        <Select
+                          value={selectedCategory}
+                          onValueChange={setSelectedCategory}
+                        >
+                          <SelectTrigger className="w-full h-11 border-gray-300 focus:ring-2 focus:ring-[#FFC107]/20 focus:border-[#FFC107]">
+                            <SelectValue placeholder="All Categories" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Categories</SelectItem>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat} value={cat}>
+                                {cat}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <span className="text-sm">{user.firstName}</span>
+                      <div className="w-full relative">
+                        <Input
+                          type="text"
+                          className="w-full h-11 border-gray-300 focus:ring-2 focus:ring-[#FFC107]/20 focus:border-[#FFC107] pr-24"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          autoComplete="off"
+                          placeholder="Search by event name, location, or description..."
+                          autoFocus
+                        />
+                        {searchTerm && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchTerm("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="text-[#1a2d5a] border-2 border-[#1a2d5a] hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 hover:border-[#ffc107] transition-all duration-200 rounded-xl font-medium bg-transparent"
-                    onClick={handleLogout}
-                  >
-                    Log out
-                  </Button>
+                    <div className="flex justify-end">
+                      <Button
+                        type="submit"
+                        className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white px-8 h-11"
+                      >
+                        <Search className="h-4 w-4 mr-2" />
+                        Search
+                      </Button>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Search Results */}
+                <div className="border-t border-gray-100 max-h-[400px] overflow-y-auto">
+                  {isSearching ? (
+                    <div className="flex justify-center items-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a]"></div>
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    <>
+                      <div className="divide-y divide-gray-100">
+                        {searchResults.slice(0, visibleResultsCount).map((event) => (
+                          <button
+                            key={event._id || event.id}
+                            onClick={() => handleEventClick(event._id || event.id)}
+                            className="w-full px-6 py-4 hover:bg-gray-50 transition-colors text-left group"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-gray-900 group-hover:text-[#1a2d5a] transition-colors">
+                                  {event.name || event.title}
+                                </h3>
+                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                  {event.description}
+                                </p>
+                                <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                                  <span>{event.category?.name || "Uncategorized"}</span>
+                                  <span>•</span>
+                                  <span>{new Date(event.date).toLocaleDateString()}</span>
+                                  <span>•</span>
+                                  <span>
+                                    {typeof event.location === 'object' 
+                                      ? `${event.location.city || event.location.address || 'Location'}${event.location.country ? ', ' + event.location.country : ''}` 
+                                      : event.location}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleClearSearch}
+                          className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50"
+                        >
+                          <X className="h-4 w-4 mr-2" />
+                          Clear Search
+                        </Button>
+                        {visibleResultsCount < searchResults.length && (
+                          <Button
+                            type="button"
+                            onClick={handleShowMore}
+                            className="flex-1 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white"
+                          >
+                            Show More ({searchResults.length - visibleResultsCount} more)
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  ) : searchTerm || selectedCategory ? (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">No events found</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        Try adjusting your search or category filter
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleClearSearch}
+                        className="mt-4 border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Clear Search
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500">Start typing to search for events</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        Search by event name, location, or description
+                      </p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <Button
-                    className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white border-0 transition-all duration-200 rounded-xl font-medium shadow-lg hover:shadow-xl"
-                    onClick={() => router.push("/sign-in")}
-                  >
-                    Sign In
-                  </Button>
-                </div>
-              )}
-            </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* User Section */}
+            {user ? (
+              <div className="flex items-center gap-3">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 transition-all duration-200 rounded-xl px-4 py-1 h-auto"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
+                          <User className="h-4 w-4 text-white" />
+                        </div>
+                        <span className="text-sm hidden lg:inline">{user.firstName}</span>
+                      </div>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={handleUserClick} className="cursor-pointer">
+                      <UserCircle className="h-4 w-4 mr-2" />
+                      My Account
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600">
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Log out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  variant="outline"
+                  className="text-[#1a2d5a] border-2 border-[#1a2d5a] hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 hover:border-[#ffc107] transition-all duration-200 rounded-xl font-medium bg-transparent hidden lg:flex"
+                  onClick={handleLogout}
+                >
+                  Log out
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Button
+                  className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white border-0 transition-all duration-200 rounded-xl font-medium shadow-lg hover:shadow-xl"
+                  onClick={() => router.push("/sign-in")}
+                >
+                  Sign In
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
       {/* Spacer div to prevent content from being hidden behind fixed header on mobile */}
-      <div className="md:hidden h-16" />
+      <div className="md:h-12 h-16" />
     </>
   );
 };
