@@ -28,6 +28,24 @@ const calculateOrganizerBalance = async (organizerId) => {
         ]
       }
     },
+    // Normalize ticket quantity to account for multi-person tickets
+    {
+      $addFields: {
+        ticketQuantity: {
+          $cond: [
+            { $gt: ["$purchaseQuantity", 0] },
+            "$purchaseQuantity",
+            {
+              $cond: [
+                { $gt: ["$ticketCount", 0] },
+                "$ticketCount",
+                1
+              ]
+            }
+          ]
+        }
+      }
+    },
     {
       $facet: {
         revenue: [
@@ -35,7 +53,7 @@ const calculateOrganizerBalance = async (organizerId) => {
             $group: {
               _id: null,
               totalRevenue: { $sum: "$price" },
-              totalTickets: { $sum: 1 }
+              totalTickets: { $sum: "$ticketQuantity" }
             }
           }
         ],
@@ -55,7 +73,7 @@ const calculateOrganizerBalance = async (organizerId) => {
                 eventTitle: "$eventData.title"
               },
               totalRevenue: { $sum: "$price" },
-              ticketsSold: { $sum: 1 },
+              ticketsSold: { $sum: "$ticketQuantity" },
               onDoorRevenue: {
                 $sum: { $cond: ["$isOnDoor", "$price", 0] }
               },
@@ -63,10 +81,10 @@ const calculateOrganizerBalance = async (organizerId) => {
                 $sum: { $cond: [{ $not: "$isOnDoor" }, "$price", 0] }
               },
               onDoorTickets: {
-                $sum: { $cond: ["$isOnDoor", 1, 0] }
+                $sum: { $cond: ["$isOnDoor", "$ticketQuantity", 0] }
               },
               onlineTickets: {
-                $sum: { $cond: [{ $not: "$isOnDoor" }, 1, 0] }
+                $sum: { $cond: [{ $not: "$isOnDoor" }, "$ticketQuantity", 0] }
               }
             }
           }

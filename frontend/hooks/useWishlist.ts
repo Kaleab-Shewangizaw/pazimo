@@ -35,7 +35,7 @@ export const useWishlist = () => {
       // If logged in, sync with server
       if (userId && token) {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/wishlist`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -92,20 +92,17 @@ export const useWishlist = () => {
       localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
 
       if (userId && token) {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              eventId,
-              action: isRemoving ? "remove" : "add",
-            }),
-          }
-        );
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/wishlist`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            eventId,
+            action: isRemoving ? "remove" : "add",
+          }),
+        });
       }
 
       toast.success(isRemoving ? "Removed from wishlist" : "Added to wishlist");

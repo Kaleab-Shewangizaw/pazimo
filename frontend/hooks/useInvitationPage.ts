@@ -908,13 +908,22 @@ export function useInvitationPage() {
         }
 
         const formattedAttendees = tickets.map((ticket: any) => {
-          const name = ticket.user
-            ? `${ticket.user.firstName} ${ticket.user.lastName}`
-            : ticket.guestName || "Unknown Guest";
+          const first = (ticket.user?.firstName || "").trim();
+          const last = (ticket.user?.lastName || "").trim();
+          const fallbackName =
+            ticket.guestName ||
+            ticket.user?.email ||
+            ticket.guestEmail ||
+            ticket.guestPhone ||
+            "Guest";
+          const name = `${[first, last].filter(Boolean).join(" ") || fallbackName}`;
 
-          const contact = ticket.user
-            ? ticket.user.email
-            : ticket.guestEmail || ticket.guestPhone || "No Contact";
+          const contact =
+            ticket.user?.email ||
+            ticket.guestEmail ||
+            ticket.guestPhone ||
+            ticket.user?.phoneNumber ||
+            "No Contact";
 
           // Find matching invitation to get correct original amount for old tickets
           // Improved matching logic: Prefer linking via ticketId found in rsvpLink
@@ -997,7 +1006,10 @@ export function useInvitationPage() {
                 : "Unknown",
             status: unifiedStatus,
             purchaseQuantity: originalAmount,
-            ticketCount: ticket.ticketCount || 0,
+            ticketCount:
+              typeof ticket.ticketCount === "number"
+                ? ticket.ticketCount
+                : ticket.purchaseQuantity || 0,
             hasTicket: true,
             paymentStatus: "paid",
           };
@@ -1036,7 +1048,12 @@ export function useInvitationPage() {
 
             return {
               id: inv._id || inv.invitationId,
-              customerName: inv.guestName || "Guest",
+              customerName:
+                inv.guestName ||
+                inv.customerName ||
+                inv.guestEmail ||
+                inv.guestPhone ||
+                "Guest",
               contact: inv.guestEmail || inv.guestPhone || "No Contact",
               guestType: inv.guestType,
               confirmedAt:
