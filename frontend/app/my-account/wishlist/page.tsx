@@ -19,6 +19,8 @@ type Event = {
   description?: string;
   startDate: string;
   endDate?: string;
+  startTime?: string;
+  endTime?: string;
   location?: {
     address?: string;
     city?: string;
@@ -110,7 +112,7 @@ export default function WishlistPage() {
 
       if (userId && token) {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/events/${userId}/wishlist`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/events/wishlist`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -267,9 +269,11 @@ export default function WishlistPage() {
               <div className="relative">
                 {/* Category Badge */}
                 <div className="absolute top-3 left-3 bg-[#ffc107] text-white text-xs font-bold px-3 py-1.5 rounded-lg z-10 shadow-md">
-                  {typeof event.category === "object" && event.category?.name
-                    ? event.category.name
-                    : event.category || "Uncategorized"}
+                  {typeof event.category === "string"
+                      ? event.category
+                      : typeof event.category === "object" && event.category?.name
+                      ? event.category.name
+                      : "Uncategorized"}
                 </div>
 
                 {/* Sold Out Badge */}

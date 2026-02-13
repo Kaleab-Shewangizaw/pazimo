@@ -24,7 +24,9 @@ router.patch("/:id/tickets", eventController.updateTicketTypes);
 router.post("/:id/buy", eventController.buyTicket); // Buy ticket
 router.get("/user/:userId/tickets", eventController.getUserTickets); // Get user's tickets
 
-// Wishlist routes
+// Wishlist routes (default to authenticated user, keep legacy param for compatibility)
+router.get("/wishlist", eventController.getWishlist);
+router.post("/wishlist", eventController.updateWishlist);
 router.get("/:userId/wishlist", eventController.getWishlist);
 router.post("/:userId/wishlist", eventController.updateWishlist);
 

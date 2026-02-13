@@ -532,7 +532,23 @@ const updateTicketTypes = async (req, res) => {
    WISHLIST
 ====================================================== */
 const getWishlist = async (req, res) => {
-  const user = await User.findById(req.params.userId).populate("wishlist");
+  const targetUserId = req.user?.userId || req.params.userId;
+
+  if (!targetUserId) {
+    throw new UnauthorizedError("Authentication invalid");
+  }
+
+  // Only allow users to read their own wishlist unless admin
+  if (
+    req.user?.role !== "admin" &&
+    req.user?.userId &&
+    req.params.userId &&
+    req.user.userId !== req.params.userId
+  ) {
+    throw new UnauthorizedError("Not authorized to access wishlist");
+  }
+
+  const user = await User.findById(targetUserId).populate("wishlist");
 
   if (!user) {
     throw new NotFoundError("User not found");
@@ -545,8 +561,22 @@ const getWishlist = async (req, res) => {
 };
 
 const updateWishlist = async (req, res) => {
-  const { userId } = req.params;
+  const userId = req.user?.userId || req.params.userId;
   const { eventId, action } = req.body;
+
+  if (!userId) {
+    throw new UnauthorizedError("Authentication invalid");
+  }
+
+  // Prevent users from mutating another user's wishlist unless admin
+  if (
+    req.user?.role !== "admin" &&
+    req.user?.userId &&
+    req.params.userId &&
+    req.user.userId !== req.params.userId
+  ) {
+    throw new UnauthorizedError("Not authorized to modify wishlist");
+  }
 
   const user = await User.findById(userId);
   if (!user) {

@@ -346,15 +346,20 @@ export default function SentInvitationsTable({
                     // If no ticket exists yet, it's a pending invitation without a ticket
                     const isGuestPending = !ticket;
 
-                    const displayTicketType =
-                      ticket?.ticketType || invitation.ticketType || "Regular";
-                    const displayUsage = isGuestPending ? "0/1" : usage;
-                    const displayStatus = unifiedStatus;
-
-                    // Ticket count for display
+                    const guestQuantity = invitation.qrCodeCount || 1;
+                    
+                    // Ticket count for display (use guest quantity when no ticket exists)
                     const displayTicketCount = ticket
                       ? ticket.purchaseQuantity || ticket.ticketCount || 1
-                      : invitation.qrCodeCount || 1;
+                      : guestQuantity;
+
+                    const displayTicketType =
+                      ticket?.ticketType || invitation.ticketType || "Regular";
+                    const displayUsage = isGuestPending
+                      ? `0/${guestQuantity}`
+                      : usage;
+                    const displayStatus = unifiedStatus;
+                    const showMultiplier = displayTicketCount > 1;
 
                     return (
                       <tr
@@ -402,7 +407,7 @@ export default function SentInvitationsTable({
                           >
                             <Ticket className="w-3 h-3" />
                             {ticket ? "Paid" : "Guest"}
-                            {ticket && (
+                            {showMultiplier && (
                               <span className="ml-1 font-bold">
                                 ×{displayTicketCount}
                               </span>
