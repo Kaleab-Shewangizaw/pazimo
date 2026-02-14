@@ -1493,11 +1493,12 @@ const checkInTicket = async (req, res) => {
 
     // ⚡ OPTIMIZED: Use select() to only fetch needed fields
     let ticket = await Ticket.findOne({ ticketId })
-      .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName");
+      // Include invitation/door flags so validation rules stay accurate when saving
+      .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor");
       
     if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
       ticket = await Ticket.findById(ticketId)
-        .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName");
+        .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor");
     }
 
     if (!ticket) {
