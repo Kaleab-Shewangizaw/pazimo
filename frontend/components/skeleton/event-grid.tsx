@@ -152,17 +152,11 @@ type Event = {
 
 interface EventGridProps {
   events: Event[];
-  wishlist: string[];
-  onToggleWishlist: (eventId: string) => void;
-  isWishlistLoading: boolean;
   isEventSoldOut: (event: Event) => boolean;
 }
 
 export default function EventGrid({
   events,
-  wishlist,
-  onToggleWishlist,
-  isWishlistLoading,
   isEventSoldOut,
 }: EventGridProps) {
   if (events.length === 0) {
@@ -196,7 +190,7 @@ export default function EventGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {events.map((event) => {
         const isSoldOut = isEventSoldOut(event);
         const now = new Date();
@@ -257,10 +251,7 @@ export default function EventGrid({
               image,
               soldOut: isSoldOut,
             }}
-            wishlist={wishlist}
-            onToggleWishlist={onToggleWishlist}
-            isWishlistLoading={isWishlistLoading}
-            showCTA={false}
+            showCTA
           />
         );
       })}

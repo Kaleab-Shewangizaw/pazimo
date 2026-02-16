@@ -36,7 +36,6 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { useWishlist } from "@/hooks/useWishlist";
 
 const EventGrid = lazy(() => import("@/components/skeleton/event-grid"));
 
@@ -154,11 +153,6 @@ export default function EventSearchPage() {
   const [showSoldOut, setShowSoldOut] = useState<boolean>(true); // New state for showing/hiding sold out events
   const [isFilterOpen, setIsFilterOpen] = useState(false); // Mobile filter sheet state
   const eventsPerPage = 9;
-  const {
-    wishlist,
-    toggleWishlist,
-    isLoading: isWishlistLoading,
-  } = useWishlist();
   const { user } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -857,11 +851,7 @@ export default function EventSearchPage() {
             >
               <EventGrid
                 events={currentEvents}
-                wishlist={wishlist}
-                onToggleWishlist={toggleWishlist}
-                isWishlistLoading={isWishlistLoading}
                 isEventSoldOut={isEventSoldOut}
-                disableClickForSoldOut={true}
               />
             </Suspense>
           ) : (

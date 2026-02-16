@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, User, Menu, X, LogOut, UserCircle } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -34,6 +34,7 @@ import {
 const Header = () => {
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const pathname = usePathname();
   const [searchTerm, setSearchTerm] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -180,6 +181,33 @@ const Header = () => {
     setVisibleResultsCount(5);
   };
 
+  const scrollToSection = (id: string, skipPush = false) => {
+    setMobileMenuOpen(false);
+    setShowMobileSearch(false);
+
+    const performScroll = () => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+
+    if (typeof window !== "undefined" && pathname === "/") {
+      performScroll();
+    } else if (!skipPush) {
+      router.push(`/#${id}`);
+      setTimeout(performScroll, 300);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash?.replace("#", "");
+    if (hash) {
+      setTimeout(() => scrollToSection(hash, true), 150);
+    }
+  }, [pathname]);
+
   const toggleMobileMenu = () => {
     setMobileMenuOpen((prev) => !prev);
     if (!mobileMenuOpen) {
@@ -323,24 +351,27 @@ const Header = () => {
 
           {/* Desktop: menu */}
           <div className="hidden md:flex gap-8">
-            <Link
-              href="/"
+            <button
+              type="button"
+              onClick={() => scrollToSection("featured")}
               className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
             >
-              Discover
-            </Link>
-            <Link
-              href="/event_explore"
+              Featured
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection("categories")}
               className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
             >
               Categories
-            </Link>
-            <Link
-              href="/event_explore"
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollToSection("trending")}
               className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
             >
               Trending
-            </Link>
+            </button>
             <Link
               href="https://pazimo-organizer.vercel.app/"
               target="_blank"
@@ -348,7 +379,6 @@ const Header = () => {
             >
               Create Event
             </Link>
-            
           </div>
 
           <div className="flex items-center gap-3">
@@ -578,27 +608,24 @@ const Header = () => {
           >
             <div className="bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-lg rounded-b-2xl p-4 space-y-3">
               <nav className="flex flex-col gap-2 text-sm font-medium text-gray-700">
-                <Link
-                  href="/"
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
+                <button
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
+                  onClick={() => scrollToSection("featured")}
                 >
-                  Discover
-                </Link>
-                <Link
-                  href="/event_explore"
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
+                  Featured
+                </button>
+                <button
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
+                  onClick={() => scrollToSection("categories")}
                 >
                   Categories
-                </Link>
-                <Link
-                  href="/event_explore"
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
+                </button>
+                <button
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
+                  onClick={() => scrollToSection("trending")}
                 >
                   Trending
-                </Link>
+                </button>
                 <Link
                   href="https://pazimo-organizer.vercel.app/"
                   target="_blank"

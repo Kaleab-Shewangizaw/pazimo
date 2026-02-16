@@ -211,7 +211,9 @@ async function getBannerEvents(): Promise<BannerCarouselEvent[]> {
     );
     if (!response.ok) return [];
     const data = await response.json();
-    return (data.data || []).map(toBannerCarouselEvent);
+    return (data.data || [])
+      .filter((event: any) => event.bannerStatus === true)
+      .map(toBannerCarouselEvent);
   } catch (error) {
     console.error("Error fetching banner events:", error);
     return [];
@@ -242,7 +244,9 @@ export default async function Page() {
 
       <FeaturedEventsSection events={featuredEvents} />
 
-      <CategoryIcons initialCategories={categories} />
+      <section id="categories" className="scroll-mt-24">
+        <CategoryIcons initialCategories={categories} />
+      </section>
 
       <TrendingEventsSection events={trendingEvents} />
 

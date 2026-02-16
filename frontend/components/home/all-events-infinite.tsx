@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import FeaturedEventCard, {
   type FeaturedEventCardData,
 } from "@/components/featured-event-card";
-import { useWishlist } from "@/hooks/useWishlist";
 
 export type PublicEvent = {
   _id: string;
@@ -54,9 +53,6 @@ export default function AllEventsInfinite({
   initialHasMore: boolean;
   pageSize?: number;
 }) {
-  const { wishlist, toggleWishlist, isLoading: isWishlistLoading } =
-    useWishlist();
-
   const [events, setEvents] = useState<PublicEvent[]>(initialEvents || []);
   const [page, setPage] = useState(1); // page 0 already loaded
   const [hasMore, setHasMore] = useState(initialHasMore);
@@ -225,14 +221,11 @@ export default function AllEventsInfinite({
         <h3 className="text-lg font-semibold text-[#1a2d5a]">All Events</h3>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 sm:gap-x-5 gap-y-8">
         {events.map((event) => (
           <FeaturedEventCard
             key={event._id}
             data={buildCardData(event)}
-            wishlist={wishlist}
-            onToggleWishlist={toggleWishlist}
-            isWishlistLoading={isWishlistLoading}
           />
         ))}
       </div>
