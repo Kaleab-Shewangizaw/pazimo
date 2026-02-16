@@ -100,6 +100,7 @@ const toTrendingCard = (event: any): TrendingCardEvent => ({
     : "Trending",
   priceLabel: buildPriceLabel(event),
   image: buildImageUrl(event.coverImages),
+  soldOut: isEventSoldOut(event),
 });
 
 const toBannerCarouselEvent = (event: any): BannerCarouselEvent => {

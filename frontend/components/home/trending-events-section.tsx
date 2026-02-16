@@ -11,6 +11,7 @@ export type TrendingCardEvent = {
   attendeesLabel: string;
   priceLabel: string;
   image?: string;
+  soldOut?: boolean;
 };
 
 export default function TrendingEventsSection({
@@ -42,6 +43,11 @@ export default function TrendingEventsSection({
             <Link href={`/event_detail?id=${event.id}`} key={event.id}>
               <div className="group glass rounded-2xl overflow-hidden flex flex-col md:flex-row cursor-pointer hover:border-[#1a2d5a]/30 transition-all duration-300 border border-gray-100 shadow-sm">
                 <div className="relative md:w-80 md:h-60 shrink-0 overflow-hidden bg-gray-50">
+                  {event.soldOut && (
+                    <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-20 shadow-md">
+                      SOLD OUT
+                    </span>
+                  )}
                   {event.image ? (
                     <Image
                       src={event.image}
@@ -77,8 +83,12 @@ export default function TrendingEventsSection({
                     <span className="text-lg font-display font-bold text-[#1a2d5a]">
                       {event.priceLabel}
                     </span>
-                    <Button className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] text-white text-sm px-6 hover:opacity-90 transition-opacity">
-                      Get Tickets <ArrowRight className="h-4 w-4 ml-2" />
+                    <Button
+                      className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] text-white text-sm px-6 hover:opacity-90 transition-opacity disabled:opacity-70 disabled:cursor-not-allowed"
+                      variant={event.soldOut ? "outline" : "default"}
+                      disabled={event.soldOut}
+                    >
+                      {event.soldOut ? "Sold Out" : "Get Tickets"} <ArrowRight className="h-4 w-4 ml-2" />
                     </Button>
                   </div>
                 </div>
