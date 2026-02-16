@@ -44,25 +44,85 @@ const buildPriceLabel = (event: any) => {
   return "Free";
 };
 
+const normalizeTimeTo24h = (raw?: string): string => {
+  if (!raw || typeof raw !== "string") return "23:59";
+  const t = raw.trim().toUpperCase();
+  const ampm = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/);
+  if (ampm) {
+    let hour = parseInt(ampm[1], 10);
+    const minute = ampm[2] ? parseInt(ampm[2], 10) : 0;
+    const isPM = ampm[3] === "PM";
+    if (hour === 12) hour = isPM ? 12 : 0;
+    else if (isPM) hour += 12;
+    return `${hour.toString().padStart(2, "0")}:${minute
+      .toString()
+      .padStart(2, "0")}`;
+  }
+  const hm = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (hm) {
+    const hh = Math.min(23, Math.max(0, parseInt(hm[1], 10)))
+      .toString()
+      .padStart(2, "0");
+    const mm = Math.min(59, Math.max(0, parseInt(hm[2], 10)))
+      .toString()
+      .padStart(2, "0");
+    return `${hh}:${mm}`;
+  }
+  return "23:59";
+};
+
+const buildEventEndDate = (event: any): Date | null => {
+  const dateStr = event?.endDate || event?.startDate;
+  if (!dateStr) return null;
+  const time24 = normalizeTimeTo24h(event?.endTime);
+  const isoCandidate = `${dateStr}T${time24}:00`;
+  const d = new Date(isoCandidate);
+  if (!isNaN(d.getTime())) return d;
+  const d2 = new Date(dateStr);
+  if (!isNaN(d2.getTime())) {
+    const [h, m] = time24.split(":").map(Number);
+    d2.setHours(h || 23, m || 59, 0, 0);
+    return d2;
+  }
+  return null;
+};
+
+const isTicketTypeAvailable = (ticket: any) => {
+  const now = new Date();
+  if (ticket.available === false) return false;
+  if (typeof ticket.quantity === "number" && ticket.quantity <= 0)
+    return false;
+  if (ticket.startDate && ticket.endDate) {
+    const start = new Date(ticket.startDate);
+    const end = new Date(ticket.endDate);
+    end.setHours(23, 59, 59, 999);
+    if (now < start || now > end) return false;
+  }
+  return true;
+};
+
 const isEventSoldOut = (event: any) => {
-  if (event?.isSoldOut) return true;
-  if (event?.status && event.status !== "published") return true;
+  const status = (event?.status || "").toString().toLowerCase();
+  const explicitSoldOut =
+    event?.isSoldOut === true ||
+    event?.soldOut === true ||
+    status === "soldout" ||
+    status === "sold_out" ||
+    status === "sold out";
+  if (explicitSoldOut) return true;
+
+  if (event?.status && status !== "published") return true;
+
+  const now = new Date();
+  const end = buildEventEndDate(event);
+  if (end && end.getTime() <= now.getTime()) return true;
 
   if (Array.isArray(event?.ticketTypes) && event.ticketTypes.length > 0) {
-    const now = new Date();
-    const available = event.ticketTypes.some((t: any) => {
-      if (t.available === false) return false;
-      if (typeof t.quantity === "number" && t.quantity <= 0) return false;
-      if (t.startDate && t.endDate) {
-        const start = new Date(t.startDate);
-        const end = new Date(t.endDate);
-        end.setHours(23, 59, 59, 999);
-        if (now < start || now > end) return false;
-      }
-      return true;
-    });
-    if (!available) return true;
+    const hasAvailableTickets = event.ticketTypes.some(isTicketTypeAvailable);
+    if (!hasAvailableTickets) return true;
   }
+
+  if (typeof event?.capacity === "number" && event.capacity <= 0) return true;
 
   return false;
 };
