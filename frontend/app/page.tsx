@@ -230,8 +230,12 @@ export default async function Page() {
       getBannerEvents(),
     ]);
 
-  const featuredEvents = (featuredRes.events || []).map(toFeaturedCard);
-  const trendingEvents = (trendingRes.events || []).map(toTrendingCard);
+  const featuredEvents = (featuredRes.events || [])
+    .filter((event) => event?.isFeatured === true)
+    .map(toFeaturedCard);
+  const trendingEvents = (trendingRes.events || [])
+    .filter((event) => event?.isTrending === true)
+    .map(toTrendingCard);
 
   const initialOtherEvents = (otherRes.events || []).map(sanitizeEventForCard);
   const hasMore = otherRes.meta?.hasMore ?? false;

@@ -38,9 +38,7 @@ const Header = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [isFocused, setIsFocused] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -160,7 +158,6 @@ const Header = () => {
       params.push(`category=${encodeURIComponent(selectedCategory)}`);
     const query = params.length ? `?${params.join("&")}` : "";
     router.push(`/event_explore${query}`);
-    setShowMobileSearch(false);
     setMobileMenuOpen(false);
     setDialogOpen(false);
   };
@@ -183,7 +180,6 @@ const Header = () => {
 
   const scrollToSection = (id: string, skipPush = false) => {
     setMobileMenuOpen(false);
-    setShowMobileSearch(false);
 
     const performScroll = () => {
       const el = document.getElementById(id);
@@ -210,9 +206,6 @@ const Header = () => {
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen((prev) => !prev);
-    if (!mobileMenuOpen) {
-      setShowMobileSearch(false);
-    }
   };
 
   const handleShowMore = () => {
@@ -227,16 +220,11 @@ const Header = () => {
         `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
-          {/* Mobile: Logo, Search Icon/Bar, Hamburger */}
+          {/* Mobile: Logo, Search trigger (dialog), Hamburger */}
           <div className="flex md:hidden items-center justify-between w-full gap-3">
-            {/* Logo - hide when search is active */}
             <Link
               href="/"
-              className={`flex items-center group flex-shrink-0 transition-all duration-300 ${
-                showMobileSearch
-                  ? "opacity-0 w-0 overflow-hidden"
-                  : "opacity-100"
-              }`}
+              className="flex items-center group flex-shrink-0 transition-all duration-300"
             >
               <img
                 src="/logo.png"
@@ -245,98 +233,30 @@ const Header = () => {
               />
             </Link>
 
-            {/* Mobile Search - show when active */}
-            {showMobileSearch && (
-              <div className="flex-1 animate-in slide-in-from-right-5 duration-300">
-                <form
-                  className={`relative flex items-center rounded-lg border overflow-hidden bg-white transition-all duration-300 ease-out ${
-                    isFocused
-                      ? "border-[#FFC107] shadow-lg"
-                      : "border-gray-300 hover:border-yellow-400 shadow-sm"
-                  }`}
-                  onSubmit={handleSearch}
-                >
-                  <div className="flex items-center pl-2 pr-1 border-r border-gray-200">
-                    <Select
-                      value={selectedCategory}
-                      onValueChange={setSelectedCategory}
-                    >
-                      <SelectTrigger className="rounded-none border-0 bg-transparent h-8 min-w-[80px] text-gray-600 font-medium text-xs">
-                        <SelectValue placeholder="All" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        {categories.map((cat) => (
-                          <SelectItem key={cat} value={cat}>
-                            {cat}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="relative flex-1 group">
-                    <Input
-                      id="search-input-mobile"
-                      type="text"
-                      className="relative border-0 focus:ring-0 focus:outline-none h-8 bg-transparent px-2 text-gray-800 text-sm font-medium placeholder:text-gray-400"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      onFocus={() => setIsFocused(true)}
-                      onBlur={() => setIsFocused(false)}
-                      autoComplete="off"
-                      placeholder="Search events..."
-                      autoFocus
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    size="icon"
-                    className="h-8 w-8 bg-[#FFC107] hover:bg-[#FFC101] rounded-l-none rounded-r-lg"
-                  >
-                    <Search className="h-3 w-3 text-white" />
-                  </Button>
-                </form>
-              </div>
-            )}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="p-2 text-gray-700 hover:text-[#115db1]"
+                onClick={() => {
+                  setDialogOpen(true);
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Search className="h-5 w-5" />
+              </Button>
 
-            {/* Right side: Search Icon and Hamburger/Close */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              {!showMobileSearch && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="p-2 text-gray-700 hover:text-[#115db1]"
-                  onClick={() => {
-                    setShowMobileSearch(true);
-                    setMobileMenuOpen(false);
-                  }}
-                >
-                  <Search className="h-5 w-5" />
-                </Button>
-              )}
-
-              {showMobileSearch ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="p-2 text-gray-700 hover:text-[#115db1]"
-                  onClick={() => setShowMobileSearch(false)}
-                >
+              <button
+                className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
+                aria-label="Open menu"
+                onClick={toggleMobileMenu}
+              >
+                {mobileMenuOpen ? (
                   <X className="h-5 w-5" />
-                </Button>
-              ) : (
-                <button
-                  className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
-                  aria-label="Open menu"
-                  onClick={toggleMobileMenu}
-                >
-                  {mobileMenuOpen ? (
-                    <X className="h-5 w-5" />
-                  ) : (
-                    <Menu className="h-5 w-5" />
-                  )}
-                </button>
-              )}
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
+              </button>
             </div>
           </div>
 
@@ -389,6 +309,7 @@ const Header = () => {
                   variant="ghost"
                   size="icon"
                   className="hidden md:flex p-2 text-gray-700 hover:text-[#115db1] hover:bg-blue-50 transition-all duration-200"
+                  onClick={() => setDialogOpen(true)}
                 >
                   <Search className="h-5 w-5" />
                 </Button>
@@ -401,10 +322,9 @@ const Header = () => {
                 </DialogHeader>
                 
                 {/* Search Form */}
-                <form onSubmit={handleSearch} className="px-6 pb-4">
-                  <div className="flex  gap-4">
-                    <div className="flex flex-1 gap-3">
-                      <div className="w-[180px]">
+                <form onSubmit={handleSearch} className="md:px-6 px-2 pb-4">
+                  <div className="flex border  flex-col  gap-4">
+                    <div className="w-[180px]">
                         <Select
                           value={selectedCategory}
                           onValueChange={setSelectedCategory}
@@ -422,17 +342,19 @@ const Header = () => {
                           </SelectContent>
                         </Select>
                       </div>
+                    <div className="flex flex-1 gap-3">
+                      
                       <div className="w-full relative">
                         <Input
                           type="text"
-                          className="w-full h-11 border-gray-300 focus:ring-2 focus:ring-[#FFC107]/20 focus:border-[#FFC107] pr-24"
+                          className="w-full border border-green-500 h-11  focus:ring-2 focus:ring-[#FFC107]/20 focus:border-[#FFC107] pr-0"
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                           autoComplete="off"
                           placeholder="Search by event name, location, or description..."
                           autoFocus
                         />
-                        {searchTerm && (
+                        {/* {searchTerm && (
                           <button
                             type="button"
                             onClick={() => setSearchTerm("")}
@@ -440,10 +362,9 @@ const Header = () => {
                           >
                             <X className="h-4 w-4" />
                           </button>
-                        )}
+                        )} */}
                       </div>
-                    </div>
-                    <div className="flex justify-end">
+                      <div className="flex justify-end">
                       <Button
                         type="submit"
                         className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:from-[#2a4d7a] hover:to-[#1a2d5a] text-white px-8 h-11"
@@ -452,6 +373,8 @@ const Header = () => {
                         Search
                       </Button>
                     </div>
+                    </div>
+                    
                   </div>
                 </form>
 
@@ -598,7 +521,7 @@ const Header = () => {
 
       {/* Mobile menu overlay - slides from the top */}
       <AnimatePresence>
-        {mobileMenuOpen && !showMobileSearch && (
+        {mobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
