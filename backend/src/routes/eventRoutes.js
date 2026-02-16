@@ -31,6 +31,8 @@ router.get("/:userId/wishlist", eventController.getWishlist);
 router.post("/:userId/wishlist", eventController.updateWishlist);
 
 router.patch("/:id/banner", eventController.toggleBannerStatus);
+router.patch("/:id/featured", eventController.toggleFeaturedStatus);
+router.patch("/:id/trending", eventController.toggleTrendingStatus);
 
 // Manual ticket availability update route
 router.post(

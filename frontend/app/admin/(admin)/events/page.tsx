@@ -30,6 +30,8 @@ import {
   Loader2,
   Check,
   Copy,
+  Flame,
+  Sparkles,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import {
@@ -78,6 +80,8 @@ interface Event {
   status: string;
   capacity: number;
   bannerStatus: boolean;
+  isFeatured?: boolean;
+  isTrending?: boolean;
   ticketTypes: Array<{
     name: string;
     price: number;
@@ -303,6 +307,74 @@ export default function EventsPage() {
       );
     } catch (error) {
       toast.error("Failed to update banner status");
+    }
+  };
+
+  const handleToggleFeatured = async (
+    eventId: string,
+    currentStatus: boolean | undefined
+  ) => {
+    try {
+      const newStatus = !currentStatus;
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/${eventId}/featured`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ isFeatured: newStatus }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to update featured status");
+
+      toast.success(
+        `Event ${newStatus ? "marked as featured" : "removed from featured"}`
+      );
+
+      setEvents(
+        events.map((event) =>
+          event._id === eventId ? { ...event, isFeatured: newStatus } : event
+        )
+      );
+    } catch (error) {
+      toast.error("Failed to update featured status");
+    }
+  };
+
+  const handleToggleTrending = async (
+    eventId: string,
+    currentStatus: boolean | undefined
+  ) => {
+    try {
+      const newStatus = !currentStatus;
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/${eventId}/trending`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ isTrending: newStatus }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to update trending status");
+
+      toast.success(
+        `Event ${newStatus ? "marked as trending" : "removed from trending"}`
+      );
+
+      setEvents(
+        events.map((event) =>
+          event._id === eventId ? { ...event, isTrending: newStatus } : event
+        )
+      );
+    } catch (error) {
+      toast.error("Failed to update trending status");
     }
   };
 
@@ -637,6 +709,34 @@ export default function EventsPage() {
                             <Star
                               className={`h-4 w-4 ${
                                 event.bannerStatus ? "fill-current" : ""
+                              }`}
+                            />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-purple-600 hover:text-purple-700"
+                            onClick={() =>
+                              handleToggleFeatured(event._id, event.isFeatured)
+                            }
+                          >
+                            <Sparkles
+                              className={`h-4 w-4 ${
+                                event.isFeatured ? "fill-current" : ""
+                              }`}
+                            />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-orange-600 hover:text-orange-700"
+                            onClick={() =>
+                              handleToggleTrending(event._id, event.isTrending)
+                            }
+                          >
+                            <Flame
+                              className={`h-4 w-4 ${
+                                event.isTrending ? "fill-current" : ""
                               }`}
                             />
                           </Button>

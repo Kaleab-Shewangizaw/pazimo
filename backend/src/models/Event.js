@@ -8,6 +8,14 @@ const EventSchema = new mongoose.Schema(
       trim: true,
       maxlength: [100, "Title cannot be more than 100 characters"],
     },
+    isFeatured: {
+      type: Boolean,
+      default: false,
+    },
+    isTrending: {
+      type: Boolean,
+      default: false,
+    },
     description: {
       type: String,
       required: [true, "Please provide an event description"],

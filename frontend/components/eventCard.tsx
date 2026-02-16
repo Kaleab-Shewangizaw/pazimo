@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { HeartIcon, ImageIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -57,6 +58,19 @@ export default function EventCard({
   toggleWishlist,
   isTicketTypeAvailable,
 }: EventCardProps) {
+  // Keep a local flag so we do not keep re-requesting broken images from the API
+  const [hasImageError, setHasImageError] = useState(false);
+
+  const coverImageSrc = !hasImageError && event.coverImages?.length
+    ? event.coverImages[0].startsWith("http")
+      ? event.coverImages[0]
+      : `${process.env.NEXT_PUBLIC_API_URL}${
+          event.coverImages[0].startsWith("/")
+            ? event.coverImages[0]
+            : `/${event.coverImages[0]}`
+        }`
+    : "/placeholder.svg?height=600&width=400&text=Event+Poster";
+
   return (
     <div key={event._id} className="w-80 flex-shrink-0">
       <div className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 group">
@@ -81,23 +95,13 @@ export default function EventCard({
             {event.coverImages && event.coverImages.length > 0 && (
               <Link href={`event_detail?id=${event._id}`} className="block w-full h-full relative">
                 <Image
-                  src={
-                    event.coverImages[0].startsWith("http")
-                      ? event.coverImages[0]
-                      : `${process.env.NEXT_PUBLIC_API_URL}${
-                          event.coverImages[0].startsWith("/")
-                            ? event.coverImages[0]
-                            : `/${event.coverImages[0]}`
-                        }`
-                  }
+                  src={coverImageSrc}
                   alt={event.title}
                   fill
                   className="object-cover transition-transform duration-500 group-hover:scale-110"
                   sizes="(max-width: 640px) 320px, 320px"
                   quality={85}
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = "none";
-                  }}
+                  onError={() => setHasImageError(true)}
                 />
               </Link>
             )}

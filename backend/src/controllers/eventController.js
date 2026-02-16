@@ -441,25 +441,68 @@ const getEventDetails = async (req, res) => {
    PUBLIC EVENTS
 ====================================================== */
 const getPublicEvents = async (req, res) => {
-  const events = await Event.find({
-    status: "published",
-    $or: [{ isPublic: true }, { isPublic: { $exists: false } }],
-  })
-    .populate("category", "name description")
-    .populate({
-      path: "organizer",
-      select: "firstName lastName email",
-      populate: {
-        path: "organizerProfile",
-        select: "organization",
-      },
-    })
-    .sort("-createdAt");
+  try {
+    const { isFeatured, isTrending, limit, skip, sort } = req.query;
 
-  res.status(StatusCodes.OK).json({
-    status: "success",
-    data: events,
-  });
+    const query = {
+      status: "published",
+      $or: [{ isPublic: true }, { isPublic: { $exists: false } }],
+    };
+
+    // Optional feature/trending filters
+    if (isFeatured === "true") query.isFeatured = true;
+    if (isTrending === "true") query.isTrending = true;
+
+    // Sorting and pagination
+    const sortOption = sort || "-createdAt";
+    const numericSkip = Number.isNaN(parseInt(skip, 10))
+      ? 0
+      : parseInt(skip, 10);
+
+    const parsedLimit = parseInt(limit, 10);
+    const hasLimit = !Number.isNaN(parsedLimit);
+    const safeLimit = hasLimit
+      ? Math.max(1, Math.min(parsedLimit, 100))
+      : undefined;
+
+    let findQuery = Event.find(query)
+      .populate("category", "name description")
+      .populate({
+        path: "organizer",
+        select: "firstName lastName email",
+        populate: {
+          path: "organizerProfile",
+          select: "organization",
+        },
+      })
+      .sort(sortOption);
+
+    if (hasLimit) {
+      findQuery = findQuery.skip(numericSkip).limit(safeLimit);
+    }
+
+    const [events, total] = await Promise.all([
+      findQuery,
+      Event.countDocuments(query),
+    ]);
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: events,
+      meta: {
+        total,
+        limit: hasLimit ? safeLimit : undefined,
+        skip: hasLimit ? numericSkip : undefined,
+        hasMore: hasLimit ? numericSkip + safeLimit < total : false,
+      },
+    });
+  } catch (error) {
+    console.error("[PUBLIC-EVENTS] Error fetching public events", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to fetch public events",
+    });
+  }
 };
 
 /* ======================================================
@@ -646,6 +689,42 @@ const toggleBannerStatus = async (req, res) => {
   });
 };
 
+const toggleFeaturedStatus = async (req, res) => {
+  const { id } = req.params;
+  const { isFeatured } = req.body;
+
+  const event = await Event.findById(id);
+  if (!event) throw new NotFoundError("Event not found");
+  if (req.user.role !== "admin") throw new BadRequestError("Not authorized");
+
+  event.isFeatured = typeof isFeatured === "boolean" ? isFeatured : !event.isFeatured;
+  await event.save();
+
+  res.status(StatusCodes.OK).json({
+    status: "success",
+    message: "Featured status updated",
+    data: event,
+  });
+};
+
+const toggleTrendingStatus = async (req, res) => {
+  const { id } = req.params;
+  const { isTrending } = req.body;
+
+  const event = await Event.findById(id);
+  if (!event) throw new NotFoundError("Event not found");
+  if (req.user.role !== "admin") throw new BadRequestError("Not authorized");
+
+  event.isTrending = typeof isTrending === "boolean" ? isTrending : !event.isTrending;
+  await event.save();
+
+  res.status(StatusCodes.OK).json({
+    status: "success",
+    message: "Trending status updated",
+    data: event,
+  });
+};
+
 const updateTicketAvailability = async (req, res) => {
   // Basic implementation stub
   res.status(StatusCodes.OK).json({ message: "Ticket availability updated" });
@@ -671,5 +750,7 @@ module.exports = {
   getWishlist,
   updateWishlist,
   toggleBannerStatus,
+  toggleFeaturedStatus,
+  toggleTrendingStatus,
   updateTicketAvailability,
 };
