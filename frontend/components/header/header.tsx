@@ -347,7 +347,7 @@ const Header = () => {
                       <div className="w-full relative">
                         <Input
                           type="text"
-                          className="w-full border border-green-500 h-11  focus:ring-2 focus:ring-[#FFC107]/20 focus:border-[#FFC107] pr-0"
+                          className="w-full border border-gray-300 h-11  focus:ring-2 focus:ring-[#FFC107]/20 focus:border-[#FFC107] pr-0"
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                           autoComplete="off"
