@@ -211,7 +211,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <>
       {isAdminRoute && (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-gray-50" style={{ fontFamily: "var(--font-inter, 'Inter', ui-sans-serif, system-ui, sans-serif)" }}>
           <div className="flex h-screen overflow-hidden">
             {/* Admin Sidebar - Removed the 'hidden md:flex' wrapper */}
             <AdminSidebar open={isSidebarOpen} onClose={closeSidebar} />

@@ -60,7 +60,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={"font-sans"}>
+      <body style={{ fontFamily: "var(--font-inter, 'Inter', ui-sans-serif, system-ui, sans-serif)" }}>
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
