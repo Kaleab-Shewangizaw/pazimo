@@ -799,7 +799,7 @@ export default function EventDetailClient() {
         </div>
 
         {/* Like + Share — top right */}
-        <div className="absolute bottom-10 right-10 z-10 flex items-center gap-2">
+        <div className="absolute top-4 md:top-150 md:bottom-10 right-4 md:right-10 z-10 flex items-center gap-2">
           <button
             onClick={() => setLiked(!liked)}
             className="h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/50 transition-colors"
