@@ -308,8 +308,15 @@ export default function CustomCampaignModal({
               const normalized = normalizeEthiopianPhone(t.user.phoneNumber);
               if (!normalized) return;
 
+              const firstName = (t.user.firstName || "").trim();
+              const lastName = (t.user.lastName || "").trim();
+              const displayName =
+                [firstName, lastName].filter(Boolean).join(" ") ||
+                t.guestName ||
+                "Customer";
+
               uniqueMap.set(normalized, {
-                name: t.user.fullName || "Attendee",
+                name: displayName,
                 phone: normalized,
                 source: "event",
               });

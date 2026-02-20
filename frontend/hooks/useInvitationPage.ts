@@ -856,7 +856,7 @@ export function useInvitationPage() {
       if (response.ok) {
         const data = await response.json();
         let tickets = (data.tickets || []).filter(
-          (t: any) => t.isInvitation || t.price === 0
+          (t: any) => t.isInvitation === true
         );
 
         // If there are more pages, fetch all
@@ -876,7 +876,7 @@ export function useInvitationPage() {
             if (nextResponse.ok) {
               const nextData = await nextResponse.json();
               const nextTickets = (nextData.tickets || []).filter(
-                (t: any) => t.isInvitation || t.price === 0
+                (t: any) => t.isInvitation === true
               );
               tickets = [...tickets, ...nextTickets];
               hasMore = nextData.hasMore || false;
@@ -908,25 +908,7 @@ export function useInvitationPage() {
         }
 
         const formattedAttendees = tickets.map((ticket: any) => {
-          const first = (ticket.user?.firstName || "").trim();
-          const last = (ticket.user?.lastName || "").trim();
-          const fallbackName =
-            ticket.guestName ||
-            ticket.user?.email ||
-            ticket.guestEmail ||
-            ticket.guestPhone ||
-            "Guest";
-          const name = `${[first, last].filter(Boolean).join(" ") || fallbackName}`;
-
-          const contact =
-            ticket.user?.email ||
-            ticket.guestEmail ||
-            ticket.guestPhone ||
-            ticket.user?.phoneNumber ||
-            "No Contact";
-
-          // Find matching invitation to get correct original amount for old tickets
-          // Improved matching logic: Prefer linking via ticketId found in rsvpLink
+          // Find matching invitation first (needed for name fallback)
           const matchingInv = invitations.find((inv) => {
             // Check for direct ticket ID match within the RSVP link
             if (inv.rsvpLink && ticket.ticketId) {
@@ -957,6 +939,24 @@ export function useInvitationPage() {
               (invPhone && tPhone && invPhone === tPhone)
             );
           });
+
+          const first = (ticket.user?.firstName || "").trim();
+          const last = (ticket.user?.lastName || "").trim();
+          const fallbackName =
+            ticket.guestName ||
+            matchingInv?.guestName ||
+            ticket.user?.email ||
+            ticket.guestEmail ||
+            ticket.guestPhone ||
+            "Guest";
+          const name = `${[first, last].filter(Boolean).join(" ") || fallbackName}`;
+
+          const contact =
+            ticket.user?.email ||
+            ticket.guestEmail ||
+            ticket.guestPhone ||
+            ticket.user?.phoneNumber ||
+            "No Contact";
 
           const isOldTicket =
             new Date(ticket.createdAt) < new Date("2026-01-02");

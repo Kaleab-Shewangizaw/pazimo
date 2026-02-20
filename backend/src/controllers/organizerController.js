@@ -496,11 +496,12 @@ exports.getTopCustomers = async (req, res) => {
         },
       },
       { $unwind: "$eventDetails" },
-      // 2. Filter tickets for this organizer's events and ensure they are active/used
+      // 2. Filter tickets for this organizer's events and ensure they are active/used (excluding invitation tickets)
       {
         $match: {
           "eventDetails.organizer": new mongoose.Types.ObjectId(organizerId),
           status: { $in: ["active", "used", "confirmed"] },
+          isInvitation: { $ne: true },
         },
       },
       // 3. Lookup user info to get phone number if user field exists
@@ -524,11 +525,21 @@ exports.getTopCustomers = async (req, res) => {
             $ifNull: ["$userObj.phoneNumber", "$guestPhone"],
           },
           finalName: {
-            $ifNull: [
-              { $concat: ["$userObj.firstName", " ", "$userObj.lastName"] },
-              "$guestName",
-              "Guest",
-            ],
+            $cond: {
+              if: { $gt: [{ $strLenCP: { $ifNull: ["$userObj.firstName", ""] } }, 0] },
+              then: {
+                $trim: {
+                  input: {
+                    $concat: [
+                      { $ifNull: ["$userObj.firstName", ""] },
+                      " ",
+                      { $ifNull: ["$userObj.lastName", ""] },
+                    ],
+                  },
+                },
+              },
+              else: { $ifNull: ["$guestName", "Guest"] },
+            },
           },
           qty: {
             $ifNull: ["$purchaseQuantity", "$ticketCount", 1],
