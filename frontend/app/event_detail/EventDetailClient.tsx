@@ -765,7 +765,7 @@ export default function EventDetailClient() {
             sizes="100vw"
             quality={90}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/30 to-transparent" />
         </div>
 
         {/* Title + meta overlaid at the bottom of the hero */}
@@ -799,7 +799,7 @@ export default function EventDetailClient() {
         </div>
 
         {/* Like + Share — top right */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+        <div className="absolute bottom-10 right-10 z-10 flex items-center gap-2">
           <button
             onClick={() => setLiked(!liked)}
             className="h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/50 transition-colors"
