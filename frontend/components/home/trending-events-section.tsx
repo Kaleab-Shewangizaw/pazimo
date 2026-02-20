@@ -1,7 +1,11 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Calendar, MapPin, Flame, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
 
 export type TrendingCardEvent = {
   id: string;
@@ -13,6 +17,89 @@ export type TrendingCardEvent = {
   image?: string;
   soldOut?: boolean;
 };
+
+function TrendingCard({ event, index }: { event: TrendingCardEvent; index: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [animClass, setAnimClass] = useState("card-hidden");
+  const isSoldOut = !!event.soldOut;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const delay = index * 80;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          const isMobile = window.matchMedia("(max-width: 639px)").matches;
+          const cls = isMobile
+            ? index % 2 === 0 ? "card-animate-left" : "card-animate-right"
+            : "card-animate-up";
+          setTimeout(() => setAnimClass(cls), delay);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [index]);
+
+  return (
+    <div ref={ref} className={animClass}>
+      <Link href={`/event_detail?id=${event.id}`}>
+        <div className="group glass rounded-2xl overflow-hidden flex flex-col md:flex-row cursor-pointer hover:border-[#1a2d5a]/30 transition-all duration-300 border border-gray-100 shadow-sm">
+          <div className="relative md:w-80 md:h-60 shrink-0 overflow-hidden bg-gray-50">
+            {isSoldOut && (
+              <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-20 shadow-md">
+                SOLD OUT
+              </span>
+            )}
+            {event.image ? (
+              <Image
+                src={event.image}
+                alt={event.title}
+                width={400}
+                height={240}
+                className="w-full h-48 md:h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-full h-48 md:h-full flex items-center justify-center bg-gray-100 text-gray-400">
+                <ImageIcon className="h-12 w-12" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 p-6 md:p-8 flex flex-col justify-between bg-white">
+            <div>
+              <h3 className="font-display text-xl font-semibold mb-3 group-hover:text-[#1a2d5a] transition-colors">
+                {event.title}
+              </h3>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="h-4 w-4" /> {event.dateLabel}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" /> {event.locationLabel}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-6">
+              <span className="text-lg font-display font-bold text-blue-600">
+                {event.priceLabel}
+              </span>
+              <Button
+                className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:text-white cursor-pointer text-white text-sm px-6 hover:opacity-90 transition-opacity"
+                variant={isSoldOut ? "outline" : "default"}
+              >
+                {isSoldOut ? "Sold Out" : "Get Tickets"} <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Link>
+    </div>
+  );
+}
 
 export default function TrendingEventsSection({
   events,
@@ -39,64 +126,9 @@ export default function TrendingEventsSection({
         </div>
 
         <div className="flex flex-col gap-6">
-          {events.map((event) => {
-            const isSoldOut = !!event.soldOut;
-
-            return (
-              <Link href={`/event_detail?id=${event.id}`} key={event.id}>
-                <div className="group glass rounded-2xl overflow-hidden flex flex-col md:flex-row cursor-pointer hover:border-[#1a2d5a]/30 transition-all duration-300 border border-gray-100 shadow-sm">
-                  <div className="relative md:w-80 md:h-60 shrink-0 overflow-hidden bg-gray-50">
-                    {isSoldOut && (
-                      <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-20 shadow-md">
-                        SOLD OUT
-                      </span>
-                    )}
-                    {event.image ? (
-                      <Image
-                        src={event.image}
-                        alt={event.title}
-                        width={400}
-                        height={240}
-                        className="w-full h-48 md:h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="w-full h-48 md:h-full flex items-center justify-center bg-gray-100 text-gray-400">
-                        <ImageIcon className="h-12 w-12" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 p-6 md:p-8 flex flex-col justify-between bg-white">
-                    <div>
-                      <h3 className="font-display text-xl font-semibold mb-3 group-hover:text-[#1a2d5a] transition-colors">
-                        {event.title}
-                      </h3>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="h-4 w-4" /> {event.dateLabel}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <MapPin className="h-4 w-4" /> {event.locationLabel}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between mt-6">
-                      <span className="text-lg font-display font-bold text-[#1a2d5a] flex items-center gap-2">
-                        {event.priceLabel}
-                        
-                      </span>
-                      <Button
-                        className="bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] hover:text-white cursor-pointer text-white text-sm px-6 hover:opacity-90 transition-opacity  "
-                        variant={isSoldOut ? "outline" : "default"}
-                        
-                      >
-                        {isSoldOut ? "Sold Out" : "Get Tickets"} <ArrowRight className="h-4 w-4 ml-2" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
+          {events.map((event, i) => (
+            <TrendingCard key={event.id} event={event} index={i} />
+          ))}
         </div>
       </div>
     </section>

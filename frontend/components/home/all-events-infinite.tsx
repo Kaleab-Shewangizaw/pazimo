@@ -222,10 +222,11 @@ export default function AllEventsInfinite({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 sm:gap-x-5 gap-y-8">
-        {events.map((event) => (
+        {events.map((event, i) => (
           <FeaturedEventCard
             key={event._id}
             data={buildCardData(event)}
+            index={i}
           />
         ))}
       </div>
