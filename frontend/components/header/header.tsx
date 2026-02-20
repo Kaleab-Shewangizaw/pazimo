@@ -497,13 +497,13 @@ const Header = () => {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button
+                {/* <Button
                   variant="outline"
                   className="text-[#1a2d5a] border-2 border-[#1a2d5a] hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 hover:border-[#ffc107] transition-all duration-200 rounded-xl font-medium bg-transparent hidden lg:flex"
                   onClick={handleLogout}
                 >
                   Log out
-                </Button>
+                </Button> */}
               </div>
             ) : (
               <div className="hidden md:flex items-center gap-3">
