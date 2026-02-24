@@ -13,6 +13,9 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
+  ImageIcon,
+  BookOpen,
+  Ticket,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
@@ -20,6 +23,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import TicketCounter from "@/components/ticket-counter";
@@ -752,8 +756,106 @@ export default function EventDetailClient() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 mt-7">
+      <div className="relative w-full overflow-hidden md:hidden">
+        <div className="block md:hidden px-8 py-4">
+          <div className="relative w-full max-w-md mx-auto">
+            <Image
+              src={coverImageUrl}
+              alt={`${event.title} - Event cover`}
+              width={600}
+              height={300}
+              className="w-full h-auto object-cover rounded-lg shadow-md"
+              priority
+            />
+          </div>
+        </div>
+
+        <div className="block md:hidden px-4 py-4 bg-white">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <h1 className="text-xl font-bold tracking-tight text-gray-900 leading-tight flex-1">
+              {event.title}
+            </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-gray-700 border-gray-300 bg-transparent hover:bg-gray-50"
+              onClick={handleShare}
+            >
+              <Share2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex gap-4 items-start">
+            <div className="shrink-0 bg-white border border-gray-200 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
+              <div className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                {getDayName(event.startDate)}
+              </div>
+              <div className="text-2xl font-bold text-gray-900 leading-none mt-1">
+                {getDayNumber(event.startDate)}
+              </div>
+              <div className="text-xs font-medium text-gray-600 uppercase tracking-wide mt-1">
+                {getMonthName(event.startDate)}
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-3">
+              <div className="flex items-start gap-2 text-gray-700">
+                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
+                <div>
+                  <div className="text-sm font-medium text-blue-600">
+                    {event.location.address}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {event.location.city}, {event.location.country}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-gray-700">
+                <Calendar className="h-4 w-4 flex-shrink-0 text-gray-600" />
+                <span className="text-sm">
+                  {formatDate(event.startDate)}
+                  {event.endDate &&
+                    event.endDate !== event.startDate &&
+                    ` - ${formatDate(event.endDate)}`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-700">
+                <Clock className="h-4 w-4 flex-shrink-0 text-gray-600" />
+                <span className="text-sm">
+                  {formatTimeRange(event.startTime, event.endTime)}
+                </span>
+              </div>
+              {event.organizer?.name && (
+                <div className="text-xs text-gray-500">
+                  by {event.organizer.name}
+                </div>
+              )}
+              {event.ageRestriction?.hasRestriction && (
+                <div className="flex items-center gap-2 text-gray-700">
+                  <UserCheck className="h-4 w-4 flex-shrink-0 text-gray-600" />
+                  <span className="text-xs">
+                    {event.ageRestriction.minAge &&
+                      !event.ageRestriction.maxAge &&
+                      `Ages ${event.ageRestriction.minAge}+`}
+                    {!event.ageRestriction.minAge &&
+                      event.ageRestriction.maxAge &&
+                      `Up to age ${event.ageRestriction.maxAge}`}
+                    {event.ageRestriction.minAge &&
+                      event.ageRestriction.maxAge &&
+                      `Ages ${event.ageRestriction.minAge} - ${event.ageRestriction.maxAge}`}
+                    {!event.ageRestriction.minAge &&
+                      !event.ageRestriction.maxAge &&
+                      "Age restricted"}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Hero ── */}
-      <section className="relative bg-gray-300">
+      <section className="relative bg-gray-300 hidden md:block">
         <div className="relative h-[50vh] md:h-[75vh] w-[100%] mx-auto bg-gray-600 overflow-hidden">
           <div className="absolute"></div>
           <Image
@@ -821,8 +923,218 @@ export default function EventDetailClient() {
         </div>
       </section>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12 md:hidden">
+        <div className="block lg:hidden">
+          <Tabs defaultValue="tickets" className="w-full">
+            <TabsList className="flex md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 w-full justify-around rounded-none h-12 p-0 shadow-t">
+              <TabsTrigger
+                value="tickets"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs"
+              >
+                <Ticket className="h-4 w-4 mb-0.5" />
+                <span className="text-xs">Tickets</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="about"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs"
+              >
+                <BookOpen className="h-4 w-4 mb-0.5" />
+                <span className="text-xs">About</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="images"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 h-12 px-0 text-xs"
+              >
+                <ImageIcon className="h-4 w-4 mb-0.5" />
+                <span className="text-xs">Images</span>
+              </TabsTrigger>
+            </TabsList>
+            <div className="pb-16 md:pb-0 mt-0">
+              <TabsContent value="tickets" className="mt-0">
+                <div className="space-y-6">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-md">
+                    <div className="space-y-6">
+                      {isEventSoldOut ? (
+                        <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
+                          <p className="text-red-500 font-bold text-lg mb-2">
+                            Tickets Not Available
+                          </p>
+                          <p className="text-gray-500 text-sm">
+                            This event is sold out or has ended.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <RadioGroup
+                            value={selectedTicketType}
+                            onValueChange={setSelectedTicketType}
+                          >
+                            {ticketsToDisplay.map((ticketType) => (
+                              <div
+                                key={ticketType.name}
+                                className="flex items-center justify-between space-x-2 border border-gray-200 rounded-lg p-4"
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <RadioGroupItem
+                                    value={ticketType.name}
+                                    id={ticketType.name}
+                                  />
+                                  <div>
+                                    <Label
+                                      htmlFor={ticketType.name}
+                                      className="font-medium text-gray-900"
+                                    >
+                                      {ticketType.name}
+                                    </Label>
+                                    {ticketType.description && (
+                                      <p className="text-xs text-gray-500">
+                                        {ticketType.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="font-bold text-[#0D47A1]">
+                                  {ticketType.price} ETB
+                                </div>
+                              </div>
+                            ))}
+                          </RadioGroup>
+                          {ticketsToDisplay.length === 0 && (
+                            <div className="text-center py-6 text-gray-500">
+                              No tickets are currently available.
+                            </div>
+                          )}
+                          {ticketsToDisplay.length > 0 && (
+                            <>
+                              <div>
+                                <h3 className="text-sm font-medium mb-2 text-gray-700">
+                                  Number of tickets:
+                                </h3>
+                                <TicketCounter
+                                  value={ticketQuantity}
+                                  onChange={setTicketQuantity}
+                                  max={selectedTicket?.quantity || 10}
+                                />
+                                {isQuantityExceeded && (
+                                  <p className="text-xs text-red-500 mt-1">
+                                    Not enough tickets available
+                                  </p>
+                                )}
+                              </div>
+                              <Separator className="bg-gray-200" />
+                              <div className="flex justify-between items-center">
+                                <span className="text-lg text-gray-700">
+                                  Total:
+                                </span>
+                                <span className="text-2xl font-bold text-[#0D47A1]">
+                                  {totalPrice} ETB
+                                </span>
+                              </div>
+                              {user?.role !== "admin" &&
+                                user?.role !== "organizer" && (
+                                  <Button
+                                    onClick={handleBuyClick}
+                                    disabled={isQuantityExceeded || isProcessingPayment}
+                                    className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white disabled:bg-gray-400"
+                                  >
+                                    {isProcessingPayment ? (
+                                      <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Processing...
+                                      </>
+                                    ) : (
+                                      "Buy Ticket"
+                                    )}
+                                  </Button>
+                                )}
+                            </>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent value="about" className="mt-0">
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    About The Event
+                  </h2>
+                  <p className="text-gray-700 leading-relaxed">
+                    {event.description}
+                  </p>
+                </div>
+              </TabsContent>
+              <TabsContent value="images" className="mt-0">
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Event Images
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {event.coverImages.map((image, index) => (
+                      <div
+                        key={index}
+                        className="relative aspect-video rounded-lg overflow-hidden"
+                      >
+                        <Image
+                          src={
+                            image.startsWith("http")
+                              ? image
+                              : `${process.env.NEXT_PUBLIC_API_URL}${
+                                  image.startsWith("/") ? image : `/${image}`
+                                }`
+                          }
+                          alt={`Cover image ${index + 1}`}
+                          fill
+                          className="object-cover hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {event.eventImages?.length > 0 && (
+                    <div className="space-y-4">
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        Event Gallery
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {event.eventImages.map((image, index) => (
+                          <div
+                            key={index}
+                            className="relative aspect-video rounded-lg overflow-hidden"
+                          >
+                            <Image
+                              src={
+                                image.url.startsWith("http")
+                                  ? image.url
+                                  : `${process.env.NEXT_PUBLIC_API_URL}${
+                                      image.url.startsWith("/")
+                                        ? image.url
+                                        : `/${image.url}`
+                                    }`
+                              }
+                              alt={image.caption || `Event image ${index + 1}`}
+                              fill
+                              className="object-cover hover:scale-105 transition-transform duration-300"
+                            />
+                            {image.caption && (
+                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white p-2 text-sm">
+                                {image.caption}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </div>
+          </Tabs>
+        </div>
+      </div>
+
       {/* ── Content ── */}
-      <section className="py-10 md:py-16">
+      <section className="py-10 md:py-16 hidden md:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-14">
 
