@@ -17,7 +17,7 @@ export default function FeaturedEventsSection({
   return (
     <section
       id="featured"
-      className="py-16 px-4 sm:px-8 md:px-16 scroll-mt-24"
+      className="py-8 px-4 sm:px-8 md:px-16 scroll-mt-24"
     >
       <div className="container mx-auto">
         <div className="flex items-end justify-between mb-10">
