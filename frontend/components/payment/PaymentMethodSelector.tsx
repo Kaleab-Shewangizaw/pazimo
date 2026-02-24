@@ -9,6 +9,7 @@ interface PaymentMethodSelectorProps {
   selectedMethod: string;
   onSelect: (method: string) => void;
   provider?: "SANTIM" | "CHAPA";
+  currency?: "ETB" | "USD";
 }
 
 const SANTIM_METHODS = [
@@ -74,13 +75,33 @@ const CHAPA_METHODS = [
   // },
 ];
 
+const INTERNATIONAL_CARD_METHODS = [
+  {
+    id: "visa",
+    name: "Visa",
+    description: "Visa cards",
+    image: "/visa.png",
+  },
+  {
+    id: "mastercard",
+    name: "Mastercard",
+    description: "Mastercard",
+    image: "/mastercard.png",
+  },
+];
+
 export default function PaymentMethodSelector({
   phoneNumber,
   selectedMethod,
   onSelect,
   provider = "SANTIM",
+  currency = "ETB",
 }: PaymentMethodSelectorProps) {
-  const methods = provider === "CHAPA" ? CHAPA_METHODS : SANTIM_METHODS;
+  // If USD currency is selected, show international card payment option
+  // Otherwise, show local Ethiopian payment methods
+  const methods = currency === "USD" 
+    ? INTERNATIONAL_CARD_METHODS
+    : (provider === "CHAPA" ? CHAPA_METHODS : SANTIM_METHODS);
 
   // Handle both 09/07 and 9/7 formats
   const isTelebirrDisabled =

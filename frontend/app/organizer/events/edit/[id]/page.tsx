@@ -313,7 +313,7 @@ export default function EditEventPage() {
       const hasETBPrice = ticket.priceETB && parseFloat(ticket.priceETB) > 0;
       const hasUSDPrice = ticket.priceUSD && parseFloat(ticket.priceUSD) > 0;
       if (!hasETBPrice && !hasUSDPrice) {
-        toast.error(`Ticket "${ticket.name}" must have at least one currency price (ETB or USD)");
+        toast.error(`Ticket "${ticket.name}" must have at least one currency price (ETB or USD)`);
         return false;
       }
       if (parseInt(ticket.quantity) <= 0) {

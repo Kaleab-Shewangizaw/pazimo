@@ -27,6 +27,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import TicketCounter from "@/components/ticket-counter";
+
+// Countries list for USD payment - with flags
+const COUNTRIES_FOR_PAYMENT = [
+  { code: "US", name: "United States", flag: "🇺🇸", prefix: "1" },
+  { code: "CA", name: "Canada", flag: "🇨🇦", prefix: "1" },
+  { code: "GB", name: "United Kingdom", flag: "🇬🇧", prefix: "44" },
+  { code: "AU", name: "Australia", flag: "🇦🇺", prefix: "61" },
+  { code: "ZA", name: "South Africa", flag: "🇿🇦", prefix: "27" },
+  { code: "ET", name: "Ethiopia", flag: "🇪🇹", prefix: "251" },
+  { code: "KE", name: "Kenya", flag: "🇰🇪", prefix: "254" },
+  { code: "UG", name: "Uganda", flag: "🇺🇬", prefix: "256" },
+  { code: "NG", name: "Nigeria", flag: "🇳🇬", prefix: "234" },
+  { code: "GH", name: "Ghana", flag: "🇬🇭", prefix: "233" },
+];
 import {
   Dialog,
   DialogContent,
@@ -138,6 +152,7 @@ export default function EventDetailClient() {
     email: "",
     phoneNumber: "",
     paymentMethod: "telebirr",
+    countryCode: "US", // For USD payments
   });
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [currentTxRef, setCurrentTxRef] = useState<string | null>(null);
@@ -445,15 +460,24 @@ export default function EventDetailClient() {
       console.log("[PAYMENT-INIT] User email:", user?.email);
       console.log("[PAYMENT-INIT] Payment email:", finalEmail);
       console.log("[PAYMENT-INIT] Payment phone:", formattedPhone);
+      console.log("[PAYMENT-INIT] Selected currency:", selectedCurrency);
       console.log("[PAYMENT-INIT] ============================================");
 
-      const amount = selectedType.price * ticketQuantity;
+      // Calculate amount based on selected currency
+      const selectedTypeAny = selectedType as any;
+      const amount = selectedCurrency === "USD"
+        ? (selectedTypeAny.priceUSD || selectedType.price) * ticketQuantity
+        : (selectedTypeAny.priceETB || selectedType.price) * ticketQuantity;
+      
+      // Force CHAPA provider for USD payments (international cards)
+      const effectiveProvider = selectedCurrency === "USD" ? "CHAPA" : activePaymentProvider;
+      
       const orderId = crypto.randomUUID?.() || 
         `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const ticketId = crypto.randomUUID?.() || 
         `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      const endpoint = activePaymentProvider === "CHAPA"
+      const endpoint = effectiveProvider === "CHAPA"
         ? "/api/tickets/ticket/initiate/chapa"
         : "/api/tickets/ticket/initiate";
 
@@ -462,6 +486,7 @@ export default function EventDetailClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           amount,
+          currency: selectedCurrency, // Pass currency to backend
           paymentReason: `Ticket Purchase - ${event?.title}`,
           phoneNumber: formattedPhone,
           orderId,
@@ -531,27 +556,52 @@ export default function EventDetailClient() {
 
   // Initialize payment form when user logs in or opens modal
   const initializePaymentForm = useCallback(() => {
+    // Set country code based on currency
+    let countryCode = selectedCurrency === "USD" ? "US" : "ET";
+
     if (user) {
       let phone =  user.phoneNumber || "";
       phone = phone.replace(/\D/g, "");
       if (phone.startsWith("251")) phone = phone.substring(3);
       if (phone.startsWith("0")) phone = phone.substring(1);
 
+      // Set payment method based on currency and provider
+      let defaultMethod = "telebirr";
+      if (selectedCurrency === "USD") {
+        defaultMethod = "card"; // International card payment for USD
+      } else if (activePaymentProvider === "CHAPA") {
+        defaultMethod = "telebirr";
+      } else {
+        defaultMethod = "Telebirr";
+      }
+
       setPaymentForm({
         fullName: `${user.firstName} ${user.lastName || ""}`.trim(),
         email: user.email || "",
         phoneNumber: phone,
-        paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+        paymentMethod: defaultMethod,
+        countryCode: countryCode,
       });
     } else {
+      // Set payment method based on currency and provider
+      let defaultMethod = "telebirr";
+      if (selectedCurrency === "USD") {
+        defaultMethod = "card";
+      } else if (activePaymentProvider === "CHAPA") {
+        defaultMethod = "telebirr";
+      } else {
+        defaultMethod = "Telebirr";
+      }
+
       setPaymentForm({
         fullName: "",
         email: "",
         phoneNumber: "",
-        paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+        paymentMethod: defaultMethod,
+        countryCode: countryCode,
       });
     }
-  }, [user, activePaymentProvider]);
+  }, [user, activePaymentProvider, selectedCurrency]);
 
   const handleBuyClick = useCallback(() => {
     if (!selectedTicketType || ticketQuantity < 1) {
@@ -648,11 +698,20 @@ export default function EventDetailClient() {
 
   // Update payment method when provider changes
   useEffect(() => {
+    let defaultMethod = "telebirr";
+    if (selectedCurrency === "USD") {
+      defaultMethod = "card"; // International card payment for USD
+    } else if (activePaymentProvider === "CHAPA") {
+      defaultMethod = "telebirr";
+    } else {
+      defaultMethod = "Telebirr";
+    }
+    
     setPaymentForm((prev) => ({
       ...prev,
-      paymentMethod: activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr",
+      paymentMethod: defaultMethod,
     }));
-  }, [activePaymentProvider]);
+  }, [activePaymentProvider, selectedCurrency]);
 
   // Reset ticket index when tickets change
   useEffect(() => {
@@ -1367,7 +1426,7 @@ export default function EventDetailClient() {
                                 {isProcessingPayment ? (
                                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
                                 ) : selectedTicketType ? (
-                                  `Buy Ticket — ${totalPrice} ETB`
+                                  `Buy Ticket — ${selectedCurrency === "USD" ? "$" : ""}${totalPrice} ${selectedCurrency === "USD" ? "USD" : "ETB"}`
                                 ) : (
                                   "Select a Ticket"
                                 )}
@@ -1548,7 +1607,7 @@ export default function EventDetailClient() {
       </Dialog>
 
       <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
-        <DialogContent className="max-w-md rounded-xl max-h-[90vh] overflow-y-auto top-4 translate-y-0">
+        <DialogContent className="max-w-xl rounded-xl max-h-[90vh] overflow-y-auto top-4 translate-y-0">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-center">
               Checkout
@@ -1607,26 +1666,63 @@ export default function EventDetailClient() {
                   >
                     Phone
                   </Label>
-                  <div className="flex items-center border rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500">
-                    <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r text-sm font-medium">
-                      +251
+                  {selectedCurrency === "USD" ? (
+                    // Country code dropdown + phone input for USD
+                    <div className="flex items-center gap-2 mt-1">
+                      <select
+                        value={paymentForm.countryCode}
+                        onChange={(e) =>
+                          setPaymentForm({ ...paymentForm, countryCode: e.target.value })
+                        }
+                        className="bg-white border border-gray-300 rounded-md px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        {COUNTRIES_FOR_PAYMENT.map((country) => (
+                          <option key={country.code} value={country.code}>
+                            {country.flag} {country.name} (+{country.prefix})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex-1 flex items-center border rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                        <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r text-sm font-medium min-w-fit">
+                          +{COUNTRIES_FOR_PAYMENT.find((c) => c.code === paymentForm.countryCode)?.prefix || "1"}
+                        </div>
+                        <Input
+                          id="payment_phone"
+                          type="tel"
+                          value={paymentForm.phoneNumber}
+                          onChange={(e) => {
+                            let val = e.target.value.replace(/\D/g, "");
+                            setPaymentForm({ ...paymentForm, phoneNumber: val });
+                          }}
+                          placeholder="Enter phone number"
+                          required
+                          className="border-0 rounded-none focus-visible:ring-0 shadow-none flex-1"
+                        />
+                      </div>
                     </div>
-                    <Input
-                      id="payment_phone"
-                      type="tel"
-                      maxLength={9}
-                      value={paymentForm.phoneNumber}
-                      onChange={(e) => {
-                        let val = e.target.value.replace(/\D/g, "");
-                        if (val.startsWith("0")) val = val.substring(1);
-                        if (val.startsWith("251")) val = val.substring(3);
-                        setPaymentForm({ ...paymentForm, phoneNumber: val });
-                      }}
-                      placeholder="9..."
-                      required
-                      className="border-0 rounded-none focus-visible:ring-0 shadow-none"
-                    />
-                  </div>
+                  ) : (
+                    // Ethiopia +251 for ETB
+                    <div className="flex items-center border rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500">
+                      <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r text-sm font-medium">
+                        +251
+                      </div>
+                      <Input
+                        id="payment_phone"
+                        type="tel"
+                        maxLength={9}
+                        value={paymentForm.phoneNumber}
+                        onChange={(e) => {
+                          let val = e.target.value.replace(/\D/g, "");
+                          if (val.startsWith("0")) val = val.substring(1);
+                          if (val.startsWith("251")) val = val.substring(3);
+                          setPaymentForm({ ...paymentForm, phoneNumber: val });
+                        }}
+                        placeholder="9..."
+                        required
+                        className="border-0 rounded-none focus-visible:ring-0 shadow-none"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1638,6 +1734,7 @@ export default function EventDetailClient() {
                   setPaymentForm({ ...paymentForm, paymentMethod: val })
                 }
                 provider={activePaymentProvider}
+                currency={selectedCurrency}
               />
             </div>
             <div className="flex gap-3 pt-2">
@@ -1665,7 +1762,7 @@ export default function EventDetailClient() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing
                   </>
                 ) : (
-                  `Pay ${totalPrice} ETB`
+                  `Pay ${selectedCurrency === "USD" ? "$" : ""}${totalPrice} ${selectedCurrency === "USD" ? "USD" : "ETB"}`
                 )}
               </Button>
             </div>

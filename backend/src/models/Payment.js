@@ -22,6 +22,11 @@ const Payment = new mongoose.Schema({
   },
   message: String, // Optional message from organizer
   price: Number,
+  currency: {
+    type: String,
+    enum: ["ETB", "USD"],
+    default: "ETB",
+  },
   eventId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Event",

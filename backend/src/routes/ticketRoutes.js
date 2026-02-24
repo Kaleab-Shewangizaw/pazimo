@@ -219,6 +219,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       method,
       orderId,
       paymentReason,
+      currency = "ETB", // Add currency support, default to ETB
     } = req.body;
 
     if (!ticketDetails) {
@@ -333,9 +334,15 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
 
     // Map payment method to Chapa supported types (case-sensitive)
     let chapaType = "telebirr"; // Default
+    let useWebCheckout = false; // Flag for web checkout vs direct charge
+    
     if (method) {
       const methodInput = method.toLowerCase().trim();
-      if (methodInput === "mpesa") {
+      if (methodInput === "visa" || methodInput === "mastercard") {
+        // For card payments, use web checkout which supports multiple card types
+        useWebCheckout = true;
+        chapaType = null; // Web checkout doesn't need specific type
+      } else if (methodInput === "mpesa") {
         chapaType = "mpesa";
       } else if (methodInput === "telebirr") {
         chapaType = "telebirr";
@@ -356,31 +363,52 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       }
     }
 
-    // Call Chapa Direct Charge
+    // Call Chapa - use web checkout for card payments or direct charge for mobile money
     let response;
     try {
-      // Ensure mobile number format for Chapa (09... or 07...)
-      let chapaMobile = phoneNumber.replace(/^\+/, "");
-      if (chapaMobile.startsWith("251")) {
-        chapaMobile = "0" + chapaMobile.substring(3);
-      }
+      if (useWebCheckout) {
+        // Web checkout for Visa/Mastercard
+        const txRef = transactionId;
+        response = await ChapaService.initialize({
+          amount: String(amount),
+          currency: currency, // Pass currency (ETB or USD)
+          email: user ? user.email : ticketDetails.email || "guest@example.com",
+          first_name: ticketDetails.fullName.split(" ")[0],
+          last_name: ticketDetails.fullName.split(" ")[1] || "User",
+          phone_number: phoneNumber,
+          tx_ref: txRef,
+          callback_url: chapaCallbackUrl,
+          return_url: returnUrl,
+          customization: {
+            title: reason,
+            description: "Ticket Purchase",
+          },
+        });
+      } else {
+        // Direct charge for mobile money (Telebirr, M-Pesa, etc)
+        // Ensure mobile number format for Chapa (09... or 07...)
+        let chapaMobile = phoneNumber.replace(/^\+/, "");
+        if (chapaMobile.startsWith("251")) {
+          chapaMobile = "0" + chapaMobile.substring(3);
+        }
 
-      response = await ChapaService.directCharge({
-        amount: String(amount),
-        currency: "ETB",
-        mobile: chapaMobile,
-        type: chapaType,
-        email: user ? user.email : "guest@example.com",
-        first_name: ticketDetails.fullName.split(" ")[0],
-        last_name: ticketDetails.fullName.split(" ")[1] || "User",
-        tx_ref: transactionId,
-        callback_url: chapaCallbackUrl,
-        return_url: returnUrl,
-        customization: {
-          title: reason,
-          description: "Ticket Purchase",
-        },
-      });
+        response = await ChapaService.directCharge({
+          amount: String(amount),
+          currency: currency, // Pass currency
+          mobile: chapaMobile,
+          type: chapaType,
+          email: user ? user.email : "guest@example.com",
+          first_name: ticketDetails.fullName.split(" ")[0],
+          last_name: ticketDetails.fullName.split(" ")[1] || "User",
+          tx_ref: transactionId,
+          callback_url: chapaCallbackUrl,
+          return_url: returnUrl,
+          customization: {
+            title: reason,
+            description: "Ticket Purchase",
+          },
+        });
+      }
     } catch (error) {
       console.error("Chapa Direct Charge Error:", error);
       return res.status(400).json({
@@ -415,19 +443,20 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
     await Payment.create({
       transactionId: transactionId,
       status: "PENDING",
-      guestName: user ? user.firstName : ticketDetails.fullName, // Use firstName for logged-in users
-      contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber, // Use account phone for logged-in users
-      paymentPhone: phoneNumber, // Store payment phone separately
+      guestName: user ? user.firstName : ticketDetails.fullName,
+      contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber,
+      paymentPhone: phoneNumber,
       method: method,
       provider: "chapa",
       price: amount,
+      currency: currency, // Store currency in payment record
       eventId: ticketDetails.eventId,
       userId: userId,
       ticketDetails: {
         ...ticketDetails,
         ticketType: ticketDetails.ticketTypeId,
         ticketCount: ticketDetails.quantity,
-        userId: userId, // ⚡ CRITICAL: Also save in ticketDetails for redundancy
+        userId: userId,
         email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
       },
     });
