@@ -192,47 +192,65 @@ export default function LargeEventCarousel({
           console.log("Processed image URL:", imageUrl); 
 
           const now = new Date();
-          const hasWave = (t: any) =>
-            !!(t?.startDate && t?.endDate) ||
-            String(t?.description || "")
-              .toLowerCase()
-              .includes("wave");
-          const anyWave =
-            Array.isArray(event.ticketTypes) && event.ticketTypes.some(hasWave);
-          let priceLabel = "Free";
-          if (anyWave) {
-            const activeWaveTickets = (event.ticketTypes || []).filter(
-              (t: any) => {
-                if (!hasWave(t)) return false;
-                if (t?.available === false) return false;
-                if (t?.startDate && t?.endDate) {
-                  const s = new Date(t.startDate);
-                  const e = new Date(t.endDate);
-                  return now >= s && now <= e;
-                }
-                return false;
-              },
-            );
-            if (activeWaveTickets.length > 0) {
-              activeWaveTickets.sort(
-                (a: any, b: any) =>
-                  new Date(b.startDate).getTime() -
-                  new Date(a.startDate).getTime(),
-              );
-              priceLabel =
-                activeWaveTickets[0].price > 0
-                  ? `From ${activeWaveTickets[0].price} ETB`
-                  : "Free";
-            } else if (event.ticketTypes && event.ticketTypes.length > 0) {
-              priceLabel =
-                event.ticketTypes[0].price > 0
-                  ? `From ${event.ticketTypes[0].price} ETB`
-                  : "Free";
+          
+          // Check if a ticket is currently available
+          const isTicketTypeAvailable = (ticket: any) => {
+            if (ticket.available === false) return false;
+            if (ticket.quantity <= 0) return false;
+            if (ticket.startDate && ticket.endDate) {
+              const ticketStart = new Date(ticket.startDate);
+              const ticketEnd = new Date(ticket.endDate);
+              if (now < ticketStart || now > ticketEnd) return false;
             }
-          } else if (event.ticketTypes && event.ticketTypes.length > 0) {
-            priceLabel = `From ${Math.min(
-              ...event.ticketTypes.map((t: any) => t.price),
-            )} ETB`;
+            return true;
+          };
+
+          // Get available tickets
+          const availableTickets = (event.ticketTypes || []).filter(isTicketTypeAvailable);
+          
+          // Calculate minimum prices for each currency from available tickets
+          let minETB = Infinity, minUSD = Infinity;
+          let hasETB = false, hasUSD = false;
+          
+          availableTickets.forEach((ticket: any) => {
+            if (ticket.priceETB && ticket.priceETB > 0) {
+              minETB = Math.min(minETB, ticket.priceETB);
+              hasETB = true;
+            } else if (ticket.price && ticket.price > 0) {
+              minETB = Math.min(minETB, ticket.price);
+              hasETB = true;
+            }
+            if (ticket.priceUSD && ticket.priceUSD > 0) {
+              minUSD = Math.min(minUSD, ticket.priceUSD);
+              hasUSD = true;
+            }
+          });
+          
+          // Fallback to all tickets if no available ones found
+          if (!hasETB && !hasUSD && event.ticketTypes && event.ticketTypes.length > 0) {
+            event.ticketTypes.forEach((ticket: any) => {
+              if (ticket.priceETB && ticket.priceETB > 0) {
+                minETB = Math.min(minETB, ticket.priceETB);
+                hasETB = true;
+              } else if (ticket.price && ticket.price > 0) {
+                minETB = Math.min(minETB, ticket.price);
+                hasETB = true;
+              }
+              if (ticket.priceUSD && ticket.priceUSD > 0) {
+                minUSD = Math.min(minUSD, ticket.priceUSD);
+                hasUSD = true;
+              }
+            });
+          }
+          
+          // Format price label based on available currencies
+          let priceLabel = "Free";
+          if (hasUSD && hasETB) {
+            priceLabel = `From ${minUSD}$/${minETB} ETB`;
+          } else if (hasUSD) {
+            priceLabel = `From ${minUSD}$`;
+          } else if (hasETB && minETB !== Infinity && minETB > 0) {
+            priceLabel = `From ${minETB} ETB`;
           }
 
           return {

@@ -139,6 +139,8 @@ type Event = {
   ticketTypes: Array<{
     name: string;
     price: number;
+    priceETB?: number;
+    priceUSD?: number;
     quantity: number;
     available?: boolean;
     description?: string;
@@ -199,26 +201,65 @@ export default function EventGrid({
           (t.description || "").toLowerCase().includes("wave");
 
         const anyWave = (event.ticketTypes || []).some(hasWave);
-        let currentTicketPrice = event.ticketTypes[0]?.price || 0;
-        if (anyWave) {
-          const activeWaveTickets = (event.ticketTypes || []).filter((t) => {
-            if (!hasWave(t)) return false;
-            if (t.available === false) return false;
-            if (t.startDate && t.endDate) {
-              const s = new Date(t.startDate);
-              const e = new Date(t.endDate);
-              return now >= s && now <= e;
-            }
-            return false;
-          });
-          if (activeWaveTickets.length > 0) {
-            activeWaveTickets.sort(
-              (a, b) =>
-                new Date(b.startDate as string).getTime() -
-                new Date(a.startDate as string).getTime(),
-            );
-            currentTicketPrice = activeWaveTickets[0].price;
+        
+        // Check if a ticket is currently available
+        const isTicketTypeAvailable = (ticket: Event["ticketTypes"][number]) => {
+          if (ticket.available === false) return false;
+          if (ticket.quantity <= 0) return false;
+          if (ticket.startDate && ticket.endDate) {
+            const ticketStart = new Date(ticket.startDate);
+            const ticketEnd = new Date(ticket.endDate);
+            if (now < ticketStart || now > ticketEnd) return false;
           }
+          return true;
+        };
+
+        // Get available tickets
+        const availableTickets = (event.ticketTypes || []).filter(isTicketTypeAvailable);
+        
+        // Calculate minimum prices for each currency from available tickets
+        let minETB = Infinity, minUSD = Infinity;
+        let hasETB = false, hasUSD = false;
+        
+        availableTickets.forEach((ticket) => {
+          if (ticket.priceETB && ticket.priceETB > 0) {
+            minETB = Math.min(minETB, ticket.priceETB);
+            hasETB = true;
+          } else if (ticket.price && ticket.price > 0) {
+            minETB = Math.min(minETB, ticket.price);
+            hasETB = true;
+          }
+          if (ticket.priceUSD && ticket.priceUSD > 0) {
+            minUSD = Math.min(minUSD, ticket.priceUSD);
+            hasUSD = true;
+          }
+        });
+        
+        // Fallback to all tickets if no available ones found
+        if (!hasETB && !hasUSD && event.ticketTypes && event.ticketTypes.length > 0) {
+          event.ticketTypes.forEach((ticket) => {
+            if (ticket.priceETB && ticket.priceETB > 0) {
+              minETB = Math.min(minETB, ticket.priceETB);
+              hasETB = true;
+            } else if (ticket.price && ticket.price > 0) {
+              minETB = Math.min(minETB, ticket.price);
+              hasETB = true;
+            }
+            if (ticket.priceUSD && ticket.priceUSD > 0) {
+              minUSD = Math.min(minUSD, ticket.priceUSD);
+              hasUSD = true;
+            }
+          });
+        }
+        
+        // Format price label based on available currencies
+        let priceLabel = "Free";
+        if (hasUSD && hasETB) {
+          priceLabel = `from ${minUSD}$/${minETB} ETB`;
+        } else if (hasUSD) {
+          priceLabel = `from ${minUSD}$`;
+        } else if (hasETB && minETB !== Infinity && minETB > 0) {
+          priceLabel = `from ${minETB} ETB`;
         }
 
         const image = event.coverImages?.[0]
@@ -247,7 +288,7 @@ export default function EventGrid({
                 },
               ),
               locationLabel: `${event.location.city}, ${event.location.country}`,
-              priceLabel: currentTicketPrice ? `${currentTicketPrice} ETB` : "Free",
+              priceLabel: priceLabel,
               image,
               soldOut: isSoldOut,
             }}

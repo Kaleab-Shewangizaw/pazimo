@@ -33,12 +33,31 @@ const buildImageUrl = (coverImages?: string[]) => {
 
 const buildPriceLabel = (event: any) => {
   if (Array.isArray(event.ticketTypes) && event.ticketTypes.length > 0) {
-    const prices = event.ticketTypes
-      .map((t: any) => t.price)
-      .filter((p: any) => typeof p === "number");
-    if (prices.length) {
-      const minPrice = Math.min(...prices);
-      return minPrice > 0 ? `From ${minPrice} ETB` : "Free";
+    // Calculate minimum prices for each currency
+    let minETB = Infinity, minUSD = Infinity;
+    let hasETB = false, hasUSD = false;
+    
+    event.ticketTypes.forEach((ticket: any) => {
+      if (ticket.priceETB && ticket.priceETB > 0) {
+        minETB = Math.min(minETB, ticket.priceETB);
+        hasETB = true;
+      } else if (ticket.price && ticket.price > 0) {
+        minETB = Math.min(minETB, ticket.price);
+        hasETB = true;
+      }
+      if (ticket.priceUSD && ticket.priceUSD > 0) {
+        minUSD = Math.min(minUSD, ticket.priceUSD);
+        hasUSD = true;
+      }
+    });
+    
+    // Format price label based on available currencies
+    if (hasUSD && hasETB) {
+      return `From ${minUSD}$/${minETB} ETB`;
+    } else if (hasUSD) {
+      return `From ${minUSD}$`;
+    } else if (hasETB && minETB !== Infinity && minETB > 0) {
+      return `From ${minETB} ETB`;
     }
   }
   return "Free";

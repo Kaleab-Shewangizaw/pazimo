@@ -32,6 +32,8 @@ type Event = {
   ticketTypes?: Array<{
     name: string;
     price: number;
+    priceETB?: number;
+    priceUSD?: number;
     quantity: number;
   }>;
   status?: string;
@@ -374,22 +376,34 @@ export default function WishlistPage() {
                           (ticket) => isTicketTypeAvailable(ticket)
                         );
 
-                        if (availableTickets.length === 0) {
-                          if (!event.ticketTypes.length) return "Free";
-                          const lowestPrice = Math.min(
-                            ...event.ticketTypes.map((t) => t.price)
-                          );
-                          return lowestPrice > 0
-                            ? `${lowestPrice} ETB`
-                            : "Free";
-                        }
+                        // Calculate minimum prices for each currency
+                        let minETB = Infinity, minUSD = Infinity;
+                        let hasETB = false, hasUSD = false;
+                        const ticketsToCheck = availableTickets.length > 0 ? availableTickets : event.ticketTypes;
 
-                        const lowestAvailablePrice = Math.min(
-                          ...availableTickets.map((t) => t.price)
-                        );
-                        return lowestAvailablePrice > 0
-                          ? `${lowestAvailablePrice} ETB`
-                          : "Free";
+                        ticketsToCheck.forEach((ticket) => {
+                          if (ticket.priceETB && ticket.priceETB > 0) {
+                            minETB = Math.min(minETB, ticket.priceETB);
+                            hasETB = true;
+                          } else if (ticket.price && ticket.price > 0) {
+                            minETB = Math.min(minETB, ticket.price);
+                            hasETB = true;
+                          }
+                          if (ticket.priceUSD && ticket.priceUSD > 0) {
+                            minUSD = Math.min(minUSD, ticket.priceUSD);
+                            hasUSD = true;
+                          }
+                        });
+
+                        // Format price label based on available currencies
+                        if (hasUSD && hasETB) {
+                          return `${minUSD}$/${minETB} ETB`;
+                        } else if (hasUSD) {
+                          return `${minUSD}$`;
+                        } else if (hasETB && minETB !== Infinity && minETB > 0) {
+                          return `${minETB} ETB`;
+                        }
+                        return "Free";
                       })()}
                     </p>
                   </div>

@@ -28,6 +28,8 @@ export type PublicEvent = {
   ticketTypes: Array<{
     name: string;
     price: number;
+    priceUSD?: number;
+    priceETB?: number;
     quantity: number;
     available?: boolean;
     description?: string;
@@ -131,14 +133,39 @@ export default function AllEventsInfinite({
       return "Free";
 
     const availableTickets = event.ticketTypes.filter(isTicketTypeAvailable);
-    if (availableTickets.length > 0) {
-      const lowestAvailable = Math.min(
-        ...availableTickets.map((t) => t.price),
-      );
-      return lowestAvailable > 0 ? `${lowestAvailable} ETB` : "Free";
+    const ticketsToCheck = availableTickets.length > 0 ? availableTickets : event.ticketTypes;
+
+    // Get min prices for each currency
+    let minETB = Infinity;
+    let minUSD = Infinity;
+    let hasETB = false;
+    let hasUSD = false;
+
+    ticketsToCheck.forEach((ticket) => {
+      if (ticket.priceETB && ticket.priceETB > 0) {
+        minETB = Math.min(minETB, ticket.priceETB);
+        hasETB = true;
+      } else if (ticket.price && ticket.price > 0) {
+        minETB = Math.min(minETB, ticket.price);
+        hasETB = true;
+      }
+
+      if (ticket.priceUSD && ticket.priceUSD > 0) {
+        minUSD = Math.min(minUSD, ticket.priceUSD);
+        hasUSD = true;
+      }
+    });
+
+    // Format price display based on available currencies
+    if (hasUSD && hasETB) {
+      return `from ${minUSD}$/${minETB} ETB`;
+    } else if (hasUSD) {
+      return `from ${minUSD}$`;
+    } else if (hasETB) {
+      return minETB !== Infinity && minETB > 0 ? `from ${minETB} ETB` : "Free";
     }
-    const lowestPrice = Math.min(...event.ticketTypes.map((t) => t.price));
-    return lowestPrice > 0 ? `${lowestPrice} ETB` : "Free";
+
+    return "Free";
   };
 
   const buildCardData = (event: PublicEvent): FeaturedEventCardData => {
