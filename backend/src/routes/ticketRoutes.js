@@ -369,7 +369,9 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       if (useWebCheckout) {
         // Web checkout for Visa/Mastercard
         const txRef = transactionId;
-        response = await ChapaService.initialize({
+        console.log(`[CHAPA-INIT] Using WEB CHECKOUT for card payment. Currency: ${currency}`);
+        
+        const initializePayload = {
           amount: String(amount),
           currency: currency, // Pass currency (ETB or USD)
           email: user ? user.email : ticketDetails.email || "guest@example.com",
@@ -383,7 +385,17 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
             title: reason,
             description: "Ticket Purchase",
           },
+        };
+        
+        console.log(`[CHAPA-INIT] Sending to Chapa.initialize():`, {
+          amount: initializePayload.amount,
+          currency: initializePayload.currency,
+          email: initializePayload.email,
+          tx_ref: initializePayload.tx_ref,
+          phone_number: initializePayload.phone_number,
         });
+        
+        response = await ChapaService.initialize(initializePayload);
       } else {
         // Direct charge for mobile money (Telebirr, M-Pesa, etc)
         // Ensure mobile number format for Chapa (09... or 07...)
@@ -392,9 +404,11 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
           chapaMobile = "0" + chapaMobile.substring(3);
         }
 
+        console.log(`[CHAPA-INIT] Using DIRECT CHARGE for mobile money. Method: ${method}, Type: ${chapaType}, Currency: ${currency}`);
+        
         response = await ChapaService.directCharge({
           amount: String(amount),
-          currency: currency, // Pass currency
+          currency: currency, // Pass currency (directCharge will force to ETB)
           mobile: chapaMobile,
           type: chapaType,
           email: user ? user.email : "guest@example.com",
@@ -410,29 +424,73 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         });
       }
     } catch (error) {
-      console.error("Chapa Direct Charge Error:", error);
+      // Extract actual error message from Chapa SDK error
+      let errorMessage = "Payment initiation failed";
+      let errorDetails = {};
+      
+      if (error.message && error.message !== "[object Object]") {
+        errorMessage = error.message;
+      }
+      
+      if (error.data) {
+        errorDetails = error.data;
+        if (error.data.message) {
+          errorMessage = error.data.message;
+        }
+      }
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      }
+
+      console.error(`[CHAPA-INIT] ❌ Detailed payment error:`, {
+        errorMessage,
+        errorStatus: error.status,
+        method: method,
+        chapaType: chapaType,
+        useWebCheckout: useWebCheckout,
+        currency: currency,
+        errorDetails,
+        errorCode: error.code,
+      });
+      
       return res.status(400).json({
         success: false,
-        error: error.message || "Payment initiation failed",
+        error: errorMessage,
+        details: errorDetails,
       });
     }
 
     if (response.status !== "success") {
-      console.error("Chapa Direct Charge Failed:", response);
+      console.error(`[CHAPA-INIT] ❌ Chapa returned non-success status:`, {
+        status: response.status,
+        message: response.message,
+        data: response.data,
+      });
       return res.status(400).json({
         success: false,
         error: response.message || "Payment initiation failed",
       });
     }
 
+    console.log(`[CHAPA-INIT] ✅ Chapa payment successful:`, {
+      status: response.status,
+      hasData: !!response.data,
+      dataKeys: response.data ? Object.keys(response.data) : [],
+      checkoutUrl: response.data?.checkout_url ? "present" : "NOT FOUND",
+    });
+
     let checkoutUrl = null;
-    // Direct charge might return checkout_url for some methods or just success
+    // Web checkout returns checkout_url, direct charge might too or just success
     if (
       response.status === "success" &&
       response.data &&
       response.data.checkout_url
     ) {
       checkoutUrl = response.data.checkout_url;
+      console.log(`[CHAPA-INIT] ✅ Got checkout URL from Chapa`);
+    } else if (response.status === "success" && useWebCheckout) {
+      console.warn(`[CHAPA-INIT] ⚠️ Web checkout succeeded but no checkout_url found. Response:`, response);
     }
 
     console.log("Chapa payment initiated:", response);

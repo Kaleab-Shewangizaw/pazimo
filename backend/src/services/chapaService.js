@@ -27,7 +27,51 @@ class ChapaService {
 
   async initialize(data) {
     // data: { amount, currency, email, first_name, last_name, phone_number, tx_ref, callback_url, return_url, customization }
-    return await this.chapa.initialize(data);
+    
+    // Ensure phone_number has proper formatting for Chapa
+    if (data.phone_number && !data.phone_number.startsWith("+")) {
+      // If it starts with 0, convert to +251
+      if (data.phone_number.startsWith("0")) {
+        data.phone_number = "+251" + data.phone_number.substring(1);
+      } 
+      // If it doesn't have country code, add +251 (Ethiopia)
+      else if (!data.phone_number.includes("+")) {
+        data.phone_number = "+251" + data.phone_number;
+      }
+    }
+
+    console.log(`[CHAPA-SERVICE] Initialize (Web Checkout) payload:`, {
+      amount: data.amount,
+      currency: data.currency,
+      email: data.email,
+      tx_ref: data.tx_ref,
+      phone_number: data.phone_number?.substring(0, 8) + "***",
+      callback_url: data.callback_url?.substring(0, 40) + "...",
+    });
+
+    try {
+      const result = await this.chapa.initialize(data);
+      console.log(`[CHAPA-SERVICE] Initialize successful:`, {
+        status: result.status,
+        hasCheckoutUrl: !!result.data?.checkout_url,
+      });
+      return result;
+    } catch (error) {
+      // Extract error details from Chapa SDK error
+      const errorData = {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+      };
+
+      // Try to extract validation errors
+      if (error.response?.data?.message) {
+        errorData.validationErrors = error.response.data.message;
+      }
+
+      console.error(`[CHAPA-SERVICE] Initialize failed:`, errorData);
+      throw error;
+    }
   }
 
   async directCharge(data) {
@@ -40,16 +84,30 @@ class ChapaService {
       );
     }
 
-    // Ensure currency is ETB
+    // Ensure currency is ETB for mobile money direct charge
+    // (Web checkout handles USD, direct charge only works with ETB)
+    const originalCurrency = data.currency;
     data.currency = "ETB";
 
-    console.log("Initiating Chapa Direct Charge:", {
+    console.log(`[CHAPA-SERVICE] DirectCharge payload:`, {
       ...data,
       mobile: data.mobile ? `${data.mobile.substring(0, 4)}***` : "undefined",
+      originalCurrency: originalCurrency,
     });
 
-    // data: { amount, currency, mobile, type, email, first_name, last_name, tx_ref }
-    return await this.chapa.directCharge(data);
+    try {
+      // data: { amount, currency, mobile, type, email, first_name, last_name, tx_ref }
+      const result = await this.chapa.directCharge(data);
+      return result;
+    } catch (error) {
+      console.error(`[CHAPA-SERVICE] DirectCharge failed:`, {
+        message: error.message,
+        status: error.status,
+        code: error.code,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 
   async verify(tx_ref) {

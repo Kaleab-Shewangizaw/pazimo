@@ -481,28 +481,38 @@ export default function EventDetailClient() {
         ? "/api/tickets/ticket/initiate/chapa"
         : "/api/tickets/ticket/initiate";
 
+      const requestBody = {
+        amount,
+        currency: selectedCurrency, // Pass currency to backend
+        paymentReason: `Ticket Purchase - ${event?.title}`,
+        phoneNumber: formattedPhone,
+        orderId,
+        method: paymentForm.paymentMethod,
+        ticketDetails: {
+          ticketId,
+          eventId,
+          ticketTypeId: selectedType._id || selectedType.name,
+          quantity: ticketQuantity,
+          userId: finalUserId,
+          fullName: paymentForm.fullName,
+          email: finalEmail,
+        },
+        successUrl: `${window.location.origin}/event_detail?id=${eventId}&payment_status=success&tx_ref=${orderId}`,
+        callbackUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/payments/callback`,
+      };
+
+      console.log("[PAYMENT-INIT] Sending payment request:", {
+        endpoint,
+        currency: selectedCurrency,
+        method: paymentForm.paymentMethod,
+        provider: effectiveProvider,
+        amount,
+      });
+
       const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          currency: selectedCurrency, // Pass currency to backend
-          paymentReason: `Ticket Purchase - ${event?.title}`,
-          phoneNumber: formattedPhone,
-          orderId,
-          method: paymentForm.paymentMethod,
-          ticketDetails: {
-            ticketId,
-            eventId,
-            ticketTypeId: selectedType._id || selectedType.name,
-            quantity: ticketQuantity,
-            userId: finalUserId,
-            fullName: paymentForm.fullName,
-            email: finalEmail,
-          },
-          successUrl: `${window.location.origin}/event_detail?id=${eventId}&payment_status=success&tx_ref=${orderId}`,
-          callbackUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/payments/callback`,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -568,7 +578,7 @@ export default function EventDetailClient() {
       // Set payment method based on currency and provider
       let defaultMethod = "telebirr";
       if (selectedCurrency === "USD") {
-        defaultMethod = "card"; // International card payment for USD
+        defaultMethod = "visa"; // Default to Visa for USD card payment
       } else if (activePaymentProvider === "CHAPA") {
         defaultMethod = "telebirr";
       } else {
@@ -586,7 +596,7 @@ export default function EventDetailClient() {
       // Set payment method based on currency and provider
       let defaultMethod = "telebirr";
       if (selectedCurrency === "USD") {
-        defaultMethod = "card";
+        defaultMethod = "visa"; // Default to Visa for USD card payment
       } else if (activePaymentProvider === "CHAPA") {
         defaultMethod = "telebirr";
       } else {
@@ -696,17 +706,18 @@ export default function EventDetailClient() {
     }
   }, [searchParams, router, eventId, verifyAndShowTickets]);
 
-  // Update payment method when provider changes
+  // Update payment method when provider or currency changes
   useEffect(() => {
     let defaultMethod = "telebirr";
     if (selectedCurrency === "USD") {
-      defaultMethod = "card"; // International card payment for USD
+      defaultMethod = "visa"; // Default to Visa for USD card payment
     } else if (activePaymentProvider === "CHAPA") {
       defaultMethod = "telebirr";
     } else {
       defaultMethod = "Telebirr";
     }
     
+    console.log("[CURRENCY-CHANGE] Currency changed:", { selectedCurrency, newMethod: defaultMethod });
     setPaymentForm((prev) => ({
       ...prev,
       paymentMethod: defaultMethod,
