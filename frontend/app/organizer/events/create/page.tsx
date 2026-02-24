@@ -101,7 +101,9 @@ export default function CreateEventPage() {
     ticketTypes: [
       {
         name: "Regular",
-        price: "",
+        price: "", // Kept for backward compatibility
+        priceETB: "",
+        priceUSD: "",
         quantity: "",
         description: "",
         saleStartDate: "",
@@ -271,6 +273,8 @@ export default function CreateEventPage() {
         {
           name: "Regular",
           price: "",
+          priceETB: "",
+          priceUSD: "",
           quantity: "",
           description: "",
           saleStartDate: "",
@@ -459,6 +463,16 @@ export default function CreateEventPage() {
         return;
       }
 
+      // Validate that at least one currency price is set for each ticket
+      const hasInvalidTickets = formData.ticketTypes.some(
+        (ticket) => !ticket.priceETB && !ticket.priceUSD
+      );
+      if (hasInvalidTickets) {
+        toast.error("Each ticket must have at least one currency price (ETB or USD)");
+        setIsSubmitting(false);
+        return;
+      }
+
       // Validate ticket dates
       if (!validateTicketDates()) {
         setIsSubmitting(false);
@@ -532,7 +546,17 @@ export default function CreateEventPage() {
       // Append ticket types
       formData.ticketTypes.forEach((ticket, index) => {
         formDataToSend.append(`ticketTypes[${index}][name]`, ticket.name);
-        formDataToSend.append(`ticketTypes[${index}][price]`, ticket.price);
+        
+        // Send dual pricing fields
+        if (ticket.priceETB) {
+          formDataToSend.append(`ticketTypes[${index}][priceETB]`, ticket.priceETB);
+        }
+        if (ticket.priceUSD) {
+          formDataToSend.append(`ticketTypes[${index}][priceUSD]`, ticket.priceUSD);
+        }
+        // Also send price field for backward compatibility (use ETB as default)
+        formDataToSend.append(`ticketTypes[${index}][price]`, ticket.priceETB || ticket.priceUSD || "0");
+        
         formDataToSend.append(
           `ticketTypes[${index}][quantity]`,
           ticket.quantity
@@ -688,6 +712,8 @@ export default function CreateEventPage() {
     const firstWaveTicket = {
       name: "Regular - First Wave",
       price: basePrice.toFixed(2),
+      priceETB: basePrice.toFixed(2),
+      priceUSD: "",
       quantity: baseTicket.quantity || "0",
       description: baseTicket.description
         ? `${baseTicket.description} (First Wave)`
@@ -703,6 +729,8 @@ export default function CreateEventPage() {
     const secondWaveTicket = {
       name: "Regular - Second Wave",
       price: secondWavePrice,
+      priceETB: secondWavePrice,
+      priceUSD: "",
       quantity: baseTicket.quantity || "0",
       description: baseTicket.description
         ? `${baseTicket.description} (Second Wave)`
@@ -715,6 +743,8 @@ export default function CreateEventPage() {
     const finalWaveTicket = {
       name: "Regular - Final Wave",
       price: finalWavePrice,
+      priceETB: finalWavePrice,
+      priceUSD: "",
       quantity: baseTicket.quantity || "0",
       description: baseTicket.description
         ? `${baseTicket.description} (Final Wave)`
@@ -1380,7 +1410,10 @@ export default function CreateEventPage() {
                       Regular (Time-Limited {idx + 1})
                     </p>
                     <p className="text-base sm:text-lg font-bold mt-1">
-                      {ticket.price ? `$${ticket.price}` : "Not set"}
+                      {ticket.priceETB && `${ticket.priceETB} Birr`}
+                      {ticket.priceETB && ticket.priceUSD && " / "}
+                      {ticket.priceUSD && `$${ticket.priceUSD}`}
+                      {!ticket.priceETB && !ticket.priceUSD && "Not set"}
                     </p>
                     <p className="text-xs text-green-700 mt-1">
                       {ticket.saleStartDate
@@ -1482,32 +1515,53 @@ export default function CreateEventPage() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="grid gap-2">
-                        <Label htmlFor={`ticket-price-${index}`}>Price</Label>
+                        <Label htmlFor={`ticket-price-etb-${index}`}>
+                          Price (ETB - Birr)
+                        </Label>
                         <Input
-                          id={`ticket-price-${index}`}
+                          id={`ticket-price-etb-${index}`}
                           type="number"
                           min="0"
                           step="0.01"
-                          value={ticketType.price}
+                          value={ticketType.priceETB}
                           onChange={(e) =>
                             handleTicketTypeChange(
                               index,
-                              "price",
+                              "priceETB",
                               e.target.value
                             )
                           }
-                          placeholder="Enter price"
-                          required
-                          className={
-                            waveValidationError &&
-                            (WAVE_TICKET_TYPES.includes(ticketType.name) ||
-                              (ticketType.name === "Regular" &&
-                                ticketType.hasDateRange))
-                              ? "border-red-300"
-                              : ""
-                          }
+                          placeholder="Enter price in Birr"
                         />
+                        <p className="text-xs text-muted-foreground">
+                          Leave empty if not available in Birr
+                        </p>
                       </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor={`ticket-price-usd-${index}`}>
+                          Price (USD - Dollar)
+                        </Label>
+                        <Input
+                          id={`ticket-price-usd-${index}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={ticketType.priceUSD}
+                          onChange={(e) =>
+                            handleTicketTypeChange(
+                              index,
+                              "priceUSD",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Enter price in USD"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Leave empty if not available in USD
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="grid gap-2">
                         <Label htmlFor={`ticket-quantity-${index}`}>
                           Quantity Available

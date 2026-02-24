@@ -1,6 +1,8 @@
 export interface TicketType {
   name: string;
-  price: number;
+  price: number; // Kept for backward compatibility
+  priceETB?: number; // Price in Ethiopian Birr
+  priceUSD?: number; // Price in US Dollars
   ticketId: string;
   _id: string;
   eventId: string;

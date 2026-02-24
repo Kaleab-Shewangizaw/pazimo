@@ -141,12 +141,55 @@ export default function EventDetailClient() {
   });
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [currentTxRef, setCurrentTxRef] = useState<string | null>(null);
+  const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
 
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [liked, setLiked] = useState(false);
 
+  // Memoized computed values - prevent unnecessary re-renders
+  const ticketsToDisplay = useMemo(() => {
+    if (!event?.ticketTypes) return [];
+    
+    // Filter tickets based on selected currency availability
+    return event.ticketTypes.filter((ticket: any) => {
+      const isAvailable = ticket.available !== false;
+      const hasPriceInCurrency = selectedCurrency === "USD" 
+        ? (ticket.priceUSD && ticket.priceUSD > 0)
+        : (ticket.priceETB && ticket.priceETB > 0);
+      
+      return isAvailable && hasPriceInCurrency;
+    });
+  }, [event, selectedCurrency]);
 
- 
+  const selectedTicket = useMemo(() => 
+    ticketsToDisplay.find((t: any) => t.name === selectedTicketType),
+    [ticketsToDisplay, selectedTicketType]
+  );
+
+  // Get ticket price based on selected currency
+  const ticketPrice = useMemo(() => {
+    if (!selectedTicket) return 0;
+    const ticket = selectedTicket as any;
+    return selectedCurrency === "USD" 
+      ? (ticket.priceUSD || 0) 
+      : (ticket.priceETB || ticket.price || 0);
+  }, [selectedTicket, selectedCurrency]);
+
+  // Determine available currencies from all tickets
+  const availableCurrencies = useMemo(() => {
+    const hasETB = event?.ticketTypes.some((t: any) => (t.priceETB || t.price || 0) > 0) || false;
+    const hasUSD = event?.ticketTypes.some((t: any) => (t.priceUSD || 0) > 0) || false;
+    return { hasETB, hasUSD };
+  }, [event]);
+
+  // Set default currency based on availability
+  useEffect(() => {
+    if (!availableCurrencies.hasETB && availableCurrencies.hasUSD) {
+      setSelectedCurrency("USD");
+    } else {
+      setSelectedCurrency("ETB");
+    }
+  }, [availableCurrencies]);
 
   const verificationAttempts = useRef(0);
   const isVerifyingPayment = useRef(false);
@@ -618,20 +661,9 @@ export default function EventDetailClient() {
     }
   }, [purchasedTickets]);
 
-  // Memoized computed values - prevent unnecessary re-renders
-  const ticketsToDisplay = useMemo(() => 
-    event?.ticketTypes.filter((ticket) => ticket.available !== false) || [],
-    [event]
-  );
-
-  const selectedTicket = useMemo(() => 
-    ticketsToDisplay.find((t) => t.name === selectedTicketType),
-    [ticketsToDisplay, selectedTicketType]
-  );
-
   const totalPrice = useMemo(() => 
-    selectedTicket ? selectedTicket.price * ticketQuantity : 0,
-    [selectedTicket, ticketQuantity]
+    ticketPrice * ticketQuantity,
+    [ticketPrice, ticketQuantity]
   );
 
   const isQuantityExceeded = useMemo(() => 
@@ -954,6 +986,31 @@ export default function EventDetailClient() {
                 <div className="space-y-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-md">
                     <div className="space-y-6">
+                      {/* Currency Selector */}
+                      <div className="flex flex-col gap-3">
+                        <h3 className="text-sm font-medium text-gray-700">Select Currency:</h3>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={selectedCurrency === "ETB" ? "default" : "outline"}
+                            onClick={() => setSelectedCurrency("ETB")}
+                            disabled={!availableCurrencies.hasETB}
+                            className={`flex-1 ${selectedCurrency === "ETB" ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90" : ""}`}
+                          >
+                            Birr (ETB)
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={selectedCurrency === "USD" ? "default" : "outline"}
+                            onClick={() => setSelectedCurrency("USD")}
+                            disabled={!availableCurrencies.hasUSD}
+                            className={`flex-1 ${selectedCurrency === "USD" ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90" : ""}`}
+                          >
+                            Dollar (USD)
+                          </Button>
+                        </div>
+                      </div>
+
                       {isEventSoldOut ? (
                         <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">
                           <p className="text-red-500 font-bold text-lg mb-2">
@@ -994,7 +1051,10 @@ export default function EventDetailClient() {
                                   </div>
                                 </div>
                                 <div className="font-bold text-[#0D47A1]">
-                                  {ticketType.price} ETB
+                                  {selectedCurrency === "USD" 
+                                    ? `$${(ticketType as any).priceUSD || 0}`
+                                    : `${(ticketType as any).priceETB || (ticketType as any).price || 0} Birr`
+                                  }
                                 </div>
                               </div>
                             ))}
@@ -1027,7 +1087,10 @@ export default function EventDetailClient() {
                                   Total:
                                 </span>
                                 <span className="text-2xl font-bold text-[#0D47A1]">
-                                  {totalPrice} ETB
+                                  {selectedCurrency === "USD" 
+                                    ? `$${totalPrice}`
+                                    : `${totalPrice} Birr`
+                                  }
                                 </span>
                               </div>
                               {user?.role !== "admin" &&
@@ -1186,6 +1249,31 @@ export default function EventDetailClient() {
               <div className="border border-gray-200 rounded-2xl p-6 shadow-md lg:sticky lg:top-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-6">Select Tickets</h2>
                 <div className="space-y-5">
+                  {/* Currency Selector */}
+                  <div className="flex flex-col gap-3">
+                    <h3 className="text-sm font-medium text-gray-700">Select Currency:</h3>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant={selectedCurrency === "ETB" ? "default" : "outline"}
+                        onClick={() => setSelectedCurrency("ETB")}
+                        disabled={!availableCurrencies.hasETB}
+                        className={`flex-1 ${selectedCurrency === "ETB" ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90" : ""}`}
+                      >
+                        Birr (ETB)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={selectedCurrency === "USD" ? "default" : "outline"}
+                        onClick={() => setSelectedCurrency("USD")}
+                        disabled={!availableCurrencies.hasUSD}
+                        className={`flex-1 ${selectedCurrency === "USD" ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90" : ""}`}
+                      >
+                        Dollar (USD)
+                      </Button>
+                    </div>
+                  </div>
+
                   {isEventSoldOut ? (
                     <div className="text-center py-8 bg-gray-50 rounded-xl border border-gray-200">
                       <p className="text-red-500 font-bold text-lg mb-1">Tickets Not Available</p>
@@ -1225,7 +1313,10 @@ export default function EventDetailClient() {
                               </div>
                             </div>
                             <span className="font-bold text-[#0D47A1] whitespace-nowrap text-sm">
-                              {ticketType.price === 0 ? "Free" : `${ticketType.price} ETB`}
+                              {selectedCurrency === "USD" 
+                                ? ((ticketType as any).priceUSD === 0 ? "Free" : `$${(ticketType as any).priceUSD || 0}`)
+                                : ((ticketType as any).priceETB === 0 || (ticketType as any).price === 0 ? "Free" : `${(ticketType as any).priceETB || (ticketType as any).price || 0} Birr`)
+                              }
                             </span>
                           </div>
                         ))}
@@ -1256,7 +1347,12 @@ export default function EventDetailClient() {
                               <Separator className="bg-gray-200" />
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-600 font-medium">Total</span>
-                                <span className="text-2xl font-bold text-[#0D47A1]">{totalPrice} ETB</span>
+                                <span className="text-2xl font-bold text-[#0D47A1]">
+                                  {selectedCurrency === "USD" 
+                                    ? `$${totalPrice}`
+                                    : `${totalPrice} Birr`
+                                  }
+                                </span>
                               </div>
                             </>
                           )}

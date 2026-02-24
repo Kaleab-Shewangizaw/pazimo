@@ -70,6 +70,8 @@ export default function AdminEditEventPage() {
       {
         name: "Regular",
         price: "",
+        priceETB: "",
+        priceUSD: "",
         quantity: "",
         description: "",
         available: true,
@@ -125,6 +127,8 @@ export default function AdminEditEventPage() {
             ? event.ticketTypes.map((ticket: any) => ({
                 name: ticket.name || "Regular",
                 price: ticket.price?.toString() || "",
+                priceETB: ticket.priceETB?.toString() || "",
+                priceUSD: ticket.priceUSD?.toString() || "",
                 quantity: ticket.quantity?.toString() || "",
                 description: ticket.description || "",
                 available:
@@ -134,6 +138,8 @@ export default function AdminEditEventPage() {
                 {
                   name: "Regular",
                   price: "",
+                  priceETB: "",
+                  priceUSD: "",
                   quantity: "",
                   description: "",
                   available: true,
@@ -230,6 +236,8 @@ export default function AdminEditEventPage() {
         {
           name: "Regular",
           price: "",
+          priceETB: "",
+          priceUSD: "",
           quantity: "",
           description: "",
           available: true,
@@ -252,12 +260,15 @@ export default function AdminEditEventPage() {
     }
 
     for (const ticket of formData.ticketTypes) {
-      if (!ticket.name || !ticket.price || !ticket.quantity) {
+      if (!ticket.name || !ticket.quantity) {
         toast.error("Please fill in all ticket type fields");
         return false;
       }
-      if (parseFloat(ticket.price) <= 0) {
-        toast.error("Ticket price must be greater than 0");
+      // At least one currency must have a price
+      const hasETBPrice = ticket.priceETB && parseFloat(ticket.priceETB) > 0;
+      const hasUSDPrice = ticket.priceUSD && parseFloat(ticket.priceUSD) > 0;
+      if (!hasETBPrice && !hasUSDPrice) {
+        toast.error(`Ticket "${ticket.name}" must have at least one currency price (ETB or USD)`);
         return false;
       }
       if (parseInt(ticket.quantity) <= 0) {
@@ -334,7 +345,9 @@ export default function AdminEditEventPage() {
           : { hasRestriction: false },
         ticketTypes: formData.ticketTypes.map((ticket) => ({
           name: ticket.name,
-          price: parseFloat(ticket.price),
+          price: parseFloat(ticket.priceETB || ticket.priceUSD || "0"),
+          priceETB: ticket.priceETB ? parseFloat(ticket.priceETB) : undefined,
+          priceUSD: ticket.priceUSD ? parseFloat(ticket.priceUSD) : undefined,
           quantity: parseInt(ticket.quantity),
           description: ticket.description,
           available: ticket.available,
@@ -792,42 +805,70 @@ export default function AdminEditEventPage() {
                         required
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="grid gap-2">
-                        <Label>Price</Label>
+                        <Label htmlFor={`ticket-price-etb-${index}`}>
+                          Price (ETB - Birr)
+                        </Label>
                         <Input
+                          id={`ticket-price-etb-${index}`}
                           type="number"
                           min="0"
                           step="0.01"
-                          value={ticket.price}
+                          value={ticket.priceETB}
                           onChange={(e) =>
                             handleTicketTypeChange(
                               index,
-                              "price",
+                              "priceETB",
                               e.target.value,
                             )
                           }
-                          placeholder="0.00"
-                          required
+                          placeholder="Enter price in Birr"
                         />
+                        <p className="text-xs text-gray-500">
+                          Leave empty if not available in Birr
+                        </p>
                       </div>
                       <div className="grid gap-2">
-                        <Label>Quantity</Label>
+                        <Label htmlFor={`ticket-price-usd-${index}`}>
+                          Price (USD - Dollar)
+                        </Label>
                         <Input
+                          id={`ticket-price-usd-${index}`}
                           type="number"
                           min="0"
-                          value={ticket.quantity}
+                          step="0.01"
+                          value={ticket.priceUSD}
                           onChange={(e) =>
                             handleTicketTypeChange(
                               index,
-                              "quantity",
+                              "priceUSD",
                               e.target.value,
                             )
                           }
-                          placeholder="0"
-                          required
+                          placeholder="Enter price in USD"
                         />
+                        <p className="text-xs text-gray-500">
+                          Leave empty if not available in USD
+                        </p>
                       </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Quantity</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={ticket.quantity}
+                        onChange={(e) =>
+                          handleTicketTypeChange(
+                            index,
+                            "quantity",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="0"
+                        required
+                      />
                     </div>
                     <div className="grid gap-2">
                       <Label>Description</Label>
@@ -863,8 +904,8 @@ export default function AdminEditEventPage() {
           <Button variant="outline" onClick={() => router.back()}>
             Cancel
           </Button>
-          <Button type="submit" isLoading={isSubmitting}>
-            Save Changes
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </form>

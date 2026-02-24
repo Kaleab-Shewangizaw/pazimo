@@ -90,7 +90,15 @@ const EventSchema = new mongoose.Schema(
         },
         price: {
           type: Number,
-          required: true,
+          required: false, // Made optional for backward compatibility
+        },
+        priceETB: {
+          type: Number,
+          required: false, // Price in Ethiopian Birr
+        },
+        priceUSD: {
+          type: Number,
+          required: false, // Price in US Dollars
         },
         quantity: {
           type: Number,
