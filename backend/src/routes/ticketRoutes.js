@@ -371,18 +371,28 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         const txRef = transactionId;
         console.log(`[CHAPA-INIT] Using WEB CHECKOUT for card payment. Currency: ${currency}`);
         
+        // Chapa web checkout validates phone_number must be in 09.../07... format (10 digits).
+        // Convert +251.../251... → 09..., and omit entirely for international numbers.
+        let chapaPhone = null;
+        if (phoneNumber) {
+          let stripped = phoneNumber.replace(/[\s+]/g, "");
+          if (stripped.startsWith("251")) stripped = "0" + stripped.substring(3);
+          if (stripped.startsWith("09") || stripped.startsWith("07")) chapaPhone = stripped;
+          // else: international number — leave chapaPhone as null (omitted from payload)
+        }
+
         const initializePayload = {
           amount: String(amount),
           currency: currency, // Pass currency (ETB or USD)
           email: user ? user.email : ticketDetails.email || "guest@example.com",
           first_name: ticketDetails.fullName.split(" ")[0],
           last_name: ticketDetails.fullName.split(" ")[1] || "User",
-          phone_number: phoneNumber,
+          ...(chapaPhone && { phone_number: chapaPhone }), // Only include for Ethiopian numbers in 09/07 format
           tx_ref: txRef,
           callback_url: chapaCallbackUrl,
           return_url: returnUrl,
           customization: {
-            title: reason,
+            title: reason.substring(0, 16), // Chapa enforces max 16 chars
             description: "Ticket Purchase",
           },
         };
@@ -418,7 +428,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
           callback_url: chapaCallbackUrl,
           return_url: returnUrl,
           customization: {
-            title: reason,
+            title: reason.substring(0, 16), // Chapa enforces max 16 chars
             description: "Ticket Purchase",
           },
         });

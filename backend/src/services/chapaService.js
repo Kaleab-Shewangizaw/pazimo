@@ -27,50 +27,54 @@ class ChapaService {
 
   async initialize(data) {
     // data: { amount, currency, email, first_name, last_name, phone_number, tx_ref, callback_url, return_url, customization }
-    
-    // Ensure phone_number has proper formatting for Chapa
-    if (data.phone_number && !data.phone_number.startsWith("+")) {
-      // If it starts with 0, convert to +251
-      if (data.phone_number.startsWith("0")) {
-        data.phone_number = "+251" + data.phone_number.substring(1);
-      } 
-      // If it doesn't have country code, add +251 (Ethiopia)
-      else if (!data.phone_number.includes("+")) {
-        data.phone_number = "+251" + data.phone_number;
-      }
-    }
+    // Uses raw axios instead of the SDK — gives accurate error messages and full control.
 
     console.log(`[CHAPA-SERVICE] Initialize (Web Checkout) payload:`, {
       amount: data.amount,
       currency: data.currency,
       email: data.email,
       tx_ref: data.tx_ref,
-      phone_number: data.phone_number?.substring(0, 8) + "***",
+      phone_number: data.phone_number ? data.phone_number.substring(0, 8) + "***" : "(omitted - international number)",
       callback_url: data.callback_url?.substring(0, 40) + "...",
     });
 
     try {
-      const result = await this.chapa.initialize(data);
+      const response = await axios.post(
+        "https://api.chapa.co/v1/transaction/initialize",
+        data,
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.CHAPA_SECRET_KEY}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 20000,
+        }
+      );
+
       console.log(`[CHAPA-SERVICE] Initialize successful:`, {
-        status: result.status,
-        hasCheckoutUrl: !!result.data?.checkout_url,
+        status: response.data.status,
+        hasCheckoutUrl: !!response.data.data?.checkout_url,
       });
-      return result;
+
+      // Return in same shape the rest of the codebase expects
+      return response.data;
     } catch (error) {
-      // Extract error details from Chapa SDK error
-      const errorData = {
-        message: error.message,
-        status: error.status,
-        code: error.code,
-      };
+      const chapaMessage =
+        error.response?.data?.message ||
+        (typeof error.response?.data === "string" ? error.response.data : null) ||
+        error.message ||
+        "Chapa initialize failed";
 
-      // Try to extract validation errors
-      if (error.response?.data?.message) {
-        errorData.validationErrors = error.response.data.message;
-      }
+      console.error(`[CHAPA-SERVICE] Initialize failed:`, {
+        message: chapaMessage,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
 
-      console.error(`[CHAPA-SERVICE] Initialize failed:`, errorData);
-      throw error;
+      const err = new Error(chapaMessage);
+      err.status = error.response?.status;
+      err.data = error.response?.data;
+      throw err;
     }
   }
 
