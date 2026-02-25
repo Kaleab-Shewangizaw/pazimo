@@ -137,7 +137,7 @@ export default function PaymentMethodSelector({
             <Label
               htmlFor={`payment-${method.id}`}
               className={cn(
-                "flex flex-col items-center justify-start px-1 py-2 gap-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
+                "flex flex-col items-center justify-start px-0.5 py-2 gap-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
                 "peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50",
                 disabled &&
                   "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale"

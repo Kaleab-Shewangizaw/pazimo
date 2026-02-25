@@ -20,6 +20,18 @@ const SantimPayService = require("../services/santimPayService");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 
+// Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
+const isEthiopianNumber = (phone) => {
+  if (!phone) return false;
+  const normalized = phone.toString().replace(/[\s+]/g, "");
+  return (
+    normalized.startsWith("251") ||
+    normalized.startsWith("09") ||
+    normalized.startsWith("07") ||
+    /^[97]\d{8}$/.test(normalized) // 9-digit number starting with 9 or 7
+  );
+};
+
 const validateSignature = (signature, payload) => {
   try {
     if (!signature) return false;
@@ -255,7 +267,9 @@ const processSuccessfulPayment = async (payment) => {
   //   - For guest users: payment phone
   const smsPhone = payment.contact || (user ? user.phoneNumber : null);
   
-  if (smsPhone) {
+  // Only send SMS for Ethiopian phone numbers. International buyers (Visa/Mastercard)
+  // will receive confirmation via email instead.
+  if (smsPhone && isEthiopianNumber(smsPhone)) {
     // Priority: For logged-in users, use firstName only, not full name
     const userName = user ? user.firstName : (payment.guestName || "Customer");
     const eventTitle = event.title;
