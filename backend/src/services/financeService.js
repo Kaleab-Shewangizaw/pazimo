@@ -3,7 +3,8 @@ const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const mongoose = require("mongoose");
 
-const calculateOrganizerBalance = async (organizerId) => {
+const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
+  const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
   // Use aggregation pipeline for much faster calculation
   const balanceData = await Ticket.aggregate([
     {
@@ -20,6 +21,11 @@ const calculateOrganizerBalance = async (organizerId) => {
     {
       $match: {
         "eventData.organizer": new mongoose.Types.ObjectId(organizerId),
+        ...(normalizedCurrency === "ETB"
+          ? {
+              $or: [{ currency: "ETB" }, { currency: { $exists: false } }],
+            }
+          : { currency: normalizedCurrency }),
         price: { $gt: 0 },
         status: { $nin: ["cancelled", "failed", "expired"] },
         $or: [
@@ -104,10 +110,16 @@ const calculateOrganizerBalance = async (organizerId) => {
   ]);
 
   // Get withdrawal stats in parallel
+  const withdrawalCurrencyMatch =
+    normalizedCurrency === "ETB"
+      ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
+      : { currency: normalizedCurrency };
+
   const withdrawalStats = await Withdrawal.aggregate([
     {
       $match: {
-        organizer: new mongoose.Types.ObjectId(organizerId)
+        organizer: new mongoose.Types.ObjectId(organizerId),
+        ...withdrawalCurrencyMatch,
       }
     },
     {
@@ -168,6 +180,7 @@ const calculateOrganizerBalance = async (organizerId) => {
 
   // Log for debugging
   console.log(`💰 Balance calculated for organizer ${organizerId}:`, {
+    currency: normalizedCurrency,
     totalEvents,
     totalTicketsSold,
     totalRevenue,
@@ -176,6 +189,7 @@ const calculateOrganizerBalance = async (organizerId) => {
   });
 
   return {
+    currency: normalizedCurrency,
     totalRevenue,
     organizerRevenue,
     pazimoCommission,

@@ -37,6 +37,13 @@ import {
 } from "@/components/ui/table";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -91,6 +98,7 @@ interface WithdrawalRequest {
     email: string;
   };
   amount: number;
+    currency?: "ETB" | "USD";
   bankAccount: string;
   requestDate: string;
   status: "pending" | "approved" | "rejected";
@@ -143,6 +151,9 @@ export default function AdminDashboardPage() {
   const [eventRegistrationsChartData, setEventRegistrationsChartData] =
     useState<EventRegistrationData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">(
+    "ETB"
+  );
 
   useEffect(() => {
     // Suppress browser extension errors
@@ -163,14 +174,14 @@ export default function AdminDashboardPage() {
       clearInterval(interval);
       console.error = originalError;
     };
-  }, []);
+  }, [selectedCurrency]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       // Fetch dashboard stats
       const statsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard/stats`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard/stats?currency=${selectedCurrency}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -186,7 +197,7 @@ export default function AdminDashboardPage() {
 
       // Fetch revenue chart data
       const revenueChartResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard/charts/revenue`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard/charts/revenue?currency=${selectedCurrency}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -239,7 +250,7 @@ export default function AdminDashboardPage() {
 
       // Fetch withdrawal requests
       const withdrawalsResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals?status=pending&limit=5`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals?status=pending&limit=5&currency=${selectedCurrency}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -265,8 +276,13 @@ export default function AdminDashboardPage() {
   const fetchWithdrawalRequests = async () => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals?status=pending&limit=5`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals?status=pending&limit=5&currency=${selectedCurrency}`,
         {
+            value: `${(stats.totalRevenue || 0).toFixed(2)} ${selectedCurrency}`,
+            value: `${(stats.organizerRevenue || 0).toFixed(2)} ${selectedCurrency}`,
+            value: `${(stats.pazimoCommission || 0).toFixed(2)} ${selectedCurrency}`,
+            value: `${(stats.totalWithdrawn || 0).toFixed(2)} ${selectedCurrency}`,
+            value: `${(stats.availableBalance || 0).toFixed(2)} ${selectedCurrency}`,
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -349,7 +365,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Total Revenue",
-      value: `${(stats.totalRevenue || 0).toFixed(2)} Birr`,
+      value: `${(stats.totalRevenue || 0).toFixed(2)} ${selectedCurrency}`,
       icon: DollarSign,
       iconBg: "bg-green-100",
       iconColor: "text-green-600",
@@ -357,7 +373,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Organizer Revenue (97%)",
-      value: `${(stats.organizerRevenue || 0).toFixed(2)} Birr`,
+      value: `${(stats.organizerRevenue || 0).toFixed(2)} ${selectedCurrency}`,
       icon: DollarSign,
       iconBg: "bg-purple-100",
       iconColor: "text-purple-600",
@@ -366,7 +382,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Pazimo Commission (3%)",
-      value: `${(stats.pazimoCommission || 0).toFixed(2)} Birr`,
+      value: `${(stats.pazimoCommission || 0).toFixed(2)} ${selectedCurrency}`,
       icon: DollarSign,
       iconBg: "bg-red-100",
       iconColor: "text-red-600",
@@ -374,7 +390,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Total Withdrawn",
-      value: `${(stats.totalWithdrawn || 0).toFixed(2)} Birr`,
+      value: `${(stats.totalWithdrawn || 0).toFixed(2)} ${selectedCurrency}`,
       icon: ArrowUpRight,
       iconBg: "bg-yellow-100",
       iconColor: "text-yellow-600",
@@ -382,7 +398,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Available Balance",
-      value: `${(stats.availableBalance || 0).toFixed(2)} Birr`,
+      value: `${(stats.availableBalance || 0).toFixed(2)} ${selectedCurrency}`,
       icon: Building2,
       iconBg: "bg-emerald-100",
       iconColor: "text-emerald-600",
@@ -414,16 +430,33 @@ export default function AdminDashboardPage() {
       <main className="p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-          <Button
-            onClick={fetchDashboardData}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh Data
-          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 mt-1">Admin analytics overview</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select
+              value={selectedCurrency}
+              onValueChange={(value: "ETB" | "USD") => setSelectedCurrency(value)}
+            >
+              <SelectTrigger className="w-[140px] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ETB">ETB</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={fetchDashboardData}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh Data
+            </Button>
+          </div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {statsCards.map((stat, index) => (
             <Card

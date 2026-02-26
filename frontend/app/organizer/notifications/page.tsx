@@ -139,7 +139,7 @@ export default function NotificationsPage() {
           _id: data._id || Date.now().toString(),
           userId: userId,
           type: "withdrawal_status_change",
-          message: `Your withdrawal of ${data.amount} Birr has been ${data.status}.`,
+           message: `Your withdrawal of ${data.amount} ${data.currency || "ETB"} has been ${data.status}.`,
           read: false,
           createdAt: new Date().toISOString(),
           withdrawalId: data.withdrawalId,

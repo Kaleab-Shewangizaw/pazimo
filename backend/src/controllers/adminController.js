@@ -7,6 +7,11 @@ const { StatusCodes } = require("http-status-codes");
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
   try {
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
+    const withdrawalCurrencyMatch =
+      currency === "ETB"
+        ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
+        : { currency: "USD" };
     // Run all count queries in parallel for better performance
     const [
       totalUsers,
@@ -28,6 +33,14 @@ const getDashboardStats = async (req, res) => {
             revenue: [
               {
                 $match: {
+                  ...(currency === "ETB"
+                    ? {
+                        $or: [
+                          { currency: "ETB" },
+                          { currency: { $exists: false } },
+                        ],
+                      }
+                    : { currency }),
                   price: { $gt: 0 },
                 },
               },
@@ -84,6 +97,7 @@ const getDashboardStats = async (req, res) => {
             withdrawn: [
               {
                 $match: {
+                  ...withdrawalCurrencyMatch,
                   status: { $in: ["approved", "completed"] },
                 },
               },
@@ -97,6 +111,7 @@ const getDashboardStats = async (req, res) => {
             pending: [
               {
                 $match: {
+                  ...withdrawalCurrencyMatch,
                   status: "pending",
                 },
               },
@@ -145,6 +160,7 @@ const getDashboardStats = async (req, res) => {
     res.status(StatusCodes.OK).json({
       status: "success",
       data: {
+        currency,
         totalUsers,
         totalEvents,
         totalRevenue,
@@ -169,9 +185,17 @@ const getDashboardStats = async (req, res) => {
 
 const getRevenueChartData = async (req, res) => {
   try {
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
     const revenueData = await Ticket.aggregate([
       {
-        $match: { paymentStatus: "completed" },
+        $match: {
+          paymentStatus: "completed",
+          ...(currency === "ETB"
+            ? {
+                $or: [{ currency: "ETB" }, { currency: { $exists: false } }],
+              }
+            : { currency }),
+        },
       },
       {
         $group: {
@@ -192,6 +216,7 @@ const getRevenueChartData = async (req, res) => {
 
     res.status(StatusCodes.OK).json({
       status: "success",
+      currency,
       data: formattedData,
     });
   } catch (error) {

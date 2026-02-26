@@ -131,6 +131,9 @@ export default function OrganizerDashboard() {
   });
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">(
+    "ETB"
+  );
 
   // Pagination states
   const [eventsPage, setEventsPage] = useState(1);
@@ -306,7 +309,7 @@ export default function OrganizerDashboard() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance?currency=${selectedCurrency}`,
         {
           method: "GET",
           headers: {
@@ -354,7 +357,7 @@ export default function OrganizerDashboard() {
       // Fetch withdrawals
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?currency=${selectedCurrency}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -377,7 +380,7 @@ export default function OrganizerDashboard() {
 
     fetchWithdrawals();
     fetchBalance();
-  }, [user]);
+  }, [user, selectedCurrency]);
 
   // Pagination helper functions
   const getPaginatedData = (
@@ -662,9 +665,14 @@ export default function OrganizerDashboard() {
   // to ensure perfect consistency with the data displayed to the user.
 
   const allTicketsFlat = Object.values(allTicketsByEvent).flat();
+  const currencyTickets = allTicketsFlat.filter((t: any) =>
+    selectedCurrency === "USD"
+      ? t.currency === "USD"
+      : !t.currency || t.currency === "ETB"
+  );
 
   // Use ALL tickets for revenue calculation as requested by user to match the table
-  const totalRevenue = allTicketsFlat.reduce(
+  const totalRevenue = currencyTickets.reduce(
     (sum, t: any) => sum + (t.price || 0),
     0
   );
@@ -690,7 +698,13 @@ export default function OrganizerDashboard() {
   const revenueData = events.slice(0, 6).map((event) => {
     const allTickets = allTicketsByEvent[event._id] || [];
     // Use all tickets for charts to match total revenue
-    const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    const revenue = allTickets
+      .filter((t: any) =>
+        selectedCurrency === "USD"
+          ? t.currency === "USD"
+          : !t.currency || t.currency === "ETB"
+      )
+      .reduce((sum, t) => sum + (t.price || 0), 0);
     const ticketCount = allTickets.reduce(
       (sum, t) => sum + getTicketQuantity(t, event._id),
       0
@@ -716,7 +730,13 @@ export default function OrganizerDashboard() {
   // Monthly performance data
   const monthlyData = events.slice(0, 12).map((event, index) => {
     const allTickets = allTicketsByEvent[event._id] || [];
-    const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+    const revenue = allTickets
+      .filter((t: any) =>
+        selectedCurrency === "USD"
+          ? t.currency === "USD"
+          : !t.currency || t.currency === "ETB"
+      )
+      .reduce((sum, t) => sum + (t.price || 0), 0);
     const ticketCount = allTickets.reduce(
       (sum, t) => sum + getTicketQuantity(t, event._id),
       0
@@ -737,7 +757,13 @@ export default function OrganizerDashboard() {
   const topEvents = events
     .map((event) => {
       const allTickets = allTicketsByEvent[event._id] || [];
-      const revenue = allTickets.reduce((sum, t) => sum + (t.price || 0), 0);
+      const revenue = allTickets
+        .filter((t: any) =>
+          selectedCurrency === "USD"
+            ? t.currency === "USD"
+            : !t.currency || t.currency === "ETB"
+        )
+        .reduce((sum, t) => sum + (t.price || 0), 0);
       const ticketCount = allTickets.reduce(
         (sum, t) => sum + getTicketQuantity(t, event._id),
         0
@@ -916,6 +942,8 @@ export default function OrganizerDashboard() {
           </div>
         </div>
 
+     
+
         {/* Quick Actions */}
         <Card className="border border-gray-200 shadow-md">
           <CardHeader className="p-3 sm:p-4 pb-2">
@@ -961,6 +989,25 @@ export default function OrganizerDashboard() {
           </CardContent>
         </Card>
         {/* Stat Cards (Top Row) */}
+        <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-700">
+                Currency
+              </span>
+              <Select
+                value={selectedCurrency}
+                onValueChange={(value: "ETB" | "USD") =>
+                  setSelectedCurrency(value)
+                }
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ETB">ETB</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 lg:gap-6 mb-4">
           {isLoading || withdrawalsLoading || ticketsLoading
             ? Array(5)
@@ -982,7 +1029,7 @@ export default function OrganizerDashboard() {
                             <>
                               <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 truncate">
                                 {showEarnings[stat.id]
-                                  ? `${stat.value.toFixed(2)} Birr`
+                                  ? `${stat.value.toFixed(2)} ${selectedCurrency}`
                                   : "••••••"}
                               </p>
                               <button
@@ -1088,7 +1135,7 @@ export default function OrganizerDashboard() {
                     {totalTicketsSold > 0
                       ? (totalRevenue / totalTicketsSold).toFixed(0)
                       : "0"}{" "}
-                    Birr
+                    {selectedCurrency}
                   </p>
                 </div>
                 <div className="bg-green-100 p-2 rounded-lg">
@@ -1149,7 +1196,7 @@ export default function OrganizerDashboard() {
               <ChartContainer
                 config={{
                   revenue: {
-                    label: "Revenue (Birr)",
+                    label: `Revenue (${selectedCurrency})`,
                     color: "#0D47A1",
                   },
                 }}
@@ -1197,7 +1244,7 @@ export default function OrganizerDashboard() {
                     }}
                     labelStyle={{ color: "#0D47A1", fontWeight: "bold" }}
                     formatter={(value: number) =>
-                      `${value.toLocaleString()} Birr`
+                      `${value.toLocaleString()} ${selectedCurrency}`
                     }
                   />
                   <Area
@@ -1294,7 +1341,10 @@ export default function OrganizerDashboard() {
             <CardContent className="pt-0">
               <ChartContainer
                 config={{
-                  revenue: { label: "Revenue (Birr)", color: "#0D47A1" },
+                  revenue: {
+                    label: `Revenue (${selectedCurrency})`,
+                    color: "#0D47A1",
+                  },
                   tickets: { label: "Tickets Sold", color: "#42A5F5" },
                 }}
                 className="h-[300px] w-full aspect-auto"
@@ -1375,7 +1425,10 @@ export default function OrganizerDashboard() {
               ) : (
                 <ChartContainer
                   config={{
-                    revenue: { label: "Revenue (Birr)", color: "#0D47A1" },
+                    revenue: {
+                      label: `Revenue (${selectedCurrency})`,
+                      color: "#0D47A1",
+                    },
                   }}
                   className="h-[300px] w-full aspect-auto"
                 >
@@ -1404,7 +1457,7 @@ export default function OrganizerDashboard() {
                     />
                     <ChartTooltip
                       formatter={(value: number) =>
-                        `${value.toLocaleString()} Birr`
+                        `${value.toLocaleString()} ${selectedCurrency}`
                       }
                       contentStyle={{
                         backgroundColor: "rgba(255,255,255,0.95)",
@@ -1505,7 +1558,7 @@ export default function OrganizerDashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Revenue</span>
                   <span className="text-xs font-medium">
-                    {totalRevenue.toFixed(0)} Birr
+                    {totalRevenue.toFixed(0)} {selectedCurrency}
                   </span>
                 </div>
               </div>
@@ -1671,7 +1724,7 @@ export default function OrganizerDashboard() {
                             {totalTickets}
                           </TableCell>
                           <TableCell className="text-xs">
-                            {revenue.toFixed(2)} Birr
+                            {revenue.toFixed(2)} {selectedCurrency}
                           </TableCell>
                         </TableRow>
                       );
@@ -1735,7 +1788,7 @@ export default function OrganizerDashboard() {
                             {new Date(w.createdAt).toLocaleDateString()}
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm font-medium">
-                            {w.amount.toFixed(2)} Birr
+                            {w.amount.toFixed(2)} {w.currency || selectedCurrency}
                           </TableCell>
                           <TableCell className="text-xs sm:text-sm">
                             <Badge

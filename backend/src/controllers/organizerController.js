@@ -596,6 +596,7 @@ exports.getTopCustomers = async (req, res) => {
 exports.getOrganizerDashboard = async (req, res) => {
   try {
     const organizerId = req.params.organizerId || req.user?.userId;
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
     if (!organizerId) {
       return res.status(400).json({
@@ -640,7 +641,21 @@ exports.getOrganizerDashboard = async (req, res) => {
             $filter: {
               input: "$tickets",
               as: "ticket",
-              cond: { $gt: ["$$ticket.price", 0] },
+              cond: {
+                $and: [
+                  { $gt: ["$$ticket.price", 0] },
+                  ...(currency === "ETB"
+                    ? [
+                        {
+                          $or: [
+                            { $eq: ["$$ticket.currency", "ETB"] },
+                            { $eq: [{ $type: "$$ticket.currency" }, "missing"] },
+                          ],
+                        },
+                      ]
+                    : [{ $eq: ["$$ticket.currency", "USD"] }]),
+                ],
+              },
             },
           },
           // Calculate ticket stats
@@ -709,10 +724,16 @@ exports.getOrganizerDashboard = async (req, res) => {
     ]);
 
     // Get withdrawal data in parallel
+    const withdrawalCurrencyMatch =
+      currency === "ETB"
+        ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
+        : { currency: "USD" };
+
     const withdrawalData = await Withdrawal.aggregate([
       {
         $match: {
           organizer: new mongoose.Types.ObjectId(organizerId),
+          ...withdrawalCurrencyMatch,
         },
       },
       {
@@ -764,6 +785,7 @@ exports.getOrganizerDashboard = async (req, res) => {
         events: dashboardData,
         withdrawals: withdrawalData[0]?.withdrawals || [],
         balance: {
+          currency,
           totalRevenue,
           organizerRevenue,
           pazimoCommission,
@@ -792,6 +814,7 @@ exports.getOrganizerDashboard = async (req, res) => {
 exports.getOrganizerDashboard = async (req, res) => {
   try {
     const organizerId = req.params.organizerId || req.user?.userId;
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
     if (!organizerId) {
       return res.status(400).json({
@@ -836,7 +859,21 @@ exports.getOrganizerDashboard = async (req, res) => {
             $filter: {
               input: "$tickets",
               as: "ticket",
-              cond: { $gt: ["$$ticket.price", 0] },
+              cond: {
+                $and: [
+                  { $gt: ["$$ticket.price", 0] },
+                  ...(currency === "ETB"
+                    ? [
+                        {
+                          $or: [
+                            { $eq: ["$$ticket.currency", "ETB"] },
+                            { $eq: [{ $type: "$$ticket.currency" }, "missing"] },
+                          ],
+                        },
+                      ]
+                    : [{ $eq: ["$$ticket.currency", "USD"] }]),
+                ],
+              },
             },
           },
           // Calculate ticket stats
@@ -905,10 +942,16 @@ exports.getOrganizerDashboard = async (req, res) => {
     ]);
 
     // Get withdrawal data in parallel
+    const withdrawalCurrencyMatch =
+      currency === "ETB"
+        ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
+        : { currency: "USD" };
+
     const withdrawalData = await Withdrawal.aggregate([
       {
         $match: {
           organizer: new mongoose.Types.ObjectId(organizerId),
+          ...withdrawalCurrencyMatch,
         },
       },
       {
@@ -960,6 +1003,7 @@ exports.getOrganizerDashboard = async (req, res) => {
         events: dashboardData,
         withdrawals: withdrawalData[0]?.withdrawals || [],
         balance: {
+          currency,
           totalRevenue,
           organizerRevenue,
           pazimoCommission,

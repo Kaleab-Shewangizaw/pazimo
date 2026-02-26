@@ -77,6 +77,13 @@ const TicketSchema = new mongoose.Schema(
       min: 0,
     },
 
+    currency: {
+      type: String,
+      enum: ["ETB", "USD"],
+      default: "ETB",
+      index: true,
+    },
+
     purchaseDate: {
       type: Date,
       default: Date.now,
@@ -150,6 +157,7 @@ const TicketSchema = new mongoose.Schema(
 TicketSchema.index({ event: 1, status: 1, createdAt: -1 }); // Event tickets with status filter
 TicketSchema.index({ event: 1, checkedIn: 1, status: 1 }); // QR scanning - checked in filter
 TicketSchema.index({ event: 1, paymentStatus: 1, price: 1 }); // Revenue/stats calculations
+TicketSchema.index({ event: 1, currency: 1, createdAt: -1 }); // Currency-specific analytics
 TicketSchema.index({ user: 1, createdAt: -1 }); // User ticket queries
 TicketSchema.index({ user: 1, status: 1 }); // User active tickets
 TicketSchema.index({ isInvitation: 1, paymentStatus: 1, status: 1 }); // Invitation stats

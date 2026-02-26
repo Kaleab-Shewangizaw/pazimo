@@ -14,8 +14,9 @@ const { calculateOrganizerBalance } = require("../services/financeService");
 const getOrganizerBalance = async (req, res) => {
   try {
     const { organizerId } = req.params;
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
-    const balanceData = await calculateOrganizerBalance(organizerId);
+    const balanceData = await calculateOrganizerBalance(organizerId, currency);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -40,6 +41,7 @@ const createWithdrawal = async (req, res) => {
 
     let organizerId;
     const { amount, notes, bankDetails } = req.body;
+    const currency = req.body.currency === "USD" ? "USD" : "ETB";
 
     if (req.user.role === "admin") {
       organizerId = req.body.organizerId;
@@ -57,7 +59,10 @@ const createWithdrawal = async (req, res) => {
     }
 
     // Get available balance (match the calculation in getOrganizerBalance)
-    const { availableBalance } = await calculateOrganizerBalance(organizerId);
+    const { availableBalance } = await calculateOrganizerBalance(
+      organizerId,
+      currency
+    );
 
     // Validate amount
     if (amount > availableBalance) {
@@ -68,6 +73,7 @@ const createWithdrawal = async (req, res) => {
     const withdrawal = await Withdrawal.create({
       organizer: organizerId,
       amount,
+      currency,
       notes,
       bankDetails,
       processedBy: req.user.role === "admin" ? req.user.userId : undefined,
@@ -137,9 +143,10 @@ const updateWithdrawalStatus = async (req, res) => {
     const notification = await Notification.create({
       userId: withdrawal.organizer,
       type: "withdrawal_status_change",
-      message: `Your withdrawal of ${withdrawal.amount} Birr has been ${withdrawal.status}.`,
+      message: `Your withdrawal of ${withdrawal.amount} ${withdrawal.currency} has been ${withdrawal.status}.`,
       withdrawalId: withdrawal._id,
       amount: withdrawal.amount,
+      currency: withdrawal.currency,
       status: withdrawal.status,
       read: false,
     });
@@ -153,6 +160,7 @@ const updateWithdrawalStatus = async (req, res) => {
       io.to(roomName).emit("withdrawalStatusUpdated", {
         withdrawalId: withdrawal._id,
         amount: withdrawal.amount,
+        currency: withdrawal.currency,
         status: withdrawal.status,
       });
       console.log("Socket event emitted");
@@ -178,12 +186,18 @@ const updateWithdrawalStatus = async (req, res) => {
 const getAllWithdrawals = async (req, res) => {
   try {
     const { status, organizerId, page = 1, limit = 10 } = req.query;
+    const currency = req.query.currency === "USD" ? "USD" : req.query.currency === "ETB" ? "ETB" : null;
     const skip = (page - 1) * limit;
 
     // Build query
     const query = {};
     if (status && status !== "all") query.status = status;
     if (organizerId) query.organizer = organizerId;
+    if (currency === "ETB") {
+      query.$or = [{ currency: "ETB" }, { currency: { $exists: false } }];
+    } else if (currency === "USD") {
+      query.currency = "USD";
+    }
 
     // Use Promise.all for parallel queries
     const [withdrawals, total, stats] = await Promise.all([
@@ -262,11 +276,17 @@ const getOrganizerWithdrawals = async (req, res) => {
       organizerId = req.user.userId;
     }
     const { status, page = 1, limit = 10 } = req.query;
+    const currency = req.query.currency === "USD" ? "USD" : req.query.currency === "ETB" ? "ETB" : null;
     const skip = (page - 1) * limit;
 
     // Build query
     const query = { organizer: organizerId };
     if (status && status !== "all") query.status = status;
+    if (currency === "ETB") {
+      query.$or = [{ currency: "ETB" }, { currency: { $exists: false } }];
+    } else if (currency === "USD") {
+      query.currency = "USD";
+    }
 
     // Use Promise.all for parallel queries
     const [withdrawals, total, stats] = await Promise.all([

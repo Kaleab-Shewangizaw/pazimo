@@ -37,6 +37,7 @@ import { io, type Socket } from "socket.io-client";
 interface Withdrawal {
   _id: string;
   amount: number;
+  currency?: "ETB" | "USD";
   status: "pending" | "approved" | "rejected" | "completed";
   createdAt: string;
   processedAt?: string;
@@ -55,6 +56,7 @@ interface Withdrawal {
 }
 
 interface BalanceData {
+  currency?: "ETB" | "USD";
   totalRevenue: number;
   pendingWithdrawals: number;
   approvedWithdrawals: number;
@@ -90,6 +92,7 @@ export default function WithdrawalsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
   const [totalPages, setTotalPages] = useState(1);
+  const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
   const [bankDetails, setBankDetails] = useState({
     accountName: "",
     accountNumber: "",
@@ -136,7 +139,7 @@ export default function WithdrawalsPage() {
     socketRef.current.on("withdrawalStatusUpdated", (data) => {
       // console.log("Received withdrawalStatusUpdated (withdrawals page):", data)
       toast.success(
-        `Your withdrawal of ${data.amount} Birr has been ${data.status}.`
+        `Your withdrawal of ${data.amount} ${data.currency || selectedCurrency} has been ${data.status}.`
       );
       // Optionally refresh the withdrawal list
       fetchWithdrawals();
@@ -149,7 +152,7 @@ export default function WithdrawalsPage() {
         socketRef.current = null;
       }
     };
-  }, [currentPage, itemsPerPage, statusFilter]);
+  }, [currentPage, itemsPerPage, statusFilter, selectedCurrency]);
 
   const fetchWithdrawals = async () => {
     try {
@@ -171,7 +174,7 @@ export default function WithdrawalsPage() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?page=${currentPage}&limit=${itemsPerPage}&status=${statusFilter}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?page=${currentPage}&limit=${itemsPerPage}&status=${statusFilter}&currency=${selectedCurrency}`,
         {
           method: "GET",
           headers: {
@@ -225,7 +228,7 @@ export default function WithdrawalsPage() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/balance?currency=${selectedCurrency}`,
         {
           method: "GET",
           headers: {
@@ -309,6 +312,7 @@ export default function WithdrawalsPage() {
 
       const requestBody = {
         amount: Number.parseFloat(withdrawAmount),
+        currency: selectedCurrency,
         notes: withdrawNotes,
         bankDetails,
       };
@@ -405,6 +409,23 @@ export default function WithdrawalsPage() {
         <p className="text-muted-foreground text-sm sm:text-base mt-1">
           Manage your earnings and withdrawal requests
         </p>
+        <div className="mt-3 w-full sm:w-[180px]">
+          <Select
+            value={selectedCurrency}
+            onValueChange={(value: "ETB" | "USD") => {
+              setSelectedCurrency(value);
+              setCurrentPage(1);
+            }}
+          >
+            <SelectTrigger className="h-9 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ETB">ETB</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Balance Cards */}
@@ -425,7 +446,7 @@ export default function WithdrawalsPage() {
                       Available Balance
                     </div>
                     <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                      {balance?.availableBalance.toFixed(2) || "0.00"} birr
+                      {balance?.availableBalance.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       After 3% commission
@@ -446,7 +467,7 @@ export default function WithdrawalsPage() {
                       Pending Withdrawals
                     </div>
                     <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                      {balance?.pendingWithdrawals.toFixed(2) || "0.00"} birr
+                      {balance?.pendingWithdrawals.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
                   </div>
                   <div className="p-2 sm:p-3 rounded-lg bg-orange-100 shadow-sm">
@@ -464,7 +485,7 @@ export default function WithdrawalsPage() {
                       Approved Withdrawals
                     </div>
                     <div className="text-xl sm:text-2xl font-bold text-gray-800">
-                      {balance?.approvedWithdrawals.toFixed(2) || "0.00"} birr
+                      {balance?.approvedWithdrawals.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
                   </div>
                   <div className="p-2 sm:p-3 rounded-lg bg-green-100 shadow-sm">
@@ -541,7 +562,7 @@ export default function WithdrawalsPage() {
                         {new Date(withdrawal.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="font-medium text-xs sm:text-sm">
-                        {withdrawal.amount.toFixed(2)} birr
+                        {withdrawal.amount.toFixed(2)} {withdrawal.currency || selectedCurrency}
                       </TableCell>
                       <TableCell className="text-xs sm:text-sm">
                         <Badge
@@ -671,7 +692,7 @@ export default function WithdrawalsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="withdraw-amount" className="text-sm">
-                Amount (birr)
+                Amount ({selectedCurrency})
               </Label>
               <Input
                 id="withdraw-amount"
@@ -857,7 +878,7 @@ export default function WithdrawalsPage() {
                 <AlertCircle className="h-4 w-4" />
                 <span>
                   Available Balance (After 3% Commission):{" "}
-                  {(balance?.availableBalance ?? 0).toFixed(2)} birr
+                  {(balance?.availableBalance ?? 0).toFixed(2)} {selectedCurrency}
                 </span>
               </div>
             </div>

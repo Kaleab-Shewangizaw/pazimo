@@ -35,6 +35,7 @@ interface WithdrawalData {
     email: string
   }
   amount: number
+  currency?: "ETB" | "USD"
   status: "pending" | "approved" | "rejected" | "completed"
   notes: string
   bankDetails: {
@@ -60,6 +61,7 @@ export default function WithdrawalsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(10)
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [currencyFilter, setCurrencyFilter] = useState<"ETB" | "USD">("ETB")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedWithdrawal, setSelectedWithdrawal] = useState<WithdrawalData | null>(null)
   const [updateStatus, setUpdateStatus] = useState<"approved" | "rejected" | "completed">("approved")
@@ -67,7 +69,7 @@ export default function WithdrawalsPage() {
 
   useEffect(() => {
     fetchWithdrawals()
-  }, [page, itemsPerPage, statusFilter])
+  }, [page, itemsPerPage, statusFilter, currencyFilter])
 
   const fetchWithdrawals = async () => {
     try {
@@ -76,6 +78,7 @@ export default function WithdrawalsPage() {
       if (statusFilter !== "all") {
         url += `&status=${statusFilter}`
       }
+      url += `&currency=${currencyFilter}`
       const response = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -186,6 +189,21 @@ export default function WithdrawalsPage() {
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
+            <Select
+              value={currencyFilter}
+              onValueChange={(value: "ETB" | "USD") => {
+                setCurrencyFilter(value)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectValue placeholder="Currency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ETB">ETB</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
             <Button onClick={fetchWithdrawals} className="bg-blue-600 hover:bg-blue-700 text-white">
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
@@ -230,7 +248,7 @@ export default function WithdrawalsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-semibold text-green-600">{withdrawal.amount.toFixed(2)} Birr</span>
+                          <span className="font-semibold text-green-600">{withdrawal.amount.toFixed(2)} {withdrawal.currency || currencyFilter}</span>
                         </TableCell>
                         <TableCell>
                           <Badge
@@ -319,7 +337,7 @@ export default function WithdrawalsPage() {
               <DialogTitle className="text-gray-900">Update Withdrawal Status</DialogTitle>
               <DialogDescription>
                 Update the status for {selectedWithdrawal?.organizer.firstName}{" "}
-                {selectedWithdrawal?.organizer.lastName}'s request of {selectedWithdrawal?.amount.toFixed(2)} Birr.
+                {selectedWithdrawal?.organizer.lastName}'s request of {selectedWithdrawal?.amount.toFixed(2)} {selectedWithdrawal?.currency || currencyFilter}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">

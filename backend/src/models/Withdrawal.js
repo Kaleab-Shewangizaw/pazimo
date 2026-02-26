@@ -12,6 +12,12 @@ const WithdrawalSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    currency: {
+      type: String,
+      enum: ['ETB', 'USD'],
+      default: 'ETB',
+      required: true,
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected', 'completed'],
@@ -43,6 +49,7 @@ const WithdrawalSchema = new mongoose.Schema(
 
 // Add index for faster queries
 WithdrawalSchema.index({ organizer: 1, status: 1 });
+WithdrawalSchema.index({ organizer: 1, currency: 1, status: 1 });
 WithdrawalSchema.index({ createdAt: -1 });
 
 const Withdrawal = mongoose.model('Withdrawal', WithdrawalSchema);

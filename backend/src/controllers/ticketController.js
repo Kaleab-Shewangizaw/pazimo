@@ -107,6 +107,7 @@ const processSuccessfulPayment = async (payment) => {
     ticketCount: ticketCount || 1,
     purchaseQuantity: ticketCount || 1,
     price: ticketTypeInfo.price * (ticketCount || 1),
+    currency: payment.currency === "USD" ? "USD" : "ETB",
     seatNumber,
     paymentReference: payment.transactionId,
     status: "active",
@@ -1245,7 +1246,7 @@ const getEventTickets = async (req, res) => {
     const [totalCount, tickets, eventDetails, paidTickets] = await Promise.all([
       Ticket.countDocuments(ticketQuery),
       Ticket.find(ticketQuery)
-        .select("ticketId user guestName guestEmail guestPhone ticketType price status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor checkedIn checkedInAt")
+        .select("ticketId user guestName guestEmail guestPhone ticketType price currency status paymentStatus purchaseDate createdAt ticketCount purchaseQuantity isInvitation isOnDoor checkedIn checkedInAt")
         .populate("user", "firstName lastName email phoneNumber")
         .sort({ createdAt: -1 }) // Uses compound index: event + status + createdAt
         .skip(skip)
@@ -1254,7 +1255,7 @@ const getEventTickets = async (req, res) => {
       Event.findById(eventId).select("ticketTypes").lean(),
       // ⚡ Stats query with minimal fields
       Ticket.find({ event: eventId, price: { $gt: 0 } })
-        .select("ticketType price createdAt purchaseDate ticketCount purchaseQuantity isOnDoor")
+        .select("ticketType price currency createdAt purchaseDate ticketCount purchaseQuantity isOnDoor")
         .lean(),
     ]);
 
