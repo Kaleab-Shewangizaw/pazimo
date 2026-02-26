@@ -16,8 +16,6 @@ import {
   ImageIcon,
   BookOpen,
   Ticket,
-  CreditCard,
-  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
@@ -155,7 +153,6 @@ export default function EventDetailClient() {
     phoneNumber: "",
     paymentMethod: "telebirr",
     countryCode: "US", // For USD payments
-    cardNumber: "", // For USD card payments
   });
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [currentTxRef, setCurrentTxRef] = useState<string | null>(null);
@@ -606,7 +603,6 @@ export default function EventDetailClient() {
         phoneNumber: phone,
         paymentMethod: defaultMethod,
         countryCode: countryCode,
-        cardNumber: "",
       });
     } else {
       // Set payment method based on currency and provider
@@ -625,7 +621,6 @@ export default function EventDetailClient() {
         phoneNumber: "",
         paymentMethod: defaultMethod,
         countryCode: countryCode,
-        cardNumber: "",
       });
     }
   }, [user, activePaymentProvider, selectedCurrency]);
@@ -1635,7 +1630,7 @@ export default function EventDetailClient() {
       </Dialog>
 
       <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
-        <DialogContent className="max-w-xl rounded-xl max-h-[90vh] overflow-y-auto top-4 translate-y-0">
+        <DialogContent className="w-[95vw] sm:w-full max-w-xl rounded-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-center">
               Checkout
@@ -1710,7 +1705,7 @@ export default function EventDetailClient() {
                           </option>
                         ))}
                       </select>
-                      <div className="flex-1 sm:block flex w-full items-center border rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                      <div className="flex-1 sm:flex-row flex flex-row  w-full items-center border rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
                         <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r text-sm font-medium min-w-fit">
                           +{COUNTRIES_FOR_PAYMENT.find((c) => c.code === paymentForm.countryCode)?.prefix || "1"}
                         </div>
@@ -1755,50 +1750,6 @@ export default function EventDetailClient() {
                 </div>
               </div>
             </div>
-            {/* Card number input — only for USD / international card payments */}
-            {selectedCurrency === "USD" && (
-              <div>
-                <Label
-                  htmlFor="payment_card_number"
-                  className="text-xs font-semibold uppercase text-gray-500"
-                >
-                  Card Number
-                </Label>
-                <div className="flex items-center border rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500">
-                  <div className="bg-gray-100 px-3 py-2 text-gray-500 border-r">
-                    <CreditCard className="h-4 w-4" />
-                  </div>
-                  <Input
-                    id="payment_card_number"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="cc-number"
-                    value={paymentForm.cardNumber}
-                    onChange={(e) => {
-                      // Keep only digits, format as "XXXX XXXX XXXX XXXX"
-                      const digits = e.target.value.replace(/\D/g, "").slice(0, 16);
-                      const formatted = digits.replace(/(\d{4})(?=\d)/g, "$1 ");
-                      setPaymentForm({ ...paymentForm, cardNumber: formatted });
-                    }}
-                    placeholder="XXXX XXXX XXXX XXXX"
-                    required
-                    maxLength={19}
-                    className="border-0 rounded-none focus-visible:ring-0 shadow-none tracking-widest font-mono"
-                  />
-                  <div className="px-3 py-2 text-gray-400">
-                    {(() => {
-                      const digits = paymentForm.cardNumber.replace(/\D/g, "");
-                      if (digits.startsWith("4")) return <span className="text-xs font-bold text-blue-700">VISA</span>;
-                      if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return <span className="text-xs font-bold text-red-600">MC</span>;
-                      return <Lock className="h-3 w-3" />;
-                    })()}
-                  </div>
-                </div>
-                {/* <p className="text-xs text-gray-400 mt-1">
-                  You will complete the payment on Chapa&apos;s secure checkout page.
-                </p> */}
-              </div>
-            )}
             <div>
               <PaymentMethodSelector
                 phoneNumber={paymentForm.phoneNumber}
@@ -1829,9 +1780,7 @@ export default function EventDetailClient() {
                   !paymentForm.paymentMethod ||
                   // For ETB payments, enforce 9-digit Ethiopian number.
                   // For USD (international card), any non-empty number is accepted.
-                  (selectedCurrency !== "USD" && paymentForm.phoneNumber.length < 9) ||
-                  // For USD, require a complete 16-digit card number
-                  (selectedCurrency === "USD" && paymentForm.cardNumber.replace(/\D/g, "").length < 16)
+                  (selectedCurrency !== "USD" && paymentForm.phoneNumber.length < 9)
                 }
               >
                 {isProcessingPayment ? (
@@ -1849,7 +1798,7 @@ export default function EventDetailClient() {
 
       {/* Loading Dialog for Ticket Verification */}
       <Dialog open={isProcessingPayment} onOpenChange={() => {}}>
-        <DialogContent className="max-w-sm rounded-xl p-6 text-center" onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent className="w-[90vw] max-w-sm rounded-xl p-6 text-center" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-xl font-bold mb-2">
               Processing Your Tickets
