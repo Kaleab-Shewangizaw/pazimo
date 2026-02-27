@@ -116,7 +116,7 @@ const initiateChapaInvitationPayment = async (req, res) => {
     // Chapa specific URLs
     const chapaCallbackUrl = `${
       process.env.BACKEND_URL || "http://localhost:5000"
-    }/api/webhook/chapa`;
+    }/api/webhooks/chapa`;
     const returnUrl =
       successUrl ||
       `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success`;

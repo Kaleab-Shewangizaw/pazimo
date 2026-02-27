@@ -2,41 +2,120 @@ const crypto = require("crypto");
 const Ticket = require("../models/Ticket");
 const Event = require("../models/Event");
 const User = require("../models/User");
+const Payment = require("../models/Payment");
+const { processSuccessfulPayment } = require("./ticketController");
 
 const chapaWebhook = async (req, res) => {
   try {
-    // Verify webhook signature
+    // Verify webhook signature only when secret is configured
     const signature = req.headers["chapa-signature"];
-    const payload = JSON.stringify(req.body);
-    const expectedSignature = crypto
-      .createHmac(
-        "sha256",
-        process.env.CHAPA_WEBHOOK_SECRET || "your-webhook-secret"
-      )
-      .update(payload)
-      .digest("hex");
+    const webhookSecret = process.env.CHAPA_WEBHOOK_SECRET;
 
-    if (signature !== expectedSignature) {
-      console.log("Invalid webhook signature");
-      return res.status(401).json({ error: "Invalid signature" });
+    if (webhookSecret) {
+      const payload = JSON.stringify(req.body);
+      const expectedSignature = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(payload)
+        .digest("hex");
+
+      if (signature !== expectedSignature) {
+        console.log("Invalid webhook signature");
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+    } else {
+      console.warn(
+        "CHAPA_WEBHOOK_SECRET is not configured. Skipping signature validation."
+      );
     }
 
     const { event, data } = req.body;
+    const txRef = data?.tx_ref;
+    const normalizedEvent = String(event || "").toLowerCase();
+    const normalizedStatus = String(data?.status || "").toLowerCase();
 
-    if (event === "charge.success") {
-      const { tx_ref, amount, currency, status, customer } = data;
+    const isSuccessEvent =
+      normalizedEvent === "charge.success" ||
+      normalizedStatus === "success" ||
+      normalizedStatus === "completed" ||
+      normalizedStatus === "paid";
 
-      console.log("Payment webhook received:", { tx_ref, amount, status });
+    const isFailureEvent =
+      normalizedStatus === "failed" ||
+      normalizedStatus === "cancelled" ||
+      normalizedStatus === "canceled";
+
+    if (!txRef) {
+      return res.status(400).json({ error: "Missing tx_ref in webhook payload" });
+    }
+
+    // Primary flow: Fulfill Payment records (ticket purchase flow)
+    const payment = await Payment.findOne({ transactionId: txRef });
+
+    if (payment) {
+      console.log("Chapa webhook received for payment:", {
+        tx_ref: txRef,
+        event,
+        status: data?.status,
+        currentPaymentStatus: payment.status,
+      });
+
+      if (isSuccessEvent) {
+        if (payment.status !== "PAID") {
+          payment.status = "PAID";
+          payment.santimPayResponse = data;
+          await payment.save();
+
+          const createdTicket = await processSuccessfulPayment(payment);
+
+          return res.status(200).json({
+            message: "Webhook processed and payment fulfilled",
+            transactionId: txRef,
+            ticketId: createdTicket?.ticketId || null,
+          });
+        }
+
+        return res.status(200).json({
+          message: "Webhook already fulfilled",
+          transactionId: txRef,
+        });
+      }
+
+      if (isFailureEvent) {
+        payment.status =
+          normalizedStatus === "cancelled" || normalizedStatus === "canceled"
+            ? "CANCELLED"
+            : "FAILED";
+        payment.santimPayResponse = data;
+        await payment.save();
+
+        return res.status(200).json({
+          message: "Webhook processed with failed/cancelled status",
+          transactionId: txRef,
+          paymentStatus: payment.status,
+        });
+      }
+
+      return res.status(200).json({
+        message: "Webhook received with unhandled status",
+        transactionId: txRef,
+      });
+    }
+
+    // Legacy fallback flow: pre-created pending tickets
+    if (isSuccessEvent) {
+      const { amount } = data;
+
+      console.log("Legacy ticket webhook received:", { tx_ref: txRef, amount });
 
       // Find pending ticket purchase by reference
       const tickets = await Ticket.find({
-        paymentReference: tx_ref,
+        paymentReference: txRef,
         status: "pending",
       }).populate("event user");
 
       if (tickets.length === 0) {
-        console.log("No pending tickets found for reference:", tx_ref);
-        return res.status(404).json({ error: "No pending tickets found" });
+        console.log("No pending tickets or payment found for reference:", txRef);
+        return res.status(200).json({ message: "No matching payment or pending tickets" });
       }
 
       // Verify payment amount matches ticket total
@@ -54,7 +133,7 @@ const chapaWebhook = async (req, res) => {
 
       // Update tickets to active status
       await Ticket.updateMany(
-        { paymentReference: tx_ref },
+        { paymentReference: txRef },
         {
           status: "active",
           paymentStatus: "completed",
@@ -68,6 +147,14 @@ const chapaWebhook = async (req, res) => {
       // You can add email/SMS notification here
 
       res.status(200).json({ message: "Webhook processed successfully" });
+    } else if (isFailureEvent) {
+      await Ticket.updateMany(
+        { paymentReference: txRef, status: "pending" },
+        {
+          paymentStatus: "failed",
+        }
+      );
+      res.status(200).json({ message: "Failed/cancelled webhook processed" });
     } else {
       console.log("Unhandled webhook event:", event);
       res.status(200).json({ message: "Event not handled" });
