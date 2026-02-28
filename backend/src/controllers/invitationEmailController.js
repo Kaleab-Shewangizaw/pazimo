@@ -50,18 +50,12 @@ const createEmailTemplate = (
 
   const frontendUrl = process.env.FRONTEND_URL || "https://pazimo.com";
 
-  // Check for Signature Event
-  const isSignatureEvent =
-    event.title && event.title.toLowerCase().includes("signature");
 
   let actionLink = invitation.actionLink;
   if (!actionLink) {
-    if (isSignatureEvent) {
-      // For Signature event, use the custom link for both paid and guest
-      actionLink = `${frontendUrl}/guest-invitation/signature?inv=${invitation.uniqueId}`;
-    } else {
+  
       actionLink = `${frontendUrl}/guest-invitation?inv=${invitation.uniqueId}`;
-    }
+  
   }
 
   const actionText = invitation.actionText || "Confirm Attendance";
@@ -74,130 +68,8 @@ const createEmailTemplate = (
       ? "Secure your spot today"
       : "Join us for an amazing event";
 
-  // Custom Template for Signature Events
-  if (isSignatureEvent) {
-    const signatureEventDate = new Date(event.date).toLocaleDateString(
-      "en-US",
-      {
-        weekday: "short",
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      },
-    );
+  
 
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${headerTitle}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <style>
-    .button {
-      display: inline-block;
-      background: linear-gradient(135deg, #d4af37 0%, #aa8c2c 100%);
-      color: #000000 !important;
-      padding: 15px 40px;
-      border-radius: 2px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 16px;
-      letter-spacing: 1px;
-      text-transform: uppercase;
-      transition: all 0.3s ease;
-      border: 1px solid #d4af37;
-    }
-    .button:hover {
-      background: #000000;
-      color: #d4af37 !important;
-    }
-  </style>
-</head>
-<body style="margin: 0; padding: 0; font-family: 'Playfair Display', Georgia, serif; background-color: #111111;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a1a; border: 1px solid #333333;">
-    <!-- Header -->
-    <div style="background-color: #000000; padding: 40px 30px; text-align: center; border-bottom: 1px solid #d4af37;">
-      <img src="https://www.signaturewellnesseth.com/logo-gold-dark-mode.png" alt="Signature Wellness" style="max-width: 150px; margin-bottom: 20px;" />
-      <h1 style="color: #d4af37; margin: 0; font-size: 32px; font-weight: 400; letter-spacing: 2px;">${headerTitle}</h1>
-      <p style="color: #888888; margin: 10px 0 0 0; font-size: 14px; letter-spacing: 1px; text-transform: uppercase;">${headerSubtitle}</p>
-    </div>
-
-    <!-- Content -->
-    <div style="padding: 50px 40px; text-align: center;">
-      <h2 style="color: #ffffff; margin: 0 0 15px 0; font-size: 28px; font-weight: 400;">${
-        event.title
-      }</h2>
-      <div style="width: 60px; height: 2px; background-color: #d4af37; margin: 0 auto 30px auto;"></div>
-        <p style="color: #ffffff; font-size: 18px; margin-bottom: 10px;">Hello, ${
-          invitation.guestName
-        }</p>
-        <p style="color: #cccccc; margin: 0 0 40px 0; font-size: 16px; line-height: 1.8; font-family: 'Segoe UI', sans-serif; font-weight: 300;">
-          We cordially invite you to join us for an evening of elegance and celebration.
-        </p>
-
-      ${
-        message
-          ? `
-      <div style="background: #222222; border: 1px solid #333333; padding: 30px; margin: 30px 0;">
-        <p style="color: #d4af37; margin: 0 0 10px 0; font-size: 12px; letter-spacing: 2px; text-transform: uppercase;">Message from Organizer</p>
-        <p style="color: #ffffff; margin: 0; font-size: 16px; line-height: 1.6; font-style: italic;">"${message}"</p>
-      </div>
-      `
-          : ""
-      }
-
-      <!-- Event Details -->
-      <div style="margin: 40px 0; border-top: 1px solid #333333; border-bottom: 1px solid #333333; padding: 30px 0;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 10px; text-align: center; width: 33%;">
-              <div style="color: #d4af37; font-size: 14px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;">DATE</div>
-              <div style="color: #ffffff; margin-top: 5px; font-family: 'Segoe UI', sans-serif;">${signatureEventDate}</div>
-            </td>
-            <td style="padding: 10px; text-align: center; width: 33%; border-left: 1px solid #333333; border-right: 1px solid #333333;">
-              <div style="color: #d4af37; font-size: 14px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;">TIME</div>
-              <div style="color: #ffffff; margin-top: 5px; font-family: 'Segoe UI', sans-serif;">${eventTime}</div>
-            </td>
-            <td style="padding: 10px; text-align: center; width: 33%;">
-              <div style="color: #d4af37; font-size: 14px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase;">LOCATION</div>
-              <div style="color: #ffffff; margin-top: 5px; font-family: 'Segoe UI', sans-serif;">${
-                typeof event.location === "string"
-                  ? event.location
-                  : event.location?.city ||
-                    event.location?.address ||
-                    "Venue TBD"
-              }</div>
-            </td>
-          </tr>
-        </table>
-      </div>
-
-      <!-- CTA Button -->
-      <div style="margin-top: 40px;">
-        <a href="${actionLink}" class="button">${actionText}</a>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="background-color: #000000; padding: 30px; text-align: center; border-top: 1px solid #333333;">
-      <p style="color: #666666; margin: 0; font-size: 12px; font-family: 'Segoe UI', sans-serif;">
-        &copy; ${new Date().getFullYear()} Pazimo. All rights reserved.
-      </p>
-      <p style="margin: 10px 0 0 0;">
-        <a href="https://pazimo.com?uid=${new Date().getTime()}" style="color: #d4af37; text-decoration: none; font-size: 14px; font-family: 'Playfair Display', serif; letter-spacing: 1px;">pazimo.com</a>
-      </p>
-      <!-- Unique identifier to prevent Gmail clipping/threading -->
-      <div style="display:none; opacity:0; font-size:1px; color:#000000;">${new Date().getTime()}-${Math.random()
-        .toString(36)
-        .substring(7)}</div>
-    </div>
-  </div>
-</body>
-</html>
-    `;
-  }
 
   const displayMessage = message || invitation.message;
 
