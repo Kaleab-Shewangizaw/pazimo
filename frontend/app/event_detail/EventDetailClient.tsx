@@ -323,6 +323,13 @@ export default function EventDetailClient() {
       // STEP 2: Payment is COMPLETED, fetch the created tickets
       if (statusData.status === "COMPLETED") {
         console.log(`[VERIFY] Payment completed! Fetching tickets...`);
+
+        if (statusData.ticketId) {
+          setIsProcessingPayment(false);
+          toast.success("🎉 Payment confirmed! Redirecting to your ticket...");
+          router.replace(`/ticket/${statusData.ticketId}`);
+          return true;
+        }
         
         // 🔐 AUTO-LOGIN: If backend returns credentials AND user not logged in, log them in
         if (statusData.newUserCredentials) {
@@ -680,43 +687,37 @@ export default function EventDetailClient() {
   // Handle payment return from gateway - OPTIMIZED for speed
   useEffect(() => {
     const txRef = searchParams.get("tx_ref") || searchParams.get("orderId");
-    const status = searchParams.get("status");
-    const paymentStatus = searchParams.get("payment_status");
+    const status = (searchParams.get("status") || "").toLowerCase();
+    const paymentStatus = (searchParams.get("payment_status") || "").toLowerCase();
 
-    if ((txRef && status) || (paymentStatus === "success" && txRef)) {
-      // Prevent multiple verification attempts
-      if (isVerifyingPayment.current) return;
-      isVerifyingPayment.current = true;
+    if (!txRef) return;
 
-      const processPayment = async () => {
-        if (status === "success" || paymentStatus === "success") {
-          setIsProcessingPayment(true);
-          setCurrentTxRef(txRef);
-          cancelPaymentRef.current = false;
-          console.log("[PAYMENT-RETURN] Payment successful, verifying tickets for:", txRef);
-          
-          // Start verification immediately - no delays!
-          await verifyAndShowTickets(txRef, 0, cancelPaymentRef);
-        } else if (status === "cancelled" || status === "canceled" || paymentStatus === "cancelled") {
-          console.log("[PAYMENT-RETURN] Payment was cancelled:", { status, paymentStatus });
-          toast.error("Payment was cancelled");
-          router.replace(`/event_detail?id=${eventId || ""}`);
-        } else if (status === "failed" || paymentStatus === "failed") {
-          console.log("[PAYMENT-RETURN] Payment failed:", { status, paymentStatus });
-          toast.error("Payment failed. Please try again.");
-          router.replace(`/event_detail?id=${eventId || ""}`);
-        } else {
-          console.log("[PAYMENT-RETURN] Payment was not successful:", { status, paymentStatus });
-          toast.error("Payment was not successful");
-          router.replace(`/event_detail?id=${eventId || ""}`);
-        }
-        
-        isVerifyingPayment.current = false;
-      };
+    // Prevent multiple verification attempts
+    if (isVerifyingPayment.current) return;
+    isVerifyingPayment.current = true;
 
-      processPayment();
-    }
-  }, [searchParams, router, eventId, verifyAndShowTickets]);
+    const processPayment = async () => {
+      // If gateway explicitly says cancelled/failed, show immediate feedback
+      // and still rely on backend status endpoint for final source of truth.
+      if (status === "cancelled" || status === "canceled" || paymentStatus === "cancelled") {
+        console.log("[PAYMENT-RETURN] Payment marked cancelled by gateway:", { status, paymentStatus, txRef });
+        toast.error("Payment was cancelled");
+      } else if (status === "failed" || paymentStatus === "failed") {
+        console.log("[PAYMENT-RETURN] Payment marked failed by gateway:", { status, paymentStatus, txRef });
+        toast.error("Payment failed. Please try again.");
+      }
+
+      setIsProcessingPayment(true);
+      setCurrentTxRef(txRef);
+      cancelPaymentRef.current = false;
+      console.log("[PAYMENT-RETURN] Verifying payment status for txRef:", txRef);
+      await verifyAndShowTickets(txRef, 0, cancelPaymentRef);
+
+      isVerifyingPayment.current = false;
+    };
+
+    processPayment();
+  }, [searchParams, verifyAndShowTickets]);
 
   // Update payment method when provider or currency changes
   useEffect(() => {

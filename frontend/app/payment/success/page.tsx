@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { CheckCircle, Loader2, ArrowRight, Ticket } from "lucide-react";
 import Link from "next/link";
@@ -13,17 +13,23 @@ function PaymentSuccessContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login } = useAuthStore();
-  const txnId = searchParams.get("txn") || searchParams.get("orderId");
+  const txnId =
+    searchParams.get("txn") ||
+    searchParams.get("orderId") ||
+    searchParams.get("tx_ref");
   const [status, setStatus] = useState<
     "loading" | "success" | "pending" | "failed"
   >("loading");
   const [pollCount, setPollCount] = useState(0);
   const [isInvitation, setIsInvitation] = useState(false);
   const [newUserCreated, setNewUserCreated] = useState(false);
+  const [ticketId, setTicketId] = useState<string | null>(null);
+  const hasRedirected = useRef(false);
 
   useEffect(() => {
     if (!txnId) {
-      setStatus("success"); // Fallback if no txnId
+      setStatus("failed");
+      toast.error("Missing payment reference. Please contact support.");
       return;
     }
 
@@ -42,8 +48,11 @@ function PaymentSuccessContent() {
         
         console.log(`[Payment] Status check took ${Date.now() - startTime}ms:`, data);
 
-        if (data.success === true) {
+        if (data.status === "COMPLETED" || data.status === "PAID") {
           setStatus("success");
+          if (data.ticketId) {
+            setTicketId(data.ticketId);
+          }
           
           // ⚡ Auto-login if new user was created
           if (data.newUserCredentials) {
@@ -131,6 +140,18 @@ function PaymentSuccessContent() {
 
     checkStatus();
   }, [txnId, pollCount, status]);
+
+  useEffect(() => {
+    if (status !== "success" || hasRedirected.current) return;
+    hasRedirected.current = true;
+
+    const target = ticketId ? `/ticket/${ticketId}` : "/my-account";
+    const timer = setTimeout(() => {
+      router.replace(target);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [status, ticketId, router]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

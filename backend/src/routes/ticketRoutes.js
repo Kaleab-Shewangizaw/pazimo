@@ -30,6 +30,30 @@ const User = require("../models/User");
 const Event = require("../models/Event");
 const Payment = require("../models/Payment");
 
+const resolveWebhookBaseUrl = (req) => {
+  const explicitPublicUrl =
+    process.env.CHAPA_WEBHOOK_BASE_URL || process.env.BACKEND_PUBLIC_URL;
+  if (explicitPublicUrl) {
+    return explicitPublicUrl.replace(/\/$/, "");
+  }
+
+  const configuredBackendUrl = process.env.BACKEND_URL;
+  if (
+    configuredBackendUrl &&
+    !/localhost|127\.0\.0\.1/i.test(configuredBackendUrl)
+  ) {
+    return configuredBackendUrl.replace(/\/$/, "");
+  }
+
+  const forwardedHost = req.headers["x-forwarded-host"];
+  if (forwardedHost && !/localhost|127\.0\.0\.1/i.test(forwardedHost)) {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    return `${protocol}://${forwardedHost}`.replace(/\/$/, "");
+  }
+
+  return (configuredBackendUrl || "http://localhost:5000").replace(/\/$/, "");
+};
+
 // Public route - NO authentication middleware
 
 router.post("/ticket/initiate", async (req, res) => {
@@ -142,9 +166,8 @@ router.post("/ticket/initiate", async (req, res) => {
     const reason =
       paymentReason ||
       `Ticket purchase: ${selectedEvent.title} - ${ticketDetails.ticketTypeId}`;
-    const notifyUrl = `${
-      process.env.BACKEND_URL || "http://localhost:5000"
-    }/api/webhook/santimpay`;
+    const webhookBaseUrl = resolveWebhookBaseUrl(req);
+    const notifyUrl = `${webhookBaseUrl}/api/webhook/santimpay`;
 
     // Use provided orderId or generate one
     const transactionId =
@@ -320,17 +343,22 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       paymentReason ||
       `Ticket purchase: ${selectedEvent.title} - ${ticketDetails.ticketTypeId}`;
 
-    // Chapa specific URLs
-    const chapaCallbackUrl = `${
-      process.env.BACKEND_URL || "http://localhost:5000"
-    }/api/webhooks/chapa`;
-    const returnUrl =
-      req.body.successUrl ||
-      `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success`;
-
     const transactionId =
       orderId ||
       `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Chapa specific URLs
+    const webhookBaseUrl = resolveWebhookBaseUrl(req);
+    const chapaCallbackUrl = `${webhookBaseUrl}/api/webhooks/chapa`;
+
+    if (/localhost|127\.0\.0\.1/i.test(chapaCallbackUrl)) {
+      console.warn(
+        "[CHAPA-INIT] ⚠️ callback_url points to localhost. Chapa webhook will not reach this server from the internet. Configure CHAPA_WEBHOOK_BASE_URL or BACKEND_PUBLIC_URL."
+      );
+    }
+    const returnUrl =
+      req.body.successUrl ||
+      `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success?txn=${transactionId}`;
 
     // Map payment method to Chapa supported types (case-sensitive)
     let chapaType = "telebirr"; // Default

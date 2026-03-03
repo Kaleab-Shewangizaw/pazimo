@@ -15,6 +15,30 @@ const QRCode = require("qrcode");
 
 const PaymentConfig = require("../models/PaymentConfig");
 
+const resolveWebhookBaseUrl = (req) => {
+  const explicitPublicUrl =
+    process.env.CHAPA_WEBHOOK_BASE_URL || process.env.BACKEND_PUBLIC_URL;
+  if (explicitPublicUrl) {
+    return explicitPublicUrl.replace(/\/$/, "");
+  }
+
+  const configuredBackendUrl = process.env.BACKEND_URL;
+  if (
+    configuredBackendUrl &&
+    !/localhost|127\.0\.0\.1/i.test(configuredBackendUrl)
+  ) {
+    return configuredBackendUrl.replace(/\/$/, "");
+  }
+
+  const forwardedHost = req.headers["x-forwarded-host"];
+  if (forwardedHost && !/localhost|127\.0\.0\.1/i.test(forwardedHost)) {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    return `${protocol}://${forwardedHost}`.replace(/\/$/, "");
+  }
+
+  return (configuredBackendUrl || "http://localhost:5000").replace(/\/$/, "");
+};
+
 // Initiate Direct Payment for Invitation
 const initiateInvitationPayment = async (req, res) => {
   try {
@@ -114,12 +138,17 @@ const initiateChapaInvitationPayment = async (req, res) => {
     const transactionId = uuidv4();
 
     // Chapa specific URLs
-    const chapaCallbackUrl = `${
-      process.env.BACKEND_URL || "http://localhost:5000"
-    }/api/webhooks/chapa`;
-    const returnUrl =
-      successUrl ||
-      `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success`;
+      const webhookBaseUrl = resolveWebhookBaseUrl(req);
+      const chapaCallbackUrl = `${webhookBaseUrl}/api/webhooks/chapa`;
+
+      if (/localhost|127\.0\.0\.1/i.test(chapaCallbackUrl)) {
+        console.warn(
+          "[CHAPA-INVITE] ⚠️ callback_url points to localhost. Chapa webhook will not reach this server from the internet. Configure CHAPA_WEBHOOK_BASE_URL or BACKEND_PUBLIC_URL."
+        );
+      }
+      const returnUrl =
+        successUrl ||
+        `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success?txn=${transactionId}`;
 
     // Map payment method to Chapa supported types (case-sensitive)
     let chapaType = "telebirr"; // Default
