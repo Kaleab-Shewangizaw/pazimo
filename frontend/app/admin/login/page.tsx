@@ -57,7 +57,7 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-lg shadow-md">
         {/* Logo */}
         <div className="flex justify-center">
-          <img src="logo.png" alt="" className="md:w-40 lg:-w-35" />
+          <img src="logo2.png" alt="" className="md:w-40 lg:-w-35" />
         </div>
 
         <div className="text-center">
@@ -68,7 +68,7 @@ export default function AdminLoginPage() {
           </div>
           {/* <h2 className="text-2xl font-bold text-gray-900">Admin </h2> */}
           <div className="flex justify-center">
-          <img src="logo.png" alt="" className="md:w-40 lg:-w-35" />
+          <img src="logo2.png" alt="" className="md:w-40 lg:-w-35" />
         </div>
         </div>
 

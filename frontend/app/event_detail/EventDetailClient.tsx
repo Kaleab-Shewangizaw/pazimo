@@ -1473,7 +1473,7 @@ export default function EventDetailClient() {
         <div className="container mx-auto px-4 flex flex-col items-center justify-center gap-4">
           <div className="relative h-8 w-32 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
             <Image
-              src="/logo.png"
+              src="/logo2.png"
               alt="Pazimo Logo"
               fill
               className="object-contain"

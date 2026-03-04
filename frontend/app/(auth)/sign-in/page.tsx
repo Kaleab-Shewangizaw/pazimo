@@ -156,7 +156,7 @@ function SignInContent() {
       <div className="relative h-14 w-70">
         <Image
           fill
-          src="/logo.png"
+          src="/logo2.png"
           alt="Pazimo Logo"
           className="h-14 w-auto drop-shadow-md object-contain"
           onError={(e) => {

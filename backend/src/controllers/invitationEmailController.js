@@ -117,8 +117,8 @@ const createEmailTemplate = (
               <!-- Logo -->
               <div style="margin-bottom:16px;position:relative;z-index:1;">
                 <span style="display:inline-block;background:#ffffff;padding:6px 12px;border-radius:12px;">
-                  <img src="https://pazimo.com/logo.png"
-                    onerror="this.onerror=null;this.src='https://pazimo.vercel.app/logo.png';" alt="Pazimo"
+                  <img src="https://pazimo.com/logo2.png"
+                    onerror="this.onerror=null;this.src='https://pazimo.vercel.app/logo2.png';" alt="Pazimo"
                     style="height:28px;display:block;" />
                 </span>
               </div>
