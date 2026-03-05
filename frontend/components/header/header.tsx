@@ -216,7 +216,7 @@ const Header = () => {
     <>
       {/* Fixed header for mobile, normal for desktop */}
       <header
-        className={`md:relative fixed! bg-white/60 backdrop-blur-2xl top-0 left-0 right-0 z-50 py-3 md:py-4 px-4 sm:px-8 md:px-16 border-b transition-all duration-300 ease-out
+        className={`md:relative fixed! bg-white/40 backdrop-blur-2xl top-0 left-0 right-0 z-50 py-1 md:py-1 px-4 sm:px-8 md:px-16 border-b transition-all duration-300 ease-out
         `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
@@ -227,7 +227,7 @@ const Header = () => {
               className="flex items-center group flex-shrink-0 transition-all duration-300"
             >
               <img
-                src="/logo.png"
+                src="/logo2.png"
                 alt="Pazimo"
                 className="w-16 transition-transform duration-200 group-hover:scale-105"
               />
@@ -261,11 +261,11 @@ const Header = () => {
           </div>
 
           {/* Desktop: Logo */}
-          <Link href="/" className="hidden md:flex items-center group">
+          <Link href="/" className="hidden md:flex items-center group ">
             <img
-              src="/logo.png"
+              src="/logo2.png"
               alt="Pazimo"
-              className="w-40 lg:w-35 transition-transform duration-200 group-hover:scale-105"
+              className="w-40 lg:w-30 h-15 transition-transform duration-200 group-hover:scale-105"
             />
           </Link>
 
