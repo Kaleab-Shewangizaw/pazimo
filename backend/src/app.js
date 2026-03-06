@@ -39,6 +39,8 @@ const allowedOrigins = [
   "https://www.pazimo.vercel.app",
   "https://pazimo-front-end.vercel.app",
   "https://www.pazimo-front-end.vercel.app",
+  "https://pazimo-organizer.vercel.app",
+  "https://www.pazimo-organizer.vercel.app",
   "http://localhost:3000",
   "http://localhost:3001",
   process.env.FRONTEND_URL,
