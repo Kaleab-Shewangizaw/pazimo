@@ -3,13 +3,14 @@ import { Suspense } from "react";
 import EventDetailClient from "./EventDetailClient";
 
 type Props = {
-  searchParams: { id?: string };
+  searchParams: Promise<{ id?: string }>;
 };
 
 export async function generateMetadata({
   searchParams,
 }: Props): Promise<Metadata> {
-  const eventId = searchParams.id;
+  const resolvedSearchParams = await searchParams;
+  const eventId = resolvedSearchParams.id;
 
   if (!eventId) {
     return {

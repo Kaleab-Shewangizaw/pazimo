@@ -51,49 +51,72 @@ class PaymentController {
             
             while (attempts < maxAttempts) {
               try {
+                console.log(`[CHAPA-VERIFY] Attempting to verify transaction ${txn} (attempt ${attempts + 1}/${maxAttempts})`);
                 verifyResponse = await ChapaService.verify(txn);
-                console.log(`Chapa Verify Response for ${txn} (attempt ${attempts + 1}):`, JSON.stringify(verifyResponse, null, 2));
+                console.log(`[CHAPA-VERIFY] Raw Chapa Verify Response for ${txn}:`, JSON.stringify(verifyResponse, null, 2));
                 
-                if (verifyResponse.status === "success" && verifyResponse.data) {
-                  const chapaStatus = verifyResponse.data.status;
-                  console.log(`[DEBUG] Chapa returned status: "${chapaStatus}" (type: ${typeof chapaStatus})`);
+                // Check different possible response structures
+                let apiStatus = null;
+                let paymentStatus = null;
+                
+                if (verifyResponse) {
+                  apiStatus = verifyResponse.status;
+                  paymentStatus = verifyResponse.data?.status || verifyResponse.status;
+                }
 
-                  if (chapaStatus === "success") {
+                const normalizedApiStatus = String(apiStatus || "").toLowerCase();
+                const normalizedPaymentStatus = String(paymentStatus || "").toLowerCase();
+                
+                console.log(`[CHAPA-VERIFY] Extracted apiStatus: "${apiStatus}", paymentStatus: "${paymentStatus}"`);
+                
+                if (normalizedApiStatus === "success" && normalizedPaymentStatus) {
+                  console.log(`[CHAPA-VERIFY] Processing payment status: "${paymentStatus}"`);
+                  
+                  if (normalizedPaymentStatus === "success" || normalizedPaymentStatus === "completed" || normalizedPaymentStatus === "paid") {
+                    console.log(`[CHAPA-VERIFY] ✅ Payment ${txn} is successful, marking as PAID`);
                     payment.status = "PAID";
                     await payment.save();
-                    console.log(`Payment ${txn} marked as PAID, creating tickets...`);
+                    console.log(`[CHAPA-VERIFY] Payment ${txn} marked as PAID, creating tickets...`);
                     await processSuccessfulPayment(payment);
                     break; // Exit retry loop
                   } else if (
-                    chapaStatus === "failed" || 
-                    chapaStatus.includes("failed") ||
-                    chapaStatus.includes("failure")
+                    normalizedPaymentStatus === "failed" || 
+                    normalizedPaymentStatus === "failure" ||
+                    normalizedPaymentStatus.includes("failed") ||
+                    normalizedPaymentStatus.includes("failure")
                   ) {
+                    console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} failed with status: ${paymentStatus}`);
                     payment.status = "FAILED";
                     await payment.save();
-                    console.log(`Payment ${txn} marked as FAILED (Chapa status: ${chapaStatus})`);
+                    console.log(`Payment ${txn} marked as FAILED (Chapa status: ${paymentStatus})`);
                     break;
                   } else if (
-                    chapaStatus === "cancelled" || 
-                    chapaStatus === "canceled" ||
-                    chapaStatus.includes("cancel")
+                    normalizedPaymentStatus === "cancelled" || 
+                    normalizedPaymentStatus === "canceled" ||
+                    normalizedPaymentStatus.includes("cancel")
                   ) {
+                    console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} cancelled with status: ${paymentStatus}`);
                     payment.status = "CANCELLED";
                     await payment.save();
-                    console.log(`Payment ${txn} marked as CANCELLED (Chapa status: ${chapaStatus})`);
+                    console.log(`Payment ${txn} marked as CANCELLED (Chapa status: ${paymentStatus})`);
                     break;
                   } else {
-                    // Status is still pending, retry
-                    console.log(`[DEBUG] Payment still pending, status: "${chapaStatus}"`);
+                    // Status is still pending or unknown
+                    console.log(`[CHAPA-VERIFY] ⏳ Payment ${txn} still pending or unknown status: "${paymentStatus}"`);
                     attempts++;
                     if (attempts < maxAttempts) {
-                      // ⚡ Reduced delay: 200ms, 400ms instead of 1s, 1s
                       const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
+                      console.log(`[CHAPA-VERIFY] Retrying in ${backoff}ms...`);
                       await new Promise(resolve => setTimeout(resolve, backoff));
                     }
                   }
                 } else {
-                  console.log(`[DEBUG] Chapa response doesn't have success status or data:`, verifyResponse);
+                  console.log(`[CHAPA-VERIFY] ⚠️ Chapa response missing success status or data:`, {
+                    hasResponse: !!verifyResponse,
+                    apiStatus,
+                    hasData: !!verifyResponse?.data,
+                    dataKeys: verifyResponse?.data ? Object.keys(verifyResponse.data) : []
+                  });
                   attempts++;
                   if (attempts < maxAttempts) {
                     const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
@@ -101,13 +124,17 @@ class PaymentController {
                   }
                 }
               } catch (verifyError) {
-                console.error(`Chapa verify attempt ${attempts + 1} failed:`, verifyError.message);
+                console.error(`[CHAPA-VERIFY] Attempt ${attempts + 1} failed:`, verifyError.message);
                 attempts++;
                 if (attempts < maxAttempts) {
                   const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
                   await new Promise(resolve => setTimeout(resolve, backoff));
                 }
               }
+            }
+            
+            if (attempts >= maxAttempts) {
+              console.log(`[CHAPA-VERIFY] ❌ All ${maxAttempts} attempts failed for ${txn}`);
             }
           } else {
             // Default to SantimPay

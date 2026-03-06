@@ -100,14 +100,20 @@ const processSuccessfulPayment = async (payment) => {
   }
 
   // Prepare ticket data
+  const paymentCurrency = payment.currency === "USD" ? "USD" : "ETB";
+  const unitPrice =
+    paymentCurrency === "USD"
+      ? Number(ticketTypeInfo.priceUSD ?? ticketTypeInfo.price ?? 0)
+      : Number(ticketTypeInfo.priceETB ?? ticketTypeInfo.price ?? 0);
+
   const ticketData = {
     ticketId,
     event: eventId,
     ticketType: ticketTypeInfo.name, // Ensure we store the name
     ticketCount: ticketCount || 1,
     purchaseQuantity: ticketCount || 1,
-    price: ticketTypeInfo.price * (ticketCount || 1),
-    currency: payment.currency === "USD" ? "USD" : "ETB",
+    price: unitPrice * (ticketCount || 1),
+    currency: paymentCurrency,
     seatNumber,
     paymentReference: payment.transactionId,
     status: "active",

@@ -133,6 +133,21 @@ export default function EventDetailClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const eventId = searchParams.get("id");
+
+  const getSearchParamValue = useCallback(
+    (...keys: string[]) => {
+      for (const key of keys) {
+        const directValue = searchParams.get(key);
+        if (directValue) return directValue;
+
+        const ampKey = `amp;${key}`;
+        const ampValue = searchParams.get(ampKey);
+        if (ampValue) return ampValue;
+      }
+      return null;
+    },
+    [searchParams],
+  );
   
   // Get user from store directly
   const { user } = useAuthStore();
@@ -156,6 +171,7 @@ export default function EventDetailClient() {
   });
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [currentTxRef, setCurrentTxRef] = useState<string | null>(null);
+  const [waitingTicketId, setWaitingTicketId] = useState<string | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
 
   const [showFullDescription, setShowFullDescription] = useState(false);
@@ -325,10 +341,23 @@ export default function EventDetailClient() {
         console.log(`[VERIFY] Payment completed! Fetching tickets...`);
 
         if (statusData.ticketId) {
-          setIsProcessingPayment(false);
-          toast.success("🎉 Payment confirmed! Redirecting to your ticket...");
-          router.replace(`/ticket/${statusData.ticketId}`);
-          return true;
+          setWaitingTicketId(statusData.ticketId);
+          const directTicketResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${statusData.ticketId}`,
+          );
+
+          if (directTicketResponse.ok) {
+            const directTicketData = await directTicketResponse.json();
+            const directTickets = directTicketData.data || [];
+            if (directTickets.length > 0) {
+              setPurchasedTickets(directTickets);
+              setIsProcessingPayment(false);
+              setShowTicketModal(true);
+              router.replace(`/event_detail?id=${eventId || ""}`);
+              toast.success("🎉 Payment confirmed! Your ticket is ready.");
+              return true;
+            }
+          }
         }
         
         // 🔐 AUTO-LOGIN: If backend returns credentials AND user not logged in, log them in
@@ -389,6 +418,10 @@ export default function EventDetailClient() {
           
           if (newTickets.length > 0) {
             console.log(`[VERIFY] ✅ Success! Received ${newTickets.length} ticket(s)`);
+            // if we haven't set waitingTicketId yet, use first ticket
+            if (!waitingTicketId && newTickets[0]?.ticketId) {
+              setWaitingTicketId(newTickets[0].ticketId);
+            }
             setPurchasedTickets(newTickets);
             setIsProcessingPayment(false);
             setShowTicketModal(true);
@@ -428,7 +461,7 @@ export default function EventDetailClient() {
       router.replace(`/event_detail?id=${eventId || ""}`);
       return false;
     }
-  }, [eventId, router]);
+  }, [eventId, router, waitingTicketId]);
 
   // Handle payment initiation - streamlined and optimized
   const handleMobilePayment = useCallback(async (e: React.FormEvent) => {
@@ -448,6 +481,7 @@ export default function EventDetailClient() {
     }
 
     setIsProcessingPayment(true);
+    setWaitingTicketId(null);
 
     try {
       // Use provided email or generate placeholder email
@@ -516,7 +550,7 @@ export default function EventDetailClient() {
           fullName: paymentForm.fullName,
           email: finalEmail,
         },
-        successUrl: `${window.location.origin}/event_detail?id=${eventId}&payment_status=success&tx_ref=${orderId}`,
+        successUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}/event_detail?id=${eventId}&payment_status=success&tx_ref=${orderId}`,
         callbackUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/payments/callback`,
       };
 
@@ -686,9 +720,9 @@ export default function EventDetailClient() {
 
   // Handle payment return from gateway - OPTIMIZED for speed
   useEffect(() => {
-    const txRef = searchParams.get("tx_ref") || searchParams.get("orderId");
-    const status = (searchParams.get("status") || "").toLowerCase();
-    const paymentStatus = (searchParams.get("payment_status") || "").toLowerCase();
+    const txRef = getSearchParamValue("tx_ref", "orderId");
+    const status = (getSearchParamValue("status") || "").toLowerCase();
+    const paymentStatus = (getSearchParamValue("payment_status") || "").toLowerCase();
 
     if (!txRef) return;
 
@@ -704,11 +738,12 @@ export default function EventDetailClient() {
         toast.error("Payment was cancelled");
       } else if (status === "failed" || paymentStatus === "failed") {
         console.log("[PAYMENT-RETURN] Payment marked failed by gateway:", { status, paymentStatus, txRef });
-        toast.error("Payment failed. Please try again.");
+        toast.error("Failed to issue ticket because payment was unsuccessful.");
       }
 
       setIsProcessingPayment(true);
       setCurrentTxRef(txRef);
+      setWaitingTicketId(null);
       cancelPaymentRef.current = false;
       console.log("[PAYMENT-RETURN] Verifying payment status for txRef:", txRef);
       await verifyAndShowTickets(txRef, 0, cancelPaymentRef);
@@ -717,7 +752,7 @@ export default function EventDetailClient() {
     };
 
     processPayment();
-  }, [searchParams, verifyAndShowTickets]);
+  }, [getSearchParamValue, verifyAndShowTickets]);
 
   // Update payment method when provider or currency changes
   useEffect(() => {
@@ -1550,7 +1585,9 @@ export default function EventDetailClient() {
                         <h4 className="font-bold text-lg text-gray-900 mt-2">
                           {ticket.ticketType}
                         </h4>
-                       
+                        {/* <p className="text-sm text-gray-500 mt-1">
+                          Ticket ID: {ticket.ticketId}
+                        </p> */}
                       </div>
                     </div>
                   );
@@ -1814,7 +1851,11 @@ export default function EventDetailClient() {
               This may take a few moments
             </p>
             <p className="text-xs text-gray-500">
-              Checking payment status...
+              {waitingTicketId
+                ? `Ticket ID: ${waitingTicketId} – finalizing...`
+                : currentTxRef
+                ? `Reference: ${currentTxRef}, checking status...`
+                : "Checking payment status..."}
             </p>
             <Button
               variant="outline"
