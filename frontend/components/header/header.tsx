@@ -227,9 +227,9 @@ const Header = () => {
               className="flex items-center group flex-shrink-0 transition-all duration-300"
             >
               <img
-                src="/logo2.png"
+                src="/logo.png"
                 alt="Pazimo"
-                className="w-16 transition-transform duration-200 group-hover:scale-105"
+                className="w-15 h-auto transition-transform duration-200 group-hover:scale-105"
               />
             </Link>
 
@@ -263,9 +263,9 @@ const Header = () => {
           {/* Desktop: Logo */}
           <Link href="/" className="hidden md:flex items-center group ">
             <img
-              src="/logo2.png"
+              src="/logo.png"
               alt="Pazimo"
-              className="w-40 lg:w-30 h-15 transition-transform duration-200 group-hover:scale-105"
+              className="w-36 lg:w-30 h-auto transition-transform duration-200 group-hover:scale-105"
             />
           </Link>
 

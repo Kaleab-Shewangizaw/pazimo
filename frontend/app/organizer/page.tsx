@@ -688,9 +688,7 @@ export default function OrganizerDashboard() {
     .reduce((sum, w: any) => sum + (w.amount || 0), 0);
 
   // Available Balance = (Total Revenue * 0.97) - (Approved Withdrawals) - (Pending Withdrawals)
-  const availableBalance =
-    balance?.availableBalance ??
-    organizerRevenue - totalWithdrawn - pendingWithdrawals;
+  const availableBalance = balance?.availableBalance ?? 0;
 
   // --- Chart Data Preparation ---
 
@@ -1698,10 +1696,13 @@ export default function OrganizerDashboard() {
 
                       const onlineTickets = totalTickets - onDoorTickets;
 
-                      const revenue = tickets.reduce(
-                        (sum, t) => sum + (t.price || 0),
-                        0
-                      );
+                      const revenue = tickets
+                        .filter((t: any) =>
+                          selectedCurrency === "USD"
+                            ? t.currency === "USD"
+                            : !t.currency || t.currency === "ETB"
+                        )
+                        .reduce((sum, t) => sum + (t.price || 0), 0);
 
                       return (
                         <TableRow key={event._id}>

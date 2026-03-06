@@ -1506,9 +1506,9 @@ export default function EventDetailClient() {
       {/* Simple Footer for Event Detail Page */}
       <footer className="mt-12 border-t border-gray-200 py-8 bg-white">
         <div className="container mx-auto px-4 flex flex-col items-center justify-center gap-4">
-          <div className="relative h-8 w-32 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
+          <div className="relative h-10 w-36 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
             <Image
-              src="/logo2.png"
+              src="/logo.png"
               alt="Pazimo Logo"
               fill
               className="object-contain"
