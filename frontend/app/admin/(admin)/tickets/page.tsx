@@ -26,6 +26,13 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface Ticket {
   _id: string;
@@ -55,7 +62,10 @@ interface Ticket {
   purchaseQuantity: number;
   isOnDoor?: boolean;
   paymentStatus?: string;
+  currency?: "ETB" | "USD";
 }
+
+type CurrencyFilter = "ALL" | "ETB" | "USD";
 
 interface Event {
   _id: string;
@@ -107,6 +117,7 @@ export default function TicketsPage() {
 
   // Filter/Pagination State
   const [searchQuery, setSearchQuery] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState<CurrencyFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
   
@@ -193,7 +204,7 @@ export default function TicketsPage() {
   // Reset pagination when search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, currencyFilter]);
 
   // --- Handlers ---
 
@@ -331,15 +342,25 @@ export default function TicketsPage() {
     );
   });
 
+  const getTicketCurrency = (ticket: Ticket): "ETB" | "USD" =>
+    ticket.currency === "USD" ? "USD" : "ETB";
+
+  const currencyFilteredTickets = filteredTickets.filter((ticket) => {
+    if (currencyFilter === "ALL") return true;
+    return getTicketCurrency(ticket) === currencyFilter;
+  });
+
   // Only use client-side pagination when searching
   const isSearching = searchQuery.trim().length > 0;
   const paginatedTickets = isSearching
-    ? filteredTickets.slice(
+    ? currencyFilteredTickets.slice(
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
       )
-    : filteredTickets;
-  const totalTicketPages = Math.ceil(filteredTickets.length / itemsPerPage);
+    : currencyFilteredTickets;
+  const totalTicketPages = Math.ceil(
+    currencyFilteredTickets.length / itemsPerPage
+  );
 
   // Helper to calculate ticket quantity
   const getTicketQuantity = (ticket: Ticket) => {
@@ -371,25 +392,23 @@ export default function TicketsPage() {
     return quantity;
   };
 
-  // Revenue Calculations - Use backend statistics for overall stats
-  // But still calculate from filtered tickets for display
-  const filteredRevenue = filteredTickets.reduce(
-    (sum, t) => sum + (Number(t.price) || 0),
-    0
-  );
-  const filteredTicketsCount = filteredTickets.reduce(
-    (sum, t) => sum + getTicketQuantity(t),
-    0
-  );
-
-  const onDoorTicketsFiltered = filteredTickets.filter((t) => !!t.isOnDoor);
-  const onDoorRevenueFiltered = onDoorTicketsFiltered.reduce(
-    (sum, t) => sum + (Number(t.price) || 0),
-    0
-  );
-  const onDoorTicketsCountFiltered = onDoorTicketsFiltered.reduce(
-    (sum, t) => sum + getTicketQuantity(t),
-    0
+  const totalsByCurrency = filteredTickets.reduce(
+    (acc, ticket) => {
+      const currency = getTicketCurrency(ticket);
+      acc.totalRevenue[currency] += Number(ticket.price) || 0;
+      acc.totalTickets[currency] += getTicketQuantity(ticket);
+      if (ticket.isOnDoor) {
+        acc.onDoorRevenue[currency] += Number(ticket.price) || 0;
+        acc.onDoorTickets[currency] += getTicketQuantity(ticket);
+      }
+      return acc;
+    },
+    {
+      totalRevenue: { ETB: 0, USD: 0 },
+      totalTickets: { ETB: 0, USD: 0 },
+      onDoorRevenue: { ETB: 0, USD: 0 },
+      onDoorTickets: { ETB: 0, USD: 0 },
+    }
   );
 
   // --- Render ---
@@ -548,6 +567,19 @@ export default function TicketsPage() {
             </h1>
             <p className="text-gray-500">Manage tickets for this event</p>
           </div>
+          <Select
+            value={currencyFilter}
+            onValueChange={(value: CurrencyFilter) => setCurrencyFilter(value)}
+          >
+            <SelectTrigger className="w-[140px]">
+              <SelectValue placeholder="Currency" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All</SelectItem>
+              <SelectItem value="ETB">ETB</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -556,11 +588,14 @@ export default function TicketsPage() {
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-            <h3 className="text-2xl font-bold text-gray-900">
-              ETB {statistics.totalRevenue.toLocaleString()}
+            <h3 className="text-lg font-bold text-gray-900">
+              ETB {totalsByCurrency.totalRevenue.ETB.toLocaleString()}
+            </h3>
+            <h3 className="text-lg font-bold text-gray-900">
+              USD {totalsByCurrency.totalRevenue.USD.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {statistics.totalTickets} tickets
+              ETB tickets: {totalsByCurrency.totalTickets.ETB} • USD tickets: {totalsByCurrency.totalTickets.USD}
             </p>
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -571,11 +606,14 @@ export default function TicketsPage() {
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
-            <h3 className="text-2xl font-bold text-gray-900">
-              ETB {statistics.onDoorRevenue.toLocaleString()}
+            <h3 className="text-lg font-bold text-gray-900">
+              ETB {totalsByCurrency.onDoorRevenue.ETB.toLocaleString()}
+            </h3>
+            <h3 className="text-lg font-bold text-gray-900">
+              USD {totalsByCurrency.onDoorRevenue.USD.toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {statistics.onDoorTickets} tickets
+              ETB tickets: {totalsByCurrency.onDoorTickets.ETB} • USD tickets: {totalsByCurrency.onDoorTickets.USD}
             </p>
           </div>
           <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -610,6 +648,7 @@ export default function TicketsPage() {
                   <TableHead>Usage (Used/Total)</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Currency</TableHead>
                   <TableHead>Purchase Date</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -617,7 +656,7 @@ export default function TicketsPage() {
               <TableBody>
                 {loadingTickets ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={8} className="text-center py-8">
                       <div className="flex justify-center items-center gap-2">
                         <Loader2 className="h-6 w-6 animate-spin" />
                         <span>Loading tickets...</span>
@@ -627,7 +666,7 @@ export default function TicketsPage() {
                 ) : paginatedTickets.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={8}
                       className="text-center py-8 text-gray-500"
                     >
                       No tickets found
@@ -678,7 +717,9 @@ export default function TicketsPage() {
                           <span className="text-gray-400 mx-1">/</span>
                           <span className="text-gray-500">{total}</span>
                         </TableCell>
-                        <TableCell>{ticket.price.toFixed(2)} birr</TableCell>
+                        <TableCell>
+                          {ticket.price.toFixed(2)} {getTicketCurrency(ticket)}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             variant={
@@ -694,6 +735,7 @@ export default function TicketsPage() {
                             {ticket.status}
                           </Badge>
                         </TableCell>
+                        <TableCell>{getTicketCurrency(ticket)}</TableCell>
                         <TableCell>
                           {new Date(ticket.purchaseDate).toLocaleString()}
                         </TableCell>

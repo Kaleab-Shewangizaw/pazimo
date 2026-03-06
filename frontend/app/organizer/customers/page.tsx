@@ -50,7 +50,10 @@ interface Ticket {
   isInvitation?: boolean;
   isOnDoor?: boolean;
   purchaseQuantity?: number;
+  currency?: "ETB" | "USD";
 }
+
+type CurrencyFilter = "ALL" | "ETB" | "USD";
 
 export default function CustomersPage() {
   const [events, setEvents] = useState<Event[]>([]);
@@ -72,6 +75,7 @@ export default function CustomersPage() {
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currencyFilter, setCurrencyFilter] = useState<CurrencyFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
@@ -185,7 +189,7 @@ export default function CustomersPage() {
   // Reset pagination on filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedEventId, searchQuery]);
+  }, [selectedEventId, searchQuery, currencyFilter]);
 
   const handleLoadMore = async () => {
     if (!selectedEventId || !hasMoreTickets || isLoadingMore) return;
@@ -222,6 +226,9 @@ export default function CustomersPage() {
   };
 
   const selectedEvent = events.find((e) => e._id === selectedEventId);
+
+  const getTicketCurrency = (ticket: Ticket): "ETB" | "USD" =>
+    ticket.currency === "USD" ? "USD" : "ETB";
 
   // Calculate correct ticket quantity (handles old price changes before Dec 14, 2025)
   const getTicketQuantity = (ticket: Ticket): number => {
@@ -279,33 +286,94 @@ export default function CustomersPage() {
     );
   });
 
-  // Group tickets by type, ondoor/online, and single ticket price
+  const currencyFilteredTickets = filteredTickets.filter((ticket) => {
+    if (currencyFilter === "ALL") return true;
+    return getTicketCurrency(ticket) === currencyFilter;
+  });
+
+  // Group tickets by type, currency, ondoor/online, and single ticket price
   type TicketTypeBreakdown = {
     ticketType: string;
+    currency: "ETB" | "USD";
     isOnDoor: boolean;
     pricePerTicket: number;
     totalSold: number;
     totalRevenue: number;
   };
-  
-  // Filter out ondoor tickets from breakdown for special event
-  const ticketGroups = isSpecialEvent 
-    ? statistics.ticketTypeBreakdown.filter(group => !group.isOnDoor)
-    : statistics.ticketTypeBreakdown;
-  
-  // Total revenue is already correct from backend (includes the ondoor sales)
-  const displayTotalRevenue = statistics.totalRevenue;
 
-  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
+  const ticketGroups = currencyFilteredTickets.reduce<TicketTypeBreakdown[]>(
+    (groups, ticket) => {
+      const quantity = getTicketQuantity(ticket);
+      const pricePerTicket = quantity > 0 ? ticket.price / quantity : 0;
+      const currency = getTicketCurrency(ticket);
+      const key = `${ticket.ticketType}|${currency}|${ticket.isOnDoor ? "ondoor" : "online"}|${pricePerTicket}`;
+      const existing = groups.find(
+        (group) =>
+          `${group.ticketType}|${group.currency}|${group.isOnDoor ? "ondoor" : "online"}|${group.pricePerTicket}` === key,
+      );
+
+      if (existing) {
+        existing.totalSold += quantity;
+        existing.totalRevenue += ticket.price || 0;
+      } else {
+        groups.push({
+          ticketType: ticket.ticketType,
+          currency,
+          isOnDoor: !!ticket.isOnDoor,
+          pricePerTicket,
+          totalSold: quantity,
+          totalRevenue: ticket.price || 0,
+        });
+      }
+
+      return groups;
+    },
+    [],
+  );
+
+  const totalRevenueByCurrency = filteredTickets.reduce(
+    (acc, ticket) => {
+      const currency = getTicketCurrency(ticket);
+      acc[currency] += ticket.price || 0;
+      return acc;
+    },
+    { ETB: 0, USD: 0 },
+  );
+
+  const totalTicketsByCurrency = filteredTickets.reduce(
+    (acc, ticket) => {
+      const currency = getTicketCurrency(ticket);
+      acc[currency] += getTicketQuantity(ticket);
+      return acc;
+    },
+    { ETB: 0, USD: 0 },
+  );
+
+  const onDoorByCurrency = filteredTickets
+    .filter((ticket) => ticket.isOnDoor)
+    .reduce(
+      (acc, ticket) => {
+        const currency = getTicketCurrency(ticket);
+        acc.revenue[currency] += ticket.price || 0;
+        acc.tickets[currency] += getTicketQuantity(ticket);
+        return acc;
+      },
+      {
+        revenue: { ETB: 0, USD: 0 },
+        tickets: { ETB: 0, USD: 0 },
+      },
+    );
+
+  const totalPages = Math.ceil(currencyFilteredTickets.length / itemsPerPage);
   
   // Only use client-side pagination when searching
   const isSearching = searchQuery.trim().length > 0;
   const paginatedTickets = isSearching
-    ? filteredTickets.slice(
+    ? currencyFilteredTickets.slice(
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
       )
-    : filteredTickets;
+    : currencyFilteredTickets;
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
@@ -321,6 +389,25 @@ export default function CustomersPage() {
 
       {/* Filters & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Currency
+          </label>
+          <Select
+            value={currencyFilter}
+            onValueChange={(value: CurrencyFilter) => setCurrencyFilter(value)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="All currencies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All</SelectItem>
+              <SelectItem value="ETB">ETB</SelectItem>
+              <SelectItem value="USD">USD</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Event Selector */}
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -358,11 +445,10 @@ export default function CustomersPage() {
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-            <h3 className="text-2xl font-bold text-gray-900">
-              ETB {displayTotalRevenue.toLocaleString()}
-            </h3>
+            <h3 className="text-lg font-bold text-gray-900">ETB {totalRevenueByCurrency.ETB.toLocaleString()}</h3>
+            <h3 className="text-lg font-bold text-gray-900">USD {totalRevenueByCurrency.USD.toLocaleString()}</h3>
             <p className="text-xs text-gray-500 mt-1">
-              From {statistics.totalTickets} tickets
+              ETB tickets: {totalTicketsByCurrency.ETB} • USD tickets: {totalTicketsByCurrency.USD}
             </p>
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -378,7 +464,7 @@ export default function CustomersPage() {
           >
             <div>
               <p className="text-sm font-medium text-gray-700">
-                {group.ticketType} {group.isOnDoor ? "On-Door" : "Online"} @ ETB{" "}
+                {group.ticketType} {group.isOnDoor ? "On-Door" : "Online"} @ {group.currency}{" "}
                 {group.pricePerTicket.toLocaleString()}
               </p>
               <p className="text-xl font-bold text-gray-900 mt-1">
@@ -400,11 +486,10 @@ export default function CustomersPage() {
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
-              <h3 className="text-2xl font-bold text-gray-900">
-                ETB {statistics.onDoorRevenue.toLocaleString()}
-              </h3>
+              <h3 className="text-lg font-bold text-gray-900">ETB {onDoorByCurrency.revenue.ETB.toLocaleString()}</h3>
+              <h3 className="text-lg font-bold text-gray-900">USD {onDoorByCurrency.revenue.USD.toLocaleString()}</h3>
               <p className="text-xs text-gray-500 mt-1">
-                From {statistics.onDoorTickets} tickets
+                ETB tickets: {onDoorByCurrency.tickets.ETB} • USD tickets: {onDoorByCurrency.tickets.USD}
               </p>
             </div>
             <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -419,7 +504,7 @@ export default function CustomersPage() {
         <div className="p-6 border-b border-gray-200">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <h2 className="text-lg font-semibold text-gray-900">
-              Ticket Sales ({filteredTickets.length})
+              Ticket Sales ({currencyFilteredTickets.length})
             </h2>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -526,7 +611,7 @@ export default function CustomersPage() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-sm font-bold text-gray-900">
-                          ETB {ticket.price.toLocaleString()}
+                          {getTicketCurrency(ticket)} {ticket.price.toLocaleString()}
                         </p>
                         <p className="text-xs text-gray-500">
                           {ticket.paymentStatus}
@@ -572,8 +657,8 @@ export default function CustomersPage() {
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
             <p className="text-sm text-gray-600">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-              {Math.min(currentPage * itemsPerPage, filteredTickets.length)} of{" "}
-              {filteredTickets.length} tickets
+              {Math.min(currentPage * itemsPerPage, currencyFilteredTickets.length)} of{" "}
+              {currencyFilteredTickets.length} tickets
             </p>
             <div className="flex gap-2">
               <Button

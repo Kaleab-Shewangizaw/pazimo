@@ -92,6 +92,7 @@ interface TicketType {
 }
 
 interface TicketData {
+  purchaseDate: string;
   _id: string;
   event: string | EventData;
   user: {
@@ -107,6 +108,7 @@ interface TicketData {
   paymentStatus?: string;
   purchaseQuantity?: number;
   ticketCount?: number;
+  currency?: "ETB" | "USD";
 }
 
 interface RevenueBreakdown {
@@ -183,9 +185,11 @@ const getTicketQuantity = (ticket: TicketData, event: EventData) => {
 const EventCardWithStats = ({
   event,
   token,
+  selectedCurrency,
 }: {
   event: EventData;
   token: string | null;
+  selectedCurrency: "ETB" | "USD";
 }) => {
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,7 +238,10 @@ const EventCardWithStats = ({
     const validTickets = tickets.filter(
       (t: any) =>
         t.paymentStatus === "completed" &&
-        !["cancelled", "pending", "expired"].includes(t.status)
+        !["cancelled", "pending", "expired"].includes(t.status) &&
+        (selectedCurrency === "USD"
+          ? t.currency === "USD"
+          : !t.currency || t.currency === "ETB")
     );
     return validTickets.reduce((sum, t) => sum + (t.price || 0), 0);
   };
@@ -279,7 +286,7 @@ const EventCardWithStats = ({
               <p className="text-sm font-medium text-gray-600">Tickets Sold</p>
               <p className="text-lg font-bold text-blue-600">{ticketsSold}</p>
               <p className="text-sm text-gray-600">
-                Revenue: {revenue.toFixed(2)} Birr
+                Revenue: {revenue.toFixed(2)} {selectedCurrency}
               </p>
             </>
           )}
@@ -299,6 +306,7 @@ export default function OrganizersPage() {
   const [organizerPage, setOrganizerPage] = useState(1);
   const [organizerTotalPages, setOrganizerTotalPages] = useState(1);
   const [organizerItemsPerPage, setOrganizerItemsPerPage] = useState(10);
+  const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawNotes, setWithdrawNotes] = useState("");
@@ -328,7 +336,7 @@ export default function OrganizersPage() {
 
   useEffect(() => {
     fetchOrganizers();
-  }, [organizerPage, organizerItemsPerPage]);
+  }, [organizerPage, organizerItemsPerPage, selectedCurrency]);
 
   const fetchOrganizers = async () => {
     try {
@@ -394,7 +402,7 @@ export default function OrganizersPage() {
         organizersWithEvents.map(async (organizer: OrganizerData) => {
           try {
             const balanceResponse = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${organizer._id}/balance`,
+              `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${organizer._id}/balance?currency=${selectedCurrency}`,
               {
                 headers: {
                   Accept: "application/json",
@@ -534,6 +542,7 @@ export default function OrganizersPage() {
           body: JSON.stringify({
             organizerId: selectedOrganizer._id,
             amount: Number.parseFloat(withdrawAmount),
+            currency: selectedCurrency,
             notes: withdrawNotes,
             bankDetails,
           }),
@@ -565,7 +574,7 @@ export default function OrganizersPage() {
   const fetchOrganizerBalance = async (organizerId: string) => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${organizerId}/balance`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${organizerId}/balance?currency=${selectedCurrency}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -597,7 +606,11 @@ export default function OrganizersPage() {
 
               // Filter paid tickets only (exclude free/invitation) similar to organizer/customers
               const paidTickets = event.tickets.filter((ticket) => {
-                return !!ticket.price && ticket.price > 0;
+                const matchesCurrency =
+                  selectedCurrency === "USD"
+                    ? ticket.currency === "USD"
+                    : !ticket.currency || ticket.currency === "ETB";
+                return !!ticket.price && ticket.price > 0 && matchesCurrency;
               });
 
               // Helper to calculate correct quantity (reuse getTicketQuantity)
@@ -674,12 +687,21 @@ export default function OrganizersPage() {
   };
 
   // Helper function to calculate revenue from all tickets
-  const calculateRevenue = (tickets: TicketData[]) => {
+  const calculateRevenue = (
+    tickets: TicketData[],
+    currency: "ETB" | "USD" = selectedCurrency
+  ) => {
     if (!tickets || tickets.length === 0) return 0;
 
     // Use ALL tickets for revenue calculation as requested
     // We sum up the price of every ticket, regardless of status or type
-    return tickets.reduce((sum, ticket) => {
+    return tickets
+      .filter((ticket: any) =>
+        currency === "USD"
+          ? ticket.currency === "USD"
+          : !ticket.currency || ticket.currency === "ETB"
+      )
+      .reduce((sum, ticket) => {
       return sum + (ticket.price || 0);
     }, 0);
   };
@@ -736,6 +758,18 @@ export default function OrganizersPage() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
+            <Select
+              value={selectedCurrency}
+              onValueChange={(value: "ETB" | "USD") => setSelectedCurrency(value)}
+            >
+              <SelectTrigger className="w-full sm:w-[120px]">
+                <SelectValue placeholder="Currency" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ETB">ETB</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
@@ -820,7 +854,7 @@ export default function OrganizersPage() {
                   Total Revenue
                 </p>
                 <p className="text-sm font-bold text-gray-900">
-                  {(stats.totalRevenue || 0).toFixed(2)} Birr
+                  {(stats.totalRevenue || 0).toFixed(2)} {selectedCurrency}
                 </p>
               </div>
             </CardContent>
@@ -833,7 +867,7 @@ export default function OrganizersPage() {
                   Organizer Revenue (97%)
                 </p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(stats.organizerRevenue || 0).toFixed(2)} Birr
+                  {(stats.organizerRevenue || 0).toFixed(2)} {selectedCurrency}
                 </p>
               </div>
             </CardContent>
@@ -846,7 +880,7 @@ export default function OrganizersPage() {
                   Pazimo Commission (3%)
                 </p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(stats.pazimoCommission || 0).toFixed(2)} Birr
+                  {(stats.pazimoCommission || 0).toFixed(2)} {selectedCurrency}
                 </p>
               </div>
             </CardContent>
@@ -1070,21 +1104,21 @@ export default function OrganizersPage() {
                   <div>
                     <p className="text-gray-600">Total Revenue</p>
                     <p className="font-semibold text-gray-900">
-                      {(selectedOrganizer.totalRevenue || 0).toFixed(2)} Birr
+                      {(selectedOrganizer.totalRevenue || 0).toFixed(2)} {selectedCurrency}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">Organizer Revenue (97%)</p>
                     <p className="font-semibold text-purple-600">
                       {(selectedOrganizer.organizerRevenue || 0).toFixed(2)}{" "}
-                      Birr
+                      {selectedCurrency}
                     </p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-gray-600">Available Balance</p>
                     <p className="font-semibold text-green-600 text-lg">
                       {(selectedOrganizer.availableBalance || 0).toFixed(2)}{" "}
-                      Birr
+                      {selectedCurrency}
                     </p>
                   </div>
                 </div>
@@ -1092,7 +1126,7 @@ export default function OrganizersPage() {
             )}
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label className="text-gray-700">Amount (Birr)</Label>
+                <Label className="text-gray-700">Amount ({selectedCurrency})</Label>
                 <Input
                   type="number"
                   value={withdrawAmount}
@@ -1304,7 +1338,7 @@ export default function OrganizersPage() {
                         Total Revenue
                       </div>
                       <div className="text-lg font-bold text-green-600 mt-1">
-                        {organizerBalance.totalRevenue.toFixed(2)} Birr
+                        {organizerBalance.totalRevenue.toFixed(2)} {selectedCurrency}
                       </div>
                     </CardContent>
                   </Card>
@@ -1318,7 +1352,7 @@ export default function OrganizersPage() {
                           organizerBalance.organizerRevenue ||
                           organizerBalance.totalRevenue * 0.97
                         ).toFixed(2)}{" "}
-                        Birr
+                        {selectedCurrency}
                       </div>
                     </CardContent>
                   </Card>
@@ -1332,7 +1366,7 @@ export default function OrganizersPage() {
                           organizerBalance.pazimoCommission ||
                           organizerBalance.totalRevenue * 0.03
                         ).toFixed(2)}{" "}
-                        Birr
+                        {selectedCurrency}
                       </div>
                     </CardContent>
                   </Card>
@@ -1343,7 +1377,7 @@ export default function OrganizersPage() {
                       </div>
                       <div className="text-lg font-bold text-orange-600 mt-1">
                         {(organizerBalance.approvedWithdrawals || 0).toFixed(2)}{" "}
-                        Birr
+                        {selectedCurrency}
                       </div>
                     </CardContent>
                   </Card>
@@ -1353,7 +1387,7 @@ export default function OrganizersPage() {
                         Available Balance
                       </div>
                       <div className="text-lg font-bold text-purple-600 mt-1">
-                        {organizerBalance.availableBalance.toFixed(2)} Birr
+                        {organizerBalance.availableBalance.toFixed(2)} {selectedCurrency}
                       </div>
                     </CardContent>
                   </Card>
@@ -1391,7 +1425,7 @@ export default function OrganizersPage() {
                           </div>
                           <div className="text-right">
                             <div className="text-lg font-bold text-green-600">
-                              {event.totalRevenue.toFixed(2)} Birr
+                              {event.totalRevenue.toFixed(2)} {selectedCurrency}
                             </div>
                             <div className="text-sm text-gray-600">
                               Total Revenue
@@ -1406,7 +1440,7 @@ export default function OrganizersPage() {
                               Online Sales
                             </div>
                             <div className="text-lg font-semibold text-blue-600">
-                              {event.onlineRevenue?.toFixed(2) || "0.00"} Birr
+                              {event.onlineRevenue?.toFixed(2) || "0.00"} {selectedCurrency}
                             </div>
                             <div className="text-xs text-gray-500">
                               {event.onlineTicketsSold || 0} tickets
@@ -1417,7 +1451,7 @@ export default function OrganizersPage() {
                               On-Door Sales
                             </div>
                             <div className="text-lg font-semibold text-purple-600">
-                              {event.onDoorRevenue?.toFixed(2) || "0.00"} Birr
+                              {event.onDoorRevenue?.toFixed(2) || "0.00"} {selectedCurrency}
                             </div>
                             <div className="text-xs text-gray-500">
                               {event.onDoorTicketsSold || 0} tickets
@@ -1447,10 +1481,10 @@ export default function OrganizersPage() {
                                 </div>
                                 <div className="text-right">
                                   <div className="text-green-600 font-medium">
-                                    {type.totalRevenue.toFixed(2)} Birr
+                                    {type.totalRevenue.toFixed(2)} {selectedCurrency}
                                   </div>
                                   <div className="text-gray-600">
-                                    {type.pricePerTicket.toFixed(2)} Birr each
+                                    {type.pricePerTicket.toFixed(2)} {selectedCurrency} each
                                   </div>
                                 </div>
                               </div>
@@ -1469,7 +1503,7 @@ export default function OrganizersPage() {
                       Pending Withdrawals
                     </h3>
                     <p className="text-yellow-700">
-                      {organizerBalance.pendingWithdrawals.toFixed(2)} Birr
+                      {organizerBalance.pendingWithdrawals.toFixed(2)} {selectedCurrency}
                       pending
                     </p>
                   </div>
@@ -1572,11 +1606,11 @@ export default function OrganizersPage() {
                           {selectedOrganizer.events
                             .reduce(
                               (sum, event) =>
-                                sum + calculateRevenue(event.tickets || []),
+                                sum + calculateRevenue(event.tickets || [], selectedCurrency),
                               0
                             )
                             .toFixed(2)}{" "}
-                          Birr
+                          {selectedCurrency}
                         </p>
                       </div>
                     </div>
@@ -1592,6 +1626,7 @@ export default function OrganizersPage() {
                             key={event._id}
                             event={event}
                             token={token}
+                            selectedCurrency={selectedCurrency}
                           />
                         ))}
                       </div>
@@ -1648,7 +1683,7 @@ export default function OrganizersPage() {
                                       {type.quantity} available
                                     </span>
                                     <span className="text-sm font-medium text-green-600">
-                                      {type.price.toFixed(2)} Birr
+                                      {type.price.toFixed(2)} {selectedCurrency}
                                     </span>
                                   </div>
                                   <div className="mt-1 text-xs text-blue-600 font-medium">
