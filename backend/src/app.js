@@ -32,25 +32,60 @@ const { sendSMS } = require("./utils/sms");
 const app = express();
 
 // ------------------- CORS ------------------- //
-const allowedOrigins = [
-  "https://pazimo-ktzi.vercel.app",
-  "https://www.pazimo-ktzi.vercel.app",
-  "https://pazimo.vercel.app",
-  "https://www.pazimo.vercel.app",
-  "https://pazimo-front-end.vercel.app",
-  "https://www.pazimo-front-end.vercel.app",
-  "https://pazimo-organizer.vercel.app",
-  "https://www.pazimo-organizer.vercel.app",
-  "http://localhost:3000",
-  "http://localhost:3001",
-  process.env.FRONTEND_URL,
-].filter(Boolean);
+const normalizeOrigin = (value) => {
+  if (!value || typeof value !== "string") return null;
+  return value.trim().replace(/\/$/, "");
+};
+
+const parseOriginList = (value) =>
+  (value || "")
+    .split(",")
+    .map((item) => normalizeOrigin(item))
+    .filter(Boolean);
+
+const allowedOrigins = new Set(
+  [
+    "https://pazimo.com",
+    "https://www.pazimo.com",
+    "http://pazimo.com",
+    "http://www.pazimo.com",
+    "https://pazimo-ktzi.vercel.app",
+    "https://www.pazimo-ktzi.vercel.app",
+    "https://pazimo.vercel.app",
+    "https://www.pazimo.vercel.app",
+    "https://pazimo-front-end.vercel.app",
+    "https://www.pazimo-front-end.vercel.app",
+    "https://pazimo-organizer.vercel.app",
+    "https://www.pazimo-organizer.vercel.app",
+    "http://localhost:3000",
+    ...parseOriginList(process.env.FRONTEND_URL),
+    ...parseOriginList(process.env.CORS_ORIGIN),
+    ...parseOriginList(process.env.CORS_ORIGINS),
+  ]
+    .map((origin) => normalizeOrigin(origin))
+    .filter(Boolean)
+);
+
+const isAllowedOrigin = (origin) => {
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return true;
+
+  if (allowedOrigins.has(normalizedOrigin)) {
+    return true;
+  }
+
+  if (/^https?:\/\/(.+\.)?pazimo\.com$/i.test(normalizedOrigin)) {
+    return true;
+  }
+
+  return /^http:\/\/localhost:\d+$/i.test(normalizedOrigin);
+};
 
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true); // allow non-browser requests (Postman, curl)
 
-    if (allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true); // 
     } else {
       console.log("Blocked CORS request from:", origin);
@@ -59,7 +94,6 @@ const corsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept"],
   exposedHeaders: ["Content-Range", "X-Content-Range"],
   maxAge: 600,
 };
