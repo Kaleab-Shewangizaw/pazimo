@@ -108,6 +108,9 @@ class PaymentService {
                 });
             }
 
+            const normalizedMeta =
+                meta && typeof meta === 'object' && !Array.isArray(meta) ? meta : {};
+
             const payload = {
                 amount,
                 currency,
@@ -118,7 +121,10 @@ class PaymentService {
                 callback_url,
                 return_url,
                 customization: sanitizedCustomization,
-                meta
+                meta: {
+                    ...normalizedMeta,
+                    hide_receipt: true
+                }
             };
 
             if (phone_number) payload.phone_number = phone_number;

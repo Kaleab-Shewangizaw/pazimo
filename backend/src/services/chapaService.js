@@ -28,20 +28,28 @@ class ChapaService {
   async initialize(data) {
     // data: { amount, currency, email, first_name, last_name, phone_number, tx_ref, callback_url, return_url, customization }
     // Uses raw axios instead of the SDK — gives accurate error messages and full control.
+    const payload = {
+      ...data,
+      meta: {
+        ...(data.meta || {}),
+        hide_receipt: true,
+      },
+    };
 
     console.log(`[CHAPA-SERVICE] Initialize (Web Checkout) payload:`, {
-      amount: data.amount,
-      currency: data.currency,
-      email: data.email,
-      tx_ref: data.tx_ref,
-      phone_number: data.phone_number ? data.phone_number.substring(0, 8) + "***" : "(omitted - international number)",
-      callback_url: data.callback_url?.substring(0, 40) + "...",
+      amount: payload.amount,
+      currency: payload.currency,
+      email: payload.email,
+      tx_ref: payload.tx_ref,
+      phone_number: payload.phone_number ? payload.phone_number.substring(0, 8) + "***" : "(omitted - international number)",
+      callback_url: payload.callback_url?.substring(0, 40) + "...",
+      hide_receipt: payload.meta?.hide_receipt,
     });
 
     try {
       const response = await axios.post(
         "https://api.chapa.co/v1/transaction/initialize",
-        data,
+        payload,
         {
           headers: {
             Authorization: `Bearer ${process.env.CHAPA_SECRET_KEY}`,
