@@ -109,6 +109,8 @@ const SkeletonCard = () => (
 );
 
 export default function OrganizerDashboard() {
+  type SalesPeriod = "daily" | "weekly" | "monthly" | "all-time";
+
   const router = useRouter();
   const { events, isLoading, error, fetchEvents } = useEventStore();
   const [user, setUser] = useState<any>(null);
@@ -134,6 +136,7 @@ export default function OrganizerDashboard() {
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">(
     "ETB"
   );
+  const [salesPeriod, setSalesPeriod] = useState<SalesPeriod>("all-time");
 
   // Pagination states
   const [eventsPage, setEventsPage] = useState(1);
@@ -628,47 +631,74 @@ export default function OrganizerDashboard() {
     return quantity;
   };
 
-  const totalTicketsSold = Object.entries(allTicketsByEvent).reduce(
-    (sum, [eventId, tickets]) =>
-      sum +
-      tickets.reduce(
-        (s: number, t: any) => s + getTicketQuantity(t, eventId),
-        0
-      ),
-    0
-  );
-  const totalUsedTickets = Object.entries(allTicketsByEvent).reduce(
-    (sum, [eventId, tickets]) =>
-      sum +
-      tickets
-        .filter((t: any) => t.status === "used")
-        .reduce((s: number, t: any) => s + getTicketQuantity(t, eventId), 0),
-    0
-  );
-  const totalActiveTickets = Object.entries(activeTicketsByEvent).reduce(
-    (sum, [eventId, tickets]) =>
-      sum +
-      tickets.reduce(
-        (s: number, t: any) => s + getTicketQuantity(t, eventId),
-        0
-      ),
-    0
-  );
-  const totalConfirmedTickets = Object.values(allTicketsByEvent).reduce(
-    (sum, tickets) =>
-      sum + tickets.filter((t: any) => t.status === "confirmed").length,
-    0
-  );
-
   // --- Client-Side Revenue Calculation ---
   // We calculate these values directly from the fetched tickets and withdrawals
   // to ensure perfect consistency with the data displayed to the user.
 
-  const allTicketsFlat = Object.values(allTicketsByEvent).flat();
-  const currencyTickets = allTicketsFlat.filter((t: any) =>
+  const salesPeriodLabels: Record<SalesPeriod, string> = {
+    daily: "Today",
+    weekly: "This Week",
+    monthly: "This Month",
+    "all-time": "All Time",
+  };
+
+  const getSalesPeriodStartDate = (period: SalesPeriod) => {
+    const now = new Date();
+
+    if (period === "daily") {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      return start;
+    }
+
+    if (period === "weekly") {
+      const start = new Date(now);
+      const day = start.getDay();
+      const diffToMonday = day === 0 ? 6 : day - 1;
+      start.setDate(start.getDate() - diffToMonday);
+      start.setHours(0, 0, 0, 0);
+      return start;
+    }
+
+    if (period === "monthly") {
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    return null;
+  };
+
+  const isInSelectedSalesPeriod = (ticket: any) => {
+    if (salesPeriod === "all-time") return true;
+
+    const startDate = getSalesPeriodStartDate(salesPeriod);
+    if (!startDate) return true;
+
+    const sourceDate = ticket.createdAt || ticket.purchaseDate || ticket.updatedAt;
+    if (!sourceDate) return false;
+
+    const ticketDate = new Date(sourceDate);
+    if (Number.isNaN(ticketDate.getTime())) return false;
+
+    return ticketDate >= startDate;
+  };
+
+  const matchesSelectedCurrency = (ticket: any) =>
     selectedCurrency === "USD"
-      ? t.currency === "USD"
-      : !t.currency || t.currency === "ETB"
+      ? ticket.currency === "USD"
+      : !ticket.currency || ticket.currency === "ETB";
+
+  const filterTicketsBySalesPeriod = (tickets: any[]) =>
+    tickets.filter((ticket) => isInSelectedSalesPeriod(ticket));
+
+  const filterTicketsBySalesPeriodAndCurrency = (tickets: any[]) =>
+    tickets.filter(
+      (ticket) => isInSelectedSalesPeriod(ticket) && matchesSelectedCurrency(ticket)
+    );
+
+  const allTicketsFlat = Object.values(allTicketsByEvent).flat();
+  const periodTickets = filterTicketsBySalesPeriod(allTicketsFlat as any[]);
+  const currencyTickets = filterTicketsBySalesPeriodAndCurrency(
+    allTicketsFlat as any[]
   );
 
   // Use ALL tickets for revenue calculation as requested by user to match the table
@@ -692,18 +722,25 @@ export default function OrganizerDashboard() {
 
   // --- Chart Data Preparation ---
 
+  const totalTicketsSold = periodTickets.reduce(
+    (sum, t: any) => sum + getTicketQuantity(t, t.event?._id || t.event),
+    0
+  );
+  const totalUsedTickets = periodTickets
+    .filter((t: any) => t.status === "used")
+    .reduce(
+      (sum, t: any) => sum + getTicketQuantity(t, t.event?._id || t.event),
+      0
+    );
   // Revenue trend data (last 6 months)
   const revenueData = events.slice(0, 6).map((event) => {
     const allTickets = allTicketsByEvent[event._id] || [];
-    // Use all tickets for charts to match total revenue
-    const revenue = allTickets
-      .filter((t: any) =>
-        selectedCurrency === "USD"
-          ? t.currency === "USD"
-          : !t.currency || t.currency === "ETB"
-      )
+    const filteredTickets = filterTicketsBySalesPeriodAndCurrency(allTickets);
+    const periodEventTickets = filterTicketsBySalesPeriod(allTickets);
+
+    const revenue = filteredTickets
       .reduce((sum, t) => sum + (t.price || 0), 0);
-    const ticketCount = allTickets.reduce(
+    const ticketCount = periodEventTickets.reduce(
       (sum, t) => sum + getTicketQuantity(t, event._id),
       0
     );
@@ -728,14 +765,12 @@ export default function OrganizerDashboard() {
   // Monthly performance data
   const monthlyData = events.slice(0, 12).map((event, index) => {
     const allTickets = allTicketsByEvent[event._id] || [];
-    const revenue = allTickets
-      .filter((t: any) =>
-        selectedCurrency === "USD"
-          ? t.currency === "USD"
-          : !t.currency || t.currency === "ETB"
-      )
+    const filteredTickets = filterTicketsBySalesPeriodAndCurrency(allTickets);
+    const periodEventTickets = filterTicketsBySalesPeriod(allTickets);
+
+    const revenue = filteredTickets
       .reduce((sum, t) => sum + (t.price || 0), 0);
-    const ticketCount = allTickets.reduce(
+    const ticketCount = periodEventTickets.reduce(
       (sum, t) => sum + getTicketQuantity(t, event._id),
       0
     );
@@ -755,14 +790,12 @@ export default function OrganizerDashboard() {
   const topEvents = events
     .map((event) => {
       const allTickets = allTicketsByEvent[event._id] || [];
-      const revenue = allTickets
-        .filter((t: any) =>
-          selectedCurrency === "USD"
-            ? t.currency === "USD"
-            : !t.currency || t.currency === "ETB"
-        )
+      const filteredTickets = filterTicketsBySalesPeriodAndCurrency(allTickets);
+      const periodEventTickets = filterTicketsBySalesPeriod(allTickets);
+
+      const revenue = filteredTickets
         .reduce((sum, t) => sum + (t.price || 0), 0);
-      const ticketCount = allTickets.reduce(
+      const ticketCount = periodEventTickets.reduce(
         (sum, t) => sum + getTicketQuantity(t, event._id),
         0
       );
@@ -780,7 +813,10 @@ export default function OrganizerDashboard() {
   const statCards = [
     {
       id: "revenue",
-      title: "Total Revenue",
+      title:
+        salesPeriod === "all-time"
+          ? "Total Revenue"
+          : `${salesPeriodLabels[salesPeriod]} Revenue`,
       value: totalRevenue,
       icon: DollarSign,
       iconBg: "bg-green-100",
@@ -810,7 +846,10 @@ export default function OrganizerDashboard() {
     },
     {
       id: "tickets",
-      title: "Total Tickets Sold",
+      title:
+        salesPeriod === "all-time"
+          ? "Total Tickets Sold"
+          : `${salesPeriodLabels[salesPeriod]} Tickets Sold`,
       value: totalTicketsSold,
       icon: Ticket,
       iconBg: "bg-blue-100",
@@ -820,7 +859,10 @@ export default function OrganizerDashboard() {
     },
     {
       id: "used-tickets",
-      title: "Used Tickets",
+      title:
+        salesPeriod === "all-time"
+          ? "Used Tickets"
+          : `${salesPeriodLabels[salesPeriod]} Used Tickets`,
       value: totalUsedTickets,
       icon: CheckCircle,
       iconBg: "bg-purple-100",
@@ -987,7 +1029,7 @@ export default function OrganizerDashboard() {
           </CardContent>
         </Card>
         {/* Stat Cards (Top Row) */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
               <span className="text-sm font-medium text-gray-700">
                 Currency
               </span>
@@ -1003,6 +1045,23 @@ export default function OrganizerDashboard() {
                 <SelectContent>
                   <SelectItem value="ETB">ETB</SelectItem>
                   <SelectItem value="USD">USD</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="text-sm font-medium text-gray-700 sm:ml-4">
+                Sales Period
+              </span>
+              <Select
+                value={salesPeriod}
+                onValueChange={(value: SalesPeriod) => setSalesPeriod(value)}
+              >
+                <SelectTrigger className="w-[170px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="all-time">All Time</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1187,7 +1246,9 @@ export default function OrganizerDashboard() {
                 Revenue Trend
               </CardTitle>
               <CardDescription className="text-sm text-gray-600">
-                Ticket sales over recent events
+                {salesPeriod === "all-time"
+                  ? "Ticket sales over recent events"
+                  : `Ticket sales for ${salesPeriodLabels[salesPeriod].toLowerCase()}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -1333,7 +1394,9 @@ export default function OrganizerDashboard() {
                 Monthly Performance
               </CardTitle>
               <CardDescription className="text-sm text-gray-600">
-                Revenue vs Tickets Sold
+                {salesPeriod === "all-time"
+                  ? "Revenue vs Tickets Sold"
+                  : `Revenue vs Tickets Sold (${salesPeriodLabels[salesPeriod]})`}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -1405,7 +1468,9 @@ export default function OrganizerDashboard() {
                 Top Performing Events
               </CardTitle>
               <CardDescription className="text-sm text-gray-600">
-                Highest revenue generators
+                {salesPeriod === "all-time"
+                  ? "Highest revenue generators"
+                  : `Highest revenue generators (${salesPeriodLabels[salesPeriod]})`}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
@@ -1642,6 +1707,7 @@ export default function OrganizerDashboard() {
                   ) : (
                     paginatedAnalytics.map((event) => {
                       const tickets = allTicketsByEvent[event._id] || [];
+                      const periodTickets = filterTicketsBySalesPeriod(tickets);
 
                       // Helper to calculate quantity for a ticket
                       const getQuantity = (t: any) => {
@@ -1680,28 +1746,24 @@ export default function OrganizerDashboard() {
                         return quantity;
                       };
 
-                      const totalTickets = tickets.reduce(
+                      const totalTickets = periodTickets.reduce(
                         (sum, t) => sum + getQuantity(t),
                         0
                       );
-                      const activeTickets = tickets
+                      const activeTickets = periodTickets
                         .filter((t: any) => t.status === "active")
                         .reduce((sum, t) => sum + getQuantity(t), 0);
-                      const usedTickets = tickets
+                      const usedTickets = periodTickets
                         .filter((t: any) => t.status === "used")
                         .reduce((sum, t) => sum + getQuantity(t), 0);
-                      const onDoorTickets = tickets
+                      const onDoorTickets = periodTickets
                         .filter((t: any) => t.isOnDoor === true)
                         .reduce((sum, t) => sum + getQuantity(t), 0);
 
                       const onlineTickets = totalTickets - onDoorTickets;
 
-                      const revenue = tickets
-                        .filter((t: any) =>
-                          selectedCurrency === "USD"
-                            ? t.currency === "USD"
-                            : !t.currency || t.currency === "ETB"
-                        )
+                      const revenue = periodTickets
+                        .filter((t: any) => matchesSelectedCurrency(t))
                         .reduce((sum, t) => sum + (t.price || 0), 0);
 
                       return (
