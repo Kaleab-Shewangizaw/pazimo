@@ -34,6 +34,15 @@ interface Category {
   isPublished: boolean;
 }
 
+const isWaveTicket = (ticket: any) =>
+  Boolean(ticket?.waveOrder || ticket?.waveGroup || /wave/i.test(ticket?.name || ""));
+
+const WAVE_MODE_OPTIONS = [
+  { value: "date", label: "By Time" },
+  { value: "quantity", label: "When Previous Wave Is Sold Out" },
+  { value: "date_or_quantity", label: "By Time or Sold Out" },
+];
+
 export default function AdminEditEventPage() {
   const router = useRouter();
   const params = useParams();
@@ -75,6 +84,12 @@ export default function AdminEditEventPage() {
         quantity: "",
         description: "",
         available: true,
+        saleStartDate: "",
+        saleEndDate: "",
+        hasDateRange: false,
+        waveSwitchMode: "date_or_quantity",
+        waveOrder: undefined,
+        waveGroup: "",
       },
     ],
     capacity: "",
@@ -133,6 +148,16 @@ export default function AdminEditEventPage() {
                 description: ticket.description || "",
                 available:
                   ticket.available !== undefined ? ticket.available : true,
+                saleStartDate: ticket.startDate
+                  ? new Date(ticket.startDate).toISOString().split("T")[0]
+                  : "",
+                saleEndDate: ticket.endDate
+                  ? new Date(ticket.endDate).toISOString().split("T")[0]
+                  : "",
+                hasDateRange: !!(ticket.startDate && ticket.endDate),
+                waveSwitchMode: ticket.waveSwitchMode || "date_or_quantity",
+                waveOrder: ticket.waveOrder,
+                waveGroup: ticket.waveGroup || "",
               }))
             : [
                 {
@@ -143,6 +168,12 @@ export default function AdminEditEventPage() {
                   quantity: "",
                   description: "",
                   available: true,
+                  saleStartDate: "",
+                  saleEndDate: "",
+                  hasDateRange: false,
+                  waveSwitchMode: "date_or_quantity",
+                  waveOrder: undefined,
+                  waveGroup: "",
                 },
               ],
         capacity: event.capacity?.toString() || "",
@@ -241,6 +272,12 @@ export default function AdminEditEventPage() {
           quantity: "",
           description: "",
           available: true,
+          saleStartDate: "",
+          saleEndDate: "",
+          hasDateRange: false,
+          waveSwitchMode: "date_or_quantity",
+          waveOrder: undefined,
+          waveGroup: "",
         },
       ],
     }));
@@ -351,6 +388,21 @@ export default function AdminEditEventPage() {
           quantity: parseInt(ticket.quantity),
           description: ticket.description,
           available: ticket.available,
+          ...(ticket.waveOrder
+            ? {
+                waveOrder: Number(ticket.waveOrder),
+                waveGroup: ticket.waveGroup || "regular_wave",
+                waveSwitchMode: ticket.waveSwitchMode || "date_or_quantity",
+              }
+            : {}),
+          ...((ticket.hasDateRange || ticket.waveSwitchMode !== "quantity") &&
+          ticket.saleStartDate &&
+          ticket.saleEndDate
+            ? {
+                startDate: ticket.saleStartDate,
+                endDate: ticket.saleEndDate,
+              }
+            : {}),
         })),
       };
 
@@ -884,6 +936,62 @@ export default function AdminEditEventPage() {
                         placeholder="Ticket description"
                       />
                     </div>
+                    {isWaveTicket(ticket) && (
+                      <>
+                        <div className="grid gap-2">
+                          <Label>Wave Activation Type</Label>
+                          <Select
+                            value={ticket.waveSwitchMode || "date"}
+                            onValueChange={(value) =>
+                              handleTicketTypeChange(index, "waveSwitchMode", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select activation type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {WAVE_MODE_OPTIONS.map((mode) => (
+                                <SelectItem key={mode.value} value={mode.value}>
+                                  {mode.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {(ticket.waveSwitchMode || "date") !== "quantity" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label>Sale Start Date</Label>
+                              <Input
+                                type="date"
+                                value={ticket.saleStartDate || ""}
+                                onChange={(e) =>
+                                  handleTicketTypeChange(
+                                    index,
+                                    "saleStartDate",
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>Sale End Date</Label>
+                              <Input
+                                type="date"
+                                value={ticket.saleEndDate || ""}
+                                onChange={(e) =>
+                                  handleTicketTypeChange(
+                                    index,
+                                    "saleEndDate",
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                     <div className="flex items-center gap-2">
                       <Label>Available</Label>
                       <Switch

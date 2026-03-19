@@ -22,6 +22,8 @@ import {
   AlertCircle,
   DollarSign,
   Waves,
+  Plus,
+  Trash2,
   MapPin,
   Loader2,
 } from "lucide-react";
@@ -48,12 +50,37 @@ interface Category {
 // Predefined ticket types
 const TICKET_TYPES = ["Regular", "VIP", "VVIP", "Group"];
 
-// Wave-based ticket types that need date ranges
-const WAVE_TICKET_TYPES = [
-  "Regular - First Wave",
-  "Regular - Second Wave",
-  "Regular - Final Wave",
+const WAVE_SWITCH_MODES = [
+  { value: "date", label: "By Date / Time Window" },
+  { value: "quantity", label: "When Previous Wave Is Sold Out" },
+  { value: "date_or_quantity", label: "When Time Is Up Or Sold Out" },
 ];
+
+type WaveDraft = {
+  id: string;
+  name: string;
+  priceETB: string;
+  quantity: string;
+  description: string;
+  waveSwitchMode: "date" | "quantity" | "date_or_quantity";
+  saleStartDate: string;
+  saleEndDate: string;
+};
+
+const isWaveTicket = (ticket: any) =>
+  Boolean(ticket?.waveOrder || ticket?.waveGroup || /wave/i.test(ticket?.name || ""));
+
+const createDefaultWaveDraft = (seed: Partial<WaveDraft> = {}): WaveDraft => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+  name: "Wave",
+  priceETB: "",
+  quantity: "",
+  description: "",
+  waveSwitchMode: "date",
+  saleStartDate: "",
+  saleEndDate: "",
+  ...seed,
+});
 
 export default function CreateEventPage() {
   const router = useRouter();
@@ -68,16 +95,7 @@ export default function CreateEventPage() {
     number | null
   >(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const [waveFormData, setWaveFormData] = useState({
-    basePrice: "",
-    firstWaveStartDate: "",
-    firstWaveEndDate: "",
-    secondWaveStartDate: "",
-    secondWaveEndDate: "",
-    finalWaveStartDate: "",
-    finalWaveEndDate: "",
-    priceIncreasePercentage: "10",
-  });
+  const [waveDrafts, setWaveDrafts] = useState<WaveDraft[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -142,15 +160,13 @@ export default function CreateEventPage() {
 
   // Update active status of all tickets
   const updateActiveTicketStatus = () => {
-    const newTicketTypes = [...formData.ticketTypes];
+    const newTicketTypes = [...formData.ticketTypes] as any[];
     const today = new Date();
 
     // Update active status based on date ranges
     newTicketTypes.forEach((ticket) => {
-      if (
-        WAVE_TICKET_TYPES.includes(ticket.name) ||
-        (ticket.name === "Regular" && ticket.hasDateRange)
-      ) {
+      if (isWaveTicket(ticket) || (ticket.name === "Regular" && ticket.hasDateRange)) {
+        const mode = (ticket.waveSwitchMode || "date_or_quantity").toLowerCase();
         if (ticket.saleStartDate && ticket.saleEndDate) {
           const startDate = new Date(ticket.saleStartDate);
           const endDate = new Date(ticket.saleEndDate);
@@ -158,6 +174,8 @@ export default function CreateEventPage() {
 
           // Ticket is active if current date is within the sale period
           ticket.isActive = today >= startDate && today <= endDate;
+        } else if (isWaveTicket(ticket) && mode === "quantity") {
+          ticket.isActive = Number(ticket.quantity || 0) > 0;
         }
       }
     });
@@ -241,12 +259,35 @@ export default function CreateEventPage() {
     }
   };
 
-  const handleWaveFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setWaveFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+  const updateWaveDraft = (
+    waveId: string,
+    field: keyof WaveDraft,
+    value: string
+  ) => {
+    setWaveDrafts((prev) =>
+      prev.map((wave) =>
+        wave.id === waveId ? { ...wave, [field]: value } : wave
+      )
+    );
+  };
+
+  const addWaveDraft = () => {
+    setWaveDrafts((prev) => {
+      const nextIndex = prev.length + 1;
+      const previousWave = prev[prev.length - 1];
+      return [
+        ...prev,
+        createDefaultWaveDraft({
+          name: `Wave ${nextIndex}`,
+          quantity: previousWave?.quantity || prev[0]?.quantity || "0",
+          waveSwitchMode: previousWave?.waveSwitchMode || "date",
+        }),
+      ];
+    });
+  };
+
+  const removeWaveDraft = (waveId: string) => {
+    setWaveDrafts((prev) => prev.filter((wave) => wave.id !== waveId));
   };
 
   const handleTicketTypeChange = (
@@ -311,33 +352,39 @@ export default function CreateEventPage() {
   };
 
   const validateTicketDates = (): boolean => {
-    // Validate wave ticket dates
-    const firstWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - First Wave"
-    );
-    const secondWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - Second Wave"
-    );
-    const finalWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - Final Wave"
-    );
+    const waveTickets = formData.ticketTypes
+      .filter((ticket) => isWaveTicket(ticket))
+      .sort((a: any, b: any) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0));
 
-    if (firstWave && secondWave) {
-      // Check if first wave ends before second wave starts
-      const firstWaveEnd = new Date(firstWave.saleEndDate);
-      const secondWaveStart = new Date(secondWave.saleStartDate);
-      if (firstWaveEnd >= secondWaveStart) {
-        toast.error("First wave must end before second wave begins");
-        return false;
+    for (const wave of waveTickets) {
+      const mode = (((wave as any).waveSwitchMode as string) || "date_or_quantity").toLowerCase();
+      if (mode !== "quantity") {
+        if (!wave.saleStartDate || !wave.saleEndDate) {
+          toast.error(`Wave "${wave.name}" requires start and end dates`);
+          return false;
+        }
+
+        const start = new Date(wave.saleStartDate);
+        const end = new Date(wave.saleEndDate);
+        if (start >= end) {
+          toast.error(`Wave "${wave.name}" must have start date before end date`);
+          return false;
+        }
       }
     }
 
-    if (secondWave && finalWave) {
-      // Check if second wave ends before final wave starts
-      const secondWaveEnd = new Date(secondWave.saleEndDate);
-      const finalWaveStart = new Date(finalWave.saleStartDate);
-      if (secondWaveEnd >= finalWaveStart) {
-        toast.error("Second wave must end before final wave begins");
+    for (let i = 0; i < waveTickets.length - 1; i++) {
+      const current = waveTickets[i];
+      const next = waveTickets[i + 1];
+
+      if (
+        current.saleEndDate &&
+        next.saleStartDate &&
+        new Date(current.saleEndDate) >= new Date(next.saleStartDate)
+      ) {
+        toast.error(
+          `Wave "${current.name}" should end before "${next.name}" starts`
+        );
         return false;
       }
     }
@@ -383,23 +430,11 @@ export default function CreateEventPage() {
 
   const validateTicketPrices = (): boolean => {
     setWaveValidationError("");
-    // Validate wave ticket prices
-    const firstWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - First Wave"
-    );
-    const secondWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - Second Wave"
-    );
-    const finalWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - Final Wave"
-    );
 
-    const waveTickets = [firstWave, secondWave, finalWave].filter(Boolean);
+    const waveTickets = formData.ticketTypes.filter((ticket) => isWaveTicket(ticket));
     if (waveTickets.length > 1) {
       const wavePrices = waveTickets
-        .map((ticket) =>
-          ticket?.price ? Number.parseFloat(ticket.price) : null
-        )
+        .map((ticket) => (ticket?.priceETB ? Number.parseFloat(ticket.priceETB) : null))
         .filter(Boolean) as number[];
 
       // Check if all prices are unique
@@ -570,10 +605,27 @@ export default function CreateEventPage() {
           String(ticket.isActive)
         );
 
+        if ((ticket as any).waveOrder) {
+          formDataToSend.append(
+            `ticketTypes[${index}][waveOrder]`,
+            String((ticket as any).waveOrder)
+          );
+          formDataToSend.append(
+            `ticketTypes[${index}][waveSwitchMode]`,
+            String((ticket as any).waveSwitchMode || "date_or_quantity")
+          );
+          formDataToSend.append(
+            `ticketTypes[${index}][waveGroup]`,
+            String((ticket as any).waveGroup || "regular_wave")
+          );
+        }
+
         // Add date ranges for wave tickets and regular tickets with date ranges
         if (
-          WAVE_TICKET_TYPES.includes(ticket.name) ||
-          (ticket.name === "Regular" && ticket.hasDateRange)
+          ((isWaveTicket(ticket) ||
+            (ticket.name === "Regular" && ticket.hasDateRange)) &&
+            ticket.saleStartDate &&
+            ticket.saleEndDate)
         ) {
           // Map to the field names expected by the backend schema
           formDataToSend.append(
@@ -636,28 +688,14 @@ export default function CreateEventPage() {
     }
   };
 
-  // Get wave tickets for price comparison
-  const getWaveTickets = () => {
-    const firstWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - First Wave"
-    );
-    const secondWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - Second Wave"
-    );
-    const finalWave = formData.ticketTypes.find(
-      (t) => t.name === "Regular - Final Wave"
-    );
-    const regularTickets = formData.ticketTypes.filter(
-      (t) => t.name === "Regular" && t.hasDateRange
-    );
-    return { firstWave, secondWave, finalWave, regularTickets };
-  };
+  const getWaveTickets = () =>
+    formData.ticketTypes
+      .filter((ticket) => isWaveTicket(ticket))
+      .sort((a: any, b: any) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0));
 
   // Check if we have multiple tickets with date ranges
   const hasMultipleDateRangedTickets = () => {
-    const waveCount = formData.ticketTypes.filter((t) =>
-      WAVE_TICKET_TYPES.includes(t.name)
-    ).length;
+    const waveCount = formData.ticketTypes.filter((t) => isWaveTicket(t)).length;
     const regularWithDatesCount = formData.ticketTypes.filter(
       (t) => t.name === "Regular" && t.hasDateRange
     ).length;
@@ -667,18 +705,16 @@ export default function CreateEventPage() {
   // Open wave creation dialog for a specific regular ticket
   const openWaveCreationDialog = (index: number) => {
     setSelectedRegularTicketIndex(index);
-    // Initialize form with values from the selected ticket
     const ticket = formData.ticketTypes[index];
-    setWaveFormData({
-      basePrice: ticket.price || "",
-      firstWaveStartDate: "",
-      firstWaveEndDate: "",
-      secondWaveStartDate: "",
-      secondWaveEndDate: "",
-      finalWaveStartDate: "",
-      finalWaveEndDate: "",
-      priceIncreasePercentage: "10",
-    });
+    const defaultPrice = ticket.priceETB || ticket.price || "";
+    setWaveDrafts([
+      createDefaultWaveDraft({
+        name: `Wave 1`,
+        priceETB: defaultPrice,
+        quantity: ticket.quantity || "0",
+        description: ticket.description || "",
+      }),
+    ]);
     setWaveDialogOpen(true);
   };
 
@@ -690,157 +726,101 @@ export default function CreateEventPage() {
     }
 
     const baseTicket = formData.ticketTypes[selectedRegularTicketIndex];
-    const basePrice = Number.parseFloat(waveFormData.basePrice);
-    const priceIncrease =
-      Number.parseFloat(waveFormData.priceIncreasePercentage) / 100;
-
-    if (isNaN(basePrice) || basePrice <= 0) {
-      toast.error("Please enter a valid base price");
-      return;
-    }
-
-    if (isNaN(priceIncrease) || priceIncrease < 0) {
-      toast.error("Please enter a valid price increase percentage");
-      return;
-    }
-
-    // Calculate prices for each wave
-    const secondWavePrice = (basePrice * (1 + priceIncrease)).toFixed(2);
-    const finalWavePrice = (basePrice * (1 + priceIncrease * 2)).toFixed(2);
-
-    // Create the three wave tickets
-    const firstWaveTicket = {
-      name: "Regular - First Wave",
-      price: basePrice.toFixed(2),
-      priceETB: basePrice.toFixed(2),
-      priceUSD: "",
-      quantity: baseTicket.quantity || "0",
-      description: baseTicket.description
-        ? `${baseTicket.description} (First Wave)`
-        : "First Wave Ticket",
-      saleStartDate: waveFormData.firstWaveStartDate,
-      saleEndDate: waveFormData.firstWaveEndDate,
-      isActive: isTicketActive(
-        waveFormData.firstWaveStartDate,
-        waveFormData.firstWaveEndDate
-      ),
-      hasDateRange: true,
-    };
-    const secondWaveTicket = {
-      name: "Regular - Second Wave",
-      price: secondWavePrice,
-      priceETB: secondWavePrice,
-      priceUSD: "",
-      quantity: baseTicket.quantity || "0",
-      description: baseTicket.description
-        ? `${baseTicket.description} (Second Wave)`
-        : "Second Wave Ticket",
-      saleStartDate: waveFormData.secondWaveStartDate,
-      saleEndDate: waveFormData.secondWaveEndDate,
-      isActive: false, // Will be activated automatically when start date arrives
-      hasDateRange: true,
-    };
-    const finalWaveTicket = {
-      name: "Regular - Final Wave",
-      price: finalWavePrice,
-      priceETB: finalWavePrice,
-      priceUSD: "",
-      quantity: baseTicket.quantity || "0",
-      description: baseTicket.description
-        ? `${baseTicket.description} (Final Wave)`
-        : "Final Wave Ticket",
-      saleStartDate: waveFormData.finalWaveStartDate,
-      saleEndDate: waveFormData.finalWaveEndDate,
-      isActive: false, // Will be activated automatically when start date arrives
-      hasDateRange: true,
-    };
+    const waveGroup = `wave_group_${Date.now()}`;
+    const waveTickets = waveDrafts.map((draft, index) => {
+      const price = Number.parseFloat(draft.priceETB || "0");
+      const usesDates = draft.waveSwitchMode !== "quantity";
+      return {
+        name: draft.name,
+        price: price.toFixed(2),
+        priceETB: price.toFixed(2),
+        priceUSD: "",
+        quantity: draft.quantity || baseTicket.quantity || "0",
+        description: draft.description || baseTicket.description || "",
+        saleStartDate: usesDates ? draft.saleStartDate : "",
+        saleEndDate: usesDates ? draft.saleEndDate : "",
+        isActive:
+          index === 0
+            ? usesDates
+              ? isTicketActive(draft.saleStartDate, draft.saleEndDate)
+              : true
+            : false,
+        hasDateRange: usesDates,
+        waveOrder: index + 1,
+        waveSwitchMode: draft.waveSwitchMode,
+        waveGroup,
+      };
+    });
 
     // Add the wave tickets to the form data
     const newTicketTypes = [...formData.ticketTypes];
-    // Replace the original ticket with the first wave
-    newTicketTypes[selectedRegularTicketIndex] = firstWaveTicket;
-    // Add the second and final wave tickets
-    newTicketTypes.push(secondWaveTicket, finalWaveTicket);
+    newTicketTypes[selectedRegularTicketIndex] = waveTickets[0];
+    newTicketTypes.push(...waveTickets.slice(1));
 
     setFormData((prev) => ({
       ...prev,
       ticketTypes: newTicketTypes,
     }));
 
-    // Reset wave form data
-    setWaveFormData({
-      basePrice: "",
-      firstWaveStartDate: "",
-      firstWaveEndDate: "",
-      secondWaveStartDate: "",
-      secondWaveEndDate: "",
-      finalWaveStartDate: "",
-      finalWaveEndDate: "",
-      priceIncreasePercentage: "10",
-    });
+    setWaveDrafts([]);
 
     setSelectedRegularTicketIndex(null);
     setWaveDialogOpen(false);
-    toast.success(
-      "Wave tickets created successfully! Three wave tickets have been added with progressive pricing."
-    );
+    toast.success("Wave tickets created successfully.");
   };
 
   // Validate wave creation form
   const validateWaveForm = (): boolean => {
-    // Check if all required fields are filled
-    if (
-      !waveFormData.basePrice ||
-      !waveFormData.firstWaveStartDate ||
-      !waveFormData.firstWaveEndDate ||
-      !waveFormData.secondWaveStartDate ||
-      !waveFormData.secondWaveEndDate ||
-      !waveFormData.finalWaveStartDate ||
-      !waveFormData.finalWaveEndDate
-    ) {
-      toast.error(
-        "Please fill in all required fields including base price and all dates"
-      );
+    if (waveDrafts.length === 0) {
+      toast.error("Please add at least one wave");
       return false;
     }
 
-    // Validate base price
-    const basePrice = Number.parseFloat(waveFormData.basePrice);
-    if (isNaN(basePrice) || basePrice <= 0) {
-      toast.error("Please enter a valid base price greater than 0");
-      return false;
-    }
+    for (let i = 0; i < waveDrafts.length; i++) {
+      const wave = waveDrafts[i];
 
-    // Check if dates are sequential
-    const firstWaveStart = new Date(waveFormData.firstWaveStartDate);
-    const firstWaveEnd = new Date(waveFormData.firstWaveEndDate);
-    const secondWaveStart = new Date(waveFormData.secondWaveStartDate);
-    const secondWaveEnd = new Date(waveFormData.secondWaveEndDate);
-    const finalWaveStart = new Date(waveFormData.finalWaveStartDate);
-    const finalWaveEnd = new Date(waveFormData.finalWaveEndDate);
+      if (!wave.name.trim()) {
+        toast.error(`Please enter a name for wave ${i + 1}`);
+        return false;
+      }
 
-    // Validate individual wave date ranges
-    if (firstWaveStart >= firstWaveEnd) {
-      toast.error("First wave start date must be before end date");
-      return false;
-    }
-    if (secondWaveStart >= secondWaveEnd) {
-      toast.error("Second wave start date must be before end date");
-      return false;
-    }
-    if (finalWaveStart >= finalWaveEnd) {
-      toast.error("Final wave start date must be before end date");
-      return false;
-    }
+      const price = Number.parseFloat(wave.priceETB || "0");
+      if (isNaN(price) || price <= 0) {
+        toast.error(`Please enter a valid price for wave "${wave.name}"`);
+        return false;
+      }
 
-    // Check sequential wave dates
-    if (firstWaveEnd >= secondWaveStart) {
-      toast.error("First wave must end before second wave begins");
-      return false;
-    }
-    if (secondWaveEnd >= finalWaveStart) {
-      toast.error("Second wave must end before final wave begins");
-      return false;
+      const qty = Number.parseInt(wave.quantity || "0");
+      if (isNaN(qty) || qty <= 0) {
+        toast.error(`Please enter a valid quantity for wave "${wave.name}"`);
+        return false;
+      }
+
+      if (wave.waveSwitchMode !== "quantity") {
+        if (!wave.saleStartDate || !wave.saleEndDate) {
+          toast.error(`Please set start and end dates for wave "${wave.name}"`);
+          return false;
+        }
+
+        if (new Date(wave.saleStartDate) >= new Date(wave.saleEndDate)) {
+          toast.error(`Wave "${wave.name}" start date must be before end date`);
+          return false;
+        }
+      }
+
+      if (i < waveDrafts.length - 1) {
+        const nextWave = waveDrafts[i + 1];
+        if (
+          wave.saleEndDate &&
+          nextWave.saleStartDate &&
+          new Date(wave.saleEndDate) >= new Date(nextWave.saleStartDate)
+        ) {
+          toast.error(
+            `Wave "${wave.name}" must end before "${nextWave.name || `Wave ${i + 2}`}" starts`
+          );
+          return false;
+        }
+      }
     }
 
     return true;
@@ -1362,48 +1342,36 @@ export default function CreateEventPage() {
                 </h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {getWaveTickets().firstWave && (
-                  <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                    <p className="text-xs sm:text-sm font-medium text-blue-800">
-                      First Wave
-                    </p>
-                    <p className="text-base sm:text-lg font-bold mt-1">
-                      {getWaveTickets().firstWave?.price
-                        ? `${getWaveTickets().firstWave?.price}`
-                        : "Not set"}{" "}
-                      birr
-                    </p>
-                  </div>
-                )}
-                {getWaveTickets().secondWave && (
-                  <div className="p-3 bg-purple-50 rounded-md border border-purple-100">
-                    <p className="text-xs sm:text-sm font-medium text-purple-800">
-                      Second Wave
-                    </p>
-                    <p className="text-base sm:text-lg font-bold mt-1">
-                      {getWaveTickets().secondWave?.price
-                        ? `${getWaveTickets().secondWave?.price}`
-                        : "Not set"}{" "}
-                      birr
-                    </p>
-                  </div>
-                )}
-                {getWaveTickets().finalWave && (
-                  <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                    <p className="text-xs sm:text-sm font-medium text-amber-800">
-                      Final Wave
-                    </p>
-                    <p className="text-base sm:text-lg font-bold mt-1">
-                      {getWaveTickets().finalWave?.price
-                        ? `${getWaveTickets().finalWave?.price}`
-                        : "Not set"}{" "}
-                      birr
-                    </p>
-                  </div>
-                )}
-                {getWaveTickets().regularTickets.map((ticket, idx) => (
+                {getWaveTickets().map((ticket, idx) => (
                   <div
-                    key={idx}
+                    key={`wave-${idx}`}
+                    className="p-3 bg-blue-50 rounded-md border border-blue-100"
+                  >
+                    <p className="text-xs sm:text-sm font-medium text-blue-800">
+                      {ticket.name || `Wave ${idx + 1}`}
+                    </p>
+                    <p className="text-base sm:text-lg font-bold mt-1">
+                      {ticket.priceETB && `${ticket.priceETB} Birr`}
+                      {ticket.priceETB && ticket.priceUSD && " / "}
+                      {ticket.priceUSD && `$${ticket.priceUSD}`}
+                      {!ticket.priceETB && !ticket.priceUSD && "Not set"}
+                    </p>
+                    <p className="text-xs text-blue-700 mt-1">
+                      Trigger: {(ticket as any).waveSwitchMode || "date_or_quantity"}
+                    </p>
+                    {ticket.saleStartDate && ticket.saleEndDate && (
+                      <p className="text-xs text-blue-700 mt-1">
+                        {new Date(ticket.saleStartDate).toLocaleDateString()} -{" "}
+                        {new Date(ticket.saleEndDate).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {formData.ticketTypes
+                  .filter((t) => t.name === "Regular" && t.hasDateRange)
+                  .map((ticket, idx) => (
+                  <div
+                    key={`regular-date-${idx}`}
                     className="p-3 bg-green-50 rounded-md border border-green-100"
                   >
                     <p className="text-xs sm:text-sm font-medium text-green-800">
@@ -1450,9 +1418,8 @@ export default function CreateEventPage() {
                       <h3 className="font-medium text-base sm:text-lg">
                         Ticket Type {index + 1}
                       </h3>
-                      {(WAVE_TICKET_TYPES.includes(ticketType.name) ||
-                        (ticketType.name === "Regular" &&
-                          ticketType.hasDateRange)) && (
+                      {(isWaveTicket(ticketType) ||
+                        (ticketType.name === "Regular" && ticketType.hasDateRange)) && (
                         <Badge
                           className={
                             ticketType.isActive
@@ -1465,10 +1432,7 @@ export default function CreateEventPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {ticketType.name === "Regular" &&
-                        !WAVE_TICKET_TYPES.some((wave) =>
-                          formData.ticketTypes.some((t) => t.name === wave)
-                        ) && (
+                      {ticketType.name === "Regular" && !isWaveTicket(ticketType) && (
                           <Button
                             type="button"
                             variant="outline"
@@ -1495,23 +1459,34 @@ export default function CreateEventPage() {
                   <div className="grid gap-4">
                     <div className="grid gap-2">
                       <Label htmlFor={`ticket-name-${index}`}>Name</Label>
-                      <Select
-                        value={ticketType.name}
-                        onValueChange={(value) => {
-                          handleTicketTypeChange(index, "name", value);
-                        }}
-                      >
-                        <SelectTrigger id={`ticket-name-${index}`}>
-                          <SelectValue placeholder="Select ticket type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TICKET_TYPES.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {type}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {isWaveTicket(ticketType) ? (
+                        <Input
+                          id={`ticket-name-${index}`}
+                          value={ticketType.name}
+                          onChange={(e) =>
+                            handleTicketTypeChange(index, "name", e.target.value)
+                          }
+                          placeholder="Enter wave name"
+                        />
+                      ) : (
+                        <Select
+                          value={ticketType.name}
+                          onValueChange={(value) => {
+                            handleTicketTypeChange(index, "name", value);
+                          }}
+                        >
+                          <SelectTrigger id={`ticket-name-${index}`}>
+                            <SelectValue placeholder="Select ticket type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TICKET_TYPES.map((type) => (
+                              <SelectItem key={type} value={type}>
+                                {type}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="grid gap-2">
@@ -1697,160 +1672,157 @@ export default function CreateEventPage() {
               Create Wave Tickets
             </DialogTitle>
             <DialogDescription className="text-sm sm:text-base">
-              Create First, Second, and Final wave tickets with automatic price
-              increases.
+              Add as many waves as you need. Each wave can have a custom name,
+              price, quantity, and activation type.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="basePrice">Base Price (First Wave)</Label>
-                <Input
-                  id="basePrice"
-                  name="basePrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={waveFormData.basePrice}
-                  onChange={handleWaveFormChange}
-                  placeholder="Enter base price"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="priceIncreasePercentage">
-                  Price Increase (%)
-                </Label>
-                <Input
-                  id="priceIncreasePercentage"
-                  name="priceIncreasePercentage"
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={waveFormData.priceIncreasePercentage}
-                  onChange={handleWaveFormChange}
-                  placeholder="Enter percentage"
-                  required
-                />
-                <p className="text-xs text-gray-500">
-                  Each wave will increase by this percentage from the base price
-                </p>
-              </div>
-            </div>
-            <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
-              <h4 className="font-medium text-base sm:text-lg text-blue-800 mb-2">
-                First Wave
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="firstWaveStartDate">Start Date</Label>
-                  <Input
-                    id="firstWaveStartDate"
-                    name="firstWaveStartDate"
-                    type="date"
-                    value={waveFormData.firstWaveStartDate}
-                    onChange={handleWaveFormChange}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="firstWaveEndDate">End Date</Label>
-                  <Input
-                    id="firstWaveEndDate"
-                    name="firstWaveEndDate"
-                    type="date"
-                    value={waveFormData.firstWaveEndDate}
-                    onChange={handleWaveFormChange}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="bg-purple-50 p-3 rounded-md border border-purple-100">
-              <h4 className="font-medium text-base sm:text-lg text-purple-800 mb-2">
-                Second Wave
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="secondWaveStartDate">Start Date</Label>
-                  <Input
-                    id="secondWaveStartDate"
-                    name="secondWaveStartDate"
-                    type="date"
-                    value={waveFormData.secondWaveStartDate}
-                    onChange={handleWaveFormChange}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="secondWaveEndDate">End Date</Label>
-                  <Input
-                    id="secondWaveEndDate"
-                    name="secondWaveEndDate"
-                    type="date"
-                    value={waveFormData.secondWaveEndDate}
-                    onChange={handleWaveFormChange}
-                    required
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-purple-700 mt-2">
-                Price:{" "}
-                {waveFormData.basePrice
-                  ? `${(
-                      Number.parseFloat(waveFormData.basePrice) *
-                      (1 +
-                        Number.parseFloat(
-                          waveFormData.priceIncreasePercentage
-                        ) /
-                          100)
-                    ).toFixed(2)} birr`
-                  : "Not set"}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Configure waves in order. You can add unlimited waves.
               </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addWaveDraft}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Wave
+              </Button>
             </div>
-            <div className="bg-amber-50 p-3 rounded-md border border-amber-100">
-              <h4 className="font-medium text-base sm:text-lg text-amber-800 mb-2">
-                Final Wave
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="finalWaveStartDate">Start Date</Label>
-                  <Input
-                    id="finalWaveStartDate"
-                    name="finalWaveStartDate"
-                    type="date"
-                    value={waveFormData.finalWaveStartDate}
-                    onChange={handleWaveFormChange}
-                    required
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="finalWaveEndDate">End Date</Label>
-                  <Input
-                    id="finalWaveEndDate"
-                    name="finalWaveEndDate"
-                    type="date"
-                    value={waveFormData.finalWaveEndDate}
-                    onChange={handleWaveFormChange}
-                    required
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-amber-700 mt-2">
-                Price:{" "}
-                {waveFormData.basePrice
-                  ? `${(
-                      Number.parseFloat(waveFormData.basePrice) *
-                      (1 +
-                        (Number.parseFloat(
-                          waveFormData.priceIncreasePercentage
-                        ) /
-                          100) *
-                          2)
-                    ).toFixed(2)} birr`
-                  : "Not set"}
+
+            <div className="rounded-md border bg-muted/30 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
+                Ticket Wave List
               </p>
+              <div className="flex flex-wrap gap-2">
+                {waveDrafts.map((wave, idx) => (
+                  <span
+                    key={`wave-preview-${wave.id}`}
+                    className="inline-flex items-center rounded-full border bg-background px-2.5 py-1 text-xs"
+                  >
+                    {idx + 1}. {wave.name?.trim() || `Wave ${idx + 1}`}
+                  </span>
+                ))}
+              </div>
             </div>
+
+            {waveDrafts.map((wave, idx) => (
+              <div key={wave.id} className="border rounded-md p-3 grid gap-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">Wave {idx + 1}</h4>
+                  {waveDrafts.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => removeWaveDraft(wave.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label>Wave Name</Label>
+                    <Input
+                      value={wave.name}
+                      onChange={(e) =>
+                        updateWaveDraft(wave.id, "name", e.target.value)
+                      }
+                      placeholder="e.g. Early Bird, VIP Access, Gate Wave"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Activation Type</Label>
+                    <Select
+                      value={wave.waveSwitchMode}
+                      onValueChange={(value) =>
+                        updateWaveDraft(wave.id, "waveSwitchMode", value)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {WAVE_SWITCH_MODES.map((mode) => (
+                          <SelectItem key={mode.value} value={mode.value}>
+                            {mode.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid gap-2">
+                    <Label>Price (ETB)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={wave.priceETB}
+                      onChange={(e) =>
+                        updateWaveDraft(wave.id, "priceETB", e.target.value)
+                      }
+                      placeholder="Enter wave price"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Quantity</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      value={wave.quantity}
+                      onChange={(e) =>
+                        updateWaveDraft(wave.id, "quantity", e.target.value)
+                      }
+                      placeholder="Enter wave quantity"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Description (optional)</Label>
+                  <Input
+                    value={wave.description}
+                    onChange={(e) =>
+                      updateWaveDraft(wave.id, "description", e.target.value)
+                    }
+                    placeholder="Optional wave description"
+                  />
+                </div>
+
+                {wave.waveSwitchMode !== "quantity" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label>Start Date</Label>
+                      <Input
+                        type="date"
+                        value={wave.saleStartDate}
+                        onChange={(e) =>
+                          updateWaveDraft(wave.id, "saleStartDate", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>End Date</Label>
+                      <Input
+                        type="date"
+                        value={wave.saleEndDate}
+                        onChange={(e) =>
+                          updateWaveDraft(wave.id, "saleEndDate", e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <Button variant="outline" onClick={() => setWaveDialogOpen(false)}>

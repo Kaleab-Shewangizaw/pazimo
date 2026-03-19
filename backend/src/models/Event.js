@@ -118,6 +118,26 @@ const EventSchema = new mongoose.Schema(
           type: Date,
           required: false,
         },
+        waveGroup: {
+          type: String,
+          required: false,
+        },
+        waveOrder: {
+          type: Number,
+          required: false,
+        },
+        waveSwitchMode: {
+          type: String,
+          enum: [
+            "date",
+            "quantity",
+            "date_or_quantity",
+            "by_time",
+            "by_sold_out",
+            "by_time_or_sold_out",
+          ],
+          default: "date_or_quantity",
+        },
       },
     ],
 

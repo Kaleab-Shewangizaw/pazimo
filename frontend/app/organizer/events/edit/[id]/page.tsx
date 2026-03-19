@@ -50,11 +50,13 @@ interface Category {
 // Predefined ticket types
 const TICKET_TYPES = ["Regular", "VIP", "VVIP", "Group"];
 
-// Wave-based ticket types that need date ranges
-const WAVE_TICKET_TYPES = [
-  "Regular - First Wave",
-  "Regular - Second Wave",
-  "Regular - Final Wave",
+const isWaveTicket = (ticket: any) =>
+  Boolean(ticket?.waveOrder || ticket?.waveGroup || /wave/i.test(ticket?.name || ""));
+
+const WAVE_MODE_OPTIONS = [
+  { value: "date", label: "By Time" },
+  { value: "quantity", label: "When Previous Wave Is Sold Out" },
+  { value: "date_or_quantity", label: "By Time or Sold Out" },
 ];
 
 export default function EditEventPage() {
@@ -180,6 +182,9 @@ export default function EditEventPage() {
                 isActive:
                   ticket.available !== undefined ? ticket.available : true,
                 hasDateRange: !!(ticket.startDate && ticket.endDate),
+                waveSwitchMode: ticket.waveSwitchMode || "date_or_quantity",
+                waveOrder: ticket.waveOrder,
+                waveGroup: ticket.waveGroup || "",
               }))
             : [
                 {
@@ -193,6 +198,9 @@ export default function EditEventPage() {
                   saleEndDate: "",
                   isActive: true,
                   hasDateRange: false,
+                  waveSwitchMode: "date_or_quantity",
+                  waveOrder: undefined,
+                  waveGroup: "",
                 },
               ],
         coverImages: [] as File[],
@@ -286,6 +294,9 @@ export default function EditEventPage() {
           saleEndDate: "",
           isActive: true,
           hasDateRange: false,
+          waveSwitchMode: "date_or_quantity",
+          waveOrder: undefined,
+          waveGroup: "",
         },
       ],
     }));
@@ -382,7 +393,16 @@ export default function EditEventPage() {
           quantity: parseInt(ticket.quantity),
           description: ticket.description,
           available: ticket.isActive,
-          ...(ticket.hasDateRange && ticket.saleStartDate && ticket.saleEndDate
+          ...(ticket.waveOrder
+            ? {
+                waveOrder: Number(ticket.waveOrder),
+                waveGroup: ticket.waveGroup || "regular_wave",
+                waveSwitchMode: ticket.waveSwitchMode || "date_or_quantity",
+              }
+            : {}),
+          ...((ticket.hasDateRange || ticket.waveSwitchMode !== "quantity") &&
+          ticket.saleStartDate &&
+          ticket.saleEndDate
             ? {
                 startDate: ticket.saleStartDate,
                 endDate: ticket.saleEndDate,
@@ -798,6 +818,62 @@ export default function EditEventPage() {
                         placeholder="Ticket description (optional)"
                       />
                     </div>
+                    {isWaveTicket(ticket) && (
+                      <>
+                        <div className="grid gap-2">
+                          <Label>Wave Activation Type</Label>
+                          <Select
+                            value={ticket.waveSwitchMode || "date"}
+                            onValueChange={(value) =>
+                              handleTicketTypeChange(index, "waveSwitchMode", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select activation type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {WAVE_MODE_OPTIONS.map((mode) => (
+                                <SelectItem key={mode.value} value={mode.value}>
+                                  {mode.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {(ticket.waveSwitchMode || "date") !== "quantity" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label>Sale Start Date</Label>
+                              <Input
+                                type="date"
+                                value={ticket.saleStartDate || ""}
+                                onChange={(e) =>
+                                  handleTicketTypeChange(
+                                    index,
+                                    "saleStartDate",
+                                    e.target.value
+                                  )
+                                }
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>Sale End Date</Label>
+                              <Input
+                                type="date"
+                                value={ticket.saleEndDate || ""}
+                                onChange={(e) =>
+                                  handleTicketTypeChange(
+                                    index,
+                                    "saleEndDate",
+                                    e.target.value
+                                  )
+                                }
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </Card>
               ))}

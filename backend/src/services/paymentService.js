@@ -7,6 +7,7 @@ const { StatusCodes } = require('http-status-codes');
 const CustomError = require('../errors/customError');
 const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
+const { applyTicketAvailabilityRules } = require('../utils/ticketAvailability');
 
 class PaymentService {
     constructor() {
@@ -225,6 +226,11 @@ class PaymentService {
         const event = await Event.findById(eventId);
         if (!event) throw new CustomError('Event not found', StatusCodes.NOT_FOUND);
 
+        const now = new Date();
+        if (applyTicketAvailabilityRules(event, now).changed) {
+            await event.save();
+        }
+
         let ticketTypeDoc;
         if (ticketType && ticketType._id) {
             ticketTypeDoc = event.ticketTypes.id(ticketType._id);
@@ -239,7 +245,6 @@ class PaymentService {
 
         if (!ticketTypeDoc) throw new CustomError('Ticket type not found', StatusCodes.NOT_FOUND);
 
-        const now = new Date();
         if ((ticketTypeDoc.endDate && new Date(ticketTypeDoc.endDate) <= now) || ticketTypeDoc.available === false) {
             throw new CustomError('This ticket type is no longer available', StatusCodes.BAD_REQUEST);
         }
@@ -264,6 +269,7 @@ class PaymentService {
         }
 
         ticketTypeDoc.quantity -= quantity;
+        applyTicketAvailabilityRules(event, now);
         await event.save();
 
         return {

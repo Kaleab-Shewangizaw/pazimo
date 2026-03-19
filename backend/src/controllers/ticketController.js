@@ -19,6 +19,7 @@ const Payment = require("../models/Payment");
 const SantimPayService = require("../services/santimPayService");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
+const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
 const isEthiopianNumber = (phone) => {
@@ -505,6 +506,8 @@ const createGuestTicket = async (req, res) => {
       throw new NotFoundError("Event not found");
     }
 
+    applyTicketAvailabilityRules(event);
+
     // Check if ticketType exists and update quantity if so
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
@@ -513,6 +516,7 @@ const createGuestTicket = async (req, res) => {
           throw new BadRequestError("Not enough tickets available");
         }
         typeInfo.quantity -= ticketCount || 1;
+        applyTicketAvailabilityRules(event);
         await event.save();
       }
     }
@@ -920,6 +924,8 @@ const createInvitationTicket = async (req, res) => {
       throw new NotFoundError("Event not found");
     }
 
+    applyTicketAvailabilityRules(event);
+
     // Check if ticketType exists and update quantity if so
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
@@ -928,6 +934,7 @@ const createInvitationTicket = async (req, res) => {
           throw new BadRequestError("Not enough tickets available");
         }
         typeInfo.quantity -= ticketCount || 1;
+        applyTicketAvailabilityRules(event);
         await event.save();
       }
     }
@@ -2088,6 +2095,8 @@ const createOnDoorTicket = async (req, res) => {
       });
     }
 
+    applyTicketAvailabilityRules(event);
+
     // Find ticket type
     const ticketType = event.ticketTypes.find(
       (t) => t._id.toString() === ticketTypeId || t.name === ticketTypeId
@@ -2110,6 +2119,7 @@ const createOnDoorTicket = async (req, res) => {
 
     // Deduct quantity
     ticketType.quantity -= quantity;
+    applyTicketAvailabilityRules(event);
     await event.save();
 
     const totalPrice = ticketType.price * quantity;

@@ -8,6 +8,7 @@ const {
   processPaidInvitations,
 } = require("./invitationController");
 const { processGuestInvitation } = require("./ticketController");
+const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
 
 // Consolidated Fulfillment Logic
 const processTransactionFulfillment = async (transaction, paymentId) => {
@@ -206,6 +207,7 @@ const generateTicketsForTransaction = async (transaction) => {
               0,
               event.ticketTypes[typeIndex].quantity - qty
             );
+            applyTicketAvailabilityRules(event);
             await event.save();
           }
 

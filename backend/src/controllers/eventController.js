@@ -5,6 +5,133 @@ const { BadRequestError, NotFoundError } = require("../errors");
 const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
+const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+
+const toBoolean = (value, fallback = false) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const lowered = value.toLowerCase();
+    if (lowered === "true") return true;
+    if (lowered === "false") return false;
+  }
+  return fallback;
+};
+
+const toNumberOrUndefined = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const toDateOrUndefined = (value) => {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+const detectWaveOrderFromName = (name) => {
+  const lowered = (name || "").toLowerCase();
+  if (lowered.includes("first wave")) return 1;
+  if (lowered.includes("second wave")) return 2;
+  if (lowered.includes("third wave")) return 3;
+  if (lowered.includes("final wave")) return 99;
+  return undefined;
+};
+
+const normalizeWaveSwitchMode = (value) => {
+  const lowered = (value || "").toLowerCase();
+  if (lowered === "by_time") return "date";
+  if (lowered === "by_sold_out") return "quantity";
+  if (lowered === "by_time_or_sold_out") return "date_or_quantity";
+  if (["date", "quantity", "date_or_quantity"].includes(lowered)) {
+    return lowered;
+  }
+  return "date_or_quantity";
+};
+
+const parseBracketTicketTypes = (body) => {
+  const ticketsByIndex = {};
+
+  Object.entries(body || {}).forEach(([key, value]) => {
+    const match = key.match(/^ticketTypes\[(\d+)\]\[(.+)\]$/);
+    if (!match) return;
+
+    const index = Number(match[1]);
+    const field = match[2];
+    if (!ticketsByIndex[index]) {
+      ticketsByIndex[index] = {};
+    }
+
+    ticketsByIndex[index][field] = value;
+  });
+
+  const orderedIndexes = Object.keys(ticketsByIndex)
+    .map((index) => Number(index))
+    .sort((a, b) => a - b);
+
+  return orderedIndexes.map((index) => ticketsByIndex[index]);
+};
+
+const parseTicketTypesInput = (ticketTypes, reqBody) => {
+  if (Array.isArray(ticketTypes)) return ticketTypes;
+
+  if (ticketTypes && typeof ticketTypes === "object") {
+    const values = Object.keys(ticketTypes)
+      .filter((key) => /^\d+$/.test(key))
+      .sort((a, b) => Number(a) - Number(b))
+      .map((key) => ticketTypes[key]);
+
+    if (values.length > 0) return values;
+  }
+
+  if (typeof ticketTypes === "string") {
+    try {
+      const parsed = JSON.parse(ticketTypes);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (error) {
+      // Fall back to bracket parsing below.
+    }
+  }
+
+  const bracketParsed = parseBracketTicketTypes(reqBody);
+  if (bracketParsed.length > 0) return bracketParsed;
+  return [];
+};
+
+const normalizeTicketTypes = (rawTickets = []) =>
+  rawTickets.map((ticket) => {
+    const priceETB = toNumberOrUndefined(ticket.priceETB);
+    const priceUSD = toNumberOrUndefined(ticket.priceUSD);
+    const price =
+      toNumberOrUndefined(ticket.price) ??
+      (priceETB !== undefined ? priceETB : priceUSD !== undefined ? priceUSD : 0);
+
+    const quantity = toNumberOrUndefined(ticket.quantity) ?? 0;
+    const startDate = toDateOrUndefined(ticket.startDate || ticket.saleStartDate);
+    const endDate = toDateOrUndefined(ticket.endDate || ticket.saleEndDate);
+    const inferredWaveOrder = detectWaveOrderFromName(ticket.name);
+    const waveOrder = toNumberOrUndefined(ticket.waveOrder) ?? inferredWaveOrder;
+    const waveSwitchMode = normalizeWaveSwitchMode(
+      ticket.waveSwitchMode || ticket.waveActivationType
+    );
+    const hasWaveMetadata =
+      !!ticket.waveGroup || waveOrder !== undefined || /wave/i.test(ticket.name || "");
+
+    return {
+      name: ticket.name,
+      price,
+      priceETB,
+      priceUSD,
+      quantity,
+      description: ticket.description,
+      available: toBoolean(ticket.available, true),
+      startDate,
+      endDate,
+      ...(ticket.waveGroup ? { waveGroup: ticket.waveGroup } : {}),
+      ...(waveOrder !== undefined ? { waveOrder } : {}),
+      ...(hasWaveMetadata ? { waveSwitchMode } : {}),
+    };
+  });
 
 const createEvent = async (req, res) => {
   let {
@@ -38,15 +165,8 @@ const createEvent = async (req, res) => {
     coverImages = req.files.map((file) => `/uploads/${file.filename}`);
   }
 
-  const parsedTicketTypes = Array.isArray(ticketTypes)
-    ? ticketTypes
-    : JSON.parse(ticketTypes || "[]");
-
-  const ticketTypesWithDates = parsedTicketTypes.map((ticket) => ({
-    ...ticket,
-    startDate: ticket.startDate ? new Date(ticket.startDate) : null,
-    endDate: ticket.endDate ? new Date(ticket.endDate) : null,
-  }));
+  const parsedTicketTypes = parseTicketTypesInput(ticketTypes, req.body);
+  const ticketTypesWithDates = normalizeTicketTypes(parsedTicketTypes);
 
   const eventData = {
     title,
@@ -86,6 +206,10 @@ const createEvent = async (req, res) => {
 
   const event = await Event.create(eventData);
 
+  if (applyTicketAvailabilityRules(event).changed) {
+    await event.save();
+  }
+
   res.status(StatusCodes.CREATED).json({
     status: "success",
     data: { event },
@@ -112,6 +236,12 @@ const buyTicket = async (req, res) => {
   const event = await Event.findById(eventId);
   if (!event) throw new NotFoundError("Event not found");
 
+  const now = new Date();
+  const { changed: prePurchaseUpdated } = applyTicketAvailabilityRules(event, now);
+  if (prePurchaseUpdated) {
+    await event.save();
+  }
+
   const index = event.ticketTypes.findIndex((t) => t.name === ticketType);
 
   if (index === -1) {
@@ -124,7 +254,6 @@ const buyTicket = async (req, res) => {
     throw new BadRequestError("Not enough tickets available");
   }
 
-  const now = new Date();
   if (selectedType.startDate && now < selectedType.startDate) {
     throw new BadRequestError("Ticket sales not started");
   }
@@ -136,6 +265,8 @@ const buyTicket = async (req, res) => {
   if (event.ticketTypes[index].quantity === 0) {
     event.ticketTypes[index].available = false;
   }
+
+  applyTicketAvailabilityRules(event, now);
 
   await event.save();
 
@@ -245,6 +376,10 @@ const getEvent = async (req, res) => {
     throw new NotFoundError("Event not found");
   }
 
+  if (applyTicketAvailabilityRules(event).changed) {
+    await event.save();
+  }
+
   res.status(StatusCodes.OK).json({ event });
 };
 
@@ -279,7 +414,11 @@ const updateEvent = async (req, res) => {
       req.body.ageRestriction = JSON.parse(req.body.ageRestriction);
     }
     if (typeof req.body.ticketTypes === "string") {
-      req.body.ticketTypes = JSON.parse(req.body.ticketTypes);
+      try {
+        req.body.ticketTypes = JSON.parse(req.body.ticketTypes);
+      } catch (error) {
+        req.body.ticketTypes = parseTicketTypesInput(req.body.ticketTypes, req.body);
+      }
     }
     if (typeof req.body.tags === "string") {
       
@@ -297,6 +436,12 @@ const updateEvent = async (req, res) => {
      req.body.tags = req.body.tags.split(",").map((t) => t.trim()).filter(Boolean);
   }
 
+  if (req.body.ticketTypes) {
+    req.body.ticketTypes = normalizeTicketTypes(
+      parseTicketTypesInput(req.body.ticketTypes, req.body)
+    );
+  }
+
   Object.assign(event, req.body);
   
  
@@ -304,6 +449,10 @@ const updateEvent = async (req, res) => {
   event.updatedAt = new Date();
 
   await event.save();
+
+  if (applyTicketAvailabilityRules(event).changed) {
+    await event.save();
+  }
   res.status(StatusCodes.OK).json({
     status: "success",
     data: event,
@@ -427,6 +576,10 @@ const getEventDetails = async (req, res) => {
       });
     }
 
+    if (applyTicketAvailabilityRules(event).changed) {
+      await event.save();
+    }
+
     res.status(StatusCodes.OK).json({ status: "success", data: event });
   } catch (error) {
     console.error("[EVENT-DETAILS] Error:", error);
@@ -485,6 +638,12 @@ const getPublicEvents = async (req, res) => {
       findQuery,
       Event.countDocuments(query),
     ]);
+
+    for (const event of events) {
+      if (applyTicketAvailabilityRules(event).changed) {
+        await event.save();
+      }
+    }
 
     res.status(StatusCodes.OK).json({
       status: "success",
@@ -552,15 +711,11 @@ const updateTicketTypes = async (req, res) => {
       .json({ message: "Not authorized" });
   }
 
-  const parsedTicketTypes = Array.isArray(ticketTypes)
-    ? ticketTypes
-    : JSON.parse(ticketTypes || "[]");
+  const parsedTicketTypes = parseTicketTypesInput(ticketTypes, req.body);
 
-  event.ticketTypes = parsedTicketTypes.map((ticket) => ({
-    ...ticket,
-    startDate: ticket.startDate ? new Date(ticket.startDate) : undefined,
-    endDate: ticket.endDate ? new Date(ticket.endDate) : undefined,
-  }));
+  event.ticketTypes = normalizeTicketTypes(parsedTicketTypes);
+
+  applyTicketAvailabilityRules(event);
 
   await event.save();
 
