@@ -1030,7 +1030,8 @@ export default function OrganizerDashboard() {
         </Card>
         {/* Stat Cards (Top Row) */}
         <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-gray-700">
+              <div className="flex gap-2 items-center">
+                <span className="text-sm font-medium text-gray-700">
                 Currency
               </span>
               <Select
@@ -1047,14 +1048,16 @@ export default function OrganizerDashboard() {
                   <SelectItem value="USD">USD</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="text-sm font-medium text-gray-700 sm:ml-4">
+              </div>
+              <div className="flex gap-2 items-center">
+                <span className="text-sm font-medium text-gray-700 sm:ml-4">
                 Sales Period
               </span>
               <Select
                 value={salesPeriod}
                 onValueChange={(value: SalesPeriod) => setSalesPeriod(value)}
               >
-                <SelectTrigger className="w-[170px]">
+                <SelectTrigger className="w-[140px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1064,6 +1067,7 @@ export default function OrganizerDashboard() {
                   <SelectItem value="all-time">All Time</SelectItem>
                 </SelectContent>
               </Select>
+              </div>
             </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-4 lg:gap-6 mb-4">
           {isLoading || withdrawalsLoading || ticketsLoading
