@@ -19,7 +19,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Drawer,
@@ -38,6 +37,8 @@ const steps = [
   "Additional Information",
   "Terms & Agreement",
 ];
+
+const ORGANIZER_REGISTRATION_URL = "https://pazimo-organizer.vercel.app/";
 
 interface OrganizerFormData {
   organizerName: string;
@@ -194,7 +195,6 @@ export default function OrganizerHome() {
     digitalSignature: false,
   });
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -266,7 +266,9 @@ export default function OrganizerHome() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
               <Button
-                onClick={() => router.push("/organizer-registration")}
+                onClick={() => {
+                  window.location.href = ORGANIZER_REGISTRATION_URL;
+                }}
                 className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium transition-all duration-200"
               >
                 <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
@@ -445,7 +447,9 @@ export default function OrganizerHome() {
             </div>
             <div className="text-center lg:text-left">
               <Button
-                onClick={() => router.push("/organizer-registration")}
+                onClick={() => {
+                  window.location.href = ORGANIZER_REGISTRATION_URL;
+                }}
                 className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-6 sm:px-8 py-3 text-base sm:text-lg rounded-lg font-medium transition-all duration-200"
               >
                 Register Now
@@ -826,7 +830,9 @@ export default function OrganizerHome() {
           </div>
           <div className="pt-6 sm:pt-8">
             <Button
-              onClick={() => router.push("/organizer-registration")}
+              onClick={() => {
+                window.location.href = ORGANIZER_REGISTRATION_URL;
+              }}
               className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-8 sm:px-10 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium transition-all duration-200"
             >
               <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />

@@ -9,7 +9,7 @@ export const useWishlist = () => {
 
   useEffect(() => {
     fetchWishlist();
-  }, []);
+  }, [token]);
 
   const fetchWishlist = async () => {
     try {
@@ -83,6 +83,11 @@ export const useWishlist = () => {
         userId = parsedAuth.state?.user?.id || parsedAuth.state?.user?._id;
       }
 
+      if (!userId || !token) {
+        toast.error("Please sign in to use wishlist");
+        return wishlist.includes(eventId);
+      }
+
       const isRemoving = wishlist.includes(eventId);
       const newWishlist = isRemoving
         ? wishlist.filter((id) => id !== eventId)
@@ -91,8 +96,9 @@ export const useWishlist = () => {
       setWishlist(newWishlist);
       localStorage.setItem("event-wishlist", JSON.stringify(newWishlist));
 
-      if (userId && token) {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/wishlist`, {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/events/wishlist`,
+        {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -102,7 +108,11 @@ export const useWishlist = () => {
             eventId,
             action: isRemoving ? "remove" : "add",
           }),
-        });
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to update wishlist");
       }
 
       toast.success(isRemoving ? "Removed from wishlist" : "Added to wishlist");

@@ -3,11 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useWishlist } from "@/hooks/useWishlist"; // Import hook
+import FeaturedEventCard, {
+  type FeaturedEventCardData,
+} from "@/components/featured-event-card";
 
 import Link from "next/link";
 import { toast } from "sonner";
-import EventCard from "./eventCard";
 
 export type Event = {
   _id: string;
@@ -50,11 +51,6 @@ export default function UpcomingEvents({
   count?: number;
   initialEvents?: Event[];
 }) {
-  const {
-    wishlist,
-    toggleWishlist,
-    isLoading: isWishlistLoading,
-  } = useWishlist();
   const [events, setEvents] = useState<Event[]>(initialEvents || []);
 
   const [isLoading, setIsLoading] = useState(!initialEvents);
@@ -233,6 +229,60 @@ export default function UpcomingEvents({
     return `${s} - ${e}`;
   };
 
+  const getPriceLabel = (event: Event) => {
+    const availableTickets = event.ticketTypes.filter(isTicketTypeAvailable);
+    const ticketPool = availableTickets.length > 0 ? availableTickets : event.ticketTypes;
+
+    let minETB = Infinity;
+    let minUSD = Infinity;
+    let hasETB = false;
+    let hasUSD = false;
+
+    ticketPool.forEach((ticket) => {
+      if (ticket.price && ticket.price > 0) {
+        minETB = Math.min(minETB, ticket.price);
+        hasETB = true;
+      }
+
+      if (ticket.priceUSD && ticket.priceUSD > 0) {
+        minUSD = Math.min(minUSD, ticket.priceUSD);
+        hasUSD = true;
+      }
+    });
+
+    if (hasUSD && hasETB) return `from ${minUSD}$/${minETB} ETB`;
+    if (hasUSD) return `from ${minUSD}$`;
+    if (hasETB && minETB !== Infinity && minETB > 0) return `from ${minETB} ETB`;
+    return "Free";
+  };
+
+  const buildFeaturedCardData = (event: Event): FeaturedEventCardData => {
+    const image = event.coverImages?.[0]
+      ? event.coverImages[0].startsWith("http")
+        ? event.coverImages[0]
+        : `${process.env.NEXT_PUBLIC_API_URL}${
+            event.coverImages[0].startsWith("/")
+              ? event.coverImages[0]
+              : `/${event.coverImages[0]}`
+          }`
+      : undefined;
+
+    return {
+      id: event._id,
+      href: `/event_detail?id=${event._id}`,
+      title: event.title,
+      tag: event.category?.name || "Uncategorized",
+      dateLabel: new Date(event.startDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      locationLabel: `${event.location.city}, ${event.location.country}`,
+      priceLabel: `${getPriceLabel(event)} • ${formatTimeRange(event.startTime, event.endTime)}`,
+      image,
+      soldOut: isEventSoldOut(event),
+    };
+  };
+
   // ----------------------- Wishlist toggle (Managed by Hook) -----------------------
 
   // ----------------------- Render logic -----------------------
@@ -270,16 +320,12 @@ export default function UpcomingEvents({
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         <div className="flex gap-4 pb-4">
-          {events.map((event) => (
-            <EventCard
+          {events.map((event, index) => (
+            <FeaturedEventCard
               key={event._id}
-              event={event}
-              isEventSoldOut={isEventSoldOut}
-              wishlist={wishlist}
-              formatTimeRange={formatTimeRange}
-              isWishlistLoading={isWishlistLoading}
-              toggleWishlist={toggleWishlist}
-              isTicketTypeAvailable={isTicketTypeAvailable}
+              data={buildFeaturedCardData(event)}
+              index={index}
+              className="w-80 flex-shrink-0"
             />
           ))}
         </div>

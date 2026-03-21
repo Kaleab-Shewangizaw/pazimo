@@ -1,17 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Search, Heart, Calendar, MapPin, Ticket, Loader2 } from "lucide-react";
+import { Search, Heart, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useWishlist } from "@/hooks/useWishlist";
-import { ImageIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
+import FeaturedEventCard, {
+  type FeaturedEventCardData,
+} from "@/components/featured-event-card";
 
 type Event = {
   _id: string;
@@ -41,6 +40,14 @@ type Event = {
     name?: string;
     email?: string;
   };
+};
+
+const normalizeImage = (imagePath?: string) => {
+  if (!imagePath) return undefined;
+  if (imagePath.startsWith("http")) return imagePath;
+  return `${process.env.NEXT_PUBLIC_API_URL}${
+    imagePath.startsWith("/") ? imagePath : `/${imagePath}`
+  }`;
 };
 
 export default function WishlistPage() {
@@ -91,6 +98,57 @@ export default function WishlistPage() {
     if (!start) return end;
     if (!end) return start;
     return `${start} - ${end}`;
+  };
+
+  const getPriceLabel = (event: Event) => {
+    const tickets = event.ticketTypes || [];
+    let minETB = Infinity;
+    let minUSD = Infinity;
+    let hasETB = false;
+    let hasUSD = false;
+
+    tickets.forEach((ticket) => {
+      if (ticket.priceETB && ticket.priceETB > 0) {
+        minETB = Math.min(minETB, ticket.priceETB);
+        hasETB = true;
+      } else if (ticket.price && ticket.price > 0) {
+        minETB = Math.min(minETB, ticket.price);
+        hasETB = true;
+      }
+
+      if (ticket.priceUSD && ticket.priceUSD > 0) {
+        minUSD = Math.min(minUSD, ticket.priceUSD);
+        hasUSD = true;
+      }
+    });
+
+    if (hasUSD && hasETB) return `from ${minUSD}$/${minETB} ETB`;
+    if (hasUSD) return `from ${minUSD}$`;
+    if (hasETB && minETB !== Infinity && minETB > 0) return `from ${minETB} ETB`;
+    return "Free";
+  };
+
+  const buildFeaturedCardData = (event: Event): FeaturedEventCardData => {
+    const categoryName =
+      typeof event.category === "string"
+        ? event.category
+        : event.category?.name || "Uncategorized";
+
+    const image = normalizeImage(event.coverImages?.[0] || event.coverImage);
+
+    return {
+      id: event._id,
+      href: `/event_detail?id=${event._id}`,
+      title: event.title,
+      tag: categoryName,
+      dateLabel: formatDate(event.startDate),
+      locationLabel: event.location?.city
+        ? `${event.location.city}${event.location.country ? `, ${event.location.country}` : ""}`
+        : "Location TBA",
+      priceLabel: getPriceLabel(event),
+      image,
+      soldOut: isEventSoldOut(event),
+    };
   };
 
   useEffect(() => {
@@ -262,175 +320,16 @@ export default function WishlistPage() {
           </Link>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredItems.map((event) => (
-            <div
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredItems.map((event, index) => (
+            <FeaturedEventCard
               key={event._id}
-              className="bg-white rounded-xl shadow-lg overflow-hidden transform transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 group"
-            >
-              <div className="relative">
-                {/* Category Badge */}
-                <div className="absolute top-3 left-3 bg-[#ffc107] text-white text-xs font-bold px-3 py-1.5 rounded-lg z-10 shadow-md">
-                  {typeof event.category === "string"
-                      ? event.category
-                      : typeof event.category === "object" && event.category?.name
-                      ? event.category.name
-                      : "Uncategorized"}
-                </div>
-
-                {/* Sold Out Badge */}
-                {isEventSoldOut(event) && (
-                  <div className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-20 shadow-md">
-                    SOLD OUT
-                  </div>
-                )}
-
-                {/* Enhanced Image Container */}
-                <div className="relative aspect-[4/5] overflow-hidden bg-gray-100 flex items-center justify-center">
-                  {/* Fallback Icon */}
-                  <ImageIcon className="w-16 h-16 text-gray-300" />
-
-                  {event.coverImages && event.coverImages.length > 0 && (
-                    <Image
-                      src={
-                        event.coverImages[0].startsWith("http")
-                          ? event.coverImages[0]
-                          : `${process.env.NEXT_PUBLIC_API_URL}${
-                              event.coverImages[0].startsWith("/")
-                                ? event.coverImages[0]
-                                : `/${event.coverImages[0]}`
-                            }`
-                      }
-                      alt={event.title}
-                      fill
-                      className="object-cover transition-transform duration-500 group-hover:scale-110"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      quality={90}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  )}
-
-                  {/* Gradient Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                </div>
-
-                {/* Wishlist Button */}
-                <button
-                  className={cn(
-                    "absolute bottom-3 right-3 p-2.5 rounded-full bg-white/90 backdrop-blur-sm transition-all duration-300 shadow-lg hover:shadow-xl",
-                    wishlist.includes(event._id)
-                      ? "text-red-500 bg-red-50"
-                      : "text-gray-600 hover:text-red-50",
-                    isWishlistLoading
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:scale-110"
-                  )}
-                  onClick={() => toggleWishlist(event._id)}
-                  disabled={isWishlistLoading}
-                  aria-label={
-                    wishlist.includes(event._id)
-                      ? "Remove from wishlist"
-                      : "Add to wishlist"
-                  }
-                >
-                  <Heart
-                    className={cn(
-                      "h-5 w-5",
-                      isWishlistLoading ? "animate-pulse" : ""
-                    )}
-                    fill={
-                      wishlist.includes(event._id) ? "currentColor" : "none"
-                    }
-                  />
-                </button>
-
-                {/* Date Badge */}
-                <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm text-[#1a2d5a] text-xs font-semibold px-3 py-1.5 rounded-lg shadow-md">
-                  {new Date(event.startDate).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </div>
-              </div>
-
-              {/* Enhanced Card Content */}
-              <div className="p-5">
-                <div className="mb-3">
-                  <p className="text-gray-500 text-sm font-medium mb-1">
-                    {event.location?.city || "TBA"},{" "}
-                    {event.location?.country || ""}
-                  </p>
-                  <h3 className="font-bold text-lg text-gray-900 line-clamp-2 leading-tight group-hover:text-[#1a2d5a] transition-colors">
-                    {event.title}
-                  </h3>
-                </div>
-
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-gradient-to-r from-[#1a2d5a]/10 to-[#1a2d5a]/5 rounded-lg px-3 py-2">
-                    <p className="text-[#1a2d5a] font-bold text-sm">
-                      {(() => {
-                        if (!event.ticketTypes) return "Free";
-                        const availableTickets = event.ticketTypes.filter(
-                          (ticket) => isTicketTypeAvailable(ticket)
-                        );
-
-                        // Calculate minimum prices for each currency
-                        let minETB = Infinity, minUSD = Infinity;
-                        let hasETB = false, hasUSD = false;
-                        const ticketsToCheck = availableTickets.length > 0 ? availableTickets : event.ticketTypes;
-
-                        ticketsToCheck.forEach((ticket) => {
-                          if (ticket.priceETB && ticket.priceETB > 0) {
-                            minETB = Math.min(minETB, ticket.priceETB);
-                            hasETB = true;
-                          } else if (ticket.price && ticket.price > 0) {
-                            minETB = Math.min(minETB, ticket.price);
-                            hasETB = true;
-                          }
-                          if (ticket.priceUSD && ticket.priceUSD > 0) {
-                            minUSD = Math.min(minUSD, ticket.priceUSD);
-                            hasUSD = true;
-                          }
-                        });
-
-                        // Format price label based on available currencies
-                        if (hasUSD && hasETB) {
-                          return `${minUSD}$/${minETB} ETB`;
-                        } else if (hasUSD) {
-                          return `${minUSD}$`;
-                        } else if (hasETB && minETB !== Infinity && minETB > 0) {
-                          return `${minETB} ETB`;
-                        }
-                        return "Free";
-                      })()}
-                    </p>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {formatTimeRange(event.startTime, event.endTime)}
-                  </div>
-                </div>
-
-                {/* Action Button */}
-                {!isEventSoldOut(event) ? (
-                  <Link href={`/event_detail?id=${event._id}`} passHref>
-                    <Button className="w-full bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white font-semibold py-2.5 rounded-lg transition-all duration-200 hover:shadow-lg transform hover:scale-[1.02]">
-                      Get Tickets
-                    </Button>
-                  </Link>
-                ) : (
-                  <Link href={`/event_detail?id=${event._id}`} passHref>
-                    <Button
-                      variant="outline"
-                      className="w-full border-red-500 text-red-500 hover:bg-red-50 font-semibold py-2.5 rounded-lg"
-                    >
-                      Sold Out
-                    </Button>
-                  </Link>
-                )}
-              </div>
-            </div>
+              data={buildFeaturedCardData(event)}
+              wishlist={wishlist}
+              onToggleWishlist={toggleWishlist}
+              isWishlistLoading={isWishlistLoading}
+              index={index}
+            />
           ))}
         </div>
       )}

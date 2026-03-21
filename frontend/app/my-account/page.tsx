@@ -40,7 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function MyAccount() {
-  const { user, token, setUser, logout } = useAuthStore();
+  const { user, token, setUser, setToken, logout } = useAuthStore();
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,59 +54,90 @@ export default function MyAccount() {
   });
 
   useEffect(() => {
-    if (!user) {
-      router.push("/sign-in");
-    } else {
-      // ⚡ Fetch fresh user data from backend to ensure we have all fields (including phoneNumber)
-      const fetchUserData = async () => {
+    if (!token) {
+      const storedAuth = localStorage.getItem("auth-storage");
+      if (storedAuth) {
         try {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-          
-          if (response.ok) {
-            const data = await response.json();
-            if (data.status === "success" && data.data) {
-              // Update auth store with fresh data
-              setUser(data.data);
-              setFormData({
-                firstName: data.data.firstName || "",
-                lastName: data.data.lastName || "",
-                email: data.data.email || "",
-                phoneNumber: data.data.phoneNumber || "",
-              });
-            }
-          } else {
-            // Fallback to cached user data
+          const parsedAuth = JSON.parse(storedAuth);
+          const storedToken = parsedAuth.state?.token;
+          const storedUser = parsedAuth.state?.user;
+
+          if (storedToken) {
+            setToken(storedToken);
+          }
+
+          if (storedUser) {
+            setUser(storedUser);
             setFormData({
-              firstName: user.firstName || "",
-              lastName: user.lastName || "",
-              email: user.email || "",
-              phoneNumber: user.phoneNumber || "",
+              firstName: storedUser.firstName || "",
+              lastName: storedUser.lastName || "",
+              email: storedUser.email || "",
+              phoneNumber: storedUser.phoneNumber || "",
             });
           }
+
+          if (storedToken) {
+            return;
+          }
         } catch (error) {
-          console.error("Failed to fetch user data:", error);
-          // Fallback to cached user data
-          setFormData({
-            firstName: user.firstName || "",
-            lastName: user.lastName || "",
-            email: user.email || "",
-            phoneNumber: user.phoneNumber || "",
-          });
-        } finally {
-          setTimeout(() => setIsLoading(false), 300);
+          console.error("Failed to restore auth state:", error);
         }
-      };
-      
-      fetchUserData();
+      }
+
+      router.push("/sign-in");
+      return;
     }
-  }, [user, router, token, setUser]);
+
+    if (!user) {
+      return;
+    }
+
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/auth/me`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === "success" && data.data) {
+            setFormData({
+              firstName: data.data.firstName || "",
+              lastName: data.data.lastName || "",
+              email: data.data.email || "",
+              phoneNumber: data.data.phoneNumber || "",
+            });
+            return;
+          }
+        }
+
+        // Fallback to cached user data
+        setFormData({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: user.email || "",
+          phoneNumber: user.phoneNumber || "",
+        });
+      } catch (error) {
+        console.error("Failed to fetch user data:", error);
+        setFormData({
+          firstName: user.firstName || "",
+          lastName: user.lastName || "",
+          email: user.email || "",
+          phoneNumber: user.phoneNumber || "",
+        });
+      } finally {
+        setTimeout(() => setIsLoading(false), 300);
+      }
+    };
+
+    fetchUserData();
+  }, [router, token, user, setUser, setToken]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;

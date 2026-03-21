@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
+import { useWishlist } from "@/hooks/useWishlist";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
 
@@ -175,7 +176,8 @@ export default function EventDetailClient() {
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
 
   const [showFullDescription, setShowFullDescription] = useState(false);
-  const [liked, setLiked] = useState(false);
+  const { toggleWishlist, isInWishlist, isLoading: isWishlistLoading } =
+    useWishlist();
 
   // Memoized computed values - prevent unnecessary re-renders
   const ticketsToDisplay = useMemo(() => {
@@ -1053,13 +1055,18 @@ export default function EventDetailClient() {
         {/* Like + Share — top right */}
         <div className="absolute top-4 md:top-150 md:bottom-10 right-4 md:right-10 z-10 flex items-center gap-2">
           <button
-            onClick={() => setLiked(!liked)}
+            onClick={() => {
+              void toggleWishlist(event._id);
+            }}
             className="h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/50 transition-colors"
             aria-label="Like event"
+            disabled={isWishlistLoading}
           >
             <Heart
               className={`h-4 w-4 transition-colors ${
-                liked ? "fill-red-500 text-red-500" : "text-white"
+                isInWishlist(event._id)
+                  ? "fill-red-500 text-red-500"
+                  : "text-white"
               }`}
             />
           </button>
