@@ -66,10 +66,7 @@ export default function AdminLoginPage() {
               <Shield className="h-8 w-8 text-blue-600" />
             </div>
           </div>
-          {/* <h2 className="text-2xl font-bold text-gray-900">Admin </h2> */}
-          <div className="flex justify-center">
-          <img src="/logo.png" alt="Pazimo" className="w-32 md:w-40 h-auto" />
-        </div>
+        
         </div>
 
         {/* Admin Login Form */}
