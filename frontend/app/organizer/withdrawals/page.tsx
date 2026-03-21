@@ -598,7 +598,7 @@ export default function WithdrawalsPage() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-0">
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div className="flex items-center gap-2">
                 <span className="text-xs sm:text-sm text-gray-600">
                   Rows per page:
@@ -620,58 +620,31 @@ export default function WithdrawalsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 sm:h-9 sm:w-9 border-gray-200 hover:bg-gray-50 bg-transparent"
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.max(prev - 1, 1))
-                  }
-                  disabled={currentPage === 1}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3 w-3 sm:h-4 sm:w-4"
-                  >
-                    <path d="m15 18-6-6 6-6" />
-                  </svg>
-                </Button>
-                <span className="text-xs sm:text-sm font-medium">
-                  {currentPage} / {totalPages}
+              <div className="flex items-center gap-3">
+                <span className="text-xs sm:text-sm font-medium text-gray-700">
+                  Page {currentPage} of {totalPages}
                 </span>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 sm:h-9 sm:w-9 border-gray-200 hover:bg-gray-50 bg-transparent"
-                  onClick={() =>
-                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-                  }
-                  disabled={currentPage === totalPages}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-3 w-3 sm:h-4 sm:w-4"
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm border-gray-300 hover:bg-gray-100 bg-white"
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    disabled={currentPage === 1}
                   >
-                    <path d="m9 18 6-6-6-6" />
-                  </svg>
-                </Button>
+                    Previous
+                  </Button>
+                  <Button
+                    className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white"
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                    }
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             </div>
           )}

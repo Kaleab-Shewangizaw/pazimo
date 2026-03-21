@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
-import QrModal from "./qrModel";
 import base64id from "base64id";
-import { PlusIcon, Loader2, CreditCard } from "lucide-react";
+import { PlusIcon, Loader2, CreditCard, MessageSquareText } from "lucide-react";
 import { PaymentInit, Row } from "@/types/bulk-invite";
 import { toast } from "sonner";
 import { Event } from "@/types/invitation";
@@ -14,6 +13,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import {
   Dialog,
@@ -45,7 +45,6 @@ export default function EditableTable({
   console.log("EditableTable activePaymentProvider:", activePaymentProvider);
 
   const [showDataTrimmed, setShowDataTrimmed] = useState(false);
-  const [qrRow, setQrRow] = useState<Row | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [canSend, setCanSend] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -69,6 +68,11 @@ export default function EditableTable({
     success: unknown[];
     failed: unknown[];
   } | null>(null);
+  const [isMessageDialogOpen, setIsMessageDialogOpen] = useState(false);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(
+    null
+  );
+  const [messageDraft, setMessageDraft] = useState("");
 
   useEffect(() => {
     setPaymentMethod(
@@ -252,6 +256,19 @@ export default function EditableTable({
     const updated = [...data];
     updated.splice(index, 1);
     setData(updated);
+  };
+
+  const openMessageDialog = (index: number) => {
+    setEditingMessageIndex(index);
+    setMessageDraft(data[index]?.Message || "");
+    setIsMessageDialogOpen(true);
+  };
+
+  const saveMessage = () => {
+    if (editingMessageIndex === null) return;
+    handleChange(editingMessageIndex, "Message", messageDraft);
+    setIsMessageDialogOpen(false);
+    setEditingMessageIndex(null);
   };
 
   const handleSend = async () => {
@@ -501,7 +518,7 @@ export default function EditableTable({
     "Ticket Type",
     "Amount",
     "Message",
-    "QR",
+    "Actions",
   ];
 
   if (successResult) {
@@ -756,33 +773,34 @@ export default function EditableTable({
                         />
                       )}
                       {key === "Message" && (
-                        <input
-                          type="text"
-                          value={row.Message}
-                          onChange={(e) =>
-                            handleChange(i, "Message", e.target.value)
-                          }
-                          className="border border-gray-300 px-2 py-1 rounded w-full text-xs"
-                        />
-                      )}
-                      {key === "QR" && (
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-1">
                           <Button
+                            type="button"
                             variant="outline"
-                            disabled={!isRowValid(row)}
-                            className="text-xs py-1 px-2"
-                            onClick={() => setQrRow(row)}
+                            className="w-full justify-center text-xs px-2 py-1 h-8"
+                            onClick={() => openMessageDialog(i)}
                           >
-                            Generate
+                            <MessageSquareText className="w-3 h-3 mr-1" />
+                            {row.Message?.trim() ? "Edit Message" : "Add Message"}
                           </Button>
-                          <Button
-                            className="text-xs py-1 px-2 hover:border hover:border-red-500 hover:text-red-500"
-                            variant={"ghost"}
-                            onClick={() => handleRemove(i)}
-                          >
-                            Remove
-                          </Button>
+                          {row.Message?.trim() && (
+                            <p
+                              className="text-[10px] text-gray-500 truncate"
+                              title={row.Message}
+                            >
+                              {row.Message}
+                            </p>
+                          )}
                         </div>
+                      )}
+                      {key === "Actions" && (
+                        <Button
+                          className="text-xs py-1 px-2 hover:border hover:border-red-500 hover:text-red-500"
+                          variant={"ghost"}
+                          onClick={() => handleRemove(i)}
+                        >
+                          Remove
+                        </Button>
                       )}
                     </td>
                   ))}
@@ -816,7 +834,44 @@ export default function EditableTable({
         </button>
       </div>
 
-      {qrRow && <QrModal row={qrRow} onClose={() => setQrRow(null)} />}
+      <Dialog
+        open={isMessageDialogOpen}
+        onOpenChange={(open) => {
+          setIsMessageDialogOpen(open);
+          if (!open) {
+            setEditingMessageIndex(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit Invitation Message</DialogTitle>
+            <DialogDescription>
+              {editingMessageIndex !== null
+                ? `Set a custom message for ${data[editingMessageIndex]?.Name || "this contact"}.`
+                : "Set a custom message for this contact."}
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={messageDraft}
+            onChange={(e) => setMessageDraft(e.target.value)}
+            className="min-h-36"
+            placeholder="Type invitation message..."
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsMessageDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={saveMessage}>
+              Save Message
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Waiting for Payment Modal - NOW WORKS */}
       <Dialog

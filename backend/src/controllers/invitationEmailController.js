@@ -114,15 +114,6 @@ const createEmailTemplate = (
                 <path d="M0,40 Q150,80 300,40" stroke="#a78bfa" stroke-width="6" fill="transparent" />
               </svg>
 
-              <!-- Logo -->
-              <div style="margin-bottom:16px;position:relative;z-index:1;">
-                <span style="display:inline-block;background:#ffffff;padding:6px 12px;border-radius:12px;">
-                  <img src="https://pazimo.com/logo2.png"
-                    onerror="this.onerror=null;this.src='https://pazimo.vercel.app/logo2.png';" alt="Pazimo"
-                    style="height:28px;display:block;" />
-                </span>
-              </div>
-
               <p
                 style="margin:0;font-size:12px;letter-spacing:3px;color:#2563eb;font-weight:700;position:relative;z-index:1;text-transform:uppercase;">
                 ${headerTitle}
@@ -138,15 +129,6 @@ const createEmailTemplate = (
                 Hello ${invitation.guestName},
               </p>
 
-              <!-- Event Message -->
-              <p
-                style="margin:16px auto 0;max-width:520px;font-size:16px;line-height:1.6;color:#4b5563;position:relative;z-index:1;">
-                ${
-                  headerSubtitle ||
-                  "Please join us for a thoughtfully crafted event."
-                }
-              </p>
-
               <!-- Organizer Message -->
               ${
                 displayMessage
@@ -156,6 +138,15 @@ const createEmailTemplate = (
               </p>`
                   : ""
               }
+
+              <!-- Event Message -->
+              <p
+                style="margin:16px auto 0;max-width:520px;font-size:16px;line-height:1.6;color:#4b5563;position:relative;z-index:1;">
+                ${
+                  headerSubtitle ||
+                  "Please join us for a thoughtfully crafted event."
+                }
+              </p>
 
               <!-- Confetti and shapes below messages -->
               <svg width="100%" height="250" style="position:absolute;top=200px;right=0;pointer-events:none;z-index:0;">

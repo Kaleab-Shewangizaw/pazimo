@@ -140,63 +140,25 @@ export default function BulkInvite({
   };
 
   const parseCsv = (arrayBuffer: ArrayBuffer) => {
-    // csv-parser works with streams/strings. We decode the ArrayBuffer to a string.
-    const textDecoder = new TextDecoder("utf-8");
-    const csvString = textDecoder.decode(arrayBuffer);
-    const results: any[] = [];
-
-    // Simulate a stream behavior for the parser with a simple split/forEach approach
-    // For a true stream in the browser, you might use different utility libraries,
-    // but a string split works for basic cases.
-
-    // Using a utility funct{ title: "Sample Event" };ion might be cleaner if needed. For simplicity:
-    const lines = csvString.split("\n");
-    if (lines.length < 1) return;
-
-    const headers = lines[0].split(",").map(normalizeHeader);
-
-    // Check for missing required columns
-    const hasName = headers.includes("Name");
-    const hasContact = headers.includes("Email") || headers.includes("Phone");
-
-    const missing = [];
-    if (!hasName) missing.push("Name");
-    if (!hasContact) missing.push("Email or Phone");
-
-    if (missing.length > 0) {
-      setMissingColumns(missing);
-      toast.error(`Missing columns: ${missing.join(", ")}`);
-    }
-
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const values = lines[i].split(",");
-      const obj: Record<string, string> = {};
-      headers.forEach((header, index) => {
-        if (values[index]) {
-          obj[header] = values[index].trim();
-        }
-      });
-      results.push(obj);
-    }
-
-    processData(results);
-  };
-
-  const parseExcel = (arrayBuffer: ArrayBuffer) => {
-    // xlsx expects the data in a specific format (e.g., Uint8Array or binary string)
     const workbook = XLSX.read(arrayBuffer, { type: "array" });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    // Get headers first to normalize
     const jsonData = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
-    }) as any[][];
-    if (jsonData.length === 0) return;
+      raw: false,
+      defval: "",
+    }) as unknown[][];
 
-    const originalHeaders = jsonData[0] as string[];
-    const headers = originalHeaders.map((h) => normalizeHeader(String(h)));
+    const results = parseSheetData(jsonData);
+    processData(results);
+  };
+
+  const parseSheetData = (jsonData: unknown[][]): Record<string, string>[] => {
+    if (jsonData.length === 0) return [];
+
+    const originalHeaders = (jsonData[0] || []) as unknown[];
+    const headers = originalHeaders.map((h) => normalizeHeader(String(h ?? "")));
 
     // Check for missing required columns
     const hasName = headers.includes("Name");
@@ -211,16 +173,39 @@ export default function BulkInvite({
       toast.error(`Missing columns: ${missing.join(", ")}`);
     }
 
-    const results = jsonData.slice(1).map((row) => {
-      const obj: Record<string, any> = {};
+    return jsonData
+      .slice(1)
+      .filter((row) =>
+        (row || []).some((cell) => String(cell ?? "").trim() !== "")
+      )
+      .map((row) => {
+      const obj: Record<string, string> = {};
       headers.forEach((header, index) => {
-        if (row[index] !== undefined) {
-          obj[header] = row[index];
+        if (!header) return;
+        const value = row[index];
+        if (value === undefined || value === null) return;
+        if (header === "Message") {
+          obj[header] = String(value).replace(/\r\n/g, "\n");
+          return;
         }
+        obj[header] = String(value).trim();
       });
       return obj;
     });
+  };
 
+  const parseExcel = (arrayBuffer: ArrayBuffer) => {
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+    }) as unknown[][];
+
+    const results = parseSheetData(jsonData);
     processData(results);
   };
 
