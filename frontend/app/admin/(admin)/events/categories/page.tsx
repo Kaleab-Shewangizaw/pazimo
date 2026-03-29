@@ -12,14 +12,6 @@ import { Pencil, Trash2, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-// interface Category {
-//   _id: string;
-//   name: string;
-//   description: string;
-//   isPublished: boolean;
-//   createdAt: string;
-//   updatedAt: string;
-// }
 interface Category {
   _id: string;
   name: string;
@@ -28,6 +20,11 @@ interface Category {
   isPublished: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+const buildImageUrl = (image?: string) => {
+  if (!image) return null
+  return `${process.env.NEXT_PUBLIC_API_URL}${image}`
 }
 
 export default function CategoriesPage() {
@@ -68,14 +65,12 @@ export default function CategoriesPage() {
     category.description.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  // Pagination calculations
   const totalCategories = filteredCategories.length
   const totalPages = Math.ceil(totalCategories / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
   const paginatedCategories = filteredCategories.slice(startIndex, endIndex)
 
-  // Reset to first page when search changes
   useEffect(() => {
     setCurrentPage(1)
   }, [searchQuery])
@@ -149,7 +144,6 @@ export default function CategoriesPage() {
         <p className="text-gray-600 mt-1">Manage event categories and their details</p>
       </div>
 
-      {/* Search and Add Button */}
       <div className="mb-6 flex flex-col sm:flex-row gap-4">
         <div className="flex-1">
           <Input
@@ -168,117 +162,78 @@ export default function CategoriesPage() {
         </Button>
       </div>
 
-      {/* Categories Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Image</TableHead>
                 <TableHead>Category Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
-            {/* <TableBody>
-              {paginatedCategories.map((category) => (
-                <TableRow key={category._id}>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell>{category.description}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={category.isPublished ? "default" : "secondary"}
-                      className="cursor-pointer"
-                      onClick={() => handleTogglePublish(category._id, category.isPublished)}
-                    >
-                      {category.isPublished ? "Published" : "Draft"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => router.push(`/admin/events/categories/${category._id}/edit`)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(category._id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+            <TableBody>
+              {paginatedCategories.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    No categories found.
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody> */}
-
-<TableHeader>
-  <TableRow>
-    <TableHead>Image</TableHead>
-    <TableHead>Category Name</TableHead>
-    <TableHead>Description</TableHead>
-    <TableHead>Status</TableHead>
-    <TableHead className="text-right">Actions</TableHead>
-  </TableRow>
-</TableHeader>
-<TableBody>
-  {paginatedCategories.map((category) => (
-    <TableRow key={category._id}>
-      <TableCell>
-        {category.image ? (
-          <img 
-            src={`${process.env.NEXT_PUBLIC_API_URL}${category.image}`} 
-            alt={category.name}
-            className="w-12 h-12 object-cover rounded-lg"
-          />
-        ) : (
-          <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-            <span className="text-gray-400 text-xs">No image</span>
-          </div>
-        )}
-      </TableCell>
-      <TableCell className="font-medium">{category.name}</TableCell>
-      <TableCell>{category.description}</TableCell>
-      <TableCell>
-        <Badge
-          variant={category.isPublished ? "default" : "secondary"}
-          className="cursor-pointer"
-          onClick={() => handleTogglePublish(category._id, category.isPublished)}
-        >
-          {category.isPublished ? "Published" : "Draft"}
-        </Badge>
-      </TableCell>
-      <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push(`/admin/events/categories/${category._id}/edit`)}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDelete(category._id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  ))}
-</TableBody>
-
+              ) : (
+                paginatedCategories.map((category) => (
+                  <TableRow key={category._id}>
+                    <TableCell>
+                      {buildImageUrl(category.image) ? (
+                        <img
+                          src={buildImageUrl(category.image)!}
+                          alt={category.name}
+                          className="w-12 h-12 object-cover rounded-lg"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
+                          <span className="text-gray-400 text-xs">No image</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">{category.name}</TableCell>
+                    <TableCell>{category.description}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={category.isPublished ? "default" : "secondary"}
+                        className="cursor-pointer"
+                        onClick={() => handleTogglePublish(category._id, category.isPublished)}
+                      >
+                        {category.isPublished ? "Published" : "Draft"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => router.push(`/admin/events/categories/${category._id}/edit`)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(category._id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
           </Table>
         </CardContent>
       </Card>
 
-      {/* Pagination Controls */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-6">
           <div className="flex items-center gap-2">
@@ -374,7 +329,6 @@ export default function CategoriesPage() {
         </div>
       )}
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

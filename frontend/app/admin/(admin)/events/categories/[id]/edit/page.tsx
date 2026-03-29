@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 
@@ -14,6 +15,7 @@ interface Category {
   _id: string;
   name: string;
   description: string;
+  image?: string;
   isPublished: boolean;
 }
 
@@ -22,6 +24,9 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [category, setCategory] = useState<Category | null>(null)
+  const [isPublished, setIsPublished] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCategory()
@@ -37,6 +42,8 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
 
       const data = await response.json()
       setCategory(data.data.category)
+      setIsPublished(Boolean(data.data.category?.isPublished))
+      setImagePreview(data.data.category?.image ? `${process.env.NEXT_PUBLIC_API_URL}${data.data.category.image}` : null)
     } catch (error) {
       console.error('Error fetching category:', error)
       toast.error('Failed to fetch category')
@@ -45,24 +52,37 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
     }
   }
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    setSelectedImage(file)
+    const reader = new FileReader()
+    reader.onload = () => setImagePreview(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsSubmitting(true)
 
-    const formData = new FormData(e.currentTarget)
-    const updatedCategory = {
-      name: formData.get('name'),
-      description: formData.get('description'),
-      isPublished: category?.isPublished
+    const source = new FormData(e.currentTarget)
+    const formData = new FormData()
+    formData.append('name', (source.get('name') as string) || '')
+    formData.append('description', (source.get('description') as string) || '')
+    formData.append('isPublished', isPublished.toString())
+
+    if (selectedImage) {
+      formData.append('image', selectedImage)
     }
 
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${params.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedCategory),
+        body: formData,
       })
 
       if (!response.ok) {
@@ -126,7 +146,6 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
 
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6">
-          {/* Category Details */}
           <Card>
             <CardHeader>
               <CardTitle>Category Details</CardTitle>
@@ -155,15 +174,33 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
               </div>
 
               <div className="grid gap-2">
-                <Label>Status</Label>
-                <p className="text-sm text-gray-600">
-                  {category.isPublished ? "Published" : "Draft"}
-                </p>
+                <Label htmlFor="image">Category Image</Label>
+                <Input
+                  id="image"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                />
+                {imagePreview && (
+                  <div className="mt-2">
+                    <img src={imagePreview} alt="Category preview" className="w-32 h-32 object-cover rounded-lg" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="isPublished"
+                  checked={isPublished}
+                  onCheckedChange={setIsPublished}
+                />
+                <Label htmlFor="isPublished">
+                  {isPublished ? "Published" : "Draft"}
+                </Label>
               </div>
             </CardContent>
           </Card>
 
-          {/* Submit Button */}
           <div className="flex justify-end">
             <Button
               type="submit"
