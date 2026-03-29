@@ -90,13 +90,20 @@ export default function TableComp({ event }: { event: Event }) {
 
         setTickets(allTickets);
 
-        // Fetch Pricing
-        const pricingResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/invitation-pricing/public`,
+        // Fetch campaign pricing (fallback to invitation pricing for backward compatibility)
+        let pricingResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/campaign-pricing/public`,
         );
+
+        if (!pricingResponse.ok) {
+          pricingResponse = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/invitation-pricing/public`,
+          );
+        }
+
         if (pricingResponse.ok) {
           const data = await pricingResponse.json();
-          setPricing({ sms: data.data.smsPrice || 5 });
+          setPricing({ sms: data.data?.smsPrice || 5 });
         }
       } catch (error) {
         console.error("Error fetching data:", error);

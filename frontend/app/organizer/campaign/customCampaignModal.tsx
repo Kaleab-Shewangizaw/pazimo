@@ -133,12 +133,26 @@ export default function CustomCampaignModal({
 
     // Always fetch pricing on open
     if (isOpen) {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/invitation-pricing/public`)
-        .then((res) => res.json())
-        .then((data) => {
+      const fetchPricing = async () => {
+        try {
+          let res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/api/campaign-pricing/public`
+          );
+
+          if (!res.ok) {
+            res = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/invitation-pricing/public`
+            );
+          }
+
+          const data = await res.json();
           if (data.data?.smsPrice) setPricing({ sms: data.data.smsPrice });
-        })
-        .catch((err) => console.error("Pricing error", err));
+        } catch (err) {
+          console.error("Pricing error", err);
+        }
+      };
+
+      fetchPricing();
     }
   }, [isOpen, initialUsers, initialData]);
   useEffect(() => {

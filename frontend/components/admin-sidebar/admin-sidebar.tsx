@@ -272,6 +272,19 @@ export default function AdminSidebar({
                       Invitation Pricing
                     </Link>
                   )}
+                  {!isPartner && (
+                    <Link
+                      href="/admin/events/campaign-pricing"
+                      onClick={onClose}
+                      className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
+                        isActive("/admin/events/campaign-pricing")
+                          ? "text-blue-600 bg-blue-50"
+                          : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+                      }`}
+                    >
+                      Campaign Pricing
+                    </Link>
+                  )}
                 </div>
               )}
             </div>
