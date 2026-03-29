@@ -309,43 +309,20 @@ export default function AdminSidebar({
 
             {/* Tickets Section */}
             {!isPartner && (
-              <div>
-                <button
-                  onClick={() => toggleSubmenu("tickets")}
-                  className={`w-full flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
-                    pathname.startsWith("/admin/tickets")
-                      ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
-                      : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Ticket className="h-5 w-5 flex-shrink-0" />
-                    <span className="font-medium text-sm sm:text-base">
-                      Tickets
-                    </span>
-                  </div>
-                  {openSubmenu === "tickets" ? (
-                    <ChevronDown className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 flex-shrink-0 transition-transform duration-200" />
-                  )}
-                </button>
-                {openSubmenu === "tickets" && (
-                  <div className="ml-8 sm:ml-12 mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                    <Link
-                      href="/admin/tickets"
-                      onClick={onClose}
-                      className={`block p-2 sm:p-2.5 rounded-md text-sm transition-colors ${
-                        isActive("/admin/tickets")
-                          ? "text-blue-600 bg-blue-50"
-                          : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
-                      }`}
-                    >
-                      All Tickets
-                    </Link>
-                  </div>
-                )}
-              </div>
+              <Link
+                href="/admin/tickets"
+                onClick={onClose}
+                className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
+                  pathname.startsWith("/admin/tickets")
+                    ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                    : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                }`}
+              >
+                <Ticket className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">
+                  Tickets
+                </span>
+              </Link>
             )}
 
             {/* Withdrawals Section */}
