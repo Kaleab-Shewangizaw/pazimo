@@ -108,6 +108,7 @@ interface WithdrawalRequest {
 interface DashboardStats {
   totalUsers: number;
   totalEvents: number;
+  totalTicketsSold: number;
   totalRevenue: number;
   organizerRevenue: number;
   pazimoCommission: number;
@@ -128,12 +129,18 @@ interface EventRegistrationData {
   count: number;
 }
 
+interface TicketSalesData {
+  name: string;
+  ticketsSold: number;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const { token } = useAdminAuthStore();
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     totalEvents: 0,
+    totalTicketsSold: 0,
     totalRevenue: 0,
     organizerRevenue: 0,
     pazimoCommission: 0,
@@ -150,6 +157,8 @@ export default function AdminDashboardPage() {
   const [revenueChartData, setRevenueChartData] = useState<RevenueData[]>([]);
   const [eventRegistrationsChartData, setEventRegistrationsChartData] =
     useState<EventRegistrationData[]>([]);
+  const [ticketSalesChartData, setTicketSalesChartData] =
+    useState<TicketSalesData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">(
     "ETB"
@@ -232,6 +241,24 @@ export default function AdminDashboardPage() {
         await eventRegistrationsChartResponse.json();
       setEventRegistrationsChartData(eventRegistrationsChartData.data);
 
+      // Fetch ticket sales trend chart data
+      const ticketSalesChartResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/dashboard/charts/ticket-sales`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+      if (!ticketSalesChartResponse.ok) {
+        const errorData = await ticketSalesChartResponse.json();
+        throw new Error(
+          errorData.message || "Failed to fetch ticket sales chart data"
+        );
+      }
+      const ticketSalesChartData = await ticketSalesChartResponse.json();
+      setTicketSalesChartData(ticketSalesChartData.data);
+
       // Fetch active events
       const eventsResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/events?status=published&limit=5`,
@@ -278,11 +305,6 @@ export default function AdminDashboardPage() {
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals?status=pending&limit=5&currency=${selectedCurrency}`,
         {
-            value: `${(stats.totalRevenue || 0).toFixed(2)} ${selectedCurrency}`,
-            value: `${(stats.organizerRevenue || 0).toFixed(2)} ${selectedCurrency}`,
-            value: `${(stats.pazimoCommission || 0).toFixed(2)} ${selectedCurrency}`,
-            value: `${(stats.totalWithdrawn || 0).toFixed(2)} ${selectedCurrency}`,
-            value: `${(stats.availableBalance || 0).toFixed(2)} ${selectedCurrency}`,
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -362,6 +384,15 @@ export default function AdminDashboardPage() {
       iconBg: "bg-indigo-100",
       iconColor: "text-indigo-600",
       borderColor: "border-l-indigo-600",
+    },
+    {
+      title: "Total Tickets Sold",
+      value: stats.totalTicketsSold,
+      icon: Ticket,
+      iconBg: "bg-cyan-100",
+      iconColor: "text-cyan-600",
+      borderColor: "border-l-cyan-600",
+      trendUp: true,
     },
     {
       title: "Total Revenue",
@@ -485,7 +516,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
             <CardHeader>
               <CardTitle>Revenue Over Time</CardTitle>
@@ -507,6 +538,33 @@ export default function AdminDashboardPage() {
                       dataKey="revenue"
                       stroke="#8884d8"
                       activeDot={{ r: 8 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            </CardContent>
+          </Card>
+          <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
+            <CardHeader>
+              <CardTitle>Ticket Sales Trend</CardTitle>
+              <CardDescription>
+                Monthly total tickets sold across events.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChartContainer config={{}} className="min-h-[200px] w-full">
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={ticketSalesChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip content={<ChartTooltipContent />} />
+                    <Legend />
+                    <Line
+                      type="monotone"
+                      dataKey="ticketsSold"
+                      stroke="#0ea5e9"
+                      activeDot={{ r: 7 }}
                     />
                   </LineChart>
                 </ResponsiveContainer>

@@ -329,6 +329,10 @@ export default function TicketsPage() {
     currentPage * itemsPerPage
   );
   const totalEventPages = Math.ceil(filteredEvents.length / itemsPerPage);
+  const totalTicketsSoldAcrossEvents = filteredEvents.reduce(
+    (sum, event) => sum + (event.ticketsSold ?? 0),
+    0
+  );
 
   // Tickets View Logic
   const filteredTickets = tickets.filter((ticket) => {
@@ -426,6 +430,36 @@ export default function TicketsPage() {
             <p className="text-gray-600 mt-1">
               Select an event to manage tickets
             </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Total Tickets Sold</p>
+              <h3 className="text-2xl font-bold text-gray-900">
+                {totalTicketsSoldAcrossEvents.toLocaleString()}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Based on currently listed events
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-indigo-100 rounded-full flex items-center justify-center">
+              <TicketIcon className="h-6 w-6 text-indigo-600" />
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Events Listed</p>
+              <h3 className="text-2xl font-bold text-gray-900">
+                {filteredEvents.length.toLocaleString()}
+              </h3>
+              <p className="text-xs text-gray-500 mt-1">Filtered by search</p>
+            </div>
+            <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
+              <Calendar className="h-6 w-6 text-blue-600" />
+            </div>
           </div>
         </div>
 

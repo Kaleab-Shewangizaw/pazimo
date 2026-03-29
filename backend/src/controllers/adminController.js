@@ -261,8 +261,56 @@ const getEventRegistrationsChartData = async (req, res) => {
   }
 };
 
+const getTicketSalesChartData = async (req, res) => {
+  try {
+    const ticketSalesData = await Ticket.aggregate([
+      {
+        $match: {
+          isInvitation: { $ne: true },
+          status: { $nin: ["cancelled", "failed", "expired"] },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+          },
+          ticketsSold: {
+            $sum: {
+              $cond: [
+                { $gt: ["$purchaseQuantity", 0] },
+                "$purchaseQuantity",
+                { $cond: [{ $gt: ["$ticketCount", 0] }, "$ticketCount", 1] },
+              ],
+            },
+          },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]);
+
+    const formattedData = ticketSalesData.map((item) => ({
+      name: `${item._id.year}-${String(item._id.month).padStart(2, "0")}`,
+      ticketsSold: item.ticketsSold,
+    }));
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: formattedData,
+    });
+  } catch (error) {
+    console.error("Error getting ticket sales chart data:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to get ticket sales chart data",
+    });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getRevenueChartData,
   getEventRegistrationsChartData,
+  getTicketSalesChartData,
 };
