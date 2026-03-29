@@ -4,6 +4,8 @@ const Ticket = require('../models/Ticket');
 const Withdrawal = require('../models/Withdrawal');
 const mongoose = require('mongoose');
 
+const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // Get all users (simple version)
 exports.getAllUsers = async (req, res) => {
   try {
@@ -11,6 +13,8 @@ exports.getAllUsers = async (req, res) => {
     const limit = parseInt(req.query.limit) || 5;
     const skip = (page - 1) * limit;
     const role = req.query.role; // Get role from query parameters
+    const search = (req.query.search || '').trim();
+    const isPhoneLikeSearch = /^[\d\s()+-]+$/.test(search) && search.length > 0;
 
     // Build query object
     const query = {};
@@ -18,15 +22,34 @@ exports.getAllUsers = async (req, res) => {
       query.role = role; // Add role filter if provided
     }
 
+    if (search) {
+      if (isPhoneLikeSearch) {
+        query.phoneNumber = {
+          $regex: `^${escapeRegExp(search)}`,
+          $options: 'i'
+        };
+      } else {
+        query.$text = { $search: search };
+      }
+    }
+
     // Get total count of users with role filter
     const total = await User.countDocuments(query);
 
     // Get paginated users with role filter
-    const users = await User.find(query)
-      .select('-password')
+    let usersQuery = User.find(query).select('-password');
+
+    if (search && !isPhoneLikeSearch) {
+      usersQuery = usersQuery
+        .select({ score: { $meta: 'textScore' } })
+        .sort({ score: { $meta: 'textScore' }, createdAt: -1 });
+    } else {
+      usersQuery = usersQuery.sort({ createdAt: -1 });
+    }
+
+    const users = await usersQuery
       .skip(skip)
       .limit(limit)
-      .sort({ createdAt: -1 })
       .lean(); // Use lean for better performance
     
     res.status(200).json({
@@ -36,7 +59,8 @@ exports.getAllUsers = async (req, res) => {
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
+        totalPages: Math.ceil(total / limit),
+        search
       }
     });
   } catch (error) {

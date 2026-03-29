@@ -184,6 +184,13 @@ const userSchema = new mongoose.Schema(
 userSchema.index({ email: 1 });
 userSchema.index({ phoneNumber: 1, role: 1 }, { unique: true });
 userSchema.index({ role: 1 });
+userSchema.index(
+  { firstName: 'text', lastName: 'text', email: 'text', phoneNumber: 'text' },
+  {
+    name: 'user_search_text_index',
+    weights: { firstName: 10, lastName: 10, email: 8, phoneNumber: 6 }
+  }
+);
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {

@@ -2,13 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { User, Mail, Clock, Search, Plus, Pencil, Trash2 } from "lucide-react"
-import { useAdminAuthStore } from "@/store/adminAuthStore"
+import { Search, Plus, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import {
   Table,
@@ -44,11 +42,9 @@ interface UserData {
 
 export default function UsersPage() {
   const router = useRouter()
-  const { token } = useAdminAuthStore()
   const [users, setUsers] = useState<UserData[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [statusFilter, setStatusFilter] = useState("All")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -56,6 +52,7 @@ export default function UsersPage() {
   const { token: authToken } = useAuthStore()
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalUsers, setTotalUsers] = useState(0)
   const [itemsPerPage, setItemsPerPage] = useState(5)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [userToEdit, setUserToEdit] = useState<UserData | null>(null)
@@ -76,16 +73,34 @@ export default function UsersPage() {
   })
 
   useEffect(() => {
-    fetchUsers()
-  }, [currentPage, itemsPerPage])
+    const debounceTimer = setTimeout(() => {
+      fetchUsers()
+    }, 250)
+
+    return () => clearTimeout(debounceTimer)
+  }, [currentPage, itemsPerPage, searchQuery, statusFilter])
 
   const fetchUsers = async () => {
     try {
       setIsLoading(true)
       setError(null)
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users?page=${currentPage}&limit=${itemsPerPage}`, {
+      const searchParams = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(itemsPerPage),
+      })
+
+      if (searchQuery.trim()) {
+        searchParams.set('search', searchQuery.trim())
+      }
+
+      if (statusFilter !== 'all') {
+        searchParams.set('role', statusFilter)
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users?${searchParams.toString()}`, {
         headers: {
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}),
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
@@ -96,49 +111,18 @@ export default function UsersPage() {
       }
 
       const data = await response.json()
-              // console.log('Received data:', data)
       
       const usersArray = data.data?.users || []
       setUsers(usersArray)
-      
-      // Update pagination info
-      if (data.data?.total) {
-        setTotalPages(data.data.totalPages)
-      }
+
+      setTotalPages(data.data?.totalPages || 1)
+      setTotalUsers(data.data?.total || 0)
     } catch (error) {
       console.error('Error fetching users:', error)
       setError(error instanceof Error ? error.message : 'Failed to fetch users')
       toast.error('Failed to fetch users')
     } finally {
       setIsLoading(false)
-    }
-  }
-
-  const handleRoleChange = async (userId: string, newRole: 'customer' | 'organizer') => {
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${userId}/role`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ role: newRole }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update user role')
-      }
-
-      // Update the user in the local state
-      setUsers(users.map(user => 
-        user._id === userId ? { ...user, role: newRole } : user
-      ))
-
-      toast.success('User role updated successfully')
-    } catch (error) {
-      console.error('Error updating user role:', error)
-      toast.error('Failed to update user role')
     }
   }
 
@@ -172,7 +156,7 @@ export default function UsersPage() {
         throw new Error('Failed to update user')
       }
 
-      const data = await response.json()
+      await response.json()
       
       // Update the user in the local state
       setUsers(users.map(user => 
@@ -187,14 +171,6 @@ export default function UsersPage() {
       toast.error('Failed to update user')
     }
   }
-
-  const filteredUsers = users.filter(user => {
-    const fullName = `${user.firstName} ${user.lastName}`.toLowerCase()
-    const matchesSearch = fullName.includes(searchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === "All" || user.role === statusFilter
-    return matchesSearch && matchesStatus
-  })
 
   const handleDelete = (userId: string) => {
     setUserToDelete(userId)
@@ -286,6 +262,39 @@ export default function UsersPage() {
         </div>
       </div>
 
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value)
+              setCurrentPage(1)
+            }}
+            placeholder="Search by name, email, or phone"
+            className="pl-9"
+          />
+        </div>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => {
+            setStatusFilter(value)
+            setCurrentPage(1)
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Filter role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All roles</SelectItem>
+            <SelectItem value="customer">Customer</SelectItem>
+            <SelectItem value="organizer">Organizer</SelectItem>
+            <SelectItem value="admin">Admin</SelectItem>
+            <SelectItem value="partner">Partner</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="rounded-md border px-6 py-4">
         <Table>
           <TableHeader>
@@ -300,48 +309,56 @@ export default function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user._id}>
-                <TableCell className="font-medium">
-                  {user.firstName} {user.lastName}
-                </TableCell>
-                <TableCell>{user.email}</TableCell>
-                <TableCell>{user.phoneNumber}</TableCell>
-                <TableCell>
-                  <Badge variant={user.role === 'organizer' ? 'default' : 'secondary'}>
-                    {user.role}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge 
-                    variant="outline" 
-                    className={user.isActive ? 'text-green-600 border-green-600' : 'text-red-600 border-red-600'}
-                  >
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  {new Date(user.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(user)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(user._id)}
-                    className="text-red-600 hover:text-red-700"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+            {users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                  No users found for this search.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              users.map((user) => (
+                <TableRow key={user._id}>
+                  <TableCell className="font-medium">
+                    {user.firstName} {user.lastName}
+                  </TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>{user.phoneNumber}</TableCell>
+                  <TableCell>
+                    <Badge variant={user.role === 'organizer' ? 'default' : 'secondary'}>
+                      {user.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant="outline" 
+                      className={user.isActive ? 'text-green-600 border-green-600' : 'text-red-600 border-red-600'}
+                    >
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {new Date(user.createdAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(user)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDelete(user._id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
@@ -349,7 +366,9 @@ export default function UsersPage() {
       {/* Pagination Controls */}
       <div className="flex items-center justify-between mt-4">
         <div className="text-sm text-muted-foreground">
-          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalPages * itemsPerPage)} of {totalPages * itemsPerPage} users
+          {totalUsers > 0
+            ? `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min((currentPage - 1) * itemsPerPage + users.length, totalUsers)} of ${totalUsers} users`
+            : 'No users to display'}
         </div>
         <div className="flex items-center space-x-2">
           <Button
