@@ -489,7 +489,8 @@ const deleteEvent = async (req, res) => {
    GET ALL EVENTS
 ====================================================== */
 const getAllEvents = async (req, res) => {
-  const { page = 1, limit = 10 } = req.query;
+  const page = Number.parseInt(req.query.page, 10) || 1;
+  const limit = Number.parseInt(req.query.limit, 10) || 10;
 
   const events = await Event.find()
     .populate("category", "name description")
@@ -505,11 +506,56 @@ const getAllEvents = async (req, res) => {
     .skip((page - 1) * limit)
     .limit(Number(limit));
 
+  const eventIds = events.map((event) => event._id);
+
+  let ticketStatsByEvent = new Map();
+  if (eventIds.length > 0) {
+    const ticketStats = await Ticket.aggregate([
+      {
+        $match: {
+          event: { $in: eventIds },
+          price: { $gt: 0 },
+        },
+      },
+      {
+        $addFields: {
+          ticketQuantity: {
+            $cond: [
+              { $gt: ["$purchaseQuantity", 0] },
+              "$purchaseQuantity",
+              {
+                $cond: [{ $gt: ["$ticketCount", 0] }, "$ticketCount", 1],
+              },
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$event",
+          ticketsSold: { $sum: "$ticketQuantity" },
+        },
+      },
+    ]);
+
+    ticketStatsByEvent = new Map(
+      ticketStats.map((item) => [item._id.toString(), item.ticketsSold || 0])
+    );
+  }
+
+  const eventsWithTicketsSold = events.map((event) => {
+    const plainEvent = event.toObject();
+    return {
+      ...plainEvent,
+      ticketsSold: ticketStatsByEvent.get(event._id.toString()) || 0,
+    };
+  });
+
   const total = await Event.countDocuments();
 
   res.status(StatusCodes.OK).json({
     status: "success",
-    data: events,
+    data: eventsWithTicketsSold,
     pagination: {
       total,
       page: Number(page),

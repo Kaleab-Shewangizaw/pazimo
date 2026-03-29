@@ -24,6 +24,7 @@ import {
   CheckCircle,
   DollarSign,
   Loader2,
+  Ticket as TicketIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +71,7 @@ type CurrencyFilter = "ALL" | "ETB" | "USD";
 interface Event {
   _id: string;
   title: string;
+  ticketsSold?: number;
   organizer: {
     _id: string;
     name: string;
@@ -452,13 +454,14 @@ export default function TicketsPage() {
                     <TableHead>Organizer</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Location</TableHead>
+                    <TableHead>Tickets Sold</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loadingEvents ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8">
+                      <TableCell colSpan={6} className="text-center py-8">
                         <div className="flex justify-center items-center gap-2">
                           <Loader2 className="h-6 w-6 animate-spin" />
                           <span>Loading events...</span>
@@ -468,7 +471,7 @@ export default function TicketsPage() {
                   ) : paginatedEvents.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={5}
+                        colSpan={6}
                         className="text-center py-8 text-gray-500"
                       >
                         No events found
@@ -495,6 +498,12 @@ export default function TicketsPage() {
                           <div className="flex items-center gap-2">
                             <MapPin className="h-4 w-4 text-gray-400" />
                             {event.location?.city || "Online"}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <TicketIcon className="h-4 w-4 text-gray-400" />
+                            {event.ticketsSold ?? 0}
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
@@ -584,7 +593,22 @@ export default function TicketsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-500">Total Tickets Sold</p>
+            <h3 className="text-2xl font-bold text-gray-900">
+              {(totalsByCurrency.totalTickets.ETB + totalsByCurrency.totalTickets.USD).toLocaleString()}
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              ETB: {totalsByCurrency.totalTickets.ETB} • USD: {totalsByCurrency.totalTickets.USD}
+            </p>
+          </div>
+          <div className="h-12 w-12 bg-indigo-100 rounded-full flex items-center justify-center">
+            <TicketIcon className="h-6 w-6 text-indigo-600" />
+          </div>
+        </div>
+
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
