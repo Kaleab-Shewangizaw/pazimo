@@ -98,6 +98,15 @@ export default function AdminEditEventPage() {
     isPublic: true,
   });
 
+  const buildImageUrl = (imagePath?: string | null) => {
+    if (!imagePath) return null;
+    if (imagePath.startsWith("http")) return imagePath;
+    const normalizedPath = imagePath.startsWith("/")
+      ? imagePath
+      : `/${imagePath}`;
+    return `${process.env.NEXT_PUBLIC_API_URL}${normalizedPath}`;
+  };
+
   useEffect(() => {
     fetchCategories();
     fetchEventData();
@@ -181,11 +190,12 @@ export default function AdminEditEventPage() {
         isSoldOut: event.isSoldOut || false,
         isPublic: event.isPublic !== undefined ? event.isPublic : true,
       });
-      setCurrentCoverImage(
-        event.coverImage
-          ? `${process.env.NEXT_PUBLIC_API_URL}/uploads/${event.coverImage}`
-          : null,
-      );
+      const selectedCoverImage =
+        (Array.isArray(event.coverImages) && event.coverImages.length > 0
+          ? event.coverImages[0]
+          : event.coverImage) || null;
+
+      setCurrentCoverImage(buildImageUrl(selectedCoverImage));
     } catch (error) {
       console.error("Error fetching event:", error);
       toast.error("Failed to load event data");
