@@ -22,6 +22,7 @@ const {
   cancelPaymentIntent,
   createOnDoorTicket,
   getOrganizerTickets,
+  deleteTicket,
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
@@ -630,6 +631,7 @@ router.get("/organizer/all", getOrganizerTickets);
 router.get("/details/:id", getTicketDetails);
 router.get("/:ticketId", getTicket);
 router.patch("/:ticketId/cancel", cancelTicket);
+router.delete("/:ticketId", deleteTicket);
 router.get("/admin/all", getAllTicketsAdmin);
 
 module.exports = router;

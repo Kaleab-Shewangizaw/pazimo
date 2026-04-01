@@ -125,6 +125,9 @@ const normalizeTicketTypes = (rawTickets = []) =>
       quantity,
       description: ticket.description,
       available: toBoolean(ticket.available, true),
+      ...(typeof ticket.manualDisabled === "boolean"
+        ? { manualDisabled: ticket.manualDisabled }
+        : {}),
       startDate,
       endDate,
       ...(ticket.waveGroup ? { waveGroup: ticket.waveGroup } : {}),
@@ -132,6 +135,54 @@ const normalizeTicketTypes = (rawTickets = []) =>
       ...(hasWaveMetadata ? { waveSwitchMode } : {}),
     };
   });
+
+const createTicketTypeKey = (ticket = {}) => {
+  const name = String(ticket.name || "").trim().toLowerCase();
+  const waveGroup = String(ticket.waveGroup || "").trim().toLowerCase();
+  const waveOrder =
+    ticket.waveOrder === undefined || ticket.waveOrder === null
+      ? ""
+      : String(ticket.waveOrder);
+  return `${name}::${waveGroup}::${waveOrder}`;
+};
+
+// Preserve and infer manual disable intent from admin edits.
+const applyManualAvailabilityOverrides = (
+  existingTicketTypes = [],
+  nextTicketTypes = []
+) => {
+  const existingByKey = new Map(
+    (existingTicketTypes || []).map((ticket) => [
+      createTicketTypeKey(ticket),
+      ticket,
+    ])
+  );
+
+  return (nextTicketTypes || []).map((ticket) => {
+    const existing = existingByKey.get(createTicketTypeKey(ticket));
+
+    let manualDisabled = Boolean(existing?.manualDisabled);
+
+    if (typeof ticket.manualDisabled === "boolean") {
+      manualDisabled = ticket.manualDisabled;
+    } else if (
+      existing &&
+      typeof existing.available === "boolean" &&
+      typeof ticket.available === "boolean" &&
+      existing.available !== ticket.available
+    ) {
+      // If admin flipped availability, persist that intent.
+      manualDisabled = ticket.available === false;
+    }
+
+    return {
+      ...ticket,
+      manualDisabled,
+      // Keep payload coherent; rules will still enforce windows/quantity for enabled tickets.
+      available: manualDisabled ? false : ticket.available,
+    };
+  });
+};
 
 const createEvent = async (req, res) => {
   let {
@@ -437,8 +488,12 @@ const updateEvent = async (req, res) => {
   }
 
   if (req.body.ticketTypes) {
-    req.body.ticketTypes = normalizeTicketTypes(
+    const normalizedTicketTypes = normalizeTicketTypes(
       parseTicketTypesInput(req.body.ticketTypes, req.body)
+    );
+    req.body.ticketTypes = applyManualAvailabilityOverrides(
+      event.ticketTypes,
+      normalizedTicketTypes
     );
   }
 
@@ -758,8 +813,12 @@ const updateTicketTypes = async (req, res) => {
   }
 
   const parsedTicketTypes = parseTicketTypesInput(ticketTypes, req.body);
+  const normalizedTicketTypes = normalizeTicketTypes(parsedTicketTypes);
 
-  event.ticketTypes = normalizeTicketTypes(parsedTicketTypes);
+  event.ticketTypes = applyManualAvailabilityOverrides(
+    event.ticketTypes,
+    normalizedTicketTypes
+  );
 
   applyTicketAvailabilityRules(event);
 

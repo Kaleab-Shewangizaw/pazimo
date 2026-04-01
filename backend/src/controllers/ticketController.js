@@ -1645,6 +1645,72 @@ const cancelTicket = async (req, res) => {
   }
 };
 
+// Delete a ticket (admin/organizer)
+const deleteTicket = async (req, res) => {
+  try {
+    const { ticketId } = req.params;
+
+    let ticket = await Ticket.findById(ticketId);
+    if (!ticket) {
+      ticket = await Ticket.findOne({ ticketId });
+    }
+
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    if (!req.user || !req.user.userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    const event = await Event.findById(ticket.event);
+    const isAdmin = req.user.role === "admin";
+    const isOrganizer =
+      !!event && event.organizer && event.organizer.toString() === req.user.userId;
+
+    if (!isAdmin && !isOrganizer) {
+      throw new UnauthorizedError("Not authorized to delete this ticket");
+    }
+
+    // Restore inventory only when deleting an active ticket.
+    if (event && ticket.status === "active") {
+      const ticketType = event.ticketTypes.find(
+        (type) => type.name === ticket.ticketType
+      );
+      if (ticketType) {
+        const restoreCount = ticket.purchaseQuantity || ticket.ticketCount || 1;
+        ticketType.quantity += restoreCount;
+        await event.save();
+      }
+    }
+
+    if (ticket.user) {
+      await User.updateOne(
+        { _id: ticket.user },
+        { $pull: { tickets: ticket._id } }
+      );
+    }
+
+    await ticket.deleteOne();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Ticket deleted successfully",
+      data: { ticketId: ticket._id },
+    });
+  } catch (error) {
+    console.error("Delete ticket error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to delete ticket",
+      error: error.message,
+    });
+  }
+};
+
 // Get ticket by ID
 const getTicket = async (req, res) => {
   try {
@@ -2194,6 +2260,7 @@ module.exports = {
   getOrganizerTickets,
   checkInTicket,
   cancelTicket,
+  deleteTicket,
   getTicket,
   getAllTicketsAdmin,
   validateQRCode,

@@ -96,6 +96,14 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
   event.ticketTypes.forEach((ticket) => {
     if (isWaveTicket(ticket)) return;
 
+    if (ticket.manualDisabled === true) {
+      if (ticket.available !== false) {
+        ticket.available = false;
+        changed = true;
+      }
+      return;
+    }
+
     const hasQuantity = toSafeNumber(ticket.quantity) > 0;
     const shouldBeAvailable = hasQuantity && isWithinDateWindow(ticket, now);
 
@@ -112,6 +120,14 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
 
   // First pass keeps current wave active state coherent with date windows and quantity.
   waveTickets.forEach(({ ticket }) => {
+    if (ticket.manualDisabled === true) {
+      if (ticket.available !== false) {
+        ticket.available = false;
+        changed = true;
+      }
+      return;
+    }
+
     const hasQuantity = toSafeNumber(ticket.quantity) > 0;
     const shouldBeAvailable = hasQuantity && isWithinDateWindow(ticket, now);
 
@@ -138,7 +154,10 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
       changed = true;
     }
 
-    const shouldActivateNext = canActivateNextWave(next, now, reason);
+    const shouldActivateNext =
+      next.manualDisabled === true
+        ? false
+        : canActivateNextWave(next, now, reason);
     if (next.available !== shouldActivateNext) {
       next.available = shouldActivateNext;
       changed = true;
@@ -149,6 +168,9 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
   let latestActiveIndex = -1;
   for (let i = waveTickets.length - 1; i >= 0; i--) {
     const wave = waveTickets[i].ticket;
+    if (wave.manualDisabled === true) {
+      continue;
+    }
     if (wave.available === true && toSafeNumber(wave.quantity) > 0) {
       latestActiveIndex = i;
       break;

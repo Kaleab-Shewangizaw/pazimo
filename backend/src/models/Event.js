@@ -109,6 +109,10 @@ const EventSchema = new mongoose.Schema(
           type: Boolean,
           default: true,
         },
+        manualDisabled: {
+          type: Boolean,
+          default: false,
+        },
 
         startDate: {
           type: Date,
