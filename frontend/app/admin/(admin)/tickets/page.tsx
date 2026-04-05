@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
+import { formatCompactMoney } from "@/lib/utils";
 import {
   Search,
   Calendar,
@@ -93,6 +94,31 @@ interface Event {
   }[];
 }
 
+interface TicketStatistics {
+  totalRevenue: number;
+  totalTickets: number;
+  onDoorRevenue: number;
+  onDoorTickets: number;
+  totalRevenueByCurrency?: {
+    ETB?: number;
+    USD?: number;
+  };
+  totalTicketsByCurrency?: {
+    ETB?: number;
+    USD?: number;
+  };
+  onDoorByCurrency?: {
+    revenue?: {
+      ETB?: number;
+      USD?: number;
+    };
+    tickets?: {
+      ETB?: number;
+      USD?: number;
+    };
+  };
+}
+
 export default function TicketsPage() {
   const { token } = useAdminAuthStore();
 
@@ -105,7 +131,7 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   
   // Statistics State
-  const [statistics, setStatistics] = useState({
+  const [statistics, setStatistics] = useState<TicketStatistics>({
     totalRevenue: 0,
     totalTickets: 0,
     onDoorRevenue: 0,
@@ -417,6 +443,33 @@ export default function TicketsPage() {
     }
   );
 
+  const statsTotalsByCurrency = {
+    totalRevenue: {
+      ETB: statistics.totalRevenueByCurrency?.ETB || 0,
+      USD: statistics.totalRevenueByCurrency?.USD || 0,
+    },
+    totalTickets: {
+      ETB: statistics.totalTicketsByCurrency?.ETB || 0,
+      USD: statistics.totalTicketsByCurrency?.USD || 0,
+    },
+    onDoorRevenue: {
+      ETB: statistics.onDoorByCurrency?.revenue?.ETB || 0,
+      USD: statistics.onDoorByCurrency?.revenue?.USD || 0,
+    },
+    onDoorTickets: {
+      ETB: statistics.onDoorByCurrency?.tickets?.ETB || 0,
+      USD: statistics.onDoorByCurrency?.tickets?.USD || 0,
+    },
+  };
+
+  const summaryTotalsByCurrency =
+    statsTotalsByCurrency.totalRevenue.ETB > 0 ||
+    statsTotalsByCurrency.totalRevenue.USD > 0 ||
+    statsTotalsByCurrency.totalTickets.ETB > 0 ||
+    statsTotalsByCurrency.totalTickets.USD > 0
+      ? statsTotalsByCurrency
+      : totalsByCurrency;
+
   // --- Render ---
 
   if (view === "events") {
@@ -632,10 +685,13 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">Total Tickets Sold</p>
             <h3 className="text-2xl font-bold text-gray-900">
-              {(totalsByCurrency.totalTickets.ETB + totalsByCurrency.totalTickets.USD).toLocaleString()}
+              {(
+                summaryTotalsByCurrency.totalTickets.ETB +
+                summaryTotalsByCurrency.totalTickets.USD
+              ).toLocaleString()}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              ETB: {totalsByCurrency.totalTickets.ETB} • USD: {totalsByCurrency.totalTickets.USD}
+              ETB: {summaryTotalsByCurrency.totalTickets.ETB} • USD: {summaryTotalsByCurrency.totalTickets.USD}
             </p>
           </div>
           <div className="h-12 w-12 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -647,13 +703,13 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
             <h3 className="text-lg font-bold text-gray-900">
-              ETB {totalsByCurrency.totalRevenue.ETB.toLocaleString()}
+              {formatCompactMoney(summaryTotalsByCurrency.totalRevenue.ETB, "ETB")}
             </h3>
             <h3 className="text-lg font-bold text-gray-900">
-              USD {totalsByCurrency.totalRevenue.USD.toLocaleString()}
+              {formatCompactMoney(summaryTotalsByCurrency.totalRevenue.USD, "USD")}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              ETB tickets: {totalsByCurrency.totalTickets.ETB} • USD tickets: {totalsByCurrency.totalTickets.USD}
+              ETB tickets: {summaryTotalsByCurrency.totalTickets.ETB} • USD tickets: {summaryTotalsByCurrency.totalTickets.USD}
             </p>
           </div>
           <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
@@ -665,13 +721,13 @@ export default function TicketsPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
             <h3 className="text-lg font-bold text-gray-900">
-              ETB {totalsByCurrency.onDoorRevenue.ETB.toLocaleString()}
+              {formatCompactMoney(summaryTotalsByCurrency.onDoorRevenue.ETB, "ETB")}
             </h3>
             <h3 className="text-lg font-bold text-gray-900">
-              USD {totalsByCurrency.onDoorRevenue.USD.toLocaleString()}
+              {formatCompactMoney(summaryTotalsByCurrency.onDoorRevenue.USD, "USD")}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              ETB tickets: {totalsByCurrency.onDoorTickets.ETB} • USD tickets: {totalsByCurrency.onDoorTickets.USD}
+              ETB tickets: {summaryTotalsByCurrency.onDoorTickets.ETB} • USD tickets: {summaryTotalsByCurrency.onDoorTickets.USD}
             </p>
           </div>
           <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">

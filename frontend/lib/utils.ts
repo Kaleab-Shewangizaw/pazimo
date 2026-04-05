@@ -33,3 +33,15 @@ export function normalizeEthiopianPhone(phone: string): string | null {
 
   return null; // Invalid format
 }
+
+export function formatCompactMoney(amount: number, currency?: string): string {
+  const value = Number.isFinite(amount) ? amount : 0;
+  const suffix = currency ? ` ${currency}` : "";
+
+  const formatted = value.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+
+  return `${formatted}${suffix}`;
+}

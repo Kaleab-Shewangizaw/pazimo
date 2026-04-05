@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
+import { formatCompactMoney } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -854,7 +855,7 @@ export default function OrganizersPage() {
                   Total Revenue
                 </p>
                 <p className="text-sm font-bold text-gray-900">
-                  {(stats.totalRevenue || 0).toFixed(2)} {selectedCurrency}
+                  {formatCompactMoney(stats.totalRevenue || 0, selectedCurrency)}
                 </p>
               </div>
             </CardContent>
@@ -867,7 +868,7 @@ export default function OrganizersPage() {
                   Organizer Revenue (97%)
                 </p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(stats.organizerRevenue || 0).toFixed(2)} {selectedCurrency}
+                  {formatCompactMoney(stats.organizerRevenue || 0, selectedCurrency)}
                 </p>
               </div>
             </CardContent>
@@ -880,7 +881,7 @@ export default function OrganizersPage() {
                   Pazimo Commission (3%)
                 </p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(stats.pazimoCommission || 0).toFixed(2)} {selectedCurrency}
+                  {formatCompactMoney(stats.pazimoCommission || 0, selectedCurrency)}
                 </p>
               </div>
             </CardContent>
@@ -1104,21 +1105,19 @@ export default function OrganizersPage() {
                   <div>
                     <p className="text-gray-600">Total Revenue</p>
                     <p className="font-semibold text-gray-900">
-                      {(selectedOrganizer.totalRevenue || 0).toFixed(2)} {selectedCurrency}
+                      {formatCompactMoney(selectedOrganizer.totalRevenue || 0, selectedCurrency)}
                     </p>
                   </div>
                   <div>
                     <p className="text-gray-600">Organizer Revenue (97%)</p>
                     <p className="font-semibold text-purple-600">
-                      {(selectedOrganizer.organizerRevenue || 0).toFixed(2)}{" "}
-                      {selectedCurrency}
+                      {formatCompactMoney(selectedOrganizer.organizerRevenue || 0, selectedCurrency)}
                     </p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-gray-600">Available Balance</p>
                     <p className="font-semibold text-green-600 text-lg">
-                      {(selectedOrganizer.availableBalance || 0).toFixed(2)}{" "}
-                      {selectedCurrency}
+                      {formatCompactMoney(selectedOrganizer.availableBalance || 0, selectedCurrency)}
                     </p>
                   </div>
                 </div>

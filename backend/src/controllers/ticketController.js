@@ -1330,6 +1330,7 @@ const getEventTickets = async (req, res) => {
       (acc, ticket) => {
         const quantity = getTicketQuantity(ticket);
         const pricePerTicket = quantity > 0 ? ticket.price / quantity : 0;
+        const currency = ticket.currency === "USD" ? "USD" : "ETB";
         const key = `${ticket.ticketType}|${ticket.isOnDoor ? "ondoor" : "online"}|${pricePerTicket}`;
 
         if (!ticketTypeMap.has(key)) {
@@ -1348,14 +1349,29 @@ const getEventTickets = async (req, res) => {
 
         acc.totalRevenue += ticket.price || 0;
         acc.totalTickets += quantity;
+        acc.totalRevenueByCurrency[currency] += ticket.price || 0;
+        acc.totalTicketsByCurrency[currency] += quantity;
         if (ticket.isOnDoor) {
           acc.onDoorRevenue += ticket.price || 0;
           acc.onDoorTickets += quantity;
+          acc.onDoorByCurrency.revenue[currency] += ticket.price || 0;
+          acc.onDoorByCurrency.tickets[currency] += quantity;
         }
 
         return acc;
       },
-      { totalRevenue: 0, totalTickets: 0, onDoorRevenue: 0, onDoorTickets: 0 }
+      {
+        totalRevenue: 0,
+        totalTickets: 0,
+        onDoorRevenue: 0,
+        onDoorTickets: 0,
+        totalRevenueByCurrency: { ETB: 0, USD: 0 },
+        totalTicketsByCurrency: { ETB: 0, USD: 0 },
+        onDoorByCurrency: {
+          revenue: { ETB: 0, USD: 0 },
+          tickets: { ETB: 0, USD: 0 },
+        },
+      }
     );
 
     const ticketTypeBreakdown = Array.from(ticketTypeMap.values());
@@ -1369,6 +1385,9 @@ const getEventTickets = async (req, res) => {
       onDoorTickets: totals.onDoorTickets,
       onlineRevenue,
       onlineTickets,
+      totalRevenueByCurrency: totals.totalRevenueByCurrency,
+      totalTicketsByCurrency: totals.totalTicketsByCurrency,
+      onDoorByCurrency: totals.onDoorByCurrency,
       ticketTypeBreakdown,
     };
 

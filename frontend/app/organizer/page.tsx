@@ -42,6 +42,7 @@ import {
   Clock,
   Loader2,
 } from "lucide-react";
+import { formatCompactMoney } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -1074,64 +1075,73 @@ export default function OrganizerDashboard() {
             ? Array(5)
                 .fill(0)
                 .map((_, i) => <SkeletonCard key={i} />)
-            : statCards.map((stat) => (
-                <Card
-                  key={stat.id}
-                  className={`overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white`}
-                >
-                  <CardContent className="p-2 sm:p-3 lg:p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">
-                          {stat.title}
-                        </h3>
-                        <div className="flex items-baseline gap-1 sm:gap-2">
-                          {stat.isMoney ? (
-                            <>
-                              <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 truncate">
-                                {showEarnings[stat.id]
-                                  ? `${stat.value.toFixed(2)} ${selectedCurrency}`
-                                  : "••••••"}
+            : statCards.map((stat) => {
+                const displayAmount = formatCompactMoney(stat.value, selectedCurrency);
+                const hasLongAmount = displayAmount.length > 14;
+
+                return (
+                  <Card
+                    key={stat.id}
+                    className={`overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-blue-100 hover:from-blue-100 hover:to-white`}
+                  >
+                    <CardContent className="p-2 sm:p-3 lg:p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-xs font-medium text-gray-500 mb-1 truncate">
+                            {stat.title}
+                          </h3>
+                          <div className="flex items-baseline gap-1 sm:gap-2">
+                            {stat.isMoney ? (
+                              <>
+                                <p
+                                  className={`font-bold text-gray-800 truncate ${
+                                    hasLongAmount
+                                      ? "text-xs sm:text-sm lg:text-base"
+                                      : "text-sm sm:text-lg lg:text-xl"
+                                  }`}
+                                >
+                                  {showEarnings[stat.id] ? displayAmount : "••••••"}
+                                </p>
+                                <button
+                                  onClick={() =>
+                                    setShowEarnings((prev) => ({
+                                      ...prev,
+                                      [stat.id]: !prev[stat.id],
+                                    }))
+                                  }
+                                  className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
+                                  aria-label={
+                                    showEarnings[stat.id]
+                                      ? "Hide earnings"
+                                      : "Show earnings"
+                                  }
+                                >
+                                  {showEarnings[stat.id] ? (
+                                    <EyeOff className="h-3 w-3" />
+                                  ) : (
+                                    <Eye className="h-3 w-3" />
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">
+                                {stat.value}
                               </p>
-                              <button
-                                onClick={() =>
-                                  setShowEarnings((prev) => ({
-                                    ...prev,
-                                    [stat.id]: !prev[stat.id],
-                                  }))
-                                }
-                                className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
-                                aria-label={
-                                  showEarnings[stat.id]
-                                    ? "Hide earnings"
-                                    : "Show earnings"
-                                }
-                              >
-                                {showEarnings[stat.id] ? (
-                                  <EyeOff className="h-3 w-3" />
-                                ) : (
-                                  <Eye className="h-3 w-3" />
-                                )}
-                              </button>
-                            </>
-                          ) : (
-                            <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800">
-                              {stat.value}
-                            </p>
-                          )}
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}
+                        >
+                          <stat.icon
+                            className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`}
+                          />
                         </div>
                       </div>
-                      <div
-                        className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}
-                      >
-                        <stat.icon
-                          className={`h-4 w-4 sm:h-5 sm:w-5 ${stat.iconColor}`}
-                        />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                );
+              })}
         </div>
 
         {/* Event Status Cards (Second Row) */}
@@ -1625,7 +1635,7 @@ export default function OrganizerDashboard() {
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-600">Revenue</span>
                   <span className="text-xs font-medium">
-                    {totalRevenue.toFixed(0)} {selectedCurrency}
+                    {formatCompactMoney(totalRevenue, selectedCurrency)}
                   </span>
                 </div>
               </div>
@@ -1652,8 +1662,7 @@ export default function OrganizerDashboard() {
                   <span className="text-xs font-medium text-green-600">
                     +
                     {(
-                      (totalRevenue / Math.max(1, events.length)) *
-                      0.15
+                      (totalRevenue / Math.max(1, events.length)) * 0.15
                     ).toFixed(0)}
                     %
                   </span>

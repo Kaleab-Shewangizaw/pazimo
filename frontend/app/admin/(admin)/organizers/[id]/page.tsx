@@ -33,6 +33,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { formatCompactMoney } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   Table,
@@ -96,6 +97,9 @@ interface TicketData {
     email: string;
   };
   ticketType: string;
+  ticketId: string;
+  purchaseQuantity: number;
+  ticketCount: number;
   price: number;
   status: string;
   createdAt: string;
@@ -108,6 +112,16 @@ interface WithdrawalData {
   status: "pending" | "completed" | "rejected";
   notes: string;
   createdAt: string;
+}
+
+interface OrganizerBalance {
+  currency: "ETB" | "USD";
+  totalRevenue: number;
+  organizerRevenue: number;
+  pazimoCommission: number;
+  pendingWithdrawals: number;
+  approvedWithdrawals: number;
+  availableBalance: number;
 }
 
 export default function OrganizerDetailPage({
@@ -138,10 +152,54 @@ export default function OrganizerDetailPage({
     totalRevenue: 0,
     activeOrganizers: 0,
   });
+  const [organizerBalance, setOrganizerBalance] =
+    useState<OrganizerBalance | null>(null);
 
   useEffect(() => {
     fetchOrganizerDetails();
+    fetchOrganizerBalance();
   }, [id]);
+
+  const getAuthToken = () => {
+    try {
+      const authState = localStorage.getItem("auth-storage");
+      if (!authState) return "";
+      const parsed = JSON.parse(authState);
+      return parsed?.state?.token || "";
+    } catch {
+      return "";
+    }
+  };
+
+  const fetchOrganizerBalance = async () => {
+    try {
+      const token = getAuthToken();
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${id}/balance?currency=ETB`,
+        { headers }
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && data.data) {
+        setOrganizerBalance(data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching organizer balance:", error);
+    }
+  };
 
   const fetchOrganizerDetails = async () => {
     try {
@@ -236,6 +294,19 @@ export default function OrganizerDetailPage({
     if (!organizer) return;
 
     try {
+      const amount = Number.parseFloat(withdrawAmount);
+      const availableBalance = organizerBalance?.availableBalance ?? 0;
+
+      if (!Number.isFinite(amount) || amount <= 0) {
+        toast.error("Please enter a valid withdrawal amount");
+        return;
+      }
+
+      if (amount > availableBalance) {
+        toast.error("Withdrawal amount exceeds available balance");
+        return;
+      }
+
       setIsSubmittingWithdraw(true);
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals`,
@@ -247,7 +318,8 @@ export default function OrganizerDetailPage({
           },
           body: JSON.stringify({
             organizerId: organizer._id,
-            amount: parseFloat(withdrawAmount),
+            amount,
+            currency: "ETB",
             notes: withdrawNotes,
           }),
         }
@@ -262,6 +334,7 @@ export default function OrganizerDetailPage({
       setWithdrawAmount("");
       setWithdrawNotes("");
       fetchOrganizerDetails(); // Refresh data
+      fetchOrganizerBalance();
     } catch (error) {
       console.error("Error processing withdrawal:", error);
       toast.error("Failed to process withdrawal");
@@ -467,7 +540,10 @@ export default function OrganizerDetailPage({
                     Total Revenue
                   </div>
                   <div className="text-2xl font-bold mt-1">
-                    {stats.totalRevenue.toLocaleString()} birr
+                    {formatCompactMoney(
+                      organizerBalance?.totalRevenue ?? stats.totalRevenue,
+                      "birr"
+                    )}
                   </div>
                 </div>
               </div>
@@ -478,14 +554,17 @@ export default function OrganizerDetailPage({
             <CardContent className="p-6">
               <div className="flex items-center gap-4">
                 <div className="p-3 rounded-full bg-primary/10">
-                  <TrendingUp className="h-6 w-6 text-primary" />
+                  <Wallet className="h-6 w-6 text-primary" />
                 </div>
                 <div>
                   <div className="text-sm font-medium text-muted-foreground">
-                    Active Organizers
+                    Available Balance
                   </div>
                   <div className="text-2xl font-bold mt-1">
-                    {stats.activeOrganizers}
+                    {formatCompactMoney(
+                      organizerBalance?.availableBalance ?? 0,
+                      "birr"
+                    )}
                   </div>
                 </div>
               </div>
@@ -514,7 +593,7 @@ export default function OrganizerDetailPage({
                     Current Page Revenue
                   </div>
                   <div className="text-lg font-semibold">
-                    {currentPageStats.totalRevenue.toFixed(2)} birr
+                    {formatCompactMoney(currentPageStats.totalRevenue, "birr")}
                   </div>
                 </div>
               </div>
@@ -803,15 +882,7 @@ export default function OrganizerDetailPage({
                   Available Balance
                 </div>
                 <div className="text-xl font-semibold mt-1">
-                  {organizer.events.reduce(
-                    (sum, event) =>
-                      sum +
-                      (event.tickets?.reduce(
-                        (ticketSum, ticket) => ticketSum + ticket.price,
-                        0
-                      ) || 0),
-                    0
-                  ) || 0}{" "}
+                  {(organizerBalance?.availableBalance ?? 0).toFixed(2)} birr
                   birr
                 </div>
               </div>
@@ -826,7 +897,12 @@ export default function OrganizerDetailPage({
               </Button>
               <Button
                 onClick={handleWithdraw}
-                disabled={!withdrawAmount || isSubmittingWithdraw}
+                disabled={
+                  !withdrawAmount ||
+                  isSubmittingWithdraw ||
+                  Number.parseFloat(withdrawAmount) >
+                    (organizerBalance?.availableBalance ?? 0)
+                }
                 className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
               >
                 {isSubmittingWithdraw ? "Processing..." : "Process Withdrawal"}

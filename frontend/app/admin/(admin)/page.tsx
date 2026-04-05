@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { formatCompactMoney } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -396,7 +397,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Total Revenue",
-      value: `${(stats.totalRevenue || 0).toFixed(2)} ${selectedCurrency}`,
+      value: formatCompactMoney(stats.totalRevenue || 0, selectedCurrency),
       icon: DollarSign,
       iconBg: "bg-green-100",
       iconColor: "text-green-600",
@@ -404,7 +405,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Organizer Revenue (97%)",
-      value: `${(stats.organizerRevenue || 0).toFixed(2)} ${selectedCurrency}`,
+      value: formatCompactMoney(stats.organizerRevenue || 0, selectedCurrency),
       icon: DollarSign,
       iconBg: "bg-purple-100",
       iconColor: "text-purple-600",
@@ -413,7 +414,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Pazimo Commission (3%)",
-      value: `${(stats.pazimoCommission || 0).toFixed(2)} ${selectedCurrency}`,
+      value: formatCompactMoney(stats.pazimoCommission || 0, selectedCurrency),
       icon: DollarSign,
       iconBg: "bg-red-100",
       iconColor: "text-red-600",
@@ -421,7 +422,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Total Withdrawn",
-      value: `${(stats.totalWithdrawn || 0).toFixed(2)} ${selectedCurrency}`,
+      value: formatCompactMoney(stats.totalWithdrawn || 0, selectedCurrency),
       icon: ArrowUpRight,
       iconBg: "bg-yellow-100",
       iconColor: "text-yellow-600",
@@ -429,7 +430,7 @@ export default function AdminDashboardPage() {
     },
     {
       title: "Available Balance",
-      value: `${(stats.availableBalance || 0).toFixed(2)} ${selectedCurrency}`,
+      value: formatCompactMoney(stats.availableBalance || 0, selectedCurrency),
       icon: Building2,
       iconBg: "bg-emerald-100",
       iconColor: "text-emerald-600",

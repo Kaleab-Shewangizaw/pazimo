@@ -38,7 +38,7 @@ interface WithdrawalData {
   currency?: "ETB" | "USD"
   status: "pending" | "approved" | "rejected" | "completed"
   notes: string
-  bankDetails: {
+  bankDetails?: {
     accountName: string
     accountNumber: string
     bankName: string
@@ -140,6 +140,20 @@ export default function WithdrawalsPage() {
     const searchLower = searchQuery.toLowerCase()
     return organizerName.includes(searchLower)
   })
+
+  const renderBankDetails = (withdrawal: WithdrawalData) => {
+    const bankName = withdrawal.bankDetails?.bankName || "N/A"
+    const accountName = withdrawal.bankDetails?.accountName || "N/A"
+    const accountNumber = withdrawal.bankDetails?.accountNumber || "N/A"
+
+    return (
+      <div className="text-sm">
+        <div className="font-medium">{bankName}</div>
+        <div>{accountName}</div>
+        <div className="text-gray-500">{accountNumber}</div>
+      </div>
+    )
+  }
   
   if (loading) {
     return (
@@ -266,11 +280,7 @@ export default function WithdrawalsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="text-sm">
-                            <div className="font-medium">{withdrawal.bankDetails.bankName}</div>
-                            <div>{withdrawal.bankDetails.accountName}</div>
-                            <div className="text-gray-500">{withdrawal.bankDetails.accountNumber}</div>
-                          </div>
+                          {renderBankDetails(withdrawal)}
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {new Date(withdrawal.createdAt).toLocaleDateString()}

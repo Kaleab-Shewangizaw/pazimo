@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { formatCompactMoney } from "@/lib/utils";
 
 interface Event {
   _id: string;
@@ -68,6 +69,12 @@ export default function CustomersPage() {
     onDoorTickets: 0,
     onlineRevenue: 0,
     onlineTickets: 0,
+    totalRevenueByCurrency: { ETB: 0, USD: 0 },
+    totalTicketsByCurrency: { ETB: 0, USD: 0 },
+    onDoorByCurrency: {
+      revenue: { ETB: 0, USD: 0 },
+      tickets: { ETB: 0, USD: 0 },
+    },
     ticketTypeBreakdown: [] as TicketTypeBreakdown[],
   });
   
@@ -161,6 +168,12 @@ export default function CustomersPage() {
             onDoorTickets: 0,
             onlineRevenue: 0,
             onlineTickets: 0,
+            totalRevenueByCurrency: { ETB: 0, USD: 0 },
+            totalTicketsByCurrency: { ETB: 0, USD: 0 },
+            onDoorByCurrency: {
+              revenue: { ETB: 0, USD: 0 },
+              tickets: { ETB: 0, USD: 0 },
+            },
             ticketTypeBreakdown: [],
           };
           const incomingStats = data.statistics || {};
@@ -301,8 +314,17 @@ export default function CustomersPage() {
     totalRevenue: number;
   };
 
-  const ticketGroups = currencyFilteredTickets.reduce<TicketTypeBreakdown[]>(
-    (groups, ticket) => {
+  const ticketGroupsFromStats = (statistics.ticketTypeBreakdown || [])
+    .map((group) => ({
+      ...group,
+      currency: (group.currency === "USD" ? "USD" : "ETB") as "ETB" | "USD",
+    }))
+    .filter((group) =>
+      currencyFilter === "ALL" ? true : group.currency === currencyFilter,
+    );
+
+  const ticketGroupsFromLoadedTickets =
+    currencyFilteredTickets.reduce<TicketTypeBreakdown[]>((groups, ticket) => {
       const quantity = getTicketQuantity(ticket);
       const pricePerTicket = quantity > 0 ? ticket.price / quantity : 0;
       const currency = getTicketCurrency(ticket);
@@ -327,11 +349,14 @@ export default function CustomersPage() {
       }
 
       return groups;
-    },
-    [],
-  );
+    }, []);
 
-  const totalRevenueByCurrency = filteredTickets.reduce(
+  const ticketGroups =
+    ticketGroupsFromStats.length > 0
+      ? ticketGroupsFromStats
+      : ticketGroupsFromLoadedTickets;
+
+  const fallbackTotalRevenueByCurrency = filteredTickets.reduce(
     (acc, ticket) => {
       const currency = getTicketCurrency(ticket);
       acc[currency] += ticket.price || 0;
@@ -340,7 +365,7 @@ export default function CustomersPage() {
     { ETB: 0, USD: 0 },
   );
 
-  const totalTicketsByCurrency = filteredTickets.reduce(
+  const fallbackTotalTicketsByCurrency = filteredTickets.reduce(
     (acc, ticket) => {
       const currency = getTicketCurrency(ticket);
       acc[currency] += getTicketQuantity(ticket);
@@ -349,7 +374,7 @@ export default function CustomersPage() {
     { ETB: 0, USD: 0 },
   );
 
-  const onDoorByCurrency = filteredTickets
+  const fallbackOnDoorByCurrency = filteredTickets
     .filter((ticket) => ticket.isOnDoor)
     .reduce(
       (acc, ticket) => {
@@ -363,6 +388,24 @@ export default function CustomersPage() {
         tickets: { ETB: 0, USD: 0 },
       },
     );
+
+  const totalRevenueByCurrency =
+    (statistics.totalRevenueByCurrency.ETB || statistics.totalRevenueByCurrency.USD)
+      ? statistics.totalRevenueByCurrency
+      : fallbackTotalRevenueByCurrency;
+
+  const totalTicketsByCurrency =
+    (statistics.totalTicketsByCurrency.ETB || statistics.totalTicketsByCurrency.USD)
+      ? statistics.totalTicketsByCurrency
+      : fallbackTotalTicketsByCurrency;
+
+  const onDoorByCurrency =
+    (statistics.onDoorByCurrency.revenue.ETB ||
+      statistics.onDoorByCurrency.revenue.USD ||
+      statistics.onDoorByCurrency.tickets.ETB ||
+      statistics.onDoorByCurrency.tickets.USD)
+      ? statistics.onDoorByCurrency
+      : fallbackOnDoorByCurrency;
 
   const totalPages = Math.ceil(currencyFilteredTickets.length / itemsPerPage);
   
@@ -445,8 +488,8 @@ export default function CustomersPage() {
         <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-            <h3 className="text-lg font-bold text-gray-900">ETB {totalRevenueByCurrency.ETB.toLocaleString()}</h3>
-            <h3 className="text-lg font-bold text-gray-900">USD {totalRevenueByCurrency.USD.toLocaleString()}</h3>
+            <h3 className="text-lg font-bold text-gray-900">ETB {formatCompactMoney(totalRevenueByCurrency.ETB, "ETB")}</h3>
+            <h3 className="text-lg font-bold text-gray-900">USD {formatCompactMoney(totalRevenueByCurrency.USD, "USD")}</h3>
             <p className="text-xs text-gray-500 mt-1">
               ETB tickets: {totalTicketsByCurrency.ETB} • USD tickets: {totalTicketsByCurrency.USD}
             </p>
@@ -486,8 +529,8 @@ export default function CustomersPage() {
           <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
-              <h3 className="text-lg font-bold text-gray-900">ETB {onDoorByCurrency.revenue.ETB.toLocaleString()}</h3>
-              <h3 className="text-lg font-bold text-gray-900">USD {onDoorByCurrency.revenue.USD.toLocaleString()}</h3>
+              <h3 className="text-lg font-bold text-gray-900">ETB {formatCompactMoney(onDoorByCurrency.revenue.ETB, "ETB")}</h3>
+              <h3 className="text-lg font-bold text-gray-900">USD {formatCompactMoney(onDoorByCurrency.revenue.USD, "USD")}</h3>
               <p className="text-xs text-gray-500 mt-1">
                 ETB tickets: {onDoorByCurrency.tickets.ETB} • USD tickets: {onDoorByCurrency.tickets.USD}
               </p>
