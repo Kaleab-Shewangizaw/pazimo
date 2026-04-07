@@ -38,7 +38,7 @@ const steps = [
   "Terms & Agreement",
 ];
 
-const ORGANIZER_REGISTRATION_URL = "https://pazimo-organizer.vercel.app/";
+const ORGANIZER_REGISTRATION_PATH = "/organizer-registration";
 
 interface OrganizerFormData {
   organizerName: string;
@@ -143,6 +143,18 @@ function MobileMenu() {
       </DrawerContent>
     </Drawer>
   );
+}
+
+function scrollToSection(sectionId: string) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const section = document.getElementById(sectionId);
+
+  if (section) {
+    section.scrollIntoView({ behavior: "smooth" });
+  }
 }
 
 export default function OrganizerHome() {
@@ -265,17 +277,15 @@ export default function OrganizerHome() {
               Ticketing Platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
-              <Button
-                onClick={() => {
-                  window.location.href = ORGANIZER_REGISTRATION_URL;
-                }}
-                className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium transition-all duration-200"
-              >
-                <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
-                Get Started
+              <Button asChild className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium transition-all duration-200">
+                <Link href={ORGANIZER_REGISTRATION_PATH}>
+                  <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
+                  Get Started
+                </Link>
               </Button>
               <Button
                 variant="outline"
+                onClick={() => scrollToSection("about")}
                 className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium border-gray-300 text-gray-700 hover:border-[#115db1] hover:text-[#115db1] transition-all duration-200 bg-transparent"
               >
                 <Play className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
@@ -446,14 +456,11 @@ export default function OrganizerHome() {
               </div>
             </div>
             <div className="text-center lg:text-left">
-              <Button
-                onClick={() => {
-                  window.location.href = ORGANIZER_REGISTRATION_URL;
-                }}
-                className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-6 sm:px-8 py-3 text-base sm:text-lg rounded-lg font-medium transition-all duration-200"
-              >
-                Register Now
-                <ArrowRight className="ml-2 w-4 h-4" />
+              <Button asChild className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-6 sm:px-8 py-3 text-base sm:text-lg rounded-lg font-medium transition-all duration-200">
+                <Link href={ORGANIZER_REGISTRATION_PATH}>
+                  Register Now
+                  <ArrowRight className="ml-2 w-4 h-4" />
+                </Link>
               </Button>
             </div>
           </div>
@@ -829,14 +836,11 @@ export default function OrganizerHome() {
             </div>
           </div>
           <div className="pt-6 sm:pt-8">
-            <Button
-              onClick={() => {
-                window.location.href = ORGANIZER_REGISTRATION_URL;
-              }}
-              className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-8 sm:px-10 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium transition-all duration-200"
-            >
-              <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
-              Start Your Journey Today
+            <Button asChild className="w-full sm:w-auto bg-[#115db1] hover:bg-[#0d4a8f] px-8 sm:px-10 py-3 sm:py-4 text-base sm:text-lg rounded-lg font-medium transition-all duration-200">
+              <Link href={ORGANIZER_REGISTRATION_PATH}>
+                <Sparkles className="mr-2 w-4 h-4 sm:w-5 sm:h-5" />
+                Start Your Journey Today
+              </Link>
             </Button>
           </div>
         </div>

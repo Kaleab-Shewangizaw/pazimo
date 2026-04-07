@@ -109,17 +109,17 @@ export default function Footer() {
             <h3 className="text-lg font-semibold mb-4">Features</h3>
             <ul className="space-y-2 text-white">
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a href="/#about" className="hover:text-white transition-colors">
                   Event Management
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a href="/#pricing" className="hover:text-white transition-colors">
                   Pricing
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a href="/contact" className="hover:text-white transition-colors">
                   API
                 </a>
               </li>
@@ -136,7 +136,7 @@ export default function Footer() {
             <h3 className="text-lg font-semibold mb-4">Support</h3>
             <ul className="space-y-2 text-white">
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a href="/#support" className="hover:text-white transition-colors">
                   Help Center
                 </a>
               </li>
@@ -146,7 +146,7 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a href="/#support" className="hover:text-white transition-colors">
                   Status
                 </a>
               </li>
