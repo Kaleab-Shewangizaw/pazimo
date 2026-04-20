@@ -1,75 +1,43 @@
 "use client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Mail,
-  Lock,
-  ArrowRight,
-  Eye,
-  EyeOff,
-  Star,
-  ArrowLeft,
-} from "lucide-react";
-import { Suspense, useState, useEffect, useRef } from "react";
+
+import { useState, useEffect, Suspense } from "react";
+import { motion } from "framer-motion";
+import { Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
-import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import Image from "next/image";
 
 function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuthStore();
+
   const [mounted, setMounted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({ email: "", password: "" });
-  const [errors, setErrors] = useState({ email: "", password: "" });
-  const [isFocused, setIsFocused] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const validateForm = () => {
-    const newErrors = { email: "", password: "" };
-    let isValid = true;
-
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-      isValid = false;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Please enter a valid email";
-      isValid = false;
-    }
-
-    if (!formData.password) {
-      newErrors.password = "Password is required";
-      isValid = false;
-    }
-
-    setErrors(newErrors);
-    return isValid;
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setErrors((prev) => ({ ...prev, [name]: "" }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
-      toast.error("Please complete the form correctly");
+
+    if (!email.trim() || !password) {
+      toast.error("Please fill in all fields");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await login({ email: formData.email, password: formData.password });
+      await login({ email, password });
       const currentUser = useAuthStore.getState().user;
 
       if (currentUser?.role === "admin") {
@@ -108,337 +76,149 @@ function SignInContent() {
   if (!mounted) return null;
 
   return (
-    <div
-      ref={containerRef}
-      className="min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 relative overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 30%, #e2e8f0 100%)",
-      }}
-    >
-      {/* Shooting Star Background */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0">
-          <div className="absolute w-[200px] h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent top-1/4 -left-[200px] animate-shooting-star-1">
-            <div className="absolute right-0 w-3 h-3 bg-blue-500 rounded-full -translate-y-1/2" />
-          </div>
-          <div className="absolute w-[180px] h-[1.5px] bg-gradient-to-r from-transparent via-purple-500 to-transparent top-1/3 -left-[180px] animate-shooting-star-2">
-            <div className="absolute right-0 w-2.5 h-2.5 bg-purple-500 rounded-full -translate-y-1/2" />
-          </div>
-          <div className="absolute w-[220px] h-[1.5px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent top-2/3 -left-[220px] animate-shooting-star-3">
-            <div className="absolute right-0 w-2.5 h-2.5 bg-cyan-500 rounded-full -translate-y-1/2" />
-          </div>
-          <div className="absolute w-[150px] h-[2px] bg-gradient-to-r from-transparent via-indigo-500 to-transparent top-3/4 -left-[150px] animate-shooting-star-4">
-            <div className="absolute right-0 w-3 h-3 bg-indigo-500 rounded-full -translate-y-1/2" />
-          </div>
-        </div>
-
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage: `linear-gradient(to right, #94a3b8 1px, transparent 1px),
-                             linear-gradient(to bottom, #94a3b8 1px, transparent 1px)`,
-            backgroundSize: "40px 40px",
-          }}
-        />
-
-        <div className="absolute top-1/4 right-1/4 w-64 h-64 bg-gradient-to-r from-blue-200/20 to-cyan-200/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/4 w-72 h-72 bg-gradient-to-r from-purple-200/20 to-pink-200/20 rounded-full blur-3xl" />
-
-        <div className="absolute inset-0">
-          <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-300/30 to-transparent" />
-          <div className="absolute top-20 left-0 w-full h-px bg-gradient-to-r from-transparent via-purple-300/20 to-transparent" />
-          <div className="absolute bottom-20 left-0 w-full h-px bg-gradient-to-r from-transparent via-cyan-300/20 to-transparent" />
-          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-indigo-300/30 to-transparent" />
-        </div>
-      </div>
-
-      <div className="relative h-14 w-44 sm:w-52">
+    <div className="flex min-h-screen bg-background">
+      {/* Left — Branding */}
+      <div className="relative hidden w-1/2 lg:block">
         <Image
+          src="/event-hero.jpg"
+          alt="Concert crowd with golden stage lights"
           fill
-          src="/logo.png"
-          alt="Pazimo Logo"
-          className="h-14 w-auto drop-shadow-md object-contain"
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            target.src = `https://ui-avatars.com/api/?name=Pazimo&background=0D47A1&color=fff&bold=true&size=128`;
-          }}
+          className="absolute inset-0 h-full w-full object-cover"
+          priority
         />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="absolute bottom-16 left-10 right-10"
+        >
+          <div className="mb-6 flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2 text-white/80 hover:text-white transition-colors group">
+              <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-medium">Back to Homepage</span>
+            </Link>
+          </div>
+          <h2 className="font-display text-4xl font-bold leading-tight text-white">
+            Every great event
+            <br />
+            begins with <span className="text-[#2563eb]">Pazimo.</span>
+          </h2>
+          <p className="mt-4 max-w-md text-white/70">
+            Sell, scan, and manage events from one powerful dashboard. Trusted by
+            500+ promoters worldwide.
+          </p>
+        </motion.div>
       </div>
 
-      {/* Main Login Card */}
-      <div className="w-full max-w-xl relative z-10 mt-5 animate-fade-in-up">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/60 p-8 sm:p-10 relative overflow-hidden">
-          <div className="absolute inset-0 rounded-3xl p-[1px] bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 -z-10">
-            <div className="absolute inset-0 rounded-3xl bg-white" />
+      {/* Right — Form */}
+      <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="w-full max-w-md space-y-8"
+        >
+          {/* Logo */}
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 relative items-center justify-center rounded-lg">
+              <Image
+                src="/mobile_logo.png"
+                alt="Pazimo Logo"
+                fill
+                className="h-6 w-6 rounded-md object-fill"
+              />
+            </div>
+            <span className="font-display text-xl font-bold tracking-tight">
+              Pazimo
+            </span>
           </div>
-          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-400/50 to-transparent" />
 
-          <div className="relative z-10">
-            <div className="text-center mb-10">
-              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent mb-3">
-                SIGN IN
-              </h1>
+          <div>
+            <h1 className="font-display text-3xl font-bold">Welcome back</h1>
+            <p className="mt-2 text-muted-foreground">
+              Sign in to manage your events and sales.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="h-12 bg-secondary border-border placeholder:text-muted-foreground focus-visible:ring-[#2563eb]"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-7">
-              {/* Email Field */}
-              <div className="space-y-3">
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <button
+                  type="button"
+                  className="text-sm text-[#2563eb] hover:underline"
                 >
-                  Email Address
-                </label>
-                <div className="relative">
-                  {/* Focus glow effect - now with pointer-events-none */}
-                  <div
-                    className={`absolute inset-0 rounded-xl bg-gradient-to-r from-blue-100 to-cyan-100 transition-all duration-300 pointer-events-none ${
-                      isFocused === "email"
-                        ? "opacity-100 scale-105"
-                        : "opacity-0 scale-95"
-                    }`}
-                  />
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none z-10 transition-colors duration-300" />
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    className="relative pl-12 h-14 rounded-xl border-gray-200 bg-white/80 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/30 transition-all duration-300 shadow-sm z-20"
-                    value={formData.email}
-                    onChange={handleChange}
-                    onFocus={() => setIsFocused("email")}
-                    onBlur={() => setIsFocused(null)}
-                  />
-                </div>
-                {errors.email && (
-                  <p className="mt-2 text-sm text-red-600 animate-shake">
-                    {errors.email}
-                  </p>
-                )}
+                  Forgot password?
+                </button>
               </div>
-
-              {/* Password Field */}
-              <div className="space-y-3">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700 mb-2"
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="h-12 bg-secondary border-border pr-12 placeholder:text-muted-foreground focus-visible:ring-primary"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Password
-                </label>
-                <div className="relative">
-                  <div
-                    className={`absolute inset-0 rounded-xl bg-gradient-to-r from-blue-100 to-cyan-100 transition-all duration-300 pointer-events-none ${
-                      isFocused === "password"
-                        ? "opacity-100 scale-105"
-                        : "opacity-0 scale-95"
-                    }`}
-                  />
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none z-10 transition-colors duration-300" />
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    className="relative pl-12 pr-12 h-14 rounded-xl border-gray-200 bg-white/80 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-blue-500/30 transition-all duration-300 shadow-sm z-20"
-                    value={formData.password}
-                    onChange={handleChange}
-                    onFocus={() => setIsFocused("password")}
-                    onBlur={() => setIsFocused(null)}
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors z-30"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-5 w-5" />
-                    ) : (
-                      <Eye className="h-5 w-5" />
-                    )}
-                  </button>
-                </div>
-                {errors.password && (
-                  <p className="mt-2 text-sm text-red-600 animate-shake">
-                    {errors.password}
-                  </p>
-                )}
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
               </div>
+            </div>
 
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white h-14 rounded-xl font-semibold text-base shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-3 group relative overflow-hidden"
-                disabled={isSubmitting}
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                {isSubmitting ? (
-                  <div className="flex items-center gap-3">
-                    <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Signing In...</span>
-                  </div>
-                ) : (
-                  <>
-                    <span>Sign in</span>
-                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                  </>
-                )}
-              </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="h-12 w-full font-display font-semibold text-base bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]"
+            >
+              {isSubmitting ? "Signing in..." : "Sign in"}
+            </Button>
+          </form>
 
-              <Link
-                href="/"
-                className="pt-2 flex items-center gap-3 text-sm text-gray-500 hover:text-gray-700 transition-colors justify-center"
-              >
-                <ArrowLeft className="h-4 w-4" /> Back to Homepage
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground">
+              Don&apos;t have an account?{" "}
+              <Link href="https://pazimo-organizer.vercel.app/" target="_blank" className="text-[#2563eb] hover:underline font-medium">
+                Contact sales
               </Link>
-            </form>
-
-            <div className="mt-10 pt-3 border-t border-gray-100">
-              <div className="text-center">
-                <p className="text-sm text-gray-600">
-                  &copy; All Rights Reserved
-                </p>
-                <div className="mt-4 flex items-center justify-center gap-4">
-                  <div className="h-px w-8 bg-gradient-to-r from-transparent to-gray-200" />
-                  <div className="flex items-center gap-2">
-                    <Star className="h-3 w-3 text-blue-500 fill-blue-500" />
-                    <span className="text-xs text-gray-500">Pazimo</span>
-                    <Star className="h-3 w-3 text-cyan-500 fill-cyan-500" />
-                  </div>
-                  <div className="h-px w-8 bg-gradient-to-l from-transparent to-gray-200" />
-                </div>
-              </div>
-            </div>
+            </p>
           </div>
-        </div>
+        </motion.div>
       </div>
-
-      {/* Custom Animations */}
-      <style jsx>{`
-        @keyframes fade-in-up {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        @keyframes shake {
-          0%,
-          100% {
-            transform: translateX(0);
-          }
-          10%,
-          30%,
-          50%,
-          70%,
-          90% {
-            transform: translateX(-5px);
-          }
-          20%,
-          40%,
-          60%,
-          80% {
-            transform: translateX(5px);
-          }
-        }
-        @keyframes shooting-star-1 {
-          0% {
-            transform: translateX(0) translateY(0);
-            opacity: 0;
-          }
-          10% {
-            opacity: 1;
-          }
-          100% {
-            transform: translateX(calc(100vw + 200px)) translateY(100px);
-            opacity: 0;
-          }
-        }
-        @keyframes shooting-star-2 {
-          0% {
-            transform: translateX(0) translateY(0);
-            opacity: 0;
-          }
-          15% {
-            opacity: 1;
-          }
-          100% {
-            transform: translateX(calc(100vw + 180px)) translateY(-50px);
-            opacity: 0;
-          }
-        }
-        @keyframes shooting-star-3 {
-          0% {
-            transform: translateX(0) translateY(0);
-            opacity: 0;
-          }
-          20% {
-            opacity: 1;
-          }
-          100% {
-            transform: translateX(calc(100vw + 220px)) translateY(-100px);
-            opacity: 0;
-          }
-        }
-        @keyframes shooting-star-4 {
-          0% {
-            transform: translateX(0) translateY(0);
-            opacity: 0;
-          }
-          25% {
-            opacity: 1;
-          }
-          100% {
-            transform: translateX(calc(100vw + 150px)) translateY(50px);
-            opacity: 0;
-          }
-        }
-        .animate-fade-in-up {
-          animation: fade-in-up 0.8s ease-out;
-        }
-        .animate-shake {
-          animation: shake 0.5s ease-in-out;
-        }
-        .animate-shooting-star-1 {
-          animation: shooting-star-1 8s linear infinite;
-          animation-delay: 0s;
-        }
-        .animate-shooting-star-2 {
-          animation: shooting-star-2 10s linear infinite;
-          animation-delay: 2s;
-        }
-        .animate-shooting-star-3 {
-          animation: shooting-star-3 12s linear infinite;
-          animation-delay: 4s;
-        }
-        .animate-shooting-star-4 {
-          animation: shooting-star-4 9s linear infinite;
-          animation-delay: 6s;
-        }
-      `}</style>
     </div>
   );
 }
 
 export default function SignInPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-cyan-50">
-          <div className="relative">
-            <div className="h-16 w-16 border-4 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
-            <div
-              className="absolute inset-0 h-16 w-16 border-4 border-gray-200 border-t-cyan-500 rounded-full animate-spin"
-              style={{ animationDelay: "0.5s" }}
-            />
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-10 w-10 border-4 border-[#2563eb] border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
       <SignInContent />
     </Suspense>
   );
