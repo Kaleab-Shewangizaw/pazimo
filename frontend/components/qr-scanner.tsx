@@ -1,11 +1,11 @@
 "use client"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Scanner } from "@yudiel/react-qr-scanner"
 import { QrCode, CheckCircle, XCircle, User, Calendar, Clock, Ticket as TicketIcon, ScanLine } from "lucide-react"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
-import { Html5QrcodeScanner } from "html5-qrcode"
 
 interface TicketData {
   ticketId: string
@@ -28,51 +28,9 @@ export default function QRScanner() {
   const [checkInQuantity, setCheckInQuantity] = useState<number>(1)
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null)
-
-  useEffect(() => {
-    if (!ticketInfo) {
-      if (!scannerRef.current) {
-        scannerRef.current = new Html5QrcodeScanner(
-          "qr-reader",
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          /* verbose= */ false
-        )
-        
-        scannerRef.current.render(
-          (decodedText) => {
-            scannerRef.current?.pause(true);
-            verifyTicket(decodedText)
-          },
-          (error) => {
-            // ignore background errors
-          }
-        )
-      } else {
-        scannerRef.current.resume();
-      }
-    }
-
-    return () => {
-      // We don't necessarily want to clear immediately when ticketInfo is set
-      // because we want to reuse the DOM element quickly if "Scan Another" is clicked.
-      // But passing false to clear helps properly unmount if the component actually dies.
-    }
-  }, [ticketInfo])
-
-  // Proper cleanup on true unmount
-  useEffect(() => {
-    return () => {
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(error => {
-          console.error("Failed to clear html5QrcodeScanner. ", error)
-        })
-        scannerRef.current = null;
-      }
-    }
-  }, [])
-
   const verifyTicket = async (qrData: string) => {
+    if (isVerifying || ticketInfo) return; // Prevent double firing
+    
     setIsVerifying(true)
     setScanResult(null)
     setScannedData(qrData)
@@ -100,13 +58,11 @@ export default function QRScanner() {
       } else {
         setScanResult('error')
         toast.error(result.message || 'Ticket verification failed')
-        if (scannerRef.current) scannerRef.current.resume();
       }
     } catch (error) {
       console.error('Verification error:', error)
       setScanResult('error')
       toast.error('Failed to verify QR code')
-      if (scannerRef.current) scannerRef.current.resume();
     } finally {
       setIsVerifying(false)
     }
@@ -114,8 +70,24 @@ export default function QRScanner() {
 
   const handleManualInput = () => {
     if (scannedData.trim()) {
-      if (scannerRef.current) scannerRef.current.pause(true);
       verifyTicket(scannedData)
+    }
+  }
+  
+  const handleScanResult = (result: any) => {
+    if (!result) return;
+    
+    let qrText = "";
+    if (typeof result === 'string') {
+      qrText = result;
+    } else if (Array.isArray(result) && result.length > 0) {
+      qrText = result[0].rawValue || result[0].text || "";
+    } else if (result.text) {
+      qrText = result.text;
+    }
+    
+    if (qrText) {
+      verifyTicket(qrText);
     }
   }
 
@@ -175,7 +147,24 @@ export default function QRScanner() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className={ticketInfo ? "hidden" : "block"}>
-            <div id="qr-reader" className="w-full overflow-hidden rounded-lg border border-gray-200 mb-4 bg-gray-50 min-h-[300px]"></div>
+            <div className="w-full overflow-hidden rounded-lg border border-gray-200 mb-4 bg-gray-50 aspect-square flex items-center justify-center relative">
+              {!ticketInfo && (
+                <Scanner 
+                  onScan={handleScanResult}
+                  onError={(error) => {
+                    if (error && typeof error !== 'string' && error.name === 'NotAllowedError') {
+                      toast.error('Camera access denied. Please allow camera permissions.');
+                    }
+                  }}
+                  components={{
+                    audio: false,
+                    zoom: true,
+                    finder: true
+                  }}
+                  allowMultiple={false}
+                />
+              )}
+            </div>
             
             <div className="pt-4 border-t border-gray-200">
               <label className="block text-sm font-medium mb-2">
