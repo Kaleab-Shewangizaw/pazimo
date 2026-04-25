@@ -38,6 +38,7 @@
     "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.26",
+    "html5-qrcode": "^2.3.8",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.507.0",
     "motion": "^12.23.26",
