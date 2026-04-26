@@ -3,8 +3,8 @@
 /* eslint-disable react/no-unescaped-entities */
 "use client"
 
-import type React from "react"
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
+import { motion } from "framer-motion"
 import {
   ChevronLeft,
   Sparkles,
@@ -35,15 +35,15 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import Header from "@/components/Header"
+import Navbar from "@/components/Navbar"
 import Footer from "@/components/Footer"
 
 const steps = [
-  "Organizer Information",
-  "Business & Legal Details",
-  "Event Profile",
-  "Platform Preferences",
-  "Terms & Agreement",
+  { label: "Profile", description: "Personal & Organization" },
+  { label: "Business", description: "Legal & Banking" },
+  { label: "Experience", description: "Event History" },
+  { label: "Preferences", description: "Platform Setup" },
+  { label: "Agreement", description: "Terms & Fees" },
 ]
 
 const stepIcons = [User, Building2, Calendar, Settings, FileText]
@@ -145,6 +145,11 @@ export default function OrganizerRegistrationPage() {
   const [registrationSuccess, setRegistrationSuccess] = useState(false)
   const [validationErrors, setValidationErrors] = useState<{ [key: string]: string }>({})
 
+  // Auto-scroll to top on step change for better UX
+  React.useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }, [activeStep])
+
   const handleNext = () => {
     if (activeStep < steps.length - 1) {
       setActiveStep(activeStep + 1)
@@ -156,13 +161,12 @@ export default function OrganizerRegistrationPage() {
       setActiveStep(activeStep - 1)
     }
   }
-
   const organizerTypes = [
-    { value: "Individual", icon: User, color: "bg-blue-50 text-blue-600 border-blue-200" },
-    { value: "Event Company", icon: Building2, color: "bg-purple-50 text-purple-600 border-purple-200" },
-    { value: "NGO", icon: Users, color: "bg-green-50 text-green-600 border-green-200" },
-    { value: "University Club", icon: Award, color: "bg-orange-50 text-orange-600 border-orange-200" },
-    { value: "Other", icon: Star, color: "bg-gray-50 text-gray-600 border-gray-200" },
+    { value: "Individual", icon: User },
+    { value: "Event Company", icon: Building2 },
+    { value: "NGO", icon: Users },
+    { value: "University Club", icon: Award },
+    { value: "Other", icon: Star },
   ]
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -307,176 +311,166 @@ export default function OrganizerRegistrationPage() {
     switch (activeStep) {
       case 0:
         return (
-          <div className="flex flex-col gap-6 sm:gap-8 lg:gap-10 p-4 sm:p-6 lg:p-8">
-            <div className="text-center space-y-3 sm:space-y-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-                <User className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Tell Us About Yourself
+          <div className="flex flex-col gap-10 p-8 lg:p-12">
+            <div className="space-y-2">
+              <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
+                Organizer Profile
               </h2>
-              <p className="text-gray-600 text-base sm:text-lg max-w-md mx-auto px-4">
-                Let's start with your basic information and organization details
+              <p className="text-muted-foreground">
+                Start with your basic information and organization details.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8 lg:gap-10">
-              <div className="space-y-4 sm:space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    Full Name
+            <div className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Personal Information
                   </label>
-                  <Input
-                    placeholder="Enter your full name"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData((f) => ({ ...f, fullName: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    Phone Number
-                  </label>
-                  <Input
-                    placeholder="Enter your phone number"
-                    value={formData.phoneNumber}
-                    onChange={(e) => setFormData((f) => ({ ...f, phoneNumber: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    National ID Number
-                  </label>
-                  <Input
-                    placeholder="Enter your national ID number"
-                    value={formData.nationalIdNumber}
-                    onChange={(e) => setFormData((f) => ({ ...f, nationalIdNumber: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Mail className="w-4 h-4" />
-                    Email Address
-                  </label>
-                  <Input
-                    placeholder="Enter your email address"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData((f) => ({ ...f, email: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Input
-                      placeholder="Create a secure password"
-                      type={showPassword ? "text" : "password"}
-                      value={formData.password}
-                      onChange={(e) => setFormData((f) => ({ ...f, password: e.target.value }))}
-                      className="h-12 sm:h-14 text-base pl-4 pr-14 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Full Name</label>
+                      <Input
+                        placeholder="e.g. John Doe"
+                        value={formData.fullName}
+                        onChange={(e) => setFormData((f) => ({ ...f, fullName: e.target.value }))}
+                        className="h-12 border-border bg-surface/50 transition-all focus:border-accent focus:ring-accent/20"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Phone Number</label>
+                      <Input
+                        placeholder="+251 ..."
+                        value={formData.phoneNumber}
+                        onChange={(e) => setFormData((f) => ({ ...f, phoneNumber: e.target.value }))}
+                        className="h-12 border-border bg-surface/50 transition-all focus:border-accent focus:ring-accent/20"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">National ID Number</label>
+                      <Input
+                        placeholder="Enter ID number"
+                        value={formData.nationalIdNumber}
+                        onChange={(e) => setFormData((f) => ({ ...f, nationalIdNumber: e.target.value }))}
+                        className="h-12 border-border bg-surface/50 transition-all focus:border-accent focus:ring-accent/20"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Building2 className="w-4 h-4" />
-                    Organization/Brand Name
+                <div className="space-y-4 pt-4">
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Security
                   </label>
-                  <Input
-                    placeholder="Enter your organization name"
-                    value={formData.organizationName}
-                    onChange={(e) => setFormData((f) => ({ ...f, organizationName: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Email Address</label>
+                      <Input
+                        placeholder="mail@example.com"
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData((f) => ({ ...f, email: e.target.value }))}
+                        className="h-12 border-border bg-surface/50 transition-all focus:border-accent focus:ring-accent/20"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Password</label>
+                      <div className="relative">
+                        <Input
+                          placeholder="••••••••"
+                          type={showPassword ? "text" : "password"}
+                          value={formData.password}
+                          onChange={(e) => setFormData((f) => ({ ...f, password: e.target.value }))}
+                          className="h-12 border-border bg-surface/50 pr-12 transition-all focus:border-accent focus:ring-accent/20"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-6">
                 <div className="space-y-4">
-                  <label className="text-sm font-semibold text-gray-700">Type of Organizer</label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {organizerTypes.map((type) => {
-                      const IconComponent = type.icon
-                      return (
-                        <label key={type.value} className="cursor-pointer">
-                          <input
-                            type="radio"
-                            name="organizerType"
-                            value={type.value}
-                            checked={formData.organizerType === type.value}
-                            onChange={() => setFormData((f) => ({ ...f, organizerType: type.value }))}
-                            className="sr-only"
-                          />
-                          <div
-                            className={`p-3 sm:p-4 rounded-xl border-2 transition-all duration-200 hover:shadow-md ${
-                              formData.organizerType === type.value
-                                ? `${type.color} shadow-lg transform scale-105`
-                                : "bg-white border-gray-200 hover:border-gray-300"
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <IconComponent className="w-4 h-4 sm:w-5 sm:h-5" />
-                              <span className="font-medium text-sm sm:text-base">{type.value}</span>
-                            </div>
-                          </div>
-                          {type.value === "Other" && formData.organizerType === "Other" && (
-                            <Input
-                              placeholder="Please specify"
-                              value={formData.organizerTypeOther}
-                              onChange={(e) => setFormData((f) => ({ ...f, organizerTypeOther: e.target.value }))}
-                              className="mt-3 h-12 border-2 border-gray-200 focus:border-blue-500 rounded-lg"
-                            />
-                          )}
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Globe className="w-4 h-4" />
-                    Social Media Links <span className="text-xs text-gray-400 font-normal">(optional)</span>
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Organization Details
                   </label>
-                  <Textarea
-                    placeholder="Facebook, Instagram, TikTok, Website, etc. (comma separated)"
-                    value={formData.socialLinks}
-                    onChange={(e) => setFormData((f) => ({ ...f, socialLinks: e.target.value }))}
-                    className="h-24 sm:h-32 text-base border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300 resize-none"
-                  />
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Organization/Brand Name</label>
+                      <Input
+                        placeholder="e.g. Pazimo Events"
+                        value={formData.organizationName}
+                        onChange={(e) => setFormData((f) => ({ ...f, organizationName: e.target.value }))}
+                        className="h-12 border-border bg-surface/50 transition-all focus:border-accent focus:ring-accent/20"
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-sm font-semibold text-foreground">Type of Organizer</label>
+                      <div className="grid grid-cols-1 gap-2">
+                        {organizerTypes.map((type) => (
+                          <label key={type.value} className="cursor-pointer">
+                            <input
+                              type="radio"
+                              name="organizerType"
+                              value={type.value}
+                              checked={formData.organizerType === type.value}
+                              onChange={() => setFormData((f) => ({ ...f, organizerType: type.value }))}
+                              className="sr-only"
+                            />
+                            <div
+                              className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
+                                formData.organizerType === type.value
+                                  ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                                  : "border-border bg-surface/30 text-muted-foreground hover:border-accent/30"
+                              }`}
+                            >
+                              <type.icon className={`h-4 w-4 ${formData.organizerType === type.value ? 'text-accent' : ''}`} />
+                              <span className="text-sm font-medium">{type.value}</span>
+                              {formData.organizerType === type.value && <CheckCircle className="ml-auto h-4 w-4 text-accent" />}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      {formData.organizerType === "Other" && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
+                          <Input
+                            placeholder="Specify organizer type"
+                            value={formData.organizerTypeOther}
+                            onChange={(e) => setFormData((f) => ({ ...f, organizerTypeOther: e.target.value }))}
+                            className="mt-2 h-12 border-border bg-surface/50"
+                          />
+                        </motion.div>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Social Links</label>
+                      <Textarea
+                        placeholder="Instagram, Website, etc."
+                        value={formData.socialLinks}
+                        onChange={(e) => setFormData((f) => ({ ...f, socialLinks: e.target.value }))}
+                        className="h-24 resize-none border-border bg-surface/50 transition-all focus:border-accent focus:ring-accent/20"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex justify-end pt-6 sm:pt-8">
+            <div className="flex justify-end border-t border-border pt-8">
               <Button
                 type="button"
                 onClick={handleNext}
-                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-white font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                className="h-12 px-8 font-bold shadow-accent-btn"
               >
-                Continue
-                <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
+                Continue to Business Details
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -484,26 +478,21 @@ export default function OrganizerRegistrationPage() {
 
       case 1:
         return (
-          <div className="flex flex-col gap-6 sm:gap-8 lg:gap-10 p-4 sm:p-6 lg:p-8">
-            <div className="text-center space-y-3 sm:space-y-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-                <Building2 className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Business & Legal Details
+          <div className="flex flex-col gap-10 p-8 lg:p-12">
+            <div className="space-y-2">
+              <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
+                Business & Legal
               </h2>
-              <p className="text-gray-600 text-base sm:text-lg max-w-md mx-auto px-4">
-                Help us verify your business and set up secure payouts
+              <p className="text-muted-foreground">
+                Help us verify your business and set up secure payouts.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8 lg:gap-10">
-              <div className="space-y-4 sm:space-y-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Upload className="w-4 h-4" />
-                    Business License{" "}
-                    <span className="text-xs text-gray-400 font-normal">(optional but recommended)</span>
+            <div className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Verification Documents
                   </label>
                   <div className="relative">
                     <input
@@ -512,108 +501,119 @@ export default function OrganizerRegistrationPage() {
                       onChange={(e) =>
                         setFormData((f) => ({ ...f, businessLicense: e.target.files ? e.target.files[0] : null }))
                       }
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0"
                     />
-                    <div className="h-24 sm:h-32 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center gap-2 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200">
-                      <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
-                      <p className="text-xs sm:text-sm text-gray-600 text-center px-2">
-                        Click to upload or drag and drop
-                      </p>
-                      <p className="text-xs text-gray-400">PDF, JPG, PNG up to 10MB</p>
-                    </div>
-                    {formData.businessLicense && "name" in formData.businessLicense && (
-                      <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-sm text-green-700 flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4" />
-                          {formData.businessLicense.name}
-                        </p>
+                    <div className="flex min-h-[160px] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-border bg-surface/30 transition-all hover:border-accent/40 hover:bg-accent/5">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10 text-accent">
+                        <Upload className="h-6 w-6" />
                       </div>
+                      <div className="text-center">
+                        <p className="text-sm font-semibold text-foreground">Upload Business License</p>
+                        <p className="text-xs text-muted-foreground">PDF, JPG, PNG up to 10MB</p>
+                      </div>
+                    </div>
+                    {formData.businessLicense && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mt-3 flex items-center gap-3 rounded-xl border border-accent/20 bg-accent/5 p-3 text-accent"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        <span className="text-sm font-medium">{(formData.businessLicense as any).name}</span>
+                      </motion.div>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">
-                    TIN Number <span className="text-xs text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <Input
-                    placeholder="Enter your TIN number"
-                    value={formData.tinNumber}
-                    onChange={(e) => setFormData((f) => ({ ...f, tinNumber: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    Business Address
-                  </label>
-                  <Input
-                    placeholder="Enter your registered business address"
-                    value={formData.businessAddress}
-                    onChange={(e) => setFormData((f) => ({ ...f, businessAddress: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">TIN Number (Optional)</label>
+                    <Input
+                      placeholder="Enter TIN number"
+                      value={formData.tinNumber}
+                      onChange={(e) => setFormData((f) => ({ ...f, tinNumber: e.target.value }))}
+                      className="h-12 border-border bg-surface/50 focus:border-accent focus:ring-accent/20"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Business Address</label>
+                    <Input
+                      placeholder="Registered address"
+                      value={formData.businessAddress}
+                      onChange={(e) => setFormData((f) => ({ ...f, businessAddress: e.target.value }))}
+                      className="h-12 border-border bg-surface/50 focus:border-accent focus:ring-accent/20"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-4 sm:space-y-6">
-                <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-4 sm:p-6 rounded-xl border border-blue-100">
-                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                    <Banknote className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                    Banking Information
-                  </h3>
-                  <div className="space-y-3 sm:space-y-4">
-                    <Input
-                      placeholder="Bank Account Holder Name"
-                      value={formData.bankAccountHolder}
-                      onChange={(e) => setFormData((f) => ({ ...f, bankAccountHolder: e.target.value }))}
-                      className="h-12 text-base pl-4 border-2 border-white focus:border-blue-500 rounded-lg bg-white"
-                    />
-                    <Input
-                      placeholder="Bank Name"
-                      value={formData.bankName}
-                      onChange={(e) => setFormData((f) => ({ ...f, bankName: e.target.value }))}
-                      className="h-12 text-base pl-4 border-2 border-white focus:border-blue-500 rounded-lg bg-white"
-                    />
-                    <Input
-                      placeholder="Bank Account Number"
-                      value={formData.bankAccountNumber}
-                      onChange={(e) => setFormData((f) => ({ ...f, bankAccountNumber: e.target.value }))}
-                      className="h-12 text-base pl-4 border-2 border-white focus:border-blue-500 rounded-lg bg-white"
-                    />
+              <div className="space-y-6">
+                <div className="space-y-4 rounded-2xl border border-border bg-surface/50 p-6">
+                  <div className="flex items-center gap-3 border-b border-border pb-4">
+                    <Banknote className="h-5 w-5 text-accent" />
+                    <h3 className="font-display font-bold text-foreground text-lg">Payout Information</h3>
+                  </div>
+                  <div className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-semibold text-foreground">Bank Account Holder</label>
+                      <Input
+                        placeholder="Name on account"
+                        value={formData.bankAccountHolder}
+                        onChange={(e) => setFormData((f) => ({ ...f, bankAccountHolder: e.target.value }))}
+                        className="border-border bg-background focus:border-accent"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">Bank Name</label>
+                        <Input
+                          placeholder="e.g. CBE, Dashen"
+                          value={formData.bankName}
+                          onChange={(e) => setFormData((f) => ({ ...f, bankName: e.target.value }))}
+                          className="border-border bg-background focus:border-accent"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">Account Number</label>
+                        <Input
+                          placeholder="0000 0000 0000"
+                          value={formData.bankAccountNumber}
+                          onChange={(e) => setFormData((f) => ({ ...f, bankAccountNumber: e.target.value }))}
+                          className="border-border bg-background focus:border-accent"
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Primary Contact Person's Role</label>
+                  <label className="text-sm font-semibold text-foreground">Primary Contact Person's Role</label>
                   <Input
-                    placeholder="e.g., Manager, Founder, Director"
+                    placeholder="e.g. Manager, Founder"
                     value={formData.contactRole}
                     onChange={(e) => setFormData((f) => ({ ...f, contactRole: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
+                    className="h-12 border-border bg-surface/50 focus:border-accent focus:ring-accent/20"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6 sm:pt-8">
+            <div className="flex flex-col gap-4 border-t border-border pt-8 sm:flex-row sm:justify-between">
               <Button
                 variant="outline"
                 type="button"
                 onClick={handleBack}
-                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-xl border-2 hover:bg-gray-50 transition-all duration-200 bg-transparent"
+                className="h-12 px-8 font-semibold border-border hover:bg-surface"
               >
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Back
+                <ChevronLeft className="mr-2 h-5 w-5" /> Back
               </Button>
               <Button
                 type="button"
                 onClick={handleNext}
-                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-white font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                className="h-12 px-8 font-bold shadow-accent-btn"
               >
-                Continue
-                <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
+                Continue to Experience
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -621,12 +621,12 @@ export default function OrganizerRegistrationPage() {
 
       case 2:
         const eventKindOptions = [
-          { value: "Music/Concerts", icon: "🎵", color: "bg-pink-50 border-pink-200 text-pink-700" },
-          { value: "Festivals", icon: "🎪", color: "bg-orange-50 border-orange-200 text-orange-700" },
-          { value: "Nightlife/Clubbing", icon: "🌙", color: "bg-purple-50 border-purple-200 text-purple-700" },
-          { value: "Conferences/Seminars", icon: "🎤", color: "bg-blue-50 border-blue-200 text-blue-700" },
-          { value: "Training/Workshops", icon: "📚", color: "bg-green-50 border-green-200 text-green-700" },
-          { value: "Other", icon: "⭐", color: "bg-gray-50 border-gray-200 text-gray-700" },
+          { value: "Music/Concerts", icon: "🎵" },
+          { value: "Festivals", icon: "🎪" },
+          { value: "Nightlife/Clubbing", icon: "🌙" },
+          { value: "Conferences/Seminars", icon: "🎤" },
+          { value: "Training/Workshops", icon: "📚" },
+          { value: "Other", icon: "⭐" },
         ]
 
         const audienceOptions = [
@@ -637,191 +637,189 @@ export default function OrganizerRegistrationPage() {
         ]
 
         const frequencyOptions = [
-          { value: "Weekly", icon: "📅", color: "bg-blue-50 border-blue-200" },
-          { value: "Monthly", icon: "🗓️", color: "bg-green-50 border-green-200" },
-          { value: "Occasionally", icon: "⏰", color: "bg-yellow-50 border-yellow-200" },
-          { value: "First Time Organizer", icon: "🌟", color: "bg-purple-50 border-purple-200" },
+          { value: "Weekly", icon: "📅" },
+          { value: "Monthly", icon: "🗓️" },
+          { value: "Occasionally", icon: "⏰" },
+          { value: "First Time Organizer", icon: "🌟" },
         ]
 
         return (
-          <div className="flex flex-col gap-6 sm:gap-8 lg:gap-10 p-4 sm:p-6 lg:p-8">
-            <div className="text-center space-y-3 sm:space-y-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-purple-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-                <Calendar className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+          <div className="flex flex-col gap-10 p-8 lg:p-12">
+            <div className="space-y-2">
+              <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
                 Event Profile
               </h2>
-              <p className="text-gray-600 text-base sm:text-lg max-w-md mx-auto px-4">
-                Tell us about your event experience and what you organize
+              <p className="text-muted-foreground">
+                Tell us about your event experience and what you organize.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8 lg:gap-10">
-              <div className="space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-1 gap-10 xl:grid-cols-2">
+              <div className="space-y-8">
                 <div className="space-y-4">
-                  <label className="text-base sm:text-lg font-semibold text-gray-800">
-                    Have you organized events before?
+                  <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Experience
                   </label>
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                    {["Yes", "No"].map((option) => (
-                      <label key={option} className="cursor-pointer flex-1">
-                        <input
-                          type="radio"
-                          name="hasOrganizedBefore"
-                          value={option}
-                          checked={formData.hasOrganizedBefore === option}
-                          onChange={() => setFormData((f) => ({ ...f, hasOrganizedBefore: option }))}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`p-3 sm:p-4 rounded-xl border-2 text-center transition-all duration-200 ${
-                            formData.hasOrganizedBefore === option
-                              ? "bg-blue-50 border-blue-500 text-blue-700 shadow-lg"
-                              : "bg-white border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <span className="font-semibold">{option}</span>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <label className="text-sm font-semibold text-foreground">Have you organized events before?</label>
+                      <div className="flex gap-2">
+                        {["Yes", "No"].map((option) => (
+                          <label key={option} className="flex-1 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="hasOrganizedBefore"
+                              value={option}
+                              checked={formData.hasOrganizedBefore === option}
+                              onChange={() => setFormData((f) => ({ ...f, hasOrganizedBefore: option }))}
+                              className="sr-only"
+                            />
+                            <div
+                              className={`rounded-xl border py-2.5 text-center text-sm font-medium transition-all ${
+                                formData.hasOrganizedBefore === option
+                                  ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                                  : "border-border bg-surface/30 text-muted-foreground hover:border-accent/30"
+                              }`}
+                            >
+                              {option}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
 
-                <div className="space-y-4">
-                  <label className="text-base sm:text-lg font-semibold text-gray-800">
-                    What kind of events do you organize?
-                  </label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {eventKindOptions.map((option) => (
-                      <label key={option.value} className="cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.eventKinds.includes(option.value)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData((f) => ({ ...f, eventKinds: [...f.eventKinds, option.value] }))
-                            } else {
-                              setFormData((f) => ({ ...f, eventKinds: f.eventKinds.filter((k) => k !== option.value) }))
-                            }
-                          }}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`p-3 sm:p-4 rounded-xl border-2 transition-all duration-200 ${
-                            formData.eventKinds.includes(option.value)
-                              ? `${option.color} shadow-lg transform scale-105`
-                              : "bg-white border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-xl sm:text-2xl">{option.icon}</span>
-                            <span className="font-medium text-sm sm:text-base">{option.value}</span>
-                          </div>
-                        </div>
-                        {option.value === "Other" && formData.eventKinds.includes("Other") && (
+                    <div className="space-y-3">
+                      <label className="text-sm font-semibold text-foreground italic">What kind of events do you organize?</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {eventKindOptions.map((option) => (
+                          <label key={option.value} className="cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.eventKinds.includes(option.value)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData((f) => ({ ...f, eventKinds: [...f.eventKinds, option.value] }))
+                                } else {
+                                  setFormData((f) => ({ ...f, eventKinds: f.eventKinds.filter((k) => k !== option.value) }))
+                                }
+                              }}
+                              className="sr-only"
+                            />
+                            <div
+                              className={`flex items-center gap-2 rounded-xl border p-2.5 transition-all ${
+                                formData.eventKinds.includes(option.value)
+                                  ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                                  : "border-border bg-surface/30 text-muted-foreground hover:border-accent/30"
+                              }`}
+                            >
+                              <span className="text-lg">{option.icon}</span>
+                              <span className="text-xs font-medium leading-tight">{option.value}</span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      {formData.eventKinds.includes("Other") && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}>
                           <Input
-                            placeholder="Please specify"
+                            placeholder="Specify event types"
                             value={formData.eventKindOther}
                             onChange={(e) => setFormData((f) => ({ ...f, eventKindOther: e.target.value }))}
-                            className="mt-3 h-12 border-2 border-gray-200 focus:border-blue-500 rounded-lg"
+                            className="mt-2 h-10 border-border bg-surface/50 text-sm"
                           />
-                        )}
-                      </label>
-                    ))}
+                        </motion.div>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">
-                    Upcoming Event Name <span className="text-xs text-gray-400 font-normal">(optional)</span>
-                  </label>
-                  <Input
-                    placeholder="e.g., Summer Music Festival 2024"
-                    value={formData.sampleEventName}
-                    onChange={(e) => setFormData((f) => ({ ...f, sampleEventName: e.target.value }))}
-                    className="h-12 sm:h-14 text-base pl-4 border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl transition-all duration-200 hover:border-gray-300"
-                  />
                 </div>
               </div>
 
-              <div className="space-y-6 sm:space-y-8">
-                <div className="space-y-4">
-                  <label className="text-base sm:text-lg font-semibold text-gray-800">Event Frequency</label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {frequencyOptions.map((option) => (
-                      <label key={option.value} className="cursor-pointer">
-                        <input
-                          type="radio"
-                          name="eventFrequency"
-                          value={option.value}
-                          checked={formData.eventFrequency === option.value}
-                          onChange={() => setFormData((f) => ({ ...f, eventFrequency: option.value }))}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`p-3 sm:p-4 rounded-xl border-2 transition-all duration-200 ${
-                            formData.eventFrequency === option.value
-                              ? `${option.color} shadow-lg transform scale-105`
-                              : "bg-white border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-lg sm:text-xl">{option.icon}</span>
-                            <span className="font-medium text-sm sm:text-base">{option.value}</span>
+              <div className="space-y-8">
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold text-foreground">Estimated Audience per Event</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {audienceOptions.map((option) => (
+                        <label key={option.value} className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="estimatedAudience"
+                            value={option.value}
+                            checked={formData.estimatedAudience === option.value}
+                            onChange={() => setFormData((f) => ({ ...f, estimatedAudience: option.value }))}
+                            className="sr-only"
+                          />
+                          <div
+                            className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all ${
+                              formData.estimatedAudience === option.value
+                                ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                                : "border-border bg-surface/30 text-muted-foreground hover:border-accent/30"
+                            }`}
+                          >
+                            <span className="text-xl mb-1">{option.icon}</span>
+                            <span className="text-xs font-bold">{option.label}</span>
                           </div>
-                        </div>
-                      </label>
-                    ))}
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Estimated Audience per Event</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {audienceOptions.map((option) => (
-                      <label key={option.value} className="cursor-pointer">
-                        <input
-                          type="radio"
-                          name="estimatedAudience"
-                          value={option.value}
-                          checked={formData.estimatedAudience === option.value}
-                          onChange={() => setFormData((f) => ({ ...f, estimatedAudience: option.value }))}
-                          className="sr-only"
-                        />
-                        <div
-                          className={`p-3 sm:p-4 rounded-xl border-2 text-center transition-all duration-200 ${
-                            formData.estimatedAudience === option.value
-                              ? "bg-green-50 border-green-500 text-green-700 shadow-lg"
-                              : "bg-white border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="text-xl sm:text-2xl mb-2">{option.icon}</div>
-                          <div className="font-semibold text-xs sm:text-sm">{option.label}</div>
-                        </div>
-                      </label>
-                    ))}
+                  <div className="space-y-3">
+                    <label className="text-sm font-semibold text-foreground">Event Frequency</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {frequencyOptions.map((option) => (
+                        <label key={option.value} className="cursor-pointer">
+                          <input
+                            type="radio"
+                            name="eventFrequency"
+                            value={option.value}
+                            checked={formData.eventFrequency === option.value}
+                            onChange={() => setFormData((f) => ({ ...f, eventFrequency: option.value }))}
+                            className="sr-only"
+                          />
+                          <div
+                            className={`flex items-center gap-2 rounded-xl border p-2.5 transition-all ${
+                              formData.eventFrequency === option.value
+                                ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                                : "border-border bg-surface/30 text-muted-foreground hover:border-accent/30"
+                            }`}
+                          >
+                            <span className="text-lg">{option.icon}</span>
+                            <span className="text-xs font-medium leading-tight">{option.value}</span>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-foreground">Upcoming Event Name (Optional)</label>
+                    <Input
+                      placeholder="e.g. Summer Music Fest"
+                      value={formData.sampleEventName}
+                      onChange={(e) => setFormData((f) => ({ ...f, sampleEventName: e.target.value }))}
+                      className="h-10 border-border bg-surface/50 text-sm focus:border-accent"
+                    />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6 sm:pt-8">
+            <div className="flex flex-col gap-4 border-t border-border pt-8 sm:flex-row sm:justify-between">
               <Button
                 variant="outline"
                 type="button"
                 onClick={handleBack}
-                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-xl border-2 hover:bg-gray-50 transition-all duration-200 bg-transparent"
+                className="h-12 px-8 font-semibold border-border hover:bg-surface"
               >
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Back
+                <ChevronLeft className="mr-2 h-5 w-5" /> Back
               </Button>
               <Button
                 type="button"
                 onClick={handleNext}
-                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-white font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                className="h-12 px-8 font-bold shadow-accent-btn"
               >
-                Continue
-                <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
+                Continue to Preferences
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -829,29 +827,28 @@ export default function OrganizerRegistrationPage() {
 
       case 3:
         const payoutOptions = [
-          { value: "Bank Transfer", icon: "🏦", color: "bg-blue-50 border-blue-200" },
-          { value: "Mobile Money (Telebirr, CBE Birr, etc.)", icon: "📱", color: "bg-green-50 border-green-200" },
-          { value: "Both", icon: "💳", color: "bg-purple-50 border-purple-200" },
+          { value: "Bank Transfer", icon: "🏦" },
+          { value: "Mobile Money", icon: "📱" },
+          { value: "Both", icon: "💳" },
         ]
 
         return (
-          <div className="flex flex-col gap-6 sm:gap-8 lg:gap-10 p-4 sm:p-6 lg:p-8">
-            <div className="text-center space-y-3 sm:space-y-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-green-500 to-teal-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-                <Settings className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Platform Preferences
+          <div className="flex flex-col gap-10 p-8 lg:p-12">
+            <div className="space-y-2">
+              <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
+                Platform Setup
               </h2>
-              <p className="text-gray-600 text-base sm:text-lg max-w-md mx-auto px-4">
-                Configure how you want to use Pazimo for your events
+              <p className="text-muted-foreground">
+                Configure how you want to use Pazimo for your events.
               </p>
             </div>
 
-            <div className="max-w-2xl mx-auto space-y-6 sm:space-y-10">
-              <div className="space-y-4 sm:space-y-6">
-                <label className="text-lg sm:text-xl font-semibold text-gray-800">Preferred Payout Method</label>
-                <div className="grid grid-cols-1 gap-3 sm:gap-4">
+            <div className="space-y-10">
+              <div className="space-y-4">
+                <label className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  Payout Method
+                </label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {payoutOptions.map((option) => (
                     <label key={option.value} className="cursor-pointer">
                       <input
@@ -863,34 +860,34 @@ export default function OrganizerRegistrationPage() {
                         className="sr-only"
                       />
                       <div
-                        className={`p-4 sm:p-6 rounded-xl border-2 transition-all duration-200 ${
+                        className={`flex flex-col items-center justify-center rounded-2xl border p-6 transition-all ${
                           formData.payoutMethod === option.value
-                            ? `${option.color} shadow-lg transform scale-105`
-                            : "bg-white border-gray-200 hover:border-gray-300"
+                            ? "border-accent bg-accent/5 text-foreground shadow-md"
+                            : "border-border bg-surface/30 text-muted-foreground hover:border-accent/30"
                         }`}
                       >
-                        <div className="flex items-center gap-3 sm:gap-4">
-                          <span className="text-2xl sm:text-3xl">{option.icon}</span>
-                          <span className="font-semibold text-base sm:text-lg">{option.value}</span>
-                        </div>
+                        <span className="text-3xl mb-2">{option.icon}</span>
+                        <span className="text-sm font-bold text-center">{option.value}</span>
                       </div>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 sm:p-6 rounded-xl border border-blue-100">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                    Setup Support
-                  </h3>
-                  <p className="text-gray-600 mb-3 sm:mb-4 text-sm">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-surface/30 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <h3 className="font-display font-bold text-foreground">Setup Support</h3>
+                  </div>
+                  <p className="mb-6 text-sm text-muted-foreground">
                     Do you need Pazimo support to set up your first event page?
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex gap-2">
                     {["Yes", "No"].map((option) => (
-                      <label key={option} className="cursor-pointer flex-1">
+                      <label key={option} className="flex-1 cursor-pointer">
                         <input
                           type="radio"
                           name="needSupport"
@@ -900,30 +897,32 @@ export default function OrganizerRegistrationPage() {
                           className="sr-only"
                         />
                         <div
-                          className={`p-3 rounded-lg border-2 text-center transition-all duration-200 ${
+                          className={`rounded-xl border py-2 text-center text-sm font-medium transition-all ${
                             formData.needSupport === option
-                              ? "bg-blue-100 border-blue-500 text-blue-700"
-                              : "bg-white border-gray-200 hover:border-gray-300"
+                              ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                              : "border-border bg-surface/50 text-muted-foreground hover:border-accent/30"
                           }`}
                         >
-                          <span className="font-semibold">{option}</span>
+                          {option}
                         </div>
                       </label>
                     ))}
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-4 sm:p-6 rounded-xl border border-purple-100">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
-                    <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
-                    QR Scanner
-                  </h3>
-                  <p className="text-gray-600 mb-3 sm:mb-4 text-sm">
+                <div className="rounded-2xl border border-border bg-surface/30 p-6">
+                  <div className="mb-4 flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10 text-accent">
+                      <Zap className="h-5 w-5" />
+                    </div>
+                    <h3 className="font-display font-bold text-foreground">QR Scanner</h3>
+                  </div>
+                  <p className="mb-6 text-sm text-muted-foreground">
                     Use Pazimo's QR code scanner app for ticket validation?
                   </p>
-                  <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex gap-2">
                     {["Yes", "No"].map((option) => (
-                      <label key={option} className="cursor-pointer flex-1">
+                      <label key={option} className="flex-1 cursor-pointer">
                         <input
                           type="radio"
                           name="useQrScanner"
@@ -933,13 +932,13 @@ export default function OrganizerRegistrationPage() {
                           className="sr-only"
                         />
                         <div
-                          className={`p-3 rounded-lg border-2 text-center transition-all duration-200 ${
+                          className={`rounded-xl border py-2 text-center text-sm font-medium transition-all ${
                             formData.useQrScanner === option
-                              ? "bg-purple-100 border-purple-500 text-purple-700"
-                              : "bg-white border-gray-200 hover:border-gray-300"
+                              ? "border-accent bg-accent/5 text-foreground shadow-sm"
+                              : "border-border bg-surface/50 text-muted-foreground hover:border-accent/30"
                           }`}
                         >
-                          <span className="font-semibold">{option}</span>
+                          {option}
                         </div>
                       </label>
                     ))}
@@ -948,22 +947,22 @@ export default function OrganizerRegistrationPage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6 sm:pt-8">
+            <div className="flex flex-col gap-4 border-t border-border pt-8 sm:flex-row sm:justify-between">
               <Button
                 variant="outline"
                 type="button"
                 onClick={handleBack}
-                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-xl border-2 hover:bg-gray-50 transition-all duration-200 bg-transparent"
+                className="h-12 px-8 font-semibold border-border hover:bg-surface"
               >
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Back
+                <ChevronLeft className="mr-2 h-5 w-5" /> Back
               </Button>
               <Button
                 type="button"
                 onClick={handleNext}
-                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 px-6 sm:px-8 py-3 sm:py-4 rounded-xl text-white font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl"
+                className="h-12 px-8 font-bold shadow-accent-btn"
               >
-                Continue
-                <ArrowRight className="ml-2 w-4 h-4 sm:w-5 sm:h-5" />
+                Review & Agreement
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -971,117 +970,82 @@ export default function OrganizerRegistrationPage() {
 
       case 4:
         return (
-          <div className="flex flex-col gap-6 sm:gap-8 lg:gap-10 p-4 sm:p-6 lg:p-8">
-            <div className="text-center space-y-3 sm:space-y-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
-                <Shield className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
-                Terms & Agreement
+          <div className="flex flex-col gap-10 p-8 lg:p-12">
+            <div className="space-y-2">
+              <h2 className="font-display text-3xl font-bold tracking-tight text-foreground">
+                Agreement
               </h2>
-              <p className="text-gray-600 text-base sm:text-lg max-w-md mx-auto px-4">
-                Please review and confirm to complete your registration
+              <p className="text-muted-foreground">
+                Review our terms and complete your registration.
               </p>
             </div>
 
-            <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
-              <div className="space-y-4 sm:space-y-6">
-                <label className="flex items-start gap-3 sm:gap-4 cursor-pointer p-4 sm:p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100 hover:shadow-md transition-all duration-200">
-                  <input
-                    type="checkbox"
-                    checked={formData.agreeTerms}
-                    onChange={(e) => setFormData((f) => ({ ...f, agreeTerms: e.target.checked }))}
-                    className="w-5 h-5 sm:w-6 sm:h-6 accent-blue-600 mt-1 flex-shrink-0"
-                  />
-                  <div>
-                    <p className="text-base sm:text-lg font-semibold text-gray-800 mb-2">Terms and Conditions</p>
-                    <p className="text-gray-600 text-sm sm:text-base">
-                      I have read and agree to Pazimo's{" "}
-                      <a
-                        href="/terms"
-                        target="_blank"
-                        className="text-blue-600 hover:text-blue-700 underline font-medium"
-                        rel="noreferrer"
-                      >
+            <div className="space-y-4">
+              {[
+                { 
+                  id: 'agreeTerms', 
+                  title: 'Terms and Conditions', 
+                  content: (
+                    <>
+                      I have read and agree to Pazimo's{' '}
+                      <a href="/terms" target="_blank" className="text-accent underline hover:text-accent/80">
                         Organizer Terms and Conditions
                       </a>
-                    </p>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 sm:gap-4 cursor-pointer p-4 sm:p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-100 hover:shadow-md transition-all duration-200">
+                    </>
+                  )
+                },
+                { 
+                  id: 'agreeFee', 
+                  title: 'Service Fee Agreement', 
+                  content: 'I understand that Pazimo deducts a service fee per ticket sold to cover platform costs.' 
+                },
+                { 
+                  id: 'digitalSignature', 
+                  title: 'Information Accuracy', 
+                  content: 'I confirm that all provided information is accurate and truthful.' 
+                }
+              ].map((item) => (
+                <label key={item.id} className="flex cursor-pointer items-start gap-4 rounded-2xl border border-border bg-surface/30 p-5 transition-all hover:bg-accent/5 hover:border-accent/30">
                   <input
                     type="checkbox"
-                    checked={formData.agreeFee}
-                    onChange={(e) => setFormData((f) => ({ ...f, agreeFee: e.target.checked }))}
-                    className="w-5 h-5 sm:w-6 sm:h-6 accent-green-600 mt-1 flex-shrink-0"
+                    checked={(formData as any)[item.id]}
+                    onChange={(e) => setFormData((f) => ({ ...f, [item.id]: e.target.checked }))}
+                    className="mt-1 h-5 w-5 accent-accent"
                   />
                   <div>
-                    <p className="text-base sm:text-lg font-semibold text-gray-800 mb-2">Service Fee Agreement</p>
-                    <p className="text-gray-600 text-sm sm:text-base">
-                      I understand that Pazimo deducts a service fee per ticket sold to cover platform costs and
-                      services.
-                    </p>
+                    <p className="font-display text-base font-bold text-foreground">{item.title}</p>
+                    <div className="text-sm text-muted-foreground">{item.content}</div>
                   </div>
                 </label>
-
-                <label className="flex items-start gap-3 sm:gap-4 cursor-pointer p-4 sm:p-6 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 hover:shadow-md transition-all duration-200">
-                  <input
-                    type="checkbox"
-                    checked={formData.digitalSignature}
-                    onChange={(e) => setFormData((f) => ({ ...f, digitalSignature: e.target.checked }))}
-                    className="w-5 h-5 sm:w-6 sm:h-6 accent-purple-600 mt-1 flex-shrink-0"
-                  />
-                  <div>
-                    <p className="text-base sm:text-lg font-semibold text-gray-800 mb-2">Information Accuracy</p>
-                    <p className="text-gray-600 text-sm sm:text-base">
-                      I confirm that all the information provided above is accurate and truthful.
-                    </p>
-                  </div>
-                </label>
-              </div>
+              ))}
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6 sm:pt-8">
+            <div className="flex flex-col gap-4 border-t border-border pt-8 sm:flex-row sm:justify-between">
               <Button
                 variant="outline"
                 type="button"
                 onClick={handleBack}
-                className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 rounded-xl border-2 hover:bg-gray-50 transition-all duration-200 bg-transparent"
+                className="h-12 px-8 font-semibold border-border hover:bg-surface"
               >
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 mr-2" /> Back
+                <ChevronLeft className="mr-2 h-5 w-5" /> Back
               </Button>
               <Button
                 type="submit"
                 disabled={isLoading || !formData.agreeTerms || !formData.agreeFee || !formData.digitalSignature}
-                className="w-full sm:w-auto bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 px-8 sm:px-12 py-3 sm:py-4 rounded-xl text-white font-semibold transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+                className="h-12 px-12 font-bold shadow-accent-btn disabled:opacity-50"
               >
                 {isLoading ? (
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="flex items-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
                     Creating Account...
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <CheckCircle className="h-5 w-5" />
                     Complete Registration
                   </div>
                 )}
               </Button>
-            </div>
-
-            {/* Error messages */}
-            <div className="max-w-2xl mx-auto space-y-2">
-              {isLoading && <div className="text-sm text-gray-500 text-center">Submitting, please wait...</div>}
-              {!formData.agreeTerms && (
-                <div className="text-sm text-red-500 text-center">You must agree to the Terms and Conditions.</div>
-              )}
-              {!formData.agreeFee && (
-                <div className="text-sm text-red-500 text-center">You must agree to the Service Fee Agreement.</div>
-              )}
-              {!formData.digitalSignature && (
-                <div className="text-sm text-red-500 text-center">You must confirm Information Accuracy.</div>
-              )}
             </div>
           </div>
         )
@@ -1100,87 +1064,137 @@ export default function OrganizerRegistrationPage() {
       */
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50">
+    <div className="flex min-h-screen flex-col bg-background">
+      <Navbar />
 
       {/* Success Modal */}
       {registrationSuccess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col items-center max-w-sm w-full mx-4">
-            <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-500 mb-3 sm:mb-4" />
-            <h2 className="text-xl sm:text-2xl font-bold mb-2 text-center">Registration Successful!</h2>
-            <p className="text-gray-700 mb-2 text-center text-sm sm:text-base">
-              You will be redirected to the homepage shortly.
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="flex w-full max-w-sm flex-col items-center rounded-3xl border border-border bg-background p-8 shadow-2xl"
+          >
+            <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-accent/10 text-accent">
+              <CheckCircle className="h-10 w-10" />
+            </div>
+            <h2 className="mb-2 text-center font-display text-2xl font-bold text-foreground">Registration Successful!</h2>
+            <p className="text-center text-muted-foreground">
+              Welcome to Pazimo. You will be redirected to the homepage shortly.
             </p>
-          </div>
+          </motion.div>
         </div>
       )}
 
-      <div className="flex-1 flex flex-col items-center justify-center py-6 sm:py-8 lg:py-12 px-4">
-        <div className="w-full max-w-7xl">
-          {/* Enhanced Stepper UI */}
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 mb-6 sm:mb-8 p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              {steps.map((step, index) => {
-                const IconComponent = stepIcons[index]
-                const isActive = index === activeStep
-                const isCompleted = index < activeStep
-                return (
-                  <div key={step} className="flex items-center flex-1">
-                    <div
-                      className="flex flex-col items-center cursor-pointer group"
-                      onClick={() => setActiveStep(index)}
+      <main className="flex-1 pt-24 pb-20">
+        <div className="container mx-auto px-4">
+          <div className="mx-auto max-w-5xl">
+            {/* Header section moved inside the form for better focus */}
+            <div className="mb-12 text-center">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 inline-flex items-center gap-2"
+              >
+                <span className="h-px w-8 bg-accent" />
+                <span className="text-xs font-medium uppercase tracking-[0.2em] text-accent">
+                  Join the Network
+                </span>
+                <span className="h-px w-8 bg-accent" />
+              </motion.div>
+              <h1 className="mb-4 font-display text-4xl font-bold leading-tight tracking-tight text-foreground md:text-5xl">
+                Become a <span className="text-gradient-gold">Pazimo Organizer</span>
+              </h1>
+              <p className="mx-auto max-w-2xl text-lg text-muted-foreground">
+                Follow our step-by-step process to set up your verified organizer profile and start creating unforgettable experiences.
+              </p>
+            </div>
+
+            {/* Premium Stepper UI */}
+            <div className="mb-12 overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-stretch">
+                {steps.map((step, index) => {
+                  const IconComponent = stepIcons[index]
+                  const isActive = index === activeStep
+                  const isCompleted = index < activeStep
+                  return (
+                    <div 
+                      key={step.label} 
+                      className={`relative flex flex-1 flex-col p-6 transition-colors duration-300 ${isActive ? 'bg-background' : ''}`}
                     >
-                      <div
-                        className={`w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 mb-1 sm:mb-2 ${
-                          isCompleted
-                            ? "bg-green-500 text-white shadow-lg"
-                            : isActive
-                              ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg scale-110"
-                              : "bg-gray-200 text-gray-500 group-hover:bg-gray-300"
-                        }`}
-                      >
-                        {isCompleted ? (
-                          <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-                        ) : (
-                          <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
-                        )}
+                      <div className="relative z-10 flex items-center gap-4">
+                        <div
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all duration-500 ${
+                            isCompleted
+                              ? "bg-accent text-accent-foreground"
+                              : isActive
+                                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25"
+                                : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <CheckCircle className="h-5 w-5" />
+                          ) : (
+                            <IconComponent className="h-5 w-5" />
+                          )}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className={`text-xs font-bold uppercase tracking-wider ${isActive ? 'text-accent' : 'text-muted-foreground'}`}>
+                            Step 0{index + 1}
+                          </span>
+                          <span className={`font-display text-sm font-bold ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
+                            {step.label}
+                          </span>
+                        </div>
                       </div>
-                      <div
-                        className={`text-center transition-all duration-300 ${
-                          isActive
-                            ? "text-blue-600 font-semibold"
-                            : isCompleted
-                              ? "text-green-600 font-medium"
-                              : "text-gray-500"
-                        }`}
-                      >
-                        <div className="text-xs font-medium hidden md:block leading-tight">{step}</div>
-                        <div className="text-xs text-gray-400 hidden lg:block">Step {index + 1}</div>
-                      </div>
+                      
+                      {/* Desktop arrow/connector */}
+                      {index < steps.length - 1 && (
+                        <div className="absolute right-[-1px] top-1/2 hidden h-10 w-[1px] -translate-y-1/2 bg-border md:block" />
+                      )}
+                      
+                      {/* Active indicator line */}
+                      {isActive && (
+                        <motion.div 
+                          layoutId="stepIndicator"
+                          className="absolute bottom-0 left-0 h-1 w-full bg-accent" 
+                        />
+                      )}
                     </div>
-                    {index < steps.length - 1 && (
-                      <div
-                        className={`flex-1 h-0.5 sm:h-1 mx-2 sm:mx-4 rounded-full transition-all duration-500 ${
-                          index < activeStep ? "bg-gradient-to-r from-green-400 to-blue-500" : "bg-gray-200"
-                        }`}
-                      />
-                    )}
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Form Container */}
+            <motion.div
+              layout
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="overflow-hidden rounded-[2rem] border border-border bg-background shadow-2xl"
+            >
+              <form onSubmit={handleSubmit} className="p-0">
+                {renderStepContent()}
+              </form>
+            </motion.div>
+
+            {/* Helper Info */}
+            <div className="mt-8 flex items-center justify-center gap-6 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-accent" />
+                <span>Verified Partners Only</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-accent" />
+                <span>Quick Setup Process</span>
+              </div>
             </div>
           </div>
-
-          {/* Enhanced Form Container */}
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden"
-          >
-            {renderStepContent()}
-          </form>
         </div>
-      </div>
-   
+      </main>
+
+      <Footer />
     </div>
   )
 }
+
