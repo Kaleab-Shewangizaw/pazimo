@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 const HeroSection = () => {
   return (
-    <section className="relative flex min-h-screen items-center overflow-hidden bg-primary/90">
+    <section className="relative flex min-h-screen items-center overflow-hidden bg-primary/90 font-sans">
       <div className="absolute inset-0">
         <img src="/images/hero-event.jpg" alt="Event atmosphere" className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/80 to-primary/40" />
