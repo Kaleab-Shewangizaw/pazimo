@@ -30,7 +30,7 @@ const CTASection = () => {
               size="lg"
               className="bg-accent px-10 text-base font-semibold text-accent-foreground shadow-accent-btn transition-shadow hover:bg-accent/90"
             >
-              <Link href="/organizer-registration">
+              <Link href="/organizer-registration/register">
                 Create Your Event Now
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
