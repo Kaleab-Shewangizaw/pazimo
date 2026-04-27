@@ -76,52 +76,28 @@ function SignInContent() {
   if (!mounted) return null;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Left — Branding */}
-      <div className="relative hidden w-1/2 lg:block">
-        <Image
-          src="/event-hero.jpg"
-          alt="Concert crowd with golden stage lights"
-          fill
-          className="absolute inset-0 h-full w-full object-cover"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="absolute bottom-16 left-10 right-10"
-        >
-          <div className="mb-6 flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2 text-white/80 hover:text-white transition-colors group">
-              <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-medium">Back to Homepage</span>
-            </Link>
-          </div>
-          <h2 className="font-display text-4xl font-bold leading-tight text-white">
-            Every great event
-            <br />
-            begins with <span className="text-[#2563eb]">Pazimo.</span>
-          </h2>
-          <p className="mt-4 max-w-md text-white/70">
-            Sell, scan, and manage events from one powerful dashboard. Trusted by
-            500+ promoters worldwide.
-          </p>
-        </motion.div>
-      </div>
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      {/* Background image and overlay */}
+      <Image
+        src="/sign-in-bg.jpeg"
+        alt="Event atmosphere"
+        fill
+        className="object-cover z-0"
+        priority
+      />
+      <div className="absolute inset-0 bg-black/50 z-10" />
 
-      {/* Right — Form */}
-      <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
+      {/* Floating Card */}
+      <div className="relative z-20 flex items-center justify-center w-full px-4 py-12 min-h-screen">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="w-full max-w-md space-y-8"
+          className="w-full max-w-md rounded-2xl bg-white/90 shadow-4xl backdrop-blur-lg p-8 space-y-8"
         >
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 relative items-center justify-center rounded-lg">
+          <div className="flex items-center mx-auto justify-center gap-2">
+            <div className="flex h-15 w-15 relative items-center justify-center rounded-lg">
               <Image
                 src="/mobile_logo.png"
                 alt="Pazimo Logo"
@@ -129,15 +105,15 @@ function SignInContent() {
                 className="h-6 w-6 rounded-md object-fill"
               />
             </div>
-            <span className="font-display text-xl font-bold tracking-tight">
+            {/* <span className="font-display text-xl font-bold tracking-tight">
               Pazimo
-            </span>
+            </span> */}
           </div>
 
-          <div>
+          <div className="text-center">
             <h1 className="font-display text-3xl font-bold">Welcome back</h1>
             <p className="mt-2 text-muted-foreground">
-              Sign in to manage your events and sales.
+              Sign in here.
             </p>
           </div>
 
@@ -201,8 +177,14 @@ function SignInContent() {
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
-              <Link href="https://pazimo-organizer.vercel.app/" target="_blank" className="text-[#2563eb] hover:underline font-medium">
+              <Link href="/organizer-registration" target="_blank" className="text-[#2563eb] hover:underline font-medium">
                 Contact sales
+              </Link>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Back to {" "}
+              <Link href="/" className="text-[#2563eb] hover:underline font-medium">
+                Home
               </Link>
             </p>
           </div>
