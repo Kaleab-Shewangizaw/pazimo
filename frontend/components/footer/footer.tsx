@@ -256,7 +256,7 @@ export default function Footer({ variant = "default" }: FooterProps) {
             >
               Host your event with us and reach millions of users.
             </p>
-            <Link href="https://pazimo-organizer.vercel.app/">
+            <Link href="/organizer-registration">
               <Button className="bg-white text-[#0D47A1] hover:bg-gray-200 font-bold w-full transition-colors">
                 Register Your Event
               </Button>

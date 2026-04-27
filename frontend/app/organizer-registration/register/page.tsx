@@ -35,8 +35,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import Navbar from "@/components/Navbar"
-import Footer from "@/components/Footer"
+import Navbar from "../organizer-componenets/Navbar"
+import Footer from "../organizer-componenets/Footer"
+
 
 const steps = [
   { label: "Profile", description: "Personal & Organization" },
