@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import {
   Select,
   SelectContent,
@@ -418,6 +419,51 @@ export default function CustomersPage() {
       )
     : currencyFilteredTickets;
 
+  // Export to Excel logic
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    setIsExporting(true);
+    try {
+      if (!selectedEventId) {
+        toast.error("No event selected");
+        return;
+      }
+      if (!filteredTickets.length) {
+        toast.error("No tickets to export");
+        return;
+      }
+      const data = filteredTickets.map((ticket) => {
+        const buyerName = ticket.isOnDoor
+          ? "On-Door Purchase"
+          : ticket.user
+          ? `${ticket.user.firstName} ${ticket.user.lastName}`
+          : ticket.guestName || "Guest";
+        const ticketType = ticket.ticketType;
+        const quantity = getTicketQuantity(ticket);
+        const totalPrice = ticket.price;
+        const dateTime = `${new Date(ticket.createdAt).toLocaleDateString()} ${new Date(ticket.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+        return {
+          "Buyer Name": buyerName,
+          "Ticket Type": ticketType,
+          "Quantity": quantity,
+          "Total Price": totalPrice,
+          "Date & Time": dateTime,
+        };
+      });
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Tickets");
+      XLSX.writeFile(workbook, `event-tickets-${selectedEventId}.xlsx`);
+      toast.success("Excel file exported!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Error exporting tickets");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
       {/* Header */}
@@ -427,6 +473,19 @@ export default function CustomersPage() {
           <p className="text-gray-500">
             Manage your event attendees and ticket sales
           </p>
+        </div>
+        {/* Export to Excel Button */}
+        <div>
+          <Button onClick={handleExportExcel} variant="outline" disabled={isExporting}>
+            {isExporting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Exporting...
+              </>
+            ) : (
+              "Export to Excel"
+            )}
+          </Button>
         </div>
       </div>
 
@@ -540,6 +599,19 @@ export default function CustomersPage() {
             </div>
           </div>
         ) : null}
+      </div>
+
+      {/* Tickets Summary */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="text-lg font-semibold text-gray-900">Summary</div>
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="text-sm text-gray-700">
+            <span className="font-medium">Total Tickets Sold:</span> {filteredTickets.reduce((sum, t) => sum + getTicketQuantity(t), 0)}
+          </div>
+          <div className="text-sm text-gray-700">
+            <span className="font-medium">Total Revenue:</span> {filteredTickets.reduce((sum, t) => sum + (t.price || 0), 0).toLocaleString()}
+          </div>
+        </div>
       </div>
 
       {/* Customers Table */}
