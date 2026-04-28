@@ -39,6 +39,7 @@ interface Ticket {
     firstName: string;
     lastName: string;
     email: string;
+    phone?: string;
   };
   guestName?: string;
   guestEmail?: string;
@@ -439,16 +440,41 @@ export default function CustomersPage() {
           : ticket.user
           ? `${ticket.user.firstName} ${ticket.user.lastName}`
           : ticket.guestName || "Guest";
+
+        // Email logic: blank if contains 'pazimo' or starts with 'customerpazimo'
+        let email = ticket.user?.email || ticket.guestEmail || "";
+        if (
+          !email ||
+          email.toLowerCase().includes("pazimo") ||
+          email.toLowerCase().startsWith("customerpazimo")
+        ) {
+          email = "";
+        }
+
+        // Phone logic: only use real phone, else blank
+        let buyerPhone = ticket.user?.phone || ticket.guestPhone || ticket.guestPhoneNumber || ticket.phone || "";
+        if (!buyerPhone) {
+          buyerPhone = "";
+        }
+
         const ticketType = ticket.ticketType;
         const quantity = getTicketQuantity(ticket);
+        const total = quantity;
+        const used = Math.max(0, total - (ticket.ticketCount || 0));
+        const usage = `${used}/${total}`;
+        const status = ticket.status ? (ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)) : "";
         const totalPrice = ticket.price;
         const dateTime = `${new Date(ticket.createdAt).toLocaleDateString()} ${new Date(ticket.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
         return {
           "Buyer Name": buyerName,
+          "Email": email,
+          "Phone Number": buyerPhone,
           "Ticket Type": ticketType,
           "Quantity": quantity,
+          "Usage": usage,
           "Total Price": totalPrice,
           "Date & Time": dateTime,
+          "Status": status,
         };
       });
       const worksheet = XLSX.utils.json_to_sheet(data);
