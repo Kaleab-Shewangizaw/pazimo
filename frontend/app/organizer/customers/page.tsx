@@ -452,7 +452,7 @@ export default function CustomersPage() {
         }
 
         // Phone logic: only use real phone, else blank
-        let buyerPhone = ticket.user?.phone || ticket.guestPhone || ticket.guestPhoneNumber || ticket.phone || "";
+        let buyerPhone = ticket.user?.phoneNumber || ticket.user?.phone || ticket.guestPhone || ticket.guestPhoneNumber || ticket.phone || "";
         if (!buyerPhone) {
           buyerPhone = "";
         }

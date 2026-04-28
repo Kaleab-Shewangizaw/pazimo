@@ -364,7 +364,7 @@ const getAllTicketsAdmin = async (req, res) => {
           select: "name email firstName lastName",
         },
       })
-      .populate("user", "firstName lastName email")
+      .populate("user", "firstName lastName email phoneNumber")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
