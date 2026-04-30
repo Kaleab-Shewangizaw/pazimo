@@ -76,24 +76,22 @@ function SignInContent() {
   if (!mounted) return null;
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Background image and overlay */}
-      <Image
-        src="/sign-in-bg.jpeg"
-        alt="Event atmosphere"
-        fill
-        className="object-cover z-0"
-        priority
-      />
-      <div className="absolute inset-0 bg-black/50 z-10" />
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white">
+      {/* Back button */}
+      <div className="absolute top-6 left-6 z-30">
+        <Link href="/" className="inline-flex items-center gap-2 text-[#2563eb] hover:underline">
+          <ArrowLeft className="h-5 w-5" />
+          <span className="sr-only">Back to home</span>
+        </Link>
+      </div>
 
       {/* Floating Card */}
       <div className="relative z-20 flex items-center justify-center w-full px-4 py-12 min-h-screen">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 48 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="w-full max-w-md rounded-2xl bg-white/90 shadow-4xl backdrop-blur-lg p-8 space-y-8"
+          transition={{ type: "spring", stiffness: 110, damping: 16 }}
+          className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-8 space-y-8"
         >
           {/* Logo */}
           <div className="flex items-center mx-auto justify-center gap-2">
