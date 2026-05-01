@@ -29,11 +29,11 @@ const SANTIM_METHODS = [
     name: "M-Pesa",
     image: "/mpesa-logo.png",
   },
-  // {
-  //   id: "Awash Bank", // Keeping existing ID
-  //   name: "Awash Bank",
-  //   image: "/Awash-Bank.png",
-  // },
+  {
+    id: "Awash Bank",
+    name: "Awash Bank",
+    image: "/Awash-Bank.png",
+  },
 ];
 
 const CHAPA_METHODS = [
@@ -58,11 +58,11 @@ const CHAPA_METHODS = [
   //   name: "Coopay Ebirr",
   //   image: "/coopay-logo.png",
   // },
-  // {
-  //   id: "AwashBirr",
-  //   name: "Awash Bank",
-  //   image: "/Awash-Bank.png",
-  // },
+  {
+    id: "AwashBirr",
+    name: "Awash Bank",
+    image: "/Awash-Bank.png",
+  },
   // {
   //   id: "yaya",
   //   name: "Yaya Wallet",
