@@ -29,7 +29,7 @@ const eventTypes = [
 
 const EventTypesSection = () => {
   return (
-    <section id="about" className="bg-[hsl(var(--surface))] py-24 md:py-32">
+    <section id="about" className="py-24 md:py-32 bg-[#06283D] text-white">
       <div className="container mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -54,14 +54,14 @@ const EventTypesSection = () => {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: i * 0.15 }}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-card p-10 transition-all duration-500 hover:border-accent/40"
+              className="group relative overflow-hidden rounded-2xl border border-accent/12 bg-[#083242] p-10 transition-all duration-500 hover:border-accent/40"
             >
-              <div className="absolute right-0 top-0 rounded-bl-xl bg-accent/10 px-4 py-2 text-xs font-medium uppercase tracking-wider text-accent">
+              <div className="absolute right-0 top-0 rounded-bl-xl bg-accent/30 px-4 py-2 text-xs font-medium uppercase tracking-wider text-white/90">
                 {type.tag}
               </div>
-              <type.icon className="mb-6 h-10 w-10 text-primary" />
-              <h3 className="mb-4 text-2xl font-display font-bold">{type.title}</h3>
-              <p className="leading-relaxed text-muted-foreground">{type.description}</p>
+              <type.icon className="mb-6 h-10 w-10 text-white" />
+              <h3 className="mb-4 text-2xl font-display font-bold text-white">{type.title}</h3>
+              <p className="leading-relaxed text-slate-200/90">{type.description}</p>
             </motion.div>
           ))}
         </div>

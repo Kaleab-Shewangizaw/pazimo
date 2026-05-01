@@ -16,7 +16,7 @@ const CTASection = () => {
           transition={{ duration: 0.7 }}
           className="relative overflow-hidden rounded-3xl bg-primary p-12 text-center md:p-20"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-accent/5" />
+          <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-accent/5 "  />
           <div className="relative z-10">
             <h2 className="mb-5 text-3xl font-display font-bold text-primary-foreground md:text-5xl">
               Ready to Create Your <span className="text-gradient-gold">Next Event</span>?
