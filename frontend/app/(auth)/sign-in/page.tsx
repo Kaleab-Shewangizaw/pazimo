@@ -95,12 +95,12 @@ function SignInContent() {
         >
           {/* Logo */}
           <div className="flex items-center mx-auto justify-center gap-2">
-            <div className="flex h-15 w-15 relative items-center justify-center rounded-lg">
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-lg">
               <Image
-                src="/mobile_logo.png"
+                src="/pazimoLogo.jpg"
                 alt="Pazimo Logo"
                 fill
-                className="h-6 w-6 rounded-md object-fill"
+                className="rounded-md object-contain"
               />
             </div>
             {/* <span className="font-display text-xl font-bold tracking-tight">
