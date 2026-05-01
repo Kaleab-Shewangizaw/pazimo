@@ -12,17 +12,16 @@ const Navbar = () => {
   return (
     <nav className="fixed left-0 right-0 top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <Image
-            src="/images/paz/logo.png"
-            alt="Pazimo"
-            width={160}
-            height={80}
-            className="h-20 w-auto"
-            priority
-          />
-          
-        </Link>
+        <Link
+              href="/"
+              className="flex items-center group flex-shrink-0 transition-all duration-300"
+            >
+              <img
+                src="/logo.png"
+                alt="Pazimo"
+                className="w-35 h-auto transition-transform duration-200 group-hover:scale-105"
+              />
+            </Link>
 
         <div className="hidden items-center gap-8 md:flex">
           <a href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
