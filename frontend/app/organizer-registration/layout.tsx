@@ -22,8 +22,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Pazimo Ticketing Platform",
-  description: "organizer home page",
+  title: "Organizer Registration",
+  description: "Apply to become a Pazimo organizer, list events, sell tickets, and manage registrations from one dashboard.",
 };
 
 export default function RootLayout({

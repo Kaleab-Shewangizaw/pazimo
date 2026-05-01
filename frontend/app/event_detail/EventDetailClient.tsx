@@ -907,7 +907,7 @@ export default function EventDetailClient() {
   const shortDescription = descriptionParagraphs[0] || event.description;
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 mt-7">
+    <div className="min-h-screen bg-white text-gray-900 -mt-1">
       <div className="relative w-full overflow-hidden md:hidden">
         <div className="block md:hidden px-8 py-4">
           <div className="relative w-full max-w-md mx-auto">
