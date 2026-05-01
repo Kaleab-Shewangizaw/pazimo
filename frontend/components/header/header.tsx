@@ -293,7 +293,7 @@ const Header = () => {
               Trending
             </button>
             <Link
-              href="https://pazimo-organizer.vercel.app/"
+              href="/organizer-registration"
               target="_blank"
               className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
             >
@@ -550,7 +550,7 @@ const Header = () => {
                   Trending
                 </button>
                 <Link
-                  href="https://pazimo-organizer.vercel.app/"
+                  href="/organizer-registration"
                   target="_blank"
                   className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
