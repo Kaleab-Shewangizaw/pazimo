@@ -16,9 +16,9 @@ export default function Footer() {
       className={`border-t border-accent/12 bg-[#06283D] text-white py-10`}
     >
       <div className="container mx-auto px-6 py-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Column 1: Pazimo & App Download */}
-          <div className="lg:col-span-1">
+          <div className="md:col-span-1 col-span-2 ">
             <h3
               className="text-xl font-bold mb-4  text-[#ffd900]"
             >
@@ -26,10 +26,9 @@ export default function Footer() {
             </h3>
             <p
               className={`text-gray-200
-              mb-6`}
+              mb-6 -mr-5 lg:mr-6`}
             >
-              Your one-stop destination for discovering and booking tickets for
-              the best events.
+              Pazimo is an event ticketing and management platform in Ethiopia that helps organizers create events, sell tickets online, and manage guests seamlessly.
             </p>
             <div className="space-y-3">
               <p className="font-semibold text-white">Download the App</p>
