@@ -401,11 +401,11 @@ export default function CategoryIcons({
                           )}
                         </div>
                         <div
-                          className={`absolute inset-0 rounded-full border-2 border-gray-200 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-110 group-hover:scale-115`}
+                          className={`absolute inset-0 rounded-full border-2 border-border opacity-0 group-hover:opacity-100 transition-all duration-300 scale-110 group-hover:scale-115`}
                         />
                       </div>
                       <div className="mt-4 text-center">
-                        <span className="text-sm font-semibold text-gray-700 group-hover:text-[#1a2d5a] transition-all duration-300 inline-block">
+                        <span className="text-sm font-semibold text-foreground/80 group-hover:text-primary transition-all duration-300 inline-block">
                           {category.name}
                         </span>
                         <div
@@ -450,11 +450,11 @@ export default function CategoryIcons({
                       )}
                     </div>
                     <div
-                      className={`absolute inset-0 rounded-full border-2 border-gray-200 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-110 group-hover:scale-115`}
+                      className={`absolute inset-0 rounded-full border-2 border-border opacity-0 group-hover:opacity-100 transition-all duration-300 scale-110 group-hover:scale-115`}
                     />
                   </div>
                   <div className="mt-4 text-center">
-                    <span className="text-sm font-semibold text-gray-700 group-hover:text-[#1a2d5a] transition-all duration-300 inline-block">
+                    <span className="text-sm font-semibold text-foreground/80 group-hover:text-primary transition-all duration-300 inline-block">
                       {category.name}
                     </span>
                     <div
@@ -523,11 +523,11 @@ export default function CategoryIcons({
                         )}
                       </div>
                       <div
-                        className={`absolute inset-0 rounded-full border-2 border-gray-200 opacity-0 group-hover:opacity-100 transition-all duration-300 scale-110 group-hover:scale-115`}
+                        className={`absolute inset-0 rounded-full border-2 border-border opacity-0 group-hover:opacity-100 transition-all duration-300 scale-110 group-hover:scale-115`}
                       />
                     </div>
                     <div className="mt-4 text-center">
-                      <span className="text-base font-semibold text-gray-700 group-hover:text-[#1a2d5a] transition-all duration-300 inline-block">
+                      <span className="text-base font-semibold text-foreground/80 group-hover:text-primary transition-all duration-300 inline-block">
                         {category.name}
                       </span>
                       <div

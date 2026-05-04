@@ -30,6 +30,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ThemeToggle from "@/components/theme-toggle";
+import { useTheme } from "next-themes";
 
 const Header = () => {
   const router = useRouter();
@@ -43,6 +45,16 @@ const Header = () => {
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [visibleResultsCount, setVisibleResultsCount] = useState(5);
+  const { theme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const logoSrc = mounted && (theme === "dark" || resolvedTheme === "dark")
+    ? "/logo2.png"
+    : "/logo.png";
 
   useEffect(() => {
     async function fetchCategories() {
@@ -216,7 +228,7 @@ const Header = () => {
     <>
       {/* Fixed header for mobile, normal for desktop */}
       <header
-        className={`md:relative fixed! bg-white/40 backdrop-blur-2xl top-0 left-0 right-0 z-50 py-1 md:py-1 px-4 sm:px-8 md:px-16 border-b transition-all duration-300 ease-out
+        className={`md:relative fixed! bg-white/80 dark:bg-black/40 backdrop-blur-3xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 border-b border-border/40 transition-all duration-300 ease-out
         `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
@@ -226,11 +238,14 @@ const Header = () => {
               href="/"
               className="flex items-center group flex-shrink-0 transition-all duration-300"
             >
+            <div className="h-7 flex items-center">
               <img
-                src="/logo.png"
+                src={logoSrc}
                 alt="Pazimo"
-                className="w-15 h-auto transition-transform duration-200 group-hover:scale-105"
+                className="h-full w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+                style={{ height: '28px' }} 
               />
+            </div>
             </Link>
 
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -261,12 +276,15 @@ const Header = () => {
           </div>
 
           {/* Desktop: Logo */}
-          <Link href="/" className="hidden md:flex items-center group ">
-            <img
-              src="/logo.png"
-              alt="Pazimo"
-              className="w-36 lg:w-30 h-auto transition-transform duration-200 group-hover:scale-105"
-            />
+          <Link href="/" className="hidden md:flex items-center group">
+            <div className="h-9 flex items-center">
+              <img
+                src={logoSrc}
+                alt="Pazimo"
+                className="h-full w-auto object-contain transition-transform duration-200 group-hover:scale-105"
+                style={{ height: '36px' }}
+              />
+            </div>
           </Link>
 
           {/* Desktop: menu */}
@@ -274,28 +292,28 @@ const Header = () => {
             <button
               type="button"
               onClick={() => scrollToSection("featured")}
-              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
             >
               Featured
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("categories")}
-              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
             >
               Categories
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("trending")}
-              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
             >
               Trending
             </button>
             <Link
               href="/organizer-registration"
               target="_blank"
-              className="text-gray-500 hover:text-black font-normal transition-colors text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
             >
               Create Event
             </Link>
@@ -316,7 +334,7 @@ const Header = () => {
               </DialogTrigger>
               <DialogContent className="sm:max-w-[800px] p-0 gap-0">
                 <DialogHeader className="px-6 pt-6 pb-2">
-                  <DialogTitle className="text-xl font-semibold text-gray-900">
+                  <DialogTitle className="text-xl font-semibold text-foreground">
                     Search Events
                   </DialogTitle>
                 </DialogHeader>
@@ -379,7 +397,7 @@ const Header = () => {
                 </form>
 
                 {/* Search Results */}
-                <div className="border-t border-gray-100 max-h-[400px] overflow-y-auto">
+                <div className="border-t border-border max-h-[400px] overflow-y-auto">
                   {isSearching ? (
                     <div className="flex justify-center items-center py-12">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a]"></div>
@@ -391,17 +409,17 @@ const Header = () => {
                           <button
                             key={event._id || event.id}
                             onClick={() => handleEventClick(event._id || event.id)}
-                            className="w-full px-6 py-4 hover:bg-gray-50 transition-colors text-left group"
+                            className="w-full px-6 py-4 hover:bg-muted/50 transition-colors text-left group"
                           >
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
-                                <h3 className="font-semibold text-gray-900 group-hover:text-[#1a2d5a] transition-colors">
+                                <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
                                   {event.name || event.title}
                                 </h3>
-                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                                   {event.description}
                                 </p>
-                                <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                                <div className="flex gap-4 mt-2 text-xs text-muted-foreground/70">
                                   <span>{event.category?.name || "Uncategorized"}</span>
                                   <span>•</span>
                                   <span>{new Date(event.date).toLocaleDateString()}</span>
@@ -419,7 +437,7 @@ const Header = () => {
                       </div>
                       
                       {/* Action Buttons */}
-                      <div className="sticky bottom-0 bg-white border-t border-gray-100 px-6 py-4 flex gap-3">
+                      <div className="sticky bottom-0 bg-background border-t border-border px-6 py-4 flex gap-3">
                         <Button
                           type="button"
                           variant="outline"
@@ -442,7 +460,7 @@ const Header = () => {
                     </>
                   ) : searchTerm || selectedCategory ? (
                     <div className="text-center py-12">
-                      <p className="text-gray-500">No events found</p>
+                      <p className="text-muted-foreground">No events found</p>
                       <p className="text-sm text-gray-400 mt-1">
                         Try adjusting your search or category filter
                       </p>
@@ -467,6 +485,11 @@ const Header = () => {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Theme toggle */}
+            <div className="hidden md:flex items-center mr-2">
+              <ThemeToggle />
+            </div>
 
             {/* User Section */}
             {user ? (
@@ -529,8 +552,8 @@ const Header = () => {
             transition={{ duration: 0.2 }}
             className="md:hidden fixed top-16 left-0 right-0 z-40 px-4"
           >
-            <div className="bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-lg rounded-b-2xl p-4 space-y-3">
-              <nav className="flex flex-col gap-2 text-sm font-medium text-gray-700">
+            <div className="bg-background/95 backdrop-blur-xl border-b border-border shadow-lg rounded-b-2xl p-4 space-y-3">
+              <nav className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 <button
                   className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
                   onClick={() => scrollToSection("featured")}
@@ -559,17 +582,22 @@ const Header = () => {
                 </Link>
               </nav>
 
-              <div className="border-t border-gray-100 pt-3 flex flex-col gap-2">
+              <div className="border-t border-border pt-4 mt-2 flex flex-col gap-3">
+                <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-xl">
+                  <span className="text-sm font-medium text-foreground">Theme Mode</span>
+                  <ThemeToggle />
+                </div>
+
                 {user ? (
                   <>
                     <button
-                      className="w-full px-3 py-2 rounded-lg text-left text-gray-700 hover:bg-blue-50 hover:text-[#115db1] transition-colors"
+                      className="w-full px-3 py-2 rounded-lg text-left text-foreground hover:bg-muted transition-colors font-medium"
                       onClick={handleUserClick}
                     >
                       My Account
                     </button>
                     <button
-                      className="w-full px-3 py-2 rounded-lg text-left text-red-600 hover:bg-red-50 transition-colors"
+                      className="w-full px-3 py-2 rounded-lg text-left text-red-600 hover:bg-red-50 transition-colors font-medium"
                       onClick={handleLogout}
                     >
                       Log out
@@ -577,7 +605,7 @@ const Header = () => {
                   </>
                 ) : (
                   <Button
-                    className="w-full bg-gradient-to-r from-blue-600 to-blue-400 text-white font-medium"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl shadow-lg"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       router.push("/sign-in");

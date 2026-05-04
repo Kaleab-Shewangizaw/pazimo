@@ -243,9 +243,9 @@ export default function AllEventsInfinite({
   }, [loadMore]);
 
   return (
-    <section className="px-4 sm:px-8 md:px-16 py-14 bg-gray-50">
+    <section className="px-4 sm:px-8 md:px-16 py-14 bg-background">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-[#1a2d5a]">All Events</h3>
+        <h3 className="text-lg font-semibold text-primary">All Events</h3>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 sm:gap-x-5 gap-y-8">
@@ -260,10 +260,10 @@ export default function AllEventsInfinite({
 
       <div ref={observerRef} className="h-12 flex items-center justify-center">
         {isLoadingMore && (
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#1a2d5a]" />
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
         )}
         {!hasMore && !isLoadingMore && (
-          <p className="text-sm text-gray-500">You&apos;re all caught up</p>
+          <p className="text-sm text-muted-foreground">You&apos;re all caught up</p>
         )}
       </div>
     </section>

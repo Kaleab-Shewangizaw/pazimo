@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
@@ -8,19 +9,31 @@ import { Button } from "@/components/ui/button";
 
 const Navbar = () => {
 	const [open, setOpen] = useState(false);
+	const { theme, resolvedTheme } = useTheme();
+	const [mounted, setMounted] = useState(false);
+
+	useEffect(() => {
+		setMounted(true);
+	}, []);
+
+	const logoSrc = mounted && (theme === "dark" || resolvedTheme === "dark")
+		? "/logo2.png"
+		: "/images/paz/logo.png";
 
 	return (
 		<nav className="fixed left-0 right-0 top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
 			<div className="container mx-auto flex h-16 items-center justify-between px-4">
 				<Link href="/" className="flex items-center gap-2">
-					<Image
-						src="/images/paz/logo.png"
-						alt="Pazimo"
-						width={160}
-						height={80}
-						className="h-20 w-auto"
-						priority
-					/>
+					<div className="h-10 flex items-center">
+						<Image
+							src={logoSrc}
+							alt="Pazimo"
+							width={160}
+							height={80}
+							className="max-h-full w-auto object-contain"
+							priority
+						/>
+					</div>
 				</Link>
 
 				<div className="hidden items-center gap-8 md:flex">

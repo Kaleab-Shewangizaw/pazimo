@@ -3,6 +3,7 @@ import "./globals.css"
 import LayoutWrapper from "@/components/layout-wrapper"
 import { Toaster } from "sonner"
 import AuthProvider from "@/components/auth-provider"
+import ThemeProvider from "@/components/theme-provider"
 import "@/lib/disableInspect"
 import "@/lib/errorLogger" // Initialize error logging
 import type { Metadata, Viewport } from "next"
@@ -79,10 +80,12 @@ export default function RootLayout({
         />
       </head>
       <body className="flex flex-col min-h-screen">
-        <AuthProvider>
-          <LayoutWrapper>{children}</LayoutWrapper>
-          <Toaster position="top-center" />
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="system">
+          <AuthProvider>
+            <LayoutWrapper>{children}</LayoutWrapper>
+            <Toaster position="top-center" />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

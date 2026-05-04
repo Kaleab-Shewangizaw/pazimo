@@ -68,7 +68,7 @@ export default function FeaturedEventCard({
   return (
     <div ref={ref} className={cn(animClass, className)} style={{ animationDelay: "0ms" }}>
       <Link href={href} className="block group cursor-pointer h-full">
-        <div className="relative overflow-hidden rounded-2xl mb-4 shadow-sm border border-gray-100 bg-gray-50">
+        <div className="relative overflow-hidden rounded-2xl mb-4 border border-border dark:border-white/10 bg-card dark:bg-white/[0.02] transition-all duration-300 group-hover:bg-white/[0.05] group-hover:border-primary/30">
           {data.image ? (
             <Image
               src={data.image}
@@ -78,14 +78,14 @@ export default function FeaturedEventCard({
               className="w-full aspect-[3/4] object-cover transition-transform duration-500 group-hover:scale-110"
             />
           ) : (
-            <div className="w-full aspect-[3/4] flex items-center justify-center bg-gray-100 text-gray-400">
+            <div className="w-full aspect-[3/4] flex items-center justify-center bg-muted text-muted-foreground">
               <ImageIcon className="h-12 w-12" />
             </div>
           )}
           {/* Darker bottom gradient so text is always legible */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
           {data.tag && (
-            <span className="absolute top-4 left-4 bg-[#1a2d5a] text-white text-xs font-medium px-3 py-1 rounded-full shadow-md">
+            <span className="absolute top-4 left-4 bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-full shadow-md">
               {data.tag}
             </span>
           )}
@@ -97,8 +97,8 @@ export default function FeaturedEventCard({
           {onToggleWishlist && (
             <button
               className={cn(
-                "absolute bottom-4 right-4 p-2.5 rounded-full bg-white/90 backdrop-blur-sm transition-all duration-300 shadow-lg hover:shadow-xl",
-                isWishlisted ? "text-red-500 bg-red-50" : "text-gray-700 hover:text-red-500",
+                "absolute bottom-4 right-4 p-2.5 rounded-full bg-background/90 backdrop-blur-sm transition-all duration-300 shadow-lg hover:shadow-xl",
+                isWishlisted ? "text-red-500 bg-red-500/10" : "text-muted-foreground hover:text-red-500",
                 isWishlistLoading ? "opacity-60 cursor-not-allowed" : "hover:scale-110",
               )}
               onClick={(e) => {
@@ -129,12 +129,12 @@ export default function FeaturedEventCard({
           </div>
         </div>
         <div className="flex items-center justify-between px-1">
-          <span className="text-sm font-semibold text-blue-600">{data.priceLabel}</span>
+          <span className="text-sm font-semibold text-primary">{data.priceLabel}</span>
           {showCTA && (
             <Button
               variant="ghost"
               size="sm"
-              className="text-xs text-gray-600 hover:text-gray-900 p-0"
+              className="text-xs text-muted-foreground hover:text-foreground p-0"
             >
               Get Tickets <ArrowRight className="h-3 w-3 ml-1" />
             </Button>

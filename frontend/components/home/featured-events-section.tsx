@@ -22,17 +22,17 @@ export default function FeaturedEventsSection({
       <div className="container mx-auto">
         <div className="flex items-end justify-between mb-10">
           <div>
-            <p className="text-[#1a2d5a] text-sm font-semibold tracking-[0.2em] uppercase mb-2">
+            <p className="text-primary text-sm font-semibold tracking-[0.2em] uppercase mb-2">
               Featured
             </p>
-            <h2 className="font-display text-3xl md:text-4xl font-bold text-gray-900">
+            <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground">
               Don&apos;t Miss Out
             </h2>
           </div>
           <Link href="/event_explore">
             <Button
               variant="ghost"
-              className="hidden md:flex items-center gap-2 text-gray-600 hover:text-gray-900"
+              className="hidden md:flex items-center gap-2 text-muted-foreground hover:text-foreground"
             >
               View All <ArrowRight className="h-4 w-4" />
             </Button>
@@ -47,7 +47,7 @@ export default function FeaturedEventsSection({
 
         <div className="md:hidden mt-8 text-center">
           <Link href="/event_explore">
-            <Button variant="ghost" className="text-gray-600 hover:text-gray-900">
+            <Button variant="ghost" className="text-muted-foreground hover:text-foreground">
               View All Events <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           </Link>
