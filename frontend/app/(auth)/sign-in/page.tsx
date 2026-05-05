@@ -76,10 +76,10 @@ function SignInContent() {
   if (!mounted) return null;
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white dark:bg-[#0A0A0A] transition-colors duration-300">
       {/* Back button */}
       <div className="absolute top-6 left-6 z-30">
-        <Link href="/" className="inline-flex items-center gap-2 text-[#2563eb] hover:underline">
+        <Link href="/" className="inline-flex items-center gap-2 text-[#2563eb] dark:text-blue-400 hover:underline">
           <ArrowLeft className="h-5 w-5" />
           <span className="sr-only">Back to home</span>
         </Link>
@@ -91,7 +91,7 @@ function SignInContent() {
           initial={{ opacity: 0, y: 48 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: "spring", stiffness: 110, damping: 16 }}
-          className="w-full max-w-md rounded-2xl bg-white shadow-2xl p-8 space-y-8"
+          className="w-full max-w-md rounded-2xl bg-white dark:bg-[#1A1D24] shadow-2xl p-8 space-y-8 border border-transparent dark:border-white/10 transition-colors"
         >
           {/* Logo */}
           <div className="flex items-center mx-auto justify-center gap-2">
@@ -109,7 +109,7 @@ function SignInContent() {
           </div>
 
           <div className="text-center">
-            <h1 className="font-display text-3xl font-bold">Welcome back</h1>
+            <h1 className="font-display text-3xl font-bold text-gray-900 dark:text-white">Welcome back</h1>
             <p className="mt-2 text-muted-foreground">
               Sign in here.
             </p>
@@ -125,7 +125,7 @@ function SignInContent() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="h-12 bg-secondary border-border placeholder:text-muted-foreground focus-visible:ring-[#2563eb]"
+                className="h-12 bg-secondary dark:bg-[#0A0A0A] border-border dark:border-white/10 placeholder:text-muted-foreground dark:text-white focus-visible:ring-[#2563eb]"
               />
             </div>
 
@@ -134,7 +134,7 @@ function SignInContent() {
                 <Label htmlFor="password">Password</Label>
                 <button
                   type="button"
-                  className="text-sm text-[#2563eb] hover:underline"
+                  className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline"
                 >
                   Forgot password?
                 </button>
@@ -147,7 +147,7 @@ function SignInContent() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="h-12 bg-secondary border-border pr-12 placeholder:text-muted-foreground focus-visible:ring-primary"
+                  className="h-12 bg-secondary dark:bg-[#0A0A0A] border-border dark:border-white/10 pr-12 placeholder:text-muted-foreground dark:text-white focus-visible:ring-[#2563eb]"
                 />
                 <button
                   type="button"
@@ -166,7 +166,7 @@ function SignInContent() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="h-12 w-full font-display font-semibold text-base bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-[0_0_15px_rgba(37,99,235,0.5)]"
+              className="h-12 w-full font-display font-semibold text-base bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] dark:shadow-none transition-all"
             >
               {isSubmitting ? "Signing in..." : "Sign in"}
             </Button>
@@ -175,13 +175,13 @@ function SignInContent() {
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               Don&apos;t have an account?{" "}
-              <Link href="/organizer-registration" target="_blank" className="text-[#2563eb] hover:underline font-medium">
+              <Link href="/organizer-registration" target="_blank" className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium">
                 Contact sales
               </Link>
             </p>
             <p className="text-sm text-muted-foreground">
               Back to {" "}
-              <Link href="/" className="text-[#2563eb] hover:underline font-medium">
+              <Link href="/" className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium">
                 Home
               </Link>
             </p>
