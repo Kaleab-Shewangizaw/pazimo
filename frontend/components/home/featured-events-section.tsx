@@ -22,7 +22,7 @@ export default function FeaturedEventsSection({
       <div className="container mx-auto">
         <div className="flex items-end justify-between mb-10">
           <div>
-            <p className="text-primary text-sm font-semibold tracking-[0.2em] uppercase mb-2">
+            <p className="text-primary dark:text-yellow-400 text-sm font-semibold tracking-[0.2em] uppercase mb-2">
               Featured
             </p>
             <h2 className="font-display text-3xl md:text-4xl font-bold text-foreground">

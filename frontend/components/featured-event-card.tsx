@@ -68,7 +68,7 @@ export default function FeaturedEventCard({
   return (
     <div ref={ref} className={cn(animClass, className)} style={{ animationDelay: "0ms" }}>
       <Link href={href} className="block group cursor-pointer h-full">
-        <div className="relative overflow-hidden rounded-2xl mb-4 border border-border dark:border-white/10 bg-card dark:bg-white/[0.02] transition-all duration-300 group-hover:bg-white/[0.05] group-hover:border-primary/30">
+        <div className="relative overflow-hidden rounded-2xl mb-4 dark:border-white/10 bg-card dark:bg-white/[0.02] transition-all duration-300 group-hover:bg-white/[0.05] group-hover:border-primary/30">
           {data.image ? (
             <Image
               src={data.image}
@@ -129,7 +129,7 @@ export default function FeaturedEventCard({
           </div>
         </div>
         <div className="flex items-center justify-between px-1">
-          <span className="text-sm font-semibold text-primary">{data.priceLabel}</span>
+          <span className="text-sm font-semibold text-[#06283D] dark:text-yellow-400">{data.priceLabel}</span>
           {showCTA && (
             <Button
               variant="ghost"

@@ -245,7 +245,7 @@ export default function AllEventsInfinite({
   return (
     <section className="px-4 sm:px-8 md:px-16 py-14 bg-background">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-primary">All Events</h3>
+        <h3 className="text-lg font-semibold text-primary dark:text-white">All Events</h3>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 sm:gap-x-5 gap-y-8">

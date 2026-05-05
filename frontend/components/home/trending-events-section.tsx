@@ -48,7 +48,7 @@ function TrendingCard({ event, index }: { event: TrendingCardEvent; index: numbe
   return (
     <div ref={ref} className={animClass}>
       <Link href={`/event_detail?id=${event.id}`}>
-        <div className="group rounded-2xl overflow-hidden flex flex-col md:flex-row cursor-pointer transition-all duration-300 border border-border dark:border-white/10 bg-card dark:bg-white/[0.02] hover:bg-white/[0.05]">
+        <div className="group rounded-2xl overflow-hidden flex flex-col md:flex-row cursor-pointer transition-all duration-300   dark:border-white/10 bg-card dark:bg-white/[0.07] hover:bg-white/[0.05]">
           <div className="relative md:w-80 md:h-60 shrink-0 overflow-hidden bg-muted">
             {isSoldOut && (
               <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-20 shadow-md">
@@ -71,7 +71,7 @@ function TrendingCard({ event, index }: { event: TrendingCardEvent; index: numbe
           </div>
           <div className="flex-1 p-6 md:p-8 flex flex-col justify-between bg-transparent">
             <div>
-              <h3 className="font-display text-xl font-semibold mb-3 group-hover:text-primary transition-colors text-foreground">
+              <h3 className="font-display text-xl font-semibold mb-3 text-[#06283D] transition-colors dark:text-white">
                 {event.title}
               </h3>
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
@@ -84,11 +84,11 @@ function TrendingCard({ event, index }: { event: TrendingCardEvent; index: numbe
               </div>
             </div>
             <div className="flex items-center justify-between mt-6">
-              <span className="text-lg font-display font-bold text-primary">
+              <span className="text-lg font-display font-bold text-blue-700 dark:text-yellow-400">
                 {event.priceLabel}
               </span>
               <Button
-                className="bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer text-sm px-6"
+                className={`dark:text-black dark:bg-yellow-400 text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer text-sm px-6`}
                 variant={isSoldOut ? "outline" : "default"}
               >
                 {isSoldOut ? "Sold Out" : "Get Tickets"} <ArrowRight className="h-4 w-4 ml-2" />
