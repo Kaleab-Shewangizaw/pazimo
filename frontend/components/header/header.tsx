@@ -252,7 +252,7 @@ const Header = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="p-2 text-gray-700 hover:text-[#115db1]"
+                className="p-2 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400"
                 onClick={() => {
                   setDialogOpen(true);
                   setMobileMenuOpen(false);
@@ -326,7 +326,7 @@ const Header = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden md:flex p-2 text-gray-700 hover:text-[#115db1] hover:bg-blue-50 transition-all duration-200"
+                  className="hidden md:flex p-2 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200"
                   onClick={() => setDialogOpen(true)}
                 >
                   <Search className="h-5 w-5" />
