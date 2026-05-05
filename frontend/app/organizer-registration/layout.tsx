@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
-
-
 import "./globals.css";
 import { Toaster } from "sonner";
 import "@/lib/disableInspect";
+import ThemeProvider from "@/components/theme-provider";
+
 
 
 const spaceGrotesk = Space_Grotesk({
@@ -32,9 +32,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <div className={`${spaceGrotesk.variable} ${inter.variable} flex flex-col min-h-screen`}>
-      <Toaster />
-      {children}
-    </div>
+    <ThemeProvider attribute="class" forcedTheme="light">
+      <div className={`${spaceGrotesk.variable} ${inter.variable} flex flex-col min-h-screen`}>
+        <Toaster />
+        {children}
+      </div>
+    </ThemeProvider>
   );
 }

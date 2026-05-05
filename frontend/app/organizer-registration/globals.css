@@ -99,27 +99,6 @@
   --chart-5: oklch(0.769 0.188 70.08);
 }
 
-.dark {
-  --background: 213 28% 12%;
-  --foreground: 0 0% 98%;
-  --card: 213 25% 16%;
-  --card-foreground: 0 0% 98%;
-  --popover: 213 25% 16%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 48 96% 53%;
-  --primary-foreground: 213 51% 15%;
-  --secondary: 213 20% 22%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 213 20% 22%;
-  --muted-foreground: 215 15% 75%;
-  --accent: 48 90% 50%;
-  --accent-foreground: 213 51% 15%;
-  --destructive: 0 62.8% 52.6%;
-  --border: 213 20% 30%;
-  --input: 213 20% 30%;
-  --ring: 48 96% 53%;
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
