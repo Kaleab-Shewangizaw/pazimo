@@ -53,8 +53,8 @@ const Header = () => {
   }, []);
 
   const logoSrc = mounted && (theme === "dark" || resolvedTheme === "dark")
-    ? "/logo2.png"
-    : "/logo.png";
+    ? "/logo4.png"
+    : "/logo3.png";
 
   useEffect(() => {
     async function fetchCategories() {
@@ -262,7 +262,7 @@ const Header = () => {
               </Button>
 
               <button
-                className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
+                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
                 aria-label="Open menu"
                 onClick={toggleMobileMenu}
               >
@@ -493,7 +493,7 @@ const Header = () => {
 
             {/* User Section */}
             {user ? (
-              <div className="flex items-center gap-3">
+              <div className="hidden md:flex items-center gap-3">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -531,7 +531,7 @@ const Header = () => {
             ) : (
               <div className="hidden md:flex items-center gap-3">
                 <Button
-                  className="bg-gradient-to-r from-blue-600 to-blue-400 rounded-sm hover:from-blue-600 hover:to-blue-500 cursor-pointer text-white border-0 transition-all duration-200  font-medium shadow-lg hover:shadow-xl"
+                  className="bg-[#06283D] rounded-sm hover:bg-[#06283D]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white border-0 transition-all duration-200  font-medium shadow-lg hover:shadow-xl"
                   onClick={() => router.push("/sign-in")}
                 >
                   Sign In
@@ -555,19 +555,19 @@ const Header = () => {
             <div className="bg-background/95 backdrop-blur-xl border-b border-border shadow-lg rounded-b-2xl p-4 space-y-3">
               <nav className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 <button
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
+                  className="px-3 py-2 rounded-lg cursor:pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("featured")}
                 >
                   Featured
                 </button>
                 <button
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
+                  className="px-3 py-2 rounded-lg cursor:pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("categories")}
                 >
                   Categories
                 </button>
                 <button
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
+                  className="px-3 py-2 rounded-lg cursor:pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("trending")}
                 >
                   Trending
@@ -605,7 +605,7 @@ const Header = () => {
                   </>
                 ) : (
                   <Button
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl shadow-lg"
+                    className="w-full bg-[#06283D] hover:bg-[#06283D]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white font-bold h-12 rounded-xl shadow-lg"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       router.push("/sign-in");
