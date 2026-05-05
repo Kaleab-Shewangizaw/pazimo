@@ -149,7 +149,7 @@ export default function EventDetailClient() {
     },
     [searchParams],
   );
-  
+
   // Get user from store directly
   const { user } = useAuthStore();
 
@@ -182,19 +182,19 @@ export default function EventDetailClient() {
   // Memoized computed values - prevent unnecessary re-renders
   const ticketsToDisplay = useMemo(() => {
     if (!event?.ticketTypes) return [];
-    
+
     // Filter tickets based on selected currency availability
     return event.ticketTypes.filter((ticket: any) => {
       const isAvailable = ticket.available !== false;
-      const hasPriceInCurrency = selectedCurrency === "USD" 
+      const hasPriceInCurrency = selectedCurrency === "USD"
         ? (ticket.priceUSD && ticket.priceUSD > 0)
         : (ticket.priceETB && ticket.priceETB > 0);
-      
+
       return isAvailable && hasPriceInCurrency;
     });
   }, [event, selectedCurrency]);
 
-  const selectedTicket = useMemo(() => 
+  const selectedTicket = useMemo(() =>
     ticketsToDisplay.find((t: any) => t.name === selectedTicketType),
     [ticketsToDisplay, selectedTicketType]
   );
@@ -203,8 +203,8 @@ export default function EventDetailClient() {
   const ticketPrice = useMemo(() => {
     if (!selectedTicket) return 0;
     const ticket = selectedTicket as any;
-    return selectedCurrency === "USD" 
-      ? (ticket.priceUSD || 0) 
+    return selectedCurrency === "USD"
+      ? (ticket.priceUSD || 0)
       : (ticket.priceETB || ticket.price || 0);
   }, [selectedTicket, selectedCurrency]);
 
@@ -247,11 +247,11 @@ export default function EventDetailClient() {
       );
       if (!response.ok) throw new Error("Failed to fetch");
       const data = await response.json();
-      
+
       // Cache the event data
       eventCache.set(eventId, { data: data.data, timestamp: Date.now() });
       setEvent(data.data);
-      
+
       // Set first available ticket as default
       const firstAvailableTicket = data.data.ticketTypes.find(
         (ticket: TicketType) => ticket.available !== false,
@@ -286,12 +286,12 @@ export default function EventDetailClient() {
       }
 
       console.log(`[VERIFY] Attempt ${retryCount + 1}/${MAX_RETRIES} for txRef: ${txRef}`);
-      
+
       // STEP 1: Verify payment status with backend (triggers ticket creation if not already done)
       const statusResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txRef}`,
       );
-      
+
       if (!statusResponse.ok) {
         throw new Error(`Payment status check failed: ${statusResponse.status}`);
       }
@@ -361,7 +361,7 @@ export default function EventDetailClient() {
             }
           }
         }
-        
+
         // 🔐 AUTO-LOGIN: If backend returns credentials AND user not logged in, log them in
         if (statusData.newUserCredentials) {
           console.log(`[AUTO-LOGIN] Received credentials:`, {
@@ -370,7 +370,7 @@ export default function EventDetailClient() {
           });
           const { useAuthStore } = await import("@/store/authStore");
           const currentUser = useAuthStore.getState().user;
-          
+
           // Only login if not already logged in
           if (!currentUser?.id && !currentUser?._id) {
             console.log(`[AUTO-LOGIN] User not logged in, attempting auto-login...`);
@@ -387,7 +387,7 @@ export default function EventDetailClient() {
                   }),
                 }
               );
-              
+
               if (loginResponse.ok) {
                 const authData = await loginResponse.json();
                 if (authData.status === "success" && authData.data) {
@@ -409,15 +409,15 @@ export default function EventDetailClient() {
             console.log(`[AUTO-LOGIN] User already logged in, skipping.`);
           }
         }
-        
+
         const ticketsResponse = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/public/details/${txRef}`,
         );
-        
+
         if (ticketsResponse.ok) {
           const ticketsData = await ticketsResponse.json();
           const newTickets = ticketsData.data || [];
-          
+
           if (newTickets.length > 0) {
             console.log(`[VERIFY] ✅ Success! Received ${newTickets.length} ticket(s)`);
             // if we haven't set waitingTicketId yet, use first ticket
@@ -431,7 +431,7 @@ export default function EventDetailClient() {
             toast.success(`🎉 ${newTickets.length} ticket(s) received successfully!`);
             return true;
           }
-          
+
           // Tickets not created yet - this can happen if ticket creation is slow
           if (retryCount < MAX_RETRIES) {
             const delay = getRetryDelay(retryCount);
@@ -444,10 +444,10 @@ export default function EventDetailClient() {
 
       // Shouldn't reach here, but fallback
       throw new Error("Unexpected response from backend");
-      
+
     } catch (error) {
       console.error(`[VERIFY] Error on attempt ${retryCount + 1}:`, error);
-      
+
       // Retry on errors (network issues, timeouts, etc)
       if (retryCount < MAX_RETRIES) {
         const delay = getRetryDelay(retryCount);
@@ -455,7 +455,7 @@ export default function EventDetailClient() {
         await new Promise(resolve => setTimeout(resolve, delay));
         return verifyAndShowTickets(txRef, retryCount + 1, canceledRef);
       }
-      
+
       // Max retries exceeded
       console.error("[VERIFY] ❌ Failed after all retries");
       setIsProcessingPayment(false);
@@ -487,7 +487,7 @@ export default function EventDetailClient() {
 
     try {
       // Use provided email or generate placeholder email
-      const finalEmail = paymentForm.email || user?.email || 
+      const finalEmail = paymentForm.email || user?.email ||
         `customerpazimo${String(Math.floor(Math.random() * 1000000)).padStart(6, "0")}@gmail.com`;
 
       // Build formatted phone number:
@@ -508,7 +508,7 @@ export default function EventDetailClient() {
 
       // Backend will handle user creation during payment initiation
       const finalUserId = user?._id;
-      
+
       console.log("[PAYMENT-INIT] ============================================");
       console.log("[PAYMENT-INIT] User logged in:", !!user);
       console.log("[PAYMENT-INIT] User ID:", finalUserId);
@@ -523,13 +523,13 @@ export default function EventDetailClient() {
       const amount = selectedCurrency === "USD"
         ? (selectedTypeAny.priceUSD || selectedType.price) * ticketQuantity
         : (selectedTypeAny.priceETB || selectedType.price) * ticketQuantity;
-      
+
       // Force CHAPA provider for USD payments (international cards)
       const effectiveProvider = selectedCurrency === "USD" ? "CHAPA" : activePaymentProvider;
-      
-      const orderId = crypto.randomUUID?.() || 
+
+      const orderId = crypto.randomUUID?.() ||
         `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const ticketId = crypto.randomUUID?.() || 
+      const ticketId = crypto.randomUUID?.() ||
         `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       const endpoint = effectiveProvider === "CHAPA"
@@ -579,9 +579,9 @@ export default function EventDetailClient() {
       if (data.token && data.user && !user) {
         useAuthStore.getState().setAuth({ user: data.user, token: data.token });
         // Check if this was a newly created account or existing account
-        const isNewAccount = data.user.email?.includes("customerpazimo") || 
-                             !data.user.email || 
-                             data.message?.includes("created");
+        const isNewAccount = data.user.email?.includes("customerpazimo") ||
+          !data.user.email ||
+          data.message?.includes("created");
         toast.success(isNewAccount ? "Account created! You'll be logged in after payment." : "Welcome back! Logging you in...");
       }
 
@@ -597,7 +597,7 @@ export default function EventDetailClient() {
       if (data.transactionId) {
         setShowPaymentModal(false);
         toast.success("Payment initiated! Checking status...");
-        
+
         // ⚡ Start polling immediately - verifyAndShowTickets has smart polling
         // It will handle CANCELLED/FAILED quickly and retry PENDING with adaptive delays
         await verifyAndShowTickets(data.transactionId);
@@ -625,7 +625,7 @@ export default function EventDetailClient() {
     let countryCode = selectedCurrency === "USD" ? "US" : "ET";
 
     if (user) {
-      let phone =  user.phoneNumber || "";
+      let phone = user.phoneNumber || "";
       phone = phone.replace(/\D/g, "");
       if (phone.startsWith("251")) phone = phone.substring(3);
       if (phone.startsWith("0")) phone = phone.substring(1);
@@ -696,11 +696,11 @@ export default function EventDetailClient() {
             setActivePaymentProvider(data.data.activeProvider);
           }
         }
-      } catch {}
+      } catch { }
     };
 
     fetchProvider();
-    
+
     // Fetch event details
     if (eventId) {
       fetchEventDetails();
@@ -766,7 +766,7 @@ export default function EventDetailClient() {
     } else {
       defaultMethod = "Telebirr";
     }
-    
+
     console.log("[CURRENCY-CHANGE] Currency changed:", { selectedCurrency, newMethod: defaultMethod });
     setPaymentForm((prev) => ({
       ...prev,
@@ -781,12 +781,12 @@ export default function EventDetailClient() {
     }
   }, [purchasedTickets]);
 
-  const totalPrice = useMemo(() => 
+  const totalPrice = useMemo(() =>
     ticketPrice * ticketQuantity,
     [ticketPrice, ticketQuantity]
   );
 
-  const isQuantityExceeded = useMemo(() => 
+  const isQuantityExceeded = useMemo(() =>
     selectedTicket ? ticketQuantity > selectedTicket.quantity : false,
     [selectedTicket, ticketQuantity]
   );
@@ -814,7 +814,7 @@ export default function EventDetailClient() {
     return !hasAvailableTickets;
   }, [event]);
 
-  const shareUrl = useMemo(() => 
+  const shareUrl = useMemo(() =>
     `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}/event_detail?id=${eventId || ""}`,
     [eventId]
   );
@@ -843,7 +843,7 @@ export default function EventDetailClient() {
         title: event?.title,
         text: event?.description,
         url: shareUrl,
-      }).catch(() => {});
+      }).catch(() => { });
     } else {
       navigator.clipboard.writeText(shareUrl);
       toast.success("Link copied!");
@@ -1063,11 +1063,10 @@ export default function EventDetailClient() {
             disabled={isWishlistLoading}
           >
             <Heart
-              className={`h-4 w-4 transition-colors ${
-                isInWishlist(event._id)
+              className={`h-4 w-4 transition-colors ${isInWishlist(event._id)
                   ? "fill-red-500 text-red-500"
                   : "text-white"
-              }`}
+                }`}
             />
           </button>
           <button
@@ -1176,7 +1175,7 @@ export default function EventDetailClient() {
                                   </div>
                                 </div>
                                 <div className="font-bold text-[#0D47A1] dark:text-blue-400">
-                                  {selectedCurrency === "USD" 
+                                  {selectedCurrency === "USD"
                                     ? `$${(ticketType as any).priceUSD || 0}`
                                     : `${(ticketType as any).priceETB || (ticketType as any).price || 0} Birr`
                                   }
@@ -1212,7 +1211,7 @@ export default function EventDetailClient() {
                                   Total:
                                 </span>
                                 <span className="text-2xl font-bold text-[#0D47A1] dark:text-blue-400">
-                                  {selectedCurrency === "USD" 
+                                  {selectedCurrency === "USD"
                                     ? `$${totalPrice}`
                                     : `${totalPrice} Birr`
                                   }
@@ -1268,9 +1267,8 @@ export default function EventDetailClient() {
                           src={
                             image.startsWith("http")
                               ? image
-                              : `${process.env.NEXT_PUBLIC_API_URL}${
-                                  image.startsWith("/") ? image : `/${image}`
-                                }`
+                              : `${process.env.NEXT_PUBLIC_API_URL}${image.startsWith("/") ? image : `/${image}`
+                              }`
                           }
                           alt={`Cover image ${index + 1}`}
                           fill
@@ -1294,11 +1292,10 @@ export default function EventDetailClient() {
                               src={
                                 image.url.startsWith("http")
                                   ? image.url
-                                  : `${process.env.NEXT_PUBLIC_API_URL}${
-                                      image.url.startsWith("/")
-                                        ? image.url
-                                        : `/${image.url}`
-                                    }`
+                                  : `${process.env.NEXT_PUBLIC_API_URL}${image.url.startsWith("/")
+                                    ? image.url
+                                    : `/${image.url}`
+                                  }`
                               }
                               alt={image.caption || `Event image ${index + 1}`}
                               fill
@@ -1413,11 +1410,10 @@ export default function EventDetailClient() {
                         {ticketsToDisplay.map((ticketType) => (
                           <div
                             key={ticketType.name}
-                            className={`flex items-center justify-between gap-3 border rounded-xl p-4 cursor-pointer transition-colors ${
-                              selectedTicketType === ticketType.name
+                            className={`flex items-center justify-between gap-3 border rounded-xl p-4 cursor-pointer transition-colors ${selectedTicketType === ticketType.name
                                 ? "border-[#0D47A1]/50 bg-blue-50/60 dark:border-blue-500/50 dark:bg-blue-500/10"
                                 : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
-                            }`}
+                              }`}
                           >
                             <div className="flex items-start gap-3">
                               <RadioGroupItem
@@ -1438,7 +1434,7 @@ export default function EventDetailClient() {
                               </div>
                             </div>
                             <span className="font-bold text-[#0D47A1] dark:text-blue-400 whitespace-nowrap text-sm">
-                              {selectedCurrency === "USD" 
+                              {selectedCurrency === "USD"
                                 ? ((ticketType as any).priceUSD === 0 ? "Free" : `$${(ticketType as any).priceUSD || 0}`)
                                 : ((ticketType as any).priceETB === 0 || (ticketType as any).price === 0 ? "Free" : `${(ticketType as any).priceETB || (ticketType as any).price || 0} Birr`)
                               }
@@ -1473,7 +1469,7 @@ export default function EventDetailClient() {
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-600 dark:text-gray-400 font-medium">Total</span>
                                 <span className="text-2xl font-bold text-[#0D47A1] dark:text-blue-400">
-                                  {selectedCurrency === "USD" 
+                                  {selectedCurrency === "USD"
                                     ? `$${totalPrice}`
                                     : `${totalPrice} Birr`
                                   }
@@ -1511,7 +1507,7 @@ export default function EventDetailClient() {
       </section>
 
       {/* Simple Footer for Event Detail Page */}
-      <footer className="mt-12 border-t border-gray-200 dark:border-white/10 py-8 bg-white dark:bg-[#0A0A0A] transition-colors">
+      {/* <footer className="mt-12 border-t border-gray-200 dark:border-white/10 py-8 bg-white dark:bg-[#0A0A0A] transition-colors">
         <div className="container mx-auto px-4 flex flex-col items-center justify-center gap-4">
           <div className="relative h-10 w-36 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
             <Image
@@ -1533,7 +1529,7 @@ export default function EventDetailClient() {
             </a>
           </div>
         </div>
-      </footer>
+      </footer> */}
 
       <Dialog
         open={showTicketModal}
@@ -1618,11 +1614,10 @@ export default function EventDetailClient() {
                       {purchasedTickets.map((_, i) => (
                         <div
                           key={i}
-                          className={`h-2 w-2 rounded-full transition-colors ${
-                            i === currentTicketIndex
+                          className={`h-2 w-2 rounded-full transition-colors ${i === currentTicketIndex
                               ? "bg-[#0D47A1]"
                               : "bg-gray-200"
-                          }`}
+                            }`}
                         />
                       ))}
                     </div>
@@ -1713,7 +1708,7 @@ export default function EventDetailClient() {
                       htmlFor="payment_email"
                       className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400"
                     >
-                      Email 
+                      Email
                     </Label>
                     <Input
                       id="payment_email"
@@ -1756,7 +1751,7 @@ export default function EventDetailClient() {
                         </div>
                         <Input
                           id="payment_phone"
-                          
+
                           type="tel"
                           value={paymentForm.phoneNumber}
                           onChange={(e) => {
@@ -1842,7 +1837,7 @@ export default function EventDetailClient() {
       </Dialog>
 
       {/* Loading Dialog for Ticket Verification */}
-      <Dialog open={isProcessingPayment} onOpenChange={() => {}}>
+      <Dialog open={isProcessingPayment} onOpenChange={() => { }}>
         <DialogContent className="w-[90vw] max-w-sm rounded-xl p-6 text-center bg-white dark:bg-[#1A1D24] dark:border-white/10" onInteractOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle className="text-xl font-bold mb-2 dark:text-white">
@@ -1861,15 +1856,15 @@ export default function EventDetailClient() {
               {waitingTicketId
                 ? `Ticket ID: ${waitingTicketId} – finalizing...`
                 : currentTxRef
-                ? `Reference: ${currentTxRef}, checking status...`
-                : "Checking payment status..."}
+                  ? `Reference: ${currentTxRef}, checking status...`
+                  : "Checking payment status..."}
             </p>
             <Button
               variant="outline"
               onClick={async () => {
                 cancelPaymentRef.current = true;
                 setIsProcessingPayment(false);
-                
+
                 // Cancel the payment on backend
                 if (currentTxRef) {
                   try {
@@ -1886,7 +1881,7 @@ export default function EventDetailClient() {
                     console.error("Failed to cancel payment:", error);
                   }
                 }
-                
+
                 router.replace(`/event_detail?id=${eventId || ""}`);
               }}
               className="mt-4 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10"
