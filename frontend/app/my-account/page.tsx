@@ -251,28 +251,28 @@ export default function MyAccount() {
     <div className="container mx-auto px-4 py-6 md:py-8 max-w-4xl">
       {/* Header */}
       <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
           My Account
         </h1>
-        <p className="text-gray-500 mt-1">
+        <p className="text-gray-500 dark:text-gray-400 mt-1">
           Manage your personal information and account settings
         </p>
       </div>
 
       {/* Profile Card */}
-      <Card className="mb-6 md:mb-8 overflow-hidden border-gray-200">
-        <CardHeader className="pb-4 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <Card className="mb-6 md:mb-8 overflow-hidden border-gray-200 dark:border-white/10 dark:bg-[#1A1D24] transition-colors">
+        <CardHeader className="pb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 transition-colors">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center">
                 <User className="h-6 w-6 text-white" />
               </div>
               <div>
-                <CardTitle className="text-xl md:text-2xl">
+                <CardTitle className="text-xl md:text-2xl dark:text-white">
                   {user.firstName} {user.lastName}
                 </CardTitle>
-                <CardDescription className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className="text-xs">
+                <CardDescription className="flex items-center gap-2 mt-1 dark:text-gray-400">
+                  <Badge variant="outline" className="text-xs dark:border-white/20 dark:text-gray-300">
                     {user.email?.includes("@admin") ? "Admin" : "User"}
                   </Badge>
                   <span>Member since {new Date().getFullYear()}</span>
@@ -297,7 +297,7 @@ export default function MyAccount() {
             <form onSubmit={handleUpdateProfile} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                     <User className="h-4 w-4" />
                     First Name
                   </label>
@@ -306,11 +306,11 @@ export default function MyAccount() {
                     value={formData.firstName}
                     onChange={handleInputChange}
                     required
-                    className="h-11"
+                    className="h-11 dark:bg-[#0A0A0A] dark:border-white/10 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Last Name
                   </label>
                   <Input
@@ -318,11 +318,11 @@ export default function MyAccount() {
                     value={formData.lastName}
                     onChange={handleInputChange}
                     required
-                    className="h-11"
+                    className="h-11 dark:bg-[#0A0A0A] dark:border-white/10 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                     <Mail className="h-4 w-4" />
                     Email Address
                   </label>
@@ -332,11 +332,11 @@ export default function MyAccount() {
                     value={formData.email}
                     onChange={handleInputChange}
                     required
-                    className="h-11"
+                    className="h-11 dark:bg-[#0A0A0A] dark:border-white/10 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                     <Phone className="h-4 w-4" />
                     Phone Number
                   </label>
@@ -345,7 +345,7 @@ export default function MyAccount() {
                     value={formData.phoneNumber}
                     onChange={handleInputChange}
                     required
-                    className="h-11"
+                    className="h-11 dark:bg-[#0A0A0A] dark:border-white/10 dark:text-white"
                   />
                 </div>
               </div>
@@ -373,7 +373,7 @@ export default function MyAccount() {
                   variant="outline"
                   onClick={handleCancel}
                   disabled={isSubmitting}
-                  className="sm:flex-1 h-11"
+                  className="sm:flex-1 h-11 dark:text-white dark:border-white/20 dark:hover:bg-white/10"
                 >
                   <X className="h-4 w-4 mr-2" />
                   Cancel
@@ -384,33 +384,33 @@ export default function MyAccount() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <User className="h-4 w-4" />
                     Full Name
                   </p>
-                  <p className="font-medium text-lg">
+                  <p className="font-medium text-lg dark:text-gray-200">
                     {user.firstName} {user.lastName}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <Phone className="h-4 w-4" />
                     Phone Number
                   </p>
-                  <p className="font-medium text-lg">{user.phoneNumber}</p>
+                  <p className="font-medium text-lg dark:text-gray-200">{user.phoneNumber}</p>
                 </div>
               </div>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-500 flex items-center gap-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                     <Mail className="h-4 w-4" />
                     Email Address
                   </p>
-                  <p className="font-medium text-lg break-all">{user.email}</p>
+                  <p className="font-medium text-lg break-all dark:text-gray-200">{user.email}</p>
                 </div>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-500">Account Status</p>
-                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Account Status</p>
+                  <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/30">
                     Active
                   </Badge>
                 </div>
@@ -421,15 +421,15 @@ export default function MyAccount() {
       </Card>
 
       {/* Danger Zone Card */}
-      <Card className="border-red-200">
-        <CardHeader className="pb-4 bg-gradient-to-r from-red-50 to-orange-50">
+      <Card className="border-red-200 dark:border-red-900/50 dark:bg-[#1A1D24] transition-colors">
+        <CardHeader className="pb-4 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/30 transition-colors">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-red-100">
-              <Shield className="h-5 w-5 text-red-600" />
+            <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/50">
+              <Shield className="h-5 w-5 text-red-600 dark:text-red-400" />
             </div>
             <div>
-              <CardTitle className="text-red-700">Danger Zone</CardTitle>
-              <CardDescription className="text-red-600">
+              <CardTitle className="text-red-700 dark:text-red-400">Danger Zone</CardTitle>
+              <CardDescription className="text-red-600 dark:text-red-400/80">
                 Irreversible actions - proceed with caution
               </CardDescription>
             </div>
@@ -438,14 +438,14 @@ export default function MyAccount() {
 
         <CardContent className="pt-6">
           <div className="space-y-4">
-            <div className="rounded-lg border border-red-300 bg-white p-4 md:p-5">
+            <div className="rounded-lg border border-red-300 dark:border-red-900/50 bg-white dark:bg-[#1A1D24] p-4 md:p-5 transition-colors">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div className="space-y-1">
-                  <h4 className="font-semibold text-red-800 flex items-center gap-2">
+                  <h4 className="font-semibold text-red-800 dark:text-red-400 flex items-center gap-2">
                     <Trash2 className="h-4 w-4" />
                     Delete Account
                   </h4>
-                  <p className="text-sm text-red-600">
+                  <p className="text-sm text-red-600 dark:text-red-400/80">
                     Permanently delete your account and all associated data.
                     This action is irreversible.
                   </p>
@@ -461,17 +461,17 @@ export default function MyAccount() {
                       {isDeleting ? "Deleting..." : "Delete Account"}
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent className="max-w-md md:max-w-lg">
+                  <AlertDialogContent className="max-w-md md:max-w-lg dark:bg-[#1A1D24] dark:border-white/10">
                     <AlertDialogHeader>
                       <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 rounded-full bg-red-100">
-                          <Trash2 className="h-6 w-6 text-red-600" />
+                        <div className="p-2 rounded-full bg-red-100 dark:bg-red-900/50">
+                          <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
                         </div>
-                        <AlertDialogTitle className="text-red-700">
+                        <AlertDialogTitle className="text-red-700 dark:text-red-400">
                           Delete Your Account?
                         </AlertDialogTitle>
                       </div>
-                      <AlertDialogDescription className="space-y-3 text-gray-600">
+                      <AlertDialogDescription className="space-y-3 text-gray-600 dark:text-gray-400">
                         <p className="font-medium">
                           This action cannot be undone.
                         </p>
@@ -497,13 +497,13 @@ export default function MyAccount() {
                             <span>All associated account data</span>
                           </li>
                         </ul>
-                        <p className="pt-2 font-medium text-red-600">
+                        <p className="pt-2 font-medium text-red-600 dark:text-red-400">
                           Are you sure you want to continue?
                         </p>
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
-                      <AlertDialogCancel className="mt-0 w-full sm:w-auto">
+                      <AlertDialogCancel className="mt-0 w-full sm:w-auto dark:border-white/20 dark:text-white dark:hover:bg-white/10">
                         Cancel
                       </AlertDialogCancel>
                       <AlertDialogAction
@@ -530,7 +530,7 @@ export default function MyAccount() {
       </Card>
 
       {/* Additional Information */}
-      <div className="mt-6 text-center text-gray-500 text-sm">
+      <div className="mt-6 text-center text-gray-500 dark:text-gray-400 text-sm">
         <p>Need help? Contact our support team at support@pazimo.com</p>
       </div>
     </div>
