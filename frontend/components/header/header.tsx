@@ -228,7 +228,7 @@ const Header = () => {
     <>
       {/* Fixed header for mobile, normal for desktop */}
       <header
-        className={`md:relative fixed! bg-white/80 dark:bg-black/40 backdrop-blur-3xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 border-b border-border/40 transition-all duration-300 ease-out
+        className={`md:relative fixed! bg-white/90 dark:bg-[#0A0A0A]/90 backdrop-blur-3xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 border-b border-border/40 dark:border-white/10 transition-all duration-300 ease-out
         `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
@@ -292,28 +292,28 @@ const Header = () => {
             <button
               type="button"
               onClick={() => scrollToSection("featured")}
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Featured
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("categories")}
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Categories
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("trending")}
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Trending
             </button>
             <Link
               href="/organizer-registration"
               target="_blank"
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-bold dark:font-normal transition-all text-sm"
+              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Create Event
             </Link>
@@ -498,7 +498,7 @@ const Header = () => {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 transition-all duration-200 rounded-xl px-4 py-1 h-auto"
+                      className="text-[#1a2d5a] dark:text-gray-100 font-medium hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 dark:hover:from-white/10 dark:hover:to-white/5 transition-all duration-200 rounded-xl px-4 py-1 h-auto"
                     >
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
@@ -555,19 +555,19 @@ const Header = () => {
             <div className="bg-background/95 backdrop-blur-xl border-b border-border shadow-lg rounded-b-2xl p-4 space-y-3">
               <nav className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 <button
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("featured")}
                 >
                   Featured
                 </button>
                 <button
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("categories")}
                 >
                   Categories
                 </button>
                 <button
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors text-left"
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("trending")}
                 >
                   Trending
@@ -575,7 +575,7 @@ const Header = () => {
                 <Link
                   href="/organizer-registration"
                   target="_blank"
-                  className="px-3 py-2 rounded-lg hover:bg-blue-50 hover:text-[#115db1] transition-colors"
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors"
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Create Event
