@@ -138,9 +138,11 @@ export default function PaymentMethodSelector({
               htmlFor={`payment-${method.id}`}
               className={cn(
                 "flex flex-col items-center justify-start px-0.5 py-2 gap-3 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 cursor-pointer transition-all duration-200 h-full",
+                "dark:bg-[#1A1D24] dark:border-white/10 dark:hover:bg-[#252932] dark:hover:border-white/20",
                 "peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50",
+                "dark:peer-data-[state=checked]:border-blue-500 dark:peer-data-[state=checked]:bg-blue-500/10",
                 disabled &&
-                "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale"
+                "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale dark:hover:bg-[#1A1D24] dark:hover:border-white/10"
               )}
             >
               <div className=" w-8 h-8 shrink-0 flex items-center justify-center">
@@ -157,13 +159,15 @@ export default function PaymentMethodSelector({
                       ? 32
                       : 120
                   }
-                  className={`${method.name === "CBE Birr" || method.name === "Awash Bank"
+                  className={cn(
+                    method.name === "CBE Birr" || method.name === "Awash Bank"
                       ? ""
-                      : "scale-190"
-                    }`}
+                      : "scale-190",
+                    "dark:brightness-110"
+                  )}
                 />
               </div>
-              <span className="text-xs font-bold text-gray-700 peer-data-[state=checked]:text-blue-700">
+              <span className="text-xs font-bold text-gray-700 dark:text-gray-300 peer-data-[state=checked]:text-blue-700 dark:peer-data-[state=checked]:text-blue-400">
                 {method.name}
               </span>
             </Label>
