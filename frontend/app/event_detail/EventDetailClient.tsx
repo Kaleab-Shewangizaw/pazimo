@@ -939,7 +939,7 @@ export default function EventDetailClient() {
 
           <div className="flex gap-4 items-start">
             <div className="shrink-0 bg-white dark:bg-[#1A1D24] border border-gray-200 dark:border-white/10 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
-              <div className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">
+              <div className="text-xs font-medium text-gray-600 dark:text-gray-400 text-yellow-600 dark:text-yellow-400 uppercase tracking-wide">
                 {getDayName(event.startDate)}
               </div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none mt-1">
@@ -1064,8 +1064,8 @@ export default function EventDetailClient() {
           >
             <Heart
               className={`h-4 w-4 transition-colors ${isInWishlist(event._id)
-                  ? "fill-red-500 text-red-500"
-                  : "text-white"
+                ? "fill-red-500 text-red-500"
+                : "text-white"
                 }`}
             />
           </button>
@@ -1411,8 +1411,8 @@ export default function EventDetailClient() {
                           <div
                             key={ticketType.name}
                             className={`flex items-center justify-between gap-3 border rounded-xl p-4 cursor-pointer transition-colors ${selectedTicketType === ticketType.name
-                                ? "border-[#0D47A1]/50 bg-blue-50/60 dark:border-blue-500/50 dark:bg-blue-500/10"
-                                : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
+                              ? "border-[#0D47A1]/50 bg-blue-50/60 dark:border-blue-500/50 dark:bg-blue-500/10"
+                              : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
                               }`}
                           >
                             <div className="flex items-start gap-3">
@@ -1615,8 +1615,8 @@ export default function EventDetailClient() {
                         <div
                           key={i}
                           className={`h-2 w-2 rounded-full transition-colors ${i === currentTicketIndex
-                              ? "bg-[#0D47A1]"
-                              : "bg-gray-200"
+                            ? "bg-[#0D47A1]"
+                            : "bg-gray-200"
                             }`}
                         />
                       ))}
