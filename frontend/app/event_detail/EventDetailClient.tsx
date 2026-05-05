@@ -1718,7 +1718,7 @@ export default function EventDetailClient() {
                         setPaymentForm({ ...paymentForm, email: e.target.value })
                       }
                       placeholder="Email address"
-                      className="mt-1 dark:bg-white/5 dark:border-white/10 dark:text-white"
+                      className="mt-1 dark:bg-white/5 dark:border-white/10 dark:text-white "
                     />
                   </div>
                 )}
@@ -1766,7 +1766,7 @@ export default function EventDetailClient() {
                     </div>
                   ) : (
                     // Ethiopia +251 for ETB
-                    <div className="flex items-center border border-gray-300 dark:border-white/10 rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500">
+                    <div className="flex items-center border border-gray-300 dark:border-white/10 rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-gray-400/20">
                       <div className="bg-gray-100 dark:bg-white/5 px-3 py-2 text-gray-500 dark:text-gray-400 border-r dark:border-white/10 text-sm font-medium">
                         +251
                       </div>
@@ -1813,7 +1813,7 @@ export default function EventDetailClient() {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                className="flex-1 bg-blue-600 dark:bg-[#FDC700] dark:hover:bg-yellow-400/90 dark:text-black hover:bg-blue-700 text-white"
                 disabled={
                   isProcessingPayment ||
                   !paymentForm.phoneNumber ||
