@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { Calendar, MapPin, Star, Users, Gift, UserCheck } from "lucide-react";
+import { Calendar, MapPin, Star, Users, Gift, UserCheck, Ticket, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -126,8 +126,10 @@ const isEventSoldOut = (event: any) => {
 
 export default function LargeEventCarousel({
   initialEvents,
+  mode = "dark",
 }: {
   initialEvents?: FeaturedEvent[];
+  mode?: "dark" | "light";
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -475,7 +477,7 @@ export default function LargeEventCarousel({
   return (
     <section
       ref={carouselRef}
-      className="relative overflow-hidden mx-2 sm:mx-4 md:mx-8 my-4 sm:my-6 rounded-3xl min-h-[220px] sm:min-h-[500px] md:min-h-[600px] select-none touch-pan-y bg-black dark:bg-[#1A1D24]"
+      className="relative overflow-hidden mx-2  sm:mx-4 md:mx-8 my-4 sm:my-6 rounded-3xl min-h-[220px] sm:min-h-[500px] md:min-h-[600px] select-none touch-pan-y md:bg-black  dark:bg-[#1A1D24]"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -485,8 +487,8 @@ export default function LargeEventCarousel({
       onMouseLeave={handleMouseLeave}
       style={{ cursor: isDragging ? "grabbing" : "grab" }}
     >
-      {/* Background Image (Full Width) */}
-      <div className="absolute inset-0 transition-opacity duration-1000 ease-in-out">
+      {/* Background Image (Full Width) - Hidden on Mobile */}
+      <div className="absolute inset-0  transition-opacity duration-1000 ease-in-out hidden md:block">
         <Image
           src={
             currentEvent.image ||
@@ -507,11 +509,15 @@ export default function LargeEventCarousel({
         />
       </div>
 
-      {/* Enhanced Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-black/20 to-black/10 sm:from-black/85 sm:via-black/60 sm:to-black/30 dark:from-[#1A1D24]/80 dark:via-[#1A1D24]/40 dark:to-transparent z-10" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent sm:from-black/70 sm:via-transparent sm:to-black/20 dark:from-[#1A1D24]/20 dark:sm:from-[#1A1D24]/70 dark:sm:to-[#1A1D24]/20 z-10" />
+      {/* Mobile background fill */}
+      <div className="absolute inset-0 bg-background  md:hidden" />
 
-      {/* Sold Out Badge - Mobile Only */}
+
+      {/* Enhanced Gradient Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-r from-black/30 via-black/20 to-black/10 sm:from-black/85 sm:via-black/60 sm:to-black/30 dark:from-[#1A1D24]/80 dark:via-[#1A1D24]/40 dark:to-transparent z-10 hidden md:block" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent sm:from-black/70 sm:via-transparent sm:to-black/20 dark:from-[#1A1D24]/20 dark:sm:from-[#1A1D24]/70 dark:sm:to-[#1A1D24]/20 z-10 hidden md:block" />
+
+      {/* Sold Out Badge - Mobile Only
       {isEventSoldOut(currentEvent.originalEvent) && (
         <div className="absolute top-4 right-4 md:hidden z-30">
           <div className="bg-red-500 text-white text-sm font-bold px-3 py-2 rounded-lg shadow-lg animate-pulse mb-2">
@@ -545,12 +551,102 @@ export default function LargeEventCarousel({
             return null;
           })()}
         </div>
-      )}
+      )} */}
 
-      <div className="relative z-20 container mx-auto px-4 sm:px-8 md:px-16 py-6 sm:py-10 md:py-16 h-full flex items-center">
-        <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16 w-full h-full">
-          {/* Content Section */}
-          <div className="w-full md:w-3/5 text-white">
+      <div className="relative z-20 container mx-auto   md:px-16 p-0  md:py-16 h-full flex items-center">
+        <div className="flex flex-col   md:flex-row items-center gap-8 md:gap-16 w-full h-full">
+          {/* Mobile Only: Hero Style Layout */}
+          <div className="md:hidden px-0 pt-6 pb-0 w-full max-w-md mx-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 bg-[hsl(43,96%,58%)]" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[hsl(43,96%,58%)]" />
+                </span>
+                <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[hsl(40,8%,45%)] dark:text-[hsl(40,8%,60%)]">
+                  Spotlight Tonight
+                </span>
+              </div>
+              <span className="text-[11px] font-medium text-[hsl(40,8%,45%)] dark:text-[hsl(40,8%,60%)]">
+                {String(currentIndex + 1).padStart(2, "0")} / {String(featuredEvents.length).padStart(2, "0")}
+              </span>
+            </div>
+
+            <div className="relative h-[420px] w-full rounded-3xl overflow-visible bg-[hsl(40,30%,97%)] dark:bg-[hsl(0,0%,7%)]">
+              <div className="absolute inset-0 rounded-3xl overflow-hidden">
+                <div className="absolute -top-20 -right-16 h-56 w-56 rounded-full blur-3xl opacity-50 bg-[hsla(43,96%,58%,0.12)] dark:bg-[hsla(43,96%,58%,0.25)]" />
+                <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full blur-3xl opacity-50 bg-[hsla(43,96%,58%,0.05)] dark:bg-[hsla(43,96%,58%,0.1)]" />
+
+                <div className="absolute -top-2 left-0 right-0 px-5 select-none overflow-hidden">
+                  <p className="font-[Space_Grotesk] text-[88px] leading-none font-bold tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis text-[#0000003f] dark:text-[hsla(40,20%,96%,0.06)]">
+                    {currentEvent.title.toUpperCase()}
+                  </p>
+                </div>
+
+                <div className="absolute inset-x-0 bottom-0 p-5 pt-24 bg-[linear-gradient(180deg,transparent_0%,hsla(40,30%,95%,0.6)_55%,hsl(40,30%,94%)_100%)] dark:bg-[linear-gradient(180deg,transparent_0%,hsla(0,0%,4%,0.55)_55%,hsl(0,0%,4%)_100%)]">
+                  <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_top,hsl(40,30%,90%)_0%,hsla(40,30%,95%,0.3)_50%,transparent_100%)] dark:bg-[linear-gradient(to_top,hsl(0,0%,0%)_0%,hsla(0,0%,0%,0.4)_50%,transparent_100%)]" />
+                  <div className="relative">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.22em] mb-2 line-clamp-1 text-[hsl(43,96%,58%)]">
+                      {currentEvent.categories.join(" · ")}
+                    </p>
+                    <h1 className="font-[Space_Grotesk] text-[40px] leading-[0.95] font-bold tracking-tight line-clamp-2 text-[hsl(0,0%,15%)] dark:text-[hsl(40,20%,96%)]">
+                      {currentEvent.title.toUpperCase()}
+                    </h1>
+                    <p className="mt-2 text-[13px] max-w-[15rem] leading-relaxed line-clamp-2 text-[hsl(0,0%,45%)] dark:text-[hsl(40,8%,60%)]">
+                      {currentEvent.description || currentEvent.organization}
+                    </p>
+
+                    <div className="mt-4 flex items-center gap-4 text-[12px] text-[hsl(0,0%,30%)] dark:text-[hsla(40,20%,96%,0.8)]">
+                      <span className="flex items-center gap-1.5 whitespace-nowrap">
+                        <Calendar className="h-3.5 w-3.5 text-[hsl(43,96%,58%)]" strokeWidth={2} />
+                        {currentEvent.date.split(" ").slice(0, 2).join(" ")} · {formatTimeRange(currentEvent.startTime, currentEvent.endTime)}
+                      </span>
+                      <span className="h-3 w-px shrink-0 bg-[hsl(40,20%,85%)] dark:bg-[hsl(40,10%,14%)]" />
+                      <span className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden text-ellipsis">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-[hsl(43,96%,58%)]" strokeWidth={2} />
+                        {currentEvent.venue}
+                      </span>
+                    </div>
+
+                    {!isEventSoldOut(currentEvent.originalEvent) ? (
+                      <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
+                        <button className="mt-5 group inline-flex items-center gap-2 rounded-full px-5 py-3 text-[13px] font-semibold active:scale-[0.98] transition-transform bg-[linear-gradient(135deg,hsl(43,96%,58%),hsl(36,80%,48%))] text-white dark:text-[hsl(0,0%,6%)] shadow-[0_20px_60px_-20px_hsla(43,96%,58%,0.45)]">
+                          <Ticket className="h-4 w-4" strokeWidth={2.4} />
+                          Get Tickets
+                          <ArrowUpRight className="h-4 w-4 -mr-1 transition-transform group-hover:translate-x-0.5" strokeWidth={2.4} />
+                        </button>
+                      </Link>
+                    ) : (
+                      <button disabled className="mt-5 group inline-flex items-center gap-2 rounded-full px-5 py-3 text-[13px] font-semibold active:scale-[0.98] transition-transform opacity-60 bg-[linear-gradient(135deg,hsl(43,96%,58%),hsl(36,80%,48%))] text-white dark:text-[hsl(0,0%,6%)] shadow-[0_20px_60px_-20px_hsla(43,96%,58%,0.45)]">
+                        Sold Out
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="absolute -top-4 right-4 w-[140px] aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg] shadow-[0_40px_80px_-30px_hsla(0,0%,0%,0.3),0_10px_30px_-10px_hsla(43,96%,58%,0.15)] dark:shadow-[0_40px_80px_-30px_hsla(0,0%,0%,0.9),0_10px_30px_-10px_hsla(43,96%,58%,0.25)]">
+                <Image
+                  src={currentEvent.image || "/placeholder.svg?height=650&width=1200&text=Featured+Event"}
+                  alt={currentEvent.title}
+                  width={420}
+                  height={560}
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(to_top,hsla(0,0%,0%,0.2),transparent,transparent)] dark:bg-[linear-gradient(to_top,hsla(0,0%,0%,0.4),transparent,transparent)]" />
+              </div>
+
+              <div className="absolute top-6 left-4 rounded-full backdrop-blur-md px-3 py-1.5 bg-[hsla(40,30%,94%,0.9)] dark:bg-[hsla(0,0%,4%,0.8)] shadow-[0_10px_30px_-10px_hsla(0,0%,0%,0.1)] dark:shadow-[0_10px_30px_-10px_hsla(0,0%,0%,0.6)]">
+                <p className="text-[10px] uppercase tracking-wider leading-none text-[hsl(40,8%,45%)] dark:text-[hsl(40,8%,60%)]">From</p>
+                <p className="text-[13px] font-semibold leading-tight mt-0.5 text-[hsl(0,0%,15%)] dark:text-[hsl(40,20%,96%)]">
+                  {currentEvent.price.replace("From ", "")}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Desktop Content Section */}
+          <div className="hidden md:block w-full md:w-3/5 text-white">
             {/* Organization/Presenter */}
             <div className="mb-2 sm:mb-4">
               <p className="text-xs sm:text-base font-bold text-amber-400 tracking-[0.1em] uppercase">
@@ -646,7 +742,7 @@ export default function LargeEventCarousel({
           </div>
 
           {/* Desktop Only: Featured Event Card (Original Layout) */}
-          <div className="hidden md:block md:w-2/5 flex justify-center md:justify-end">
+          <div className="hidden md:flex md:w-2/5 justify-center md:justify-end">
             <div className="relative w-[220px] lg:w-[320px] h-[300px] lg:h-[450px] rounded-2xl overflow-hidden shadow-2xl transform md:-rotate-2 hover:rotate-0 transition-transform duration-500 border border-white/10">
               <Image
                 src={currentEvent.image}
@@ -657,7 +753,7 @@ export default function LargeEventCarousel({
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
               {isEventSoldOut(currentEvent.originalEvent) && (
-                <div className="absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-30 shadow-lg">
+                <div className="hidden md:block absolute top-4 left-4 bg-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-lg z-30 shadow-lg">
                   SOLD OUT
                 </div>
               )}

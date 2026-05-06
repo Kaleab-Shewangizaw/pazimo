@@ -151,3 +151,21 @@
 .card-hidden {
   opacity: 0;
 }
+
+@layer utilities {
+  .bg-gradient-fade {
+    background: linear-gradient(to top, var(--color-background) 40%, transparent);
+  }
+  .bg-gradient-hero-scrim {
+    background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+  }
+  .bg-gradient-gold {
+    background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  }
+  .shadow-glow {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+  }
+  .shadow-poster {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+}
