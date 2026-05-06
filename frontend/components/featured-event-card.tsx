@@ -129,7 +129,7 @@ export default function FeaturedEventCard({
           </div>
         </div>
         <div className="flex items-center justify-between px-1">
-          <span className="text-sm font-semibold text-[#06283D] dark:text-yellow-400">{data.priceLabel}</span>
+          <span className="text-sm font-semibold text-blue-700 dark:text-yellow-400">{data.priceLabel}</span>
           {showCTA && (
             <Button
               variant="ghost"

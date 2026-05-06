@@ -667,7 +667,7 @@ export default function LargeEventCarousel({
 >
               <div className="absolute inset-0 rounded-3xl overflow-hidden">
                 <div className="absolute -top-20 -right-16 h-56 w-56 rounded-full blur-3xl opacity-70"
-                //  style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` }} 
+                 style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` }} 
                  />
                 <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full blur-3xl opacity-70" 
                 // style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)` }} 
@@ -842,7 +842,7 @@ export default function LargeEventCarousel({
           </div>
 
           {/* Desktop Only: Featured Event Card (Original Layout) */}
-          <div className="hidden md:flex md:w-2/5 justify-center md:justify-end">
+          <div className="hidden md:block md:w-2/5 justify-center md:justify-end">
             <div className="relative w-[220px] lg:w-[320px] h-[300px] lg:h-[450px] rounded-2xl overflow-hidden shadow-2xl transform md:-rotate-2 hover:rotate-0 transition-transform duration-500 border border-white/10">
               <Image
                 src={currentEvent.image}

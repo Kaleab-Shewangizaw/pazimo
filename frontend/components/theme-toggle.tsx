@@ -2,48 +2,40 @@
 
 import * as React from "react"
 import { useTheme } from "next-themes"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { LaptopMinimal, MoonStar, SunMedium } from "lucide-react"
 
-const options = [
-  { value: "light", label: "Light", icon: SunMedium },
-  { value: "dark", label: "Dark", icon: MoonStar },
-  { value: "system", label: "System", icon: LaptopMinimal },
-]
-
 export default function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const { theme, resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const isDark = mounted && (theme === "dark" || (theme === "system" && resolvedTheme === "dark"))
+
+  const toggleTheme = () => {
+    setTheme(isDark ? "light" : "dark")
+  }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="p-2">
-          {theme === "dark" ? <MoonStar className="w-4 h-4" /> : <SunMedium className="w-4 h-4" />}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Theme</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuRadioGroup value={theme || "system"} onValueChange={(v) => setTheme(v)}>
-          {options.map((opt) => (
-            <DropdownMenuRadioItem key={opt.value} value={opt.value}>
-              <div className="flex items-center gap-2">
-                <opt.icon className="w-4 h-4" />
-                <span>{opt.label}</span>
-              </div>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="p-2"
+      onClick={toggleTheme}
+      aria-label={mounted ? `Switch to ${isDark ? "light" : "dark"} mode` : "Toggle theme"}
+      title={mounted ? `Switch to ${isDark ? "light" : "dark"} mode` : "Toggle theme"}
+      disabled={!mounted}
+    >
+      {!mounted ? (
+        <LaptopMinimal className="h-4 w-4" />
+      ) : isDark ? (
+        <SunMedium className="h-4 w-4" />
+      ) : (
+        <MoonStar className="h-4 w-4" />
+      )}
+    </Button>
   )
 }

@@ -261,6 +261,8 @@ const Header = () => {
                 <Search className="h-5 w-5" />
               </Button>
 
+              <ThemeToggle />
+
               <button
                 className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
                 aria-label="Open menu"
@@ -583,11 +585,6 @@ const Header = () => {
               </nav>
 
               <div className="border-t border-border pt-4 mt-2 flex flex-col gap-3">
-                <div className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-xl">
-                  <span className="text-sm font-medium text-foreground">Theme Mode</span>
-                  <ThemeToggle />
-                </div>
-
                 {user ? (
                   <>
                     <button
