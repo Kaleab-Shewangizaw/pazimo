@@ -648,12 +648,12 @@ export default function LargeEventCarousel({
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-[hsl(43,96%,58%)]" />
                 </span>
                 <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[hsl(40,8%,45%)] dark:text-[hsl(40,8%,60%)]">
-                  Spotlight Tonight
+                  Spotlight Event
                 </span>
               </div>
-              <span className="text-[11px] font-medium text-[hsl(40,8%,45%)] dark:text-[hsl(40,8%,60%)]">
+              {/* <span className="text-[11px] font-medium text-[hsl(40,8%,45%)] dark:text-[hsl(40,8%,60%)]">
                 {String(currentIndex + 1).padStart(2, "0")} / {String(featuredEvents.length).padStart(2, "0")}
-              </span>
+              </span> */}
             </div>
 
         <div
