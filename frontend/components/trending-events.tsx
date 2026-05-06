@@ -657,7 +657,7 @@ export default function LargeEventCarousel({
             </div>
 
         <div
-  className="relative h-[420px] w-full rounded-3xl overflow-visible bg-[hsl(40,30%,97%)] dark:bg-[hsl(0,0%,7%)]"
+  className="relative h-[420px] w-full dark:border border-gray-200/10 rounded-3xl overflow-visible bg-[hsl(40,30%,97%)] dark:bg-[hsl(0,0%,7%)]"
   // style={{
   //   boxShadow:
   //     mode === "dark"
@@ -721,7 +721,7 @@ export default function LargeEventCarousel({
                 </div>
               </div>
 
-              <div className="absolute -top-4 right-4 w-[140px] aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg]"
+              <div className="absolute -top-4 right-4 w-[140px]  aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg]"
               //  style={{ boxShadow: mode === "dark" ? `0 40px 80px -30px hsla(0,0%,0%,0.9), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `0 40px 80px -30px hsla(0,0%,0%,0.2), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.35)` }}
               >
                 <Image

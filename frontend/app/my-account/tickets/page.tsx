@@ -553,7 +553,7 @@ export default function TicketsPage() {
                                   <>
                                     <div className="flex justify-between items-start w-full mb-4">
                                       <div className="flex flex-col">
-                                        <p className="text-sm font-bold text-[#0D47A1] mt-1">
+                                        <p className="text-sm font-bold text-[#0D47A1] dark:text-yellow-400 mt-1">
                                           Admit:{" "}
                                           {selectedGroup.tickets[
                                             currentTicketIndex
