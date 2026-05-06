@@ -1085,21 +1085,21 @@ export default function EventDetailClient() {
             <TabsList className="flex md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-[#1A1D24] border-t border-gray-200 dark:border-white/10 w-full justify-around rounded-none h-12 p-0 shadow-t">
               <TabsTrigger
                 value="tickets"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-500/10 h-12 px-0 text-xs"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
               >
                 <Ticket className="h-4 w-4 mb-0.5" />
                 <span className="text-xs">Tickets</span>
               </TabsTrigger>
               <TabsTrigger
                 value="about"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-500/10 h-12 px-0 text-xs"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
               >
                 <BookOpen className="h-4 w-4 mb-0.5" />
                 <span className="text-xs">About</span>
               </TabsTrigger>
               <TabsTrigger
                 value="images"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-500/10 h-12 px-0 text-xs"
+                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
               >
                 <ImageIcon className="h-4 w-4 mb-0.5" />
                 <span className="text-xs">Images</span>
