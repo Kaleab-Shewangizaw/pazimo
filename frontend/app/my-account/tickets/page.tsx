@@ -515,35 +515,15 @@ export default function TicketsPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex flex-row sm:flex-col items-center sm:items-end gap-3">
+                        <div className="flex flex-row justify-between sm:flex-col items-center sm:items-end gap-3">
                           <Badge
                             variant="default"
-                            className="font-medium capitalize"
+                            className="font-medium dark:text-black dark:bg-yellow-400 capitalize"
                           >
                             {group.tickets[0].status}
                           </Badge>
-                          <p className="text-lg font-semibold text-primary">
-                            {group.tickets.reduce(
-                              (sum: number, ticket: TicketType) =>
-                                sum + ticket.price,
-                              0
-                            )}{" "}
-                            ETB
-                          </p>
-                          {group.tickets.length > 1 && (
-                            <Button
-                              onClick={() => downloadAllEventQRCodes(group)}
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                            >
-                              <Download className="h-3 w-3 mr-1" />
-                              Download All
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          
+                          <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                         <Dialog
                           onOpenChange={(open) => {
                             if (open) {
@@ -556,7 +536,7 @@ export default function TicketsPage() {
                           }}
                         >
                           <DialogTrigger asChild>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" className="" size="sm">
                               View Tickets
                             </Button>
                           </DialogTrigger>
@@ -697,6 +677,10 @@ export default function TicketsPage() {
                           </DialogContent>
                         </Dialog>
                       </div>
+                        </div>
+                      </div>
+
+                      
                     </div>
                   </div>
                 </CardContent>
