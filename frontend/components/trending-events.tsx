@@ -658,16 +658,20 @@ export default function LargeEventCarousel({
 
         <div
   className="relative h-[420px] w-full rounded-3xl overflow-visible bg-[hsl(40,30%,97%)] dark:bg-[hsl(0,0%,7%)]"
-  style={{
-    boxShadow:
-      mode === "dark"
-        ? `0 0 60px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.4), 0 20px 60px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)`
-        : `0 0 40px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.2), 0 20px 40px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)`
-  }}
+  // style={{
+  //   boxShadow:
+  //     mode === "dark"
+  //       ? `0 0 60px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.4), 0 20px 60px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)`
+  //       : `0 0 40px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.2), 0 20px 40px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)`
+  // }}
 >
               <div className="absolute inset-0 rounded-3xl overflow-hidden">
-                <div className="absolute -top-20 -right-16 h-56 w-56 rounded-full blur-3xl opacity-70" style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` }} />
-                <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full blur-3xl opacity-70" style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)` }} />
+                <div className="absolute -top-20 -right-16 h-56 w-56 rounded-full blur-3xl opacity-70"
+                //  style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` }} 
+                 />
+                <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full blur-3xl opacity-70" 
+                // style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)` }} 
+                />
 
                 <div className="absolute -top-2 left-0 right-0 px-5 select-none overflow-hidden">
                   <p className="font-[Space_Grotesk] text-[88px] leading-none font-bold tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis text-[#0000003f] dark:text-[hsla(40,20%,96%,0.06)]">
@@ -717,7 +721,9 @@ export default function LargeEventCarousel({
                 </div>
               </div>
 
-              <div className="absolute -top-4 right-4 w-[140px] aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg]" style={{ boxShadow: mode === "dark" ? `0 40px 80px -30px hsla(0,0%,0%,0.9), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `0 40px 80px -30px hsla(0,0%,0%,0.2), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.35)` }}>
+              <div className="absolute -top-4 right-4 w-[140px] aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg]"
+              //  style={{ boxShadow: mode === "dark" ? `0 40px 80px -30px hsla(0,0%,0%,0.9), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `0 40px 80px -30px hsla(0,0%,0%,0.2), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.35)` }}
+              >
                 <Image
                   src={currentEvent.image || "/placeholder.svg?height=650&width=1200&text=Featured+Event"}
                   alt={currentEvent.title}
