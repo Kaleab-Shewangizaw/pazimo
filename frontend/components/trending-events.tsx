@@ -124,6 +124,80 @@ const isEventSoldOut = (event: any) => {
   return false;
 };
 
+// Extract dominant color from image
+const extractDominantColor = (imageUrl: string): Promise<{ h: number; s: number; l: number }> => {
+  return new Promise((resolve) => {
+    try {
+      const img = document.createElement("img");
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve({ h: 43, s: 96, l: 58 }); // fallback
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, 1, 1);
+        const imageData = ctx.getImageData(0, 0, 1, 1);
+        const data = imageData.data;
+
+        const r = data[0];
+        const g = data[1];
+        const b = data[2];
+
+        const hsl = rgbToHsl(r, g, b);
+        resolve(hsl);
+      };
+      img.onerror = () => {
+        resolve({ h: 43, s: 96, l: 58 }); // fallback
+      };
+      img.src = imageUrl;
+    } catch (error) {
+      console.error("Error extracting dominant color:", error);
+      resolve({ h: 43, s: 96, l: 58 }); // fallback
+    }
+  });
+};
+
+// Convert RGB to HSL
+const rgbToHsl = (r: number, g: number, b: number): { h: number; s: number; l: number } => {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+    switch (max) {
+      case r:
+        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        break;
+      case g:
+        h = ((b - r) / d + 2) / 6;
+        break;
+      case b:
+        h = ((r - g) / d + 4) / 6;
+        break;
+    }
+  }
+
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100),
+  };
+};
+
 export default function LargeEventCarousel({
   initialEvents,
   mode = "dark",
@@ -137,6 +211,7 @@ export default function LargeEventCarousel({
     initialEvents || [],
   );
   const [isLoading, setIsLoading] = useState(!initialEvents);
+  const [dominantColor, setDominantColor] = useState<{ h: number; s: number; l: number }>({ h: 43, s: 96, l: 58 }); // fallback to gold
 
   // Swipe functionality states
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -399,6 +474,15 @@ export default function LargeEventCarousel({
     return () => clearInterval(interval);
   }, [nextSlide]);
 
+  // Extract dominant color from current event image
+  useEffect(() => {
+    if (featuredEvents.length > 0 && featuredEvents[currentIndex]?.image) {
+      extractDominantColor(featuredEvents[currentIndex].image).then((color) => {
+        setDominantColor(color);
+      });
+    }
+  }, [currentIndex, featuredEvents]);
+
 
 
   const handleMouseLeave = () => {
@@ -572,10 +656,18 @@ export default function LargeEventCarousel({
               </span>
             </div>
 
-            <div className="relative h-[420px] w-full rounded-3xl overflow-visible bg-[hsl(40,30%,97%)] dark:bg-[hsl(0,0%,7%)]">
+        <div
+  className="relative h-[420px] w-full rounded-3xl overflow-visible bg-[hsl(40,30%,97%)] dark:bg-[hsl(0,0%,7%)]"
+  style={{
+    boxShadow:
+      mode === "dark"
+        ? `0 0 60px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.4), 0 20px 60px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)`
+        : `0 0 40px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.2), 0 20px 40px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)`
+  }}
+>
               <div className="absolute inset-0 rounded-3xl overflow-hidden">
-                <div className="absolute -top-20 -right-16 h-56 w-56 rounded-full blur-3xl opacity-50 bg-[hsla(43,96%,58%,0.12)] dark:bg-[hsla(43,96%,58%,0.25)]" />
-                <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full blur-3xl opacity-50 bg-[hsla(43,96%,58%,0.05)] dark:bg-[hsla(43,96%,58%,0.1)]" />
+                <div className="absolute -top-20 -right-16 h-56 w-56 rounded-full blur-3xl opacity-70" style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` }} />
+                <div className="absolute -bottom-24 -left-10 h-56 w-56 rounded-full blur-3xl opacity-70" style={{ backgroundColor: mode === "dark" ? `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` : `hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)` }} />
 
                 <div className="absolute -top-2 left-0 right-0 px-5 select-none overflow-hidden">
                   <p className="font-[Space_Grotesk] text-[88px] leading-none font-bold tracking-tighter whitespace-nowrap overflow-hidden text-ellipsis text-[#0000003f] dark:text-[hsla(40,20%,96%,0.06)]">
@@ -625,7 +717,7 @@ export default function LargeEventCarousel({
                 </div>
               </div>
 
-              <div className="absolute -top-4 right-4 w-[140px] aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg] shadow-[0_40px_80px_-30px_hsla(0,0%,0%,0.3),0_10px_30px_-10px_hsla(43,96%,58%,0.15)] dark:shadow-[0_40px_80px_-30px_hsla(0,0%,0%,0.9),0_10px_30px_-10px_hsla(43,96%,58%,0.25)]">
+              <div className="absolute -top-4 right-4 w-[140px] aspect-[3/4] rounded-2xl overflow-hidden rotate-[4deg]" style={{ boxShadow: mode === "dark" ? `0 40px 80px -30px hsla(0,0%,0%,0.9), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `0 40px 80px -30px hsla(0,0%,0%,0.2), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.35)` }}>
                 <Image
                   src={currentEvent.image || "/placeholder.svg?height=650&width=1200&text=Featured+Event"}
                   alt={currentEvent.title}
@@ -642,6 +734,8 @@ export default function LargeEventCarousel({
                   {currentEvent.price.replace("From ", "")}
                 </p>
               </div>
+
+              {/* <div className="absolute -bottom-10  left-0 right-0 h-24 rounded-b-3xl pointer-events-none" style={{ boxShadow: mode === "dark" ? `inset 0 -40px 60px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.3)` : `inset 0 -30px 40px -20px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.15)` }} /> */}
             </div>
           </div>
 
