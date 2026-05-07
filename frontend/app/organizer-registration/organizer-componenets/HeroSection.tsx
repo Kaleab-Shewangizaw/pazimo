@@ -25,7 +25,7 @@ const HeroSection = () => {
         <div className="absolute -top-24 left-1/2 -translate-x-1/2 h-[420px] w-[420px] rounded-full bg-accent/15 blur-3xl" />
       </div>
 
-      <div className="container px-5 relative z-10">
+      <div className="container px-5 mx-auto relative z-10">
         <div className="max-w-3xl mx-auto px-7 text-center">
           {/* Eyebrow pill */}
           <motion.div
