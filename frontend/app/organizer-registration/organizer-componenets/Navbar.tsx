@@ -55,7 +55,7 @@ const Navbar = () => {
             About
           </a>
           <Button asChild className="w-full font-semibold">
-            <Link href="/organzier-registration/register" onClick={() => setOpen(false)}>
+            <Link href="/organizer-registration/register" onClick={() => setOpen(false)}>
               Get Started
             </Link>
           </Button>
