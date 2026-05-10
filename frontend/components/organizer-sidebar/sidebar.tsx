@@ -14,6 +14,7 @@ import {
   UsersIcon,
   Megaphone,
   ScanLine,
+  ClipboardList,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
@@ -104,6 +105,18 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             >
               <CalendarDays className="h-5 w-5 flex-shrink-0" />
               <span className="font-medium text-sm sm:text-base">Events</span>
+            </Link>
+            <Link
+              href="/organizer/RSVP"
+              onClick={handleLinkClick}
+              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                isActive("/organizer/RSVP")
+                  ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              <ClipboardList className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium text-sm sm:text-base">RSVP</span>
             </Link>
             <Link
               href="/organizer/invitations"
