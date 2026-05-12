@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const rsvpRoutes = require('../../routes/rsvp');
+const rsvpRoutes = require('./rsvp');
 
 // Health check route
 router.get('/health', (req, res) => {
