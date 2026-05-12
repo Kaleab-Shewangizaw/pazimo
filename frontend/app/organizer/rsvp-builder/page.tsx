@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/rsvp-store";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ export default function RSVPDashboard() {
   const router = useRouter();
   const events = useStore((s) => s.events);
   const responses = useStore((s) => s.responses);
+  const loadEvents = useStore((s) => s.loadEvents);
   const createEvent = useStore((s) => s.createEvent);
   const duplicateEvent = useStore((s) => s.duplicateEvent);
   const deleteEvent = useStore((s) => s.deleteEvent);
@@ -40,18 +41,22 @@ export default function RSVPDashboard() {
   const [name, setName] = useState("");
   const [type, setType] = useState<"rsvp" | "review">("rsvp");
 
+  useEffect(() => {
+    void loadEvents().catch(() => toast.error("Failed to load RSVP forms"));
+  }, [loadEvents]);
+
   const stats = useMemo(() => {
-    const totalRsvp = responses.filter(
-      (r) => events.find((e) => e.id === r.eventId)?.type === "rsvp"
-    ).length;
-    const totalReviews = responses.filter(
-      (r) => events.find((e) => e.id === r.eventId)?.type === "review"
-    ).length;
+    const totalRsvp = events
+      .filter((event) => event.type === "rsvp")
+      .reduce((sum, event) => sum + (event.responseCount || 0), 0);
+    const totalReviews = events
+      .filter((event) => event.type === "review")
+      .reduce((sum, event) => sum + (event.responseCount || 0), 0);
     return { totalEvents: events.length, totalRsvp, totalReviews };
   }, [events, responses]);
 
-  const onCreate = () => {
-    const id = createEvent(type, name.trim());
+  const onCreate = async () => {
+    const id = await createEvent(type, name.trim());
     setOpen(false);
     setName("");
     router.push(`/organizer/rsvp-builder/${id}`);
@@ -117,7 +122,7 @@ export default function RSVPDashboard() {
         <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           <AnimatePresence>
             {events.map((e, i) => {
-              const count = responses.filter((r) => r.eventId === e.id).length;
+              const count = e.responseCount ?? responses.filter((r) => r.eventId === e.id).length;
               const Icon = e.type === "rsvp" ? ClipboardList : MessageSquare;
               return (
                 <motion.div
@@ -190,7 +195,7 @@ export default function RSVPDashboard() {
                           variant="ghost"
                           className="h-8 w-8 rounded-full"
                           onClick={() => {
-                            duplicateEvent(e.id);
+                            void duplicateEvent(e.id);
                             toast.success("Duplicated");
                           }}
                         >
@@ -201,7 +206,7 @@ export default function RSVPDashboard() {
                           variant="ghost"
                           className="h-8 w-8 rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
                           onClick={() => {
-                            deleteEvent(e.id);
+                            void deleteEvent(e.id);
                             toast.success("Deleted");
                           }}
                         >

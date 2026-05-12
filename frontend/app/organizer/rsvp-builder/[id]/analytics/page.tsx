@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useStore } from "@/lib/rsvp-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -23,13 +23,36 @@ export default function Analytics() {
   const id = params.id as string;
   const events = useStore((s) => s.events);
   const allResponses = useStore((s) => s.responses);
+  const loadEvent = useStore((s) => s.loadEvent);
+  const loadResponses = useStore((s) => s.loadResponses);
   const router = useRouter();
+  const [loading, setLoading] = useState(true);
 
   const event = useMemo(() => events.find((e) => e.id === id), [events, id]);
   const responses = useMemo(
     () => allResponses.filter((r) => r.eventId === id),
     [allResponses, id]
   );
+
+  useEffect(() => {
+    setLoading(true);
+    void Promise.all([
+      event || !id ? Promise.resolve() : loadEvent(id),
+      loadResponses(id),
+    ])
+      .catch(() => {
+        toast.error("Failed to load analytics data");
+      })
+      .finally(() => setLoading(false));
+  }, [event, id, loadEvent, loadResponses]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-slate-600 dark:text-slate-400">Loading analytics…</div>
+      </div>
+    );
+  }
 
   if (!event) {
     return (

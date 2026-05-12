@@ -107,10 +107,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <span className="font-medium text-sm sm:text-base">Events</span>
             </Link>
             <Link
-              href="/organizer/RSVP"
+              href="/organizer/rsvp-builder"
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/RSVP")
+                isActive("/organizer/rsvp-builder")
                   ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
                   : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
               }`}

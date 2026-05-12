@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -60,8 +60,11 @@ export default function Messages() {
   const events = useStore((s) => s.events);
   const allResponses = useStore((s) => s.responses);
   const allMessages = useStore((s) => s.messages);
+  const loadEvent = useStore((s) => s.loadEvent);
+  const loadResponses = useStore((s) => s.loadResponses);
   const setResponseTag = useStore((s) => s.setResponseTag);
   const sendBulkMessage = useStore((s) => s.sendBulkMessage);
+  const [loading, setLoading] = useState(true);
 
   const event = useMemo(() => events.find((e) => e.id === id), [events, id]);
   const responses = useMemo(
@@ -79,6 +82,26 @@ export default function Messages() {
   const [channel, setChannel] = useState<MessageChannel>("email");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    void Promise.all([
+      event || !id ? Promise.resolve() : loadEvent(id),
+      loadResponses(id),
+    ])
+      .catch(() => {
+        toast.error("Failed to load message data");
+      })
+      .finally(() => setLoading(false));
+  }, [event, id, loadEvent, loadResponses]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-slate-600 dark:text-slate-400">Loading messages…</div>
+      </div>
+    );
+  }
 
   const segmentCounts = useMemo(() => {
     const c: Record<AttendeeTag, number> = { VIP: 0, Guest: 0, Press: 0 };

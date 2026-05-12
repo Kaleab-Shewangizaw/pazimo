@@ -2,8 +2,9 @@
 
 import { useParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { useStore } from "@/lib/rsvp-store";
+import { useEffect, useState } from "react";
+import type { RsvpEvent } from "@/lib/rsvp-types";
+import { rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Check, Lock } from "lucide-react";
@@ -12,12 +13,38 @@ import Link from "next/link";
 
 export default function ReviewFlow() {
   const params = useParams();
-  const id = params.id as string;
-  
-  const event = useStore((s) => s.events.find((e) => e.id === id));
-  const submitResponse = useStore((s) => s.submitResponse);
+  const publicId = params.id as string;
+  const [event, setEvent] = useState<RsvpEvent | null>(null);
+  const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    rsvpApi
+      .getPublicForm(publicId)
+      .then((form) => {
+        if (active) setEvent(form);
+      })
+      .catch(() => {
+        if (active) setEvent(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [publicId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-slate-600 dark:text-slate-400">Loading form…</div>
+      </div>
+    );
+  }
 
   if (!event) {
     return (
@@ -46,8 +73,17 @@ export default function ReviewFlow() {
   });
 
   const submit = () => {
-    submitResponse({ eventId: event.id, answers, status: "approved" });
-    setDone(true);
+    void rsvpApi
+      .submitPublicResponse(event.publicId || publicId, {
+        answers,
+        metadata: {
+          sourceUrl: typeof window !== "undefined" ? window.location.href : "",
+          referrer: typeof document !== "undefined" ? document.referrer : "",
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        },
+      })
+      .then(() => setDone(true))
+      .catch(() => {});
   };
 
   return (

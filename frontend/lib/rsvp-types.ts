@@ -43,9 +43,11 @@ export interface PaymentConfig {
 
 export interface RsvpEvent {
   id: string;
+  publicId?: string;
   name: string;
   description?: string;
   type: "rsvp" | "review";
+  status?: "draft" | "published" | "archived";
   coverImage?: string;
   date?: string;
   hostedBy?: string;
@@ -61,6 +63,10 @@ export interface RsvpEvent {
   questions: Question[];
   createdAt: string;
   updatedAt: string;
+  publishedAt?: string;
+  archivedAt?: string;
+  responseCount?: number;
+  shareUrl?: string;
 }
 
 export interface Response {

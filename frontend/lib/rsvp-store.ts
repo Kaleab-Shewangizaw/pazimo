@@ -1,26 +1,39 @@
 "use client";
 
 import { create } from "zustand";
-import { v4 as uuidv4 } from "uuid";
-import type { RsvpEvent, Question, Section, Response, BulkMessage, QuestionType, AttendeeTag, ConditionalLogic } from "./rsvp-types";
+import type {
+  RsvpEvent,
+  Question,
+  Section,
+  Response,
+  BulkMessage,
+  QuestionType,
+  AttendeeTag,
+} from "./rsvp-types";
+import { buildDefaultEvent, rsvpApi } from "./rsvp-api";
+
+const newId = () => crypto.randomUUID();
 
 interface RsvpStore {
   events: RsvpEvent[];
   responses: Response[];
   messages: BulkMessage[];
-  createEvent: (type: "rsvp" | "review", name: string) => string;
-  updateEvent: (id: string, data: Partial<RsvpEvent>) => void;
-  deleteEvent: (id: string) => void;
-  duplicateEvent: (id: string) => void;
-  addQuestion: (eventId: string, sectionId: string, type: QuestionType) => void;
-  updateQuestion: (eventId: string, questionId: string, data: Partial<Question>) => void;
-  deleteQuestion: (eventId: string, questionId: string) => void;
-  reorderQuestion: (eventId: string, questionId: string, direction: -1 | 1) => void;
-  addSection: (eventId: string) => void;
-  updateSection: (eventId: string, sectionId: string, data: Partial<Section>) => void;
-  deleteSection: (eventId: string, sectionId: string) => void;
+  loadEvents: (type?: "rsvp" | "review") => Promise<void>;
+  loadEvent: (id: string) => Promise<RsvpEvent | undefined>;
+  loadResponses: (eventId: string) => Promise<void>;
+  createEvent: (type: "rsvp" | "review", name: string) => Promise<string>;
+  updateEvent: (id: string, data: Partial<RsvpEvent>) => Promise<void>;
+  deleteEvent: (id: string) => Promise<void>;
+  duplicateEvent: (id: string) => Promise<string | void>;
+  addQuestion: (eventId: string, sectionId: string, type: QuestionType) => Promise<void>;
+  updateQuestion: (eventId: string, questionId: string, data: Partial<Question>) => Promise<void>;
+  deleteQuestion: (eventId: string, questionId: string) => Promise<void>;
+  reorderQuestion: (eventId: string, questionId: string, direction: -1 | 1) => Promise<void>;
+  addSection: (eventId: string) => Promise<void>;
+  updateSection: (eventId: string, sectionId: string, data: Partial<Section>) => Promise<void>;
+  deleteSection: (eventId: string, sectionId: string) => Promise<void>;
   submitResponse: (data: { eventId: string; answers: Record<string, any>; status: string }) => void;
-  setResponseTag: (responseId: string, tag: AttendeeTag) => void;
+  setResponseTag: (responseId: string, tag: AttendeeTag) => Promise<void>;
   sendBulkMessage: (data: {
     eventId: string;
     channel: "email" | "sms" | "push";
@@ -36,32 +49,87 @@ export const useStore = create<RsvpStore>((set, get) => ({
   responses: [],
   messages: [],
 
-  createEvent: (type: "rsvp" | "review", name: string) => {
-    const id = uuidv4();
-    const defaultSection: Section = { id: uuidv4(), title: "Basic Information" };
-    const newEvent: RsvpEvent = {
-      id,
-      name: name.trim() || `New ${type === "rsvp" ? "RSVP" : "Review"} Event`,
-      type,
-      sections: [defaultSection],
-      questions: [],
-      approvalMode: "auto",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    set((state) => ({ events: [...state.events, newEvent] }));
-    return id;
+  loadEvents: async (type?: "rsvp" | "review") => {
+    try {
+      const events = await rsvpApi.getForms(type);
+      set({ events });
+    } catch (error) {
+      console.error("Failed to load RSVP forms", error);
+    }
   },
 
-  updateEvent: (id: string, data: Partial<RsvpEvent>) => {
-    set((state) => ({
-      events: state.events.map((e) =>
-        e.id === id ? { ...e, ...data, updatedAt: new Date().toISOString() } : e
-      ),
-    }));
+  loadEvent: async (id: string) => {
+    try {
+      const event = await rsvpApi.getForm(id);
+      set((state) => {
+        const existing = state.events.find((item) => item.id === id);
+        return {
+          events: existing
+            ? state.events.map((item) => (item.id === id ? event : item))
+            : [...state.events, event],
+        };
+      });
+      return event;
+    } catch (error) {
+      console.error("Failed to load RSVP form", error);
+    }
   },
 
-  deleteEvent: (id: string) => {
+  loadResponses: async (eventId: string) => {
+    try {
+      const responses = await rsvpApi.getResponses(eventId);
+      set((state) => ({
+        responses: [...state.responses.filter((response) => response.eventId !== eventId), ...responses],
+      }));
+    } catch (error) {
+      console.error("Failed to load RSVP responses", error);
+    }
+  },
+
+  createEvent: async (type: "rsvp" | "review", name: string) => {
+    const draft = buildDefaultEvent(type, name);
+    const localEvent = { ...draft, id: newId() };
+    set((state) => ({ events: [...state.events, localEvent] }));
+
+    try {
+      const created = await rsvpApi.createForm(draft);
+      set((state) => ({
+        events: state.events.map((event) => (event.id === localEvent.id ? created : event)),
+      }));
+      return created.id;
+    } catch (error) {
+      console.error("Failed to create RSVP form", error);
+      return localEvent.id;
+    }
+  },
+
+  updateEvent: async (id: string, data: Partial<RsvpEvent>) => {
+    let nextEvent: RsvpEvent | undefined;
+    set((state) => {
+      const events = state.events.map((event) =>
+        event.id === id ? { ...event, ...data, updatedAt: new Date().toISOString() } : event
+      );
+      nextEvent = events.find((event) => event.id === id);
+      return { events };
+    });
+    if (nextEvent) {
+      try {
+        const saved = await rsvpApi.updateForm(id, nextEvent);
+        set((state) => ({
+          events: state.events.map((event) => (event.id === id ? saved : event)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP form", error);
+      }
+    }
+  },
+
+  deleteEvent: async (id: string) => {
+    try {
+      await rsvpApi.deleteForm(id);
+    } catch (error) {
+      console.error("Failed to delete RSVP form", error);
+    }
     set((state) => ({
       events: state.events.filter((e) => e.id !== id),
       responses: state.responses.filter((r) => r.eventId !== id),
@@ -69,28 +137,26 @@ export const useStore = create<RsvpStore>((set, get) => ({
     }));
   },
 
-  duplicateEvent: (id: string) => {
+  duplicateEvent: async (id: string) => {
     const state = get();
     const event = state.events.find((e) => e.id === id);
     if (!event) return;
 
-    const newId = uuidv4();
-    const newEvent: RsvpEvent = {
-      ...event,
-      id: newId,
-      name: `${event.name} (Copy)`,
-      sections: event.sections.map((s) => ({ ...s, id: uuidv4() })),
-      questions: event.questions.map((q) => ({ ...q, id: uuidv4(), sectionId: newId })),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    set((state) => ({ events: [...state.events, newEvent] }));
+    try {
+      const copy = await rsvpApi.duplicateForm(event.id);
+      set((state) => ({ events: [...state.events, copy] }));
+      return copy.id;
+    } catch (error) {
+      console.error("Failed to duplicate RSVP form", error);
+      const fallback = { ...event, id: newId(), name: `${event.name} (Copy)` };
+      set((state) => ({ events: [...state.events, fallback] }));
+      return fallback.id;
+    }
   },
 
-  addQuestion: (eventId: string, sectionId: string, type: QuestionType) => {
+  addQuestion: async (eventId: string, sectionId: string, type: QuestionType) => {
     const newQuestion: Question = {
-      id: uuidv4(),
+      id: newId(),
       label: "",
       type,
       required: false,
@@ -107,9 +173,21 @@ export const useStore = create<RsvpStore>((set, get) => ({
           : e
       ),
     }));
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP question", error);
+      }
+    }
   },
 
-  updateQuestion: (eventId: string, questionId: string, data: Partial<Question>) => {
+  updateQuestion: async (eventId: string, questionId: string, data: Partial<Question>) => {
     set((state) => ({
       events: state.events.map((e) =>
         e.id === eventId
@@ -123,9 +201,21 @@ export const useStore = create<RsvpStore>((set, get) => ({
           : e
       ),
     }));
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP question", error);
+      }
+    }
   },
 
-  deleteQuestion: (eventId: string, questionId: string) => {
+  deleteQuestion: async (eventId: string, questionId: string) => {
     set((state) => ({
       events: state.events.map((e) =>
         e.id === eventId
@@ -137,9 +227,21 @@ export const useStore = create<RsvpStore>((set, get) => ({
           : e
       ),
     }));
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP question", error);
+      }
+    }
   },
 
-  reorderQuestion: (eventId: string, questionId: string, direction: -1 | 1) => {
+  reorderQuestion: async (eventId: string, questionId: string, direction: -1 | 1) => {
     set((state) => {
       const event = state.events.find((e) => e.id === eventId);
       if (!event) return state;
@@ -160,11 +262,23 @@ export const useStore = create<RsvpStore>((set, get) => ({
         ),
       };
     });
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP question", error);
+      }
+    }
   },
 
-  addSection: (eventId: string) => {
+  addSection: async (eventId: string) => {
     const newSection: Section = {
-      id: uuidv4(),
+      id: newId(),
       title: "New Section",
     };
 
@@ -175,9 +289,21 @@ export const useStore = create<RsvpStore>((set, get) => ({
           : e
       ),
     }));
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP question", error);
+      }
+    }
   },
 
-  updateSection: (eventId: string, sectionId: string, data: Partial<Section>) => {
+  updateSection: async (eventId: string, sectionId: string, data: Partial<Section>) => {
     set((state) => ({
       events: state.events.map((e) =>
         e.id === eventId
@@ -191,9 +317,21 @@ export const useStore = create<RsvpStore>((set, get) => ({
           : e
       ),
     }));
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP question", error);
+      }
+    }
   },
 
-  deleteSection: (eventId: string, sectionId: string) => {
+  deleteSection: async (eventId: string, sectionId: string) => {
     set((state) => ({
       events: state.events.map((e) =>
         e.id === eventId
@@ -206,11 +344,19 @@ export const useStore = create<RsvpStore>((set, get) => ({
           : e
       ),
     }));
+
+    const event = get().events.find((item) => item.id === eventId);
+    if (event) {
+      const saved = await rsvpApi.updateForm(eventId, event);
+      set((state) => ({
+        events: state.events.map((item) => (item.id === eventId ? saved : item)),
+      }));
+    }
   },
 
   submitResponse: (data: { eventId: string; answers: Record<string, any>; status: string }) => {
     const newResponse: Response = {
-      id: uuidv4(),
+      id: newId(),
       eventId: data.eventId,
       answers: data.answers,
       status: data.status as any,
@@ -220,12 +366,18 @@ export const useStore = create<RsvpStore>((set, get) => ({
     set((state) => ({ responses: [...state.responses, newResponse] }));
   },
 
-  setResponseTag: (responseId: string, tag: AttendeeTag) => {
-    set((state) => ({
-      responses: state.responses.map((r) =>
-        r.id === responseId ? { ...r, tag } : r
-      ),
-    }));
+  setResponseTag: async (responseId: string, tag: AttendeeTag) => {
+    const response = get().responses.find((item) => item.id === responseId);
+    if (!response) return;
+
+    try {
+      const saved = await rsvpApi.updateResponseTag(response.eventId, responseId, tag);
+      set((state) => ({
+        responses: state.responses.map((item) => (item.id === responseId ? saved : item)),
+      }));
+    } catch (error) {
+      console.error("Failed to update RSVP response tag", error);
+    }
   },
 
   sendBulkMessage: (data: {
@@ -237,7 +389,7 @@ export const useStore = create<RsvpStore>((set, get) => ({
     recipientCount: number;
   }) => {
     const newMessage: BulkMessage = {
-      id: uuidv4(),
+      id: newId(),
       eventId: data.eventId,
       channel: data.channel,
       subject: data.subject,

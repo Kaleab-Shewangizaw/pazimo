@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,7 @@ export default function Builder() {
   const id = params.id as string;
   const router = useRouter();
   const event = useStore((s) => s.events.find((e) => e.id === id));
+  const loadEvent = useStore((s) => s.loadEvent);
   const updateEvent = useStore((s) => s.updateEvent);
   const addQuestion = useStore((s) => s.addQuestion);
   const updateQuestion = useStore((s) => s.updateQuestion);
@@ -75,6 +76,24 @@ export default function Builder() {
   const updateSection = useStore((s) => s.updateSection);
   const deleteSection = useStore((s) => s.deleteSection);
   const [activeSection, setActiveSection] = useState<string>("");
+  const [loading, setLoading] = useState(!event);
+
+  useEffect(() => {
+    if (!event && id) {
+      setLoading(true);
+      void loadEvent(id)
+        .catch(() => toast.error("Failed to load form"))
+        .finally(() => setLoading(false));
+    }
+  }, [event, id, loadEvent]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-slate-600 dark:text-slate-400">Loading form…</div>
+      </div>
+    );
+  }
 
   if (!event) {
     return (
@@ -112,7 +131,7 @@ export default function Builder() {
           </Button>
           <div className="ml-auto flex gap-2">
             <Button asChild variant="outline" className="rounded-full">
-              <Link href={`/rsvp-form/${event.id}`}>
+              <Link href={`/rsvp-form/${event.publicId || event.id}`}>
                 <Eye className="mr-1 h-4 w-4" /> Preview
               </Link>
             </Button>

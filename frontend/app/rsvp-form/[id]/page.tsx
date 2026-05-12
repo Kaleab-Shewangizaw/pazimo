@@ -2,9 +2,9 @@
 
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useMemo, useState } from "react";
-import { useStore } from "@/lib/rsvp-store";
-import type { Question } from "@/lib/rsvp-types";
+import { useEffect, useMemo, useState } from "react";
+import type { Question, RsvpEvent } from "@/lib/rsvp-types";
+import { rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,15 +35,33 @@ import Link from "next/link";
 
 export default function RsvpFlow() {
   const params = useParams();
-  const id = params.id as string;
-  
-  const event = useStore((s) => s.events.find((e) => e.id === id));
-  const submitResponse = useStore((s) => s.submitResponse);
+  const publicId = params.id as string;
+  const [event, setEvent] = useState<RsvpEvent | null>(null);
+  const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [done, setDone] = useState(false);
   const [paying, setPaying] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    rsvpApi
+      .getPublicForm(publicId)
+      .then((form) => {
+        if (active) setEvent(form);
+      })
+      .catch(() => {
+        if (active) setEvent(null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [publicId]);
 
   const sections = useMemo(
     () =>
@@ -65,6 +83,14 @@ export default function RsvpFlow() {
       event?.questions.filter((q) => q.sectionId === currentSection?.id) || [],
     [event, currentSection]
   );
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
+        <div className="text-slate-600 dark:text-slate-400">Loading form…</div>
+      </div>
+    );
+  }
 
   if (!event)
     return (
@@ -108,28 +134,34 @@ export default function RsvpFlow() {
   };
 
   const finish = () => {
-    submitResponse({
-      eventId: event.id,
-      answers,
-      status: event.payment?.enabled
-        ? "unpaid"
-        : event.approvalMode === "manual"
-          ? "pending"
-          : "approved",
-    });
-    setDone(true);
+    void rsvpApi
+      .submitPublicResponse(event.publicId || publicId, {
+        answers,
+        metadata: {
+          sourceUrl: typeof window !== "undefined" ? window.location.href : "",
+          referrer: typeof document !== "undefined" ? document.referrer : "",
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        },
+      })
+      .then(() => setDone(true))
+      .catch(() => {});
   };
 
   const completePayment = () => {
     setPaying(true);
     setTimeout(() => {
-      submitResponse({
-        eventId: event.id,
-        answers,
-        status: "paid",
-      });
-      setPaying(false);
-      setDone(true);
+      void rsvpApi
+        .submitPublicResponse(event.publicId || publicId, {
+          answers,
+          metadata: {
+            sourceUrl: typeof window !== "undefined" ? window.location.href : "",
+            referrer: typeof document !== "undefined" ? document.referrer : "",
+            userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          },
+        })
+        .then(() => setDone(true))
+        .catch(() => {})
+        .finally(() => setPaying(false));
     }, 1200);
   };
 
