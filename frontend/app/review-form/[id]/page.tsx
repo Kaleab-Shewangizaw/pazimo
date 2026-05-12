@@ -32,6 +32,7 @@ function ReviewContent() {
 
   const [event, setEvent] = useState<RsvpEvent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [done, setDone] = useState(false);
 
@@ -106,48 +107,52 @@ function ReviewContent() {
     return v !== undefined && v !== "" && !(Array.isArray(v) && v.length === 0);
   });
 
-  const submit = () => {
-    void rsvpApi
-      .submitPublicResponse(event.publicId || publicId, {
+  const submitReview = async () => {
+    setSubmitting(true);
+    try {
+      await rsvpApi.submitPublicResponse(event.publicId || publicId, {
         answers,
         metadata: {
           sourceUrl: typeof window !== "undefined" ? window.location.href : "",
           referrer: typeof document !== "undefined" ? document.referrer : "",
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         },
-      })
-      .then(() => setDone(true))
-      .catch(() => {});
+      });
+      toast.success("Review submitted! Thank you for your feedback.");
+      setDone(true);
+    } catch (error) {
+      toast.error("Failed to submit review. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-3">
-            {useAdminAuthStore.getState().token && (
+      {isPreview && (
+        <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">
+          <div className="container flex h-16 items-center justify-between">
+            <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="sm"
                 className="rounded-full h-9"
-                onClick={() => router.push(`/organizer/rsvp-builder/${event.id}`)}
+                onClick={() => router.push(`/organizer/rsvp-builder/${event?.id || mongoId}`)}
               >
                 <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Editor
               </Button>
-            )}
-            <h1 className="font-semibold text-slate-900 dark:text-white">
-              {event.name}
-            </h1>
-          </div>
-          {event.status === 'draft' && (
+              <h1 className="font-semibold text-slate-900 dark:text-white">
+                {event?.name}
+              </h1>
+            </div>
             <span className="text-[10px] uppercase tracking-widest font-bold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 px-2.5 py-1 rounded-full">
-              Draft Preview
+              Preview Mode
             </span>
-          )}
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
-      <main className="container max-w-2xl py-10 md:py-16">
+      <main className="container mx-auto max-w-2xl py-10 md:py-16">
         {!done ? (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <div className="text-center">
@@ -191,11 +196,11 @@ function ReviewContent() {
 
               <div className="mt-8 flex justify-end">
                 <Button
-                  onClick={submit}
-                  disabled={!canSubmit}
-                  className="rounded-full px-7 h-11 shadow-lg hover:shadow-xl transition-shadow"
+                  onClick={submitReview}
+                  disabled={!canSubmit || submitting}
+                  className="rounded-full px-12 h-12 shadow-lg hover:shadow-xl transition-shadow text-base"
                 >
-                  Submit feedback
+                  {submitting ? "Submitting..." : "Submit Review"}
                 </Button>
               </div>
             </Card>

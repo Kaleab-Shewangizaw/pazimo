@@ -24,6 +24,7 @@ import {
   Trash2,
   Users,
   BarChart3,
+  Link as LinkIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -64,7 +65,7 @@ export default function RSVPDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <main className="container py-12">
+      <main className="container mx-auto py-12">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -190,6 +191,18 @@ export default function RSVPDashboard() {
                         </Button>
                       )}
                       <div className="ml-auto flex">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 rounded-full"
+                          onClick={() => {
+                            const url = `${window.location.origin}/${e.type === 'rsvp' ? 'rsvp-form' : 'review-form'}/${e.publicId || e.id}`;
+                            navigator.clipboard.writeText(url);
+                            toast.success("Link copied to clipboard");
+                          }}
+                        >
+                          <LinkIcon className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"

@@ -31,6 +31,7 @@ import {
   Clock,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import Link from "next/link";
 
@@ -52,6 +53,7 @@ function RsvpContent() {
   
   const [event, setEvent] = useState<RsvpEvent | null>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
@@ -165,21 +167,27 @@ function RsvpContent() {
   const next = () => {
     if (!isPayStep && !validate()) return;
     if (step < totalSteps - 1) setStep(step + 1);
-    else finish();
+    else submitForm();
   };
 
-  const finish = () => {
-    void rsvpApi
-      .submitPublicResponse(event.publicId || publicId, {
+  const submitForm = async () => {
+    setSubmitting(true);
+    try {
+      await rsvpApi.submitPublicResponse(event.publicId || publicId, {
         answers,
         metadata: {
           sourceUrl: typeof window !== "undefined" ? window.location.href : "",
           referrer: typeof document !== "undefined" ? document.referrer : "",
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         },
-      })
-      .then(() => setDone(true))
-      .catch(() => {});
+      });
+      toast.success("RSVP submitted successfully!");
+      setDone(true);
+    } catch (error) {
+      toast.error("Failed to submit RSVP. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const completePayment = () => {
@@ -204,32 +212,39 @@ function RsvpContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">
-        <div className="container flex h-16 items-center justify-between">
-          <div className="flex items-center gap-3">
-            {useAdminAuthStore.getState().token && (
+      {isPreview && (
+        <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">
+          <div className="container flex h-16 items-center justify-between">
+            <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="sm"
                 className="rounded-full h-9"
-                onClick={() => router.push(`/organizer/rsvp-builder/${event.id}`)}
+                onClick={() => router.push(`/organizer/rsvp-builder/${event?.id || mongoId}`)}
               >
                 <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Editor
               </Button>
-            )}
-            <h1 className="font-semibold text-slate-900 dark:text-white">
-              {event.name}
-            </h1>
-          </div>
-          {event.status === 'draft' && (
+              <h1 className="font-semibold text-slate-900 dark:text-white">
+                {event?.name}
+              </h1>
+            </div>
             <span className="text-[10px] uppercase tracking-widest font-bold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 px-2.5 py-1 rounded-full">
-              Draft Preview
+              Preview Mode
             </span>
-          )}
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
-      <main className="container max-w-2xl py-10 md:py-16">
+      <main className="container mx-auto max-w-2xl py-10 md:py-16">
+        {!done && event.coverImage && (
+          <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
+            <img
+              src={event.coverImage}
+              alt={event.name}
+              className="h-full w-full object-cover"
+            />
+          </div>
+        )}
         {!done && !started ? (
           <EventDetail event={event} onStart={() => setStarted(true)} />
         ) : !done ? (
@@ -333,27 +348,30 @@ function RsvpContent() {
             </AnimatePresence>
 
             {!isPayStep && (
-              <div className="mt-6 flex items-center justify-between">
-                <Button
-                  variant="ghost"
-                  className="rounded-full"
-                  onClick={() => {
-                    if (step === 0) {
-                      router.push(`/organizer/rsvp-builder/${event.id}`);
-                    } else {
-                      setStep(step - 1);
-                    }
-                  }}
-                >
-                  <ArrowLeft className="mr-1 h-4 w-4" /> Back
-                </Button>
+              <div className="mt-6 flex items-center justify-end">
+                {step > 0 && (
+                  <Button
+                    variant="ghost"
+                    className="rounded-full mr-auto"
+                    onClick={() => setStep(step - 1)}
+                  >
+                    <ArrowLeft className="mr-1 h-4 w-4" /> Back
+                  </Button>
+                )}
                 <Button
                   onClick={next}
-                  disabled={!validate()}
-                  className="rounded-full px-6 shadow-lg hover:shadow-xl transition-shadow"
+                  disabled={!validate() || submitting}
+                  className="rounded-full px-6 shadow-lg hover:shadow-xl transition-shadow min-w-[120px]"
                 >
-                  {step === totalSteps - 1 ? "Submit RSVP" : "Continue"}{" "}
-                  <ArrowRight className="ml-1 h-4 w-4" />
+                  {submitting ? (
+                    "Submitting..."
+                  ) : step === totalSteps - 1 ? (
+                    "Submit RSVP"
+                  ) : (
+                    <>
+                      Continue <ArrowRight className="ml-1 h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             )}
@@ -394,16 +412,6 @@ function EventDetail({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
-      {event.coverImage && (
-        <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-8">
-          <img
-            src={event.coverImage}
-            alt={event.name}
-            className="h-full w-full object-cover"
-          />
-        </div>
-      )}
-
       <div className="text-center">
         {event.hostedBy && (
           <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
@@ -420,31 +428,6 @@ function EventDetail({
         )}
       </div>
 
-      <Card className="mt-8 rounded-2xl bg-white dark:bg-slate-800 p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-700">
-        <div className="grid gap-5 sm:grid-cols-2">
-          {dateLabel && (
-            <DetailRow icon={Calendar} label="Date" value={dateLabel} />
-          )}
-          {timeLabel && (
-            <DetailRow icon={Clock} label="Time" value={timeLabel} />
-          )}
-          {event.location && (
-            <DetailRow
-              icon={MapPin}
-              label="Location"
-              value={event.location}
-              sub={event.venue}
-            />
-          )}
-          {typeof event.rsvpLimit === "number" && (
-            <DetailRow
-              icon={Users}
-              label="Capacity"
-              value={`${event.rsvpLimit} guests`}
-            />
-          )}
-        </div>
-      </Card>
 
       <div className="mt-8 flex flex-col items-center gap-3">
         <Button
@@ -453,11 +436,11 @@ function EventDetail({
         >
           {ctaLabel} <ArrowRight className="ml-1 h-4 w-4" />
         </Button>
-        <p className="text-xs text-slate-600 dark:text-slate-400">
+        {/* <p className="text-xs text-slate-600 dark:text-slate-400">
           {event.approvalMode === "manual"
             ? "Subject to organizer approval"
             : "Instant confirmation"}
-        </p>
+        </p> */}
       </div>
     </motion.div>
   );

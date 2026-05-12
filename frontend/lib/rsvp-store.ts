@@ -29,6 +29,8 @@ interface RsvpStore {
   updateQuestion: (eventId: string, questionId: string, data: Partial<Question>) => Promise<void>;
   deleteQuestion: (eventId: string, questionId: string) => Promise<void>;
   reorderQuestion: (eventId: string, questionId: string, direction: -1 | 1) => Promise<void>;
+  addOption: (eventId: string, questionId: string) => Promise<void>;
+  deleteOption: (eventId: string, questionId: string, index: number) => Promise<void>;
   addSection: (eventId: string) => Promise<void>;
   updateSection: (eventId: string, sectionId: string, data: Partial<Section>) => Promise<void>;
   deleteSection: (eventId: string, sectionId: string) => Promise<void>;
@@ -214,6 +216,72 @@ export const useStore = create<RsvpStore>((set, get) => ({
       }
     }
   },
+
+  addOption: async (eventId: string, questionId: string) => {
+    const nextOptionLabel = (options: string[] | undefined) => {
+      const count = (options || []).length;
+      return `Option ${count + 1}`;
+    };
+
+    set((state) => ({
+      events: state.events.map((e) =>
+        e.id === eventId
+          ? {
+              ...e,
+              questions: e.questions.map((q) =>
+                q.id === questionId
+                  ? { ...q, options: [...(q.options || []), nextOptionLabel(q.options)] }
+                  : q
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : e
+      ),
+    }));
+
+    const event = get().events.find((e) => e.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP option", error);
+      }
+    }
+  },
+
+  deleteOption: async (eventId: string, questionId: string, index: number) => {
+    set((state) => ({
+      events: state.events.map((e) =>
+        e.id === eventId
+          ? {
+              ...e,
+              questions: e.questions.map((q) =>
+                q.id === questionId
+                  ? { ...q, options: (q.options || []).filter((_, i) => i !== index) }
+                  : q
+              ),
+              updatedAt: new Date().toISOString(),
+            }
+          : e
+      ),
+    }));
+
+    const event = get().events.find((e) => e.id === eventId);
+    if (event) {
+      try {
+        const saved = await rsvpApi.updateForm(eventId, event);
+        set((state) => ({
+          events: state.events.map((item) => (item.id === eventId ? saved : item)),
+        }));
+      } catch (error) {
+        console.error("Failed to sync RSVP option", error);
+      }
+    }
+  },
+
 
   deleteQuestion: async (eventId: string, questionId: string) => {
     set((state) => ({

@@ -76,6 +76,8 @@ export default function Builder() {
   const addSection = useStore((s) => s.addSection);
   const updateSection = useStore((s) => s.updateSection);
   const deleteSection = useStore((s) => s.deleteSection);
+  const addOption = useStore((s) => s.addOption);
+  const deleteOption = useStore((s) => s.deleteOption);
   const [activeSection, setActiveSection] = useState<string>("");
   const [loading, setLoading] = useState(!event);
 
@@ -140,9 +142,11 @@ export default function Builder() {
                   for (const q of emptyQs) {
                     await updateQuestion(event.id, q.id, { label: "Untitled Question" });
                   }
-                } else {
-                  toast.success("Form saved successfully");
                 }
+                
+                // Always ensure status is published when explicitly saving
+                await updateEvent(event.id, { status: "published" });
+                toast.success("Form saved and published successfully");
               }}
               variant="default"
               className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
@@ -207,12 +211,9 @@ export default function Builder() {
               {event.sections.map((section) => (
                 <TabsContent key={section.id} value={section.id} className="mt-5 space-y-4">
                   <div className="flex items-center gap-2">
-                    <Input
-                      value={section.title}
-                      onChange={(e) =>
-                        updateSection(event.id, section.id, { title: e.target.value })
-                      }
-                      className="h-10 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 max-w-sm"
+                    <SectionTitleEditor
+                      initialValue={section.title}
+                      onSave={(newTitle) => updateSection(event.id, section.id, { title: newTitle })}
                     />
                     {event.sections.length > 1 && (
                       <Button
@@ -243,6 +244,8 @@ export default function Builder() {
                             onPatch={(p) => updateQuestion(event.id, q.id, p)}
                             onDelete={() => deleteQuestion(event.id, q.id)}
                             onMove={(d) => reorderQuestion(event.id, q.id, d)}
+                            onAddOption={() => addOption(event.id, q.id)}
+                            onDeleteOption={(idx) => deleteOption(event.id, q.id, idx)}
                             previousNumeric={previousNumeric.filter((p) => p.id !== q.id)}
                           />
                         </motion.div>
@@ -574,6 +577,8 @@ function QuestionCard({
   onPatch,
   onDelete,
   onMove,
+  onAddOption,
+  onDeleteOption,
   previousNumeric,
 }: {
   q: Question;
@@ -581,6 +586,8 @@ function QuestionCard({
   onPatch: (p: Partial<Question>) => void;
   onDelete: () => void;
   onMove: (d: -1 | 1) => void;
+  onAddOption: () => void;
+  onDeleteOption: (idx: number) => void;
   previousNumeric: Question[];
 }) {
   const [localLabel, setLocalLabel] = useState(q.label);
@@ -636,43 +643,25 @@ function QuestionCard({
             <div className="space-y-2">
               {(q.options || []).map((opt, i) => (
                 <div key={i} className="flex gap-2">
-                  <Input
-                    value={opt}
-                    onChange={(e) => {
+                  <OptionEditor
+                    index={i}
+                    initialValue={opt}
+                    onSave={(newVal) => {
                       const next = [...(q.options || [])];
-                      next[i] = e.target.value;
+                      next[i] = newVal;
                       onPatch({ options: next });
                     }}
-                    className="h-9 rounded-lg border border-slate-200 dark:border-slate-600"
+                    onDelete={() => onDeleteOption(i)}
                   />
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 rounded-full"
-                    onClick={() =>
-                      onPatch({
-                        options: (q.options || []).filter((_, idx) => idx !== i),
-                      })
-                    }
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </div>
               ))}
               <Button
                 size="sm"
                 variant="ghost"
-                className="rounded-full"
-                onClick={() =>
-                  onPatch({
-                    options: [
-                      ...(q.options || []),
-                      `Option ${(q.options?.length || 0) + 1}`,
-                    ],
-                  })
-                }
+                className="rounded-full h-8 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                onClick={onAddOption}
               >
-                <Plus className="h-3 w-3 mr-1" /> Add option
+                <Plus className="h-3.5 w-3.5 mr-1.5" /> Add option
               </Button>
             </div>
           )}
@@ -770,5 +759,73 @@ function QuestionCard({
         </div>
       </div>
     </Card>
+  );
+}
+function SectionTitleEditor({
+  initialValue,
+  onSave,
+}: {
+  initialValue: string;
+  onSave: (val: string) => void;
+}) {
+  const [val, setVal] = useState(initialValue);
+
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  return (
+    <Input
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => {
+        if (val.trim() !== initialValue) {
+          onSave(val.trim());
+        }
+      }}
+      placeholder="Section title"
+      className="h-10 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 max-w-sm font-semibold"
+    />
+  );
+}
+function OptionEditor({
+  index,
+  initialValue,
+  onSave,
+  onDelete,
+}: {
+  index: number;
+  initialValue: string;
+  onSave: (val: string) => void;
+  onDelete: () => void;
+}) {
+  const [val, setVal] = useState(initialValue);
+
+  useEffect(() => {
+    setVal(initialValue);
+  }, [initialValue]);
+
+  return (
+    <>
+      <Input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={() => {
+          if (val !== initialValue) {
+            onSave(val);
+          }
+        }}
+        placeholder={`Option ${index + 1}`}
+        className="h-9 rounded-lg border border-slate-200 dark:border-slate-600"
+      />
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-9 w-9 rounded-full shrink-0"
+        onClick={onDelete}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </Button>
+    </>
   );
 }
