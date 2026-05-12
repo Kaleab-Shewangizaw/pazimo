@@ -1,8 +1,8 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import type { Question, RsvpEvent } from "@/lib/rsvp-types";
 import { rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,25 @@ import {
   Clock,
   Users,
 } from "lucide-react";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
 import Link from "next/link";
 
 export default function RsvpFlow() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <RsvpContent />
+    </Suspense>
+  );
+}
+
+function RsvpContent() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const publicId = params.id as string;
+  const isPreview = searchParams.get("preview") === "true";
+  const mongoId = searchParams.get("id");
+  
   const [event, setEvent] = useState<RsvpEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(0);
@@ -47,21 +61,42 @@ export default function RsvpFlow() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    rsvpApi
-      .getPublicForm(publicId)
-      .then((form) => {
-        if (active) setEvent(form);
-      })
-      .catch(() => {
-        if (active) setEvent(null);
-      })
-      .finally(() => {
+
+    const token = useAdminAuthStore.getState().token;
+
+    const fetchData = async () => {
+      try {
+        // If it's a preview and we have a mongoId + token, use the private endpoint
+        if (isPreview && mongoId && token) {
+          const form = await rsvpApi.getForm(mongoId);
+          if (active) setEvent(form);
+        } else {
+          // Normal public fetch
+          const form = await rsvpApi.getPublicForm(publicId);
+          if (active) setEvent(form);
+        }
+      } catch (err) {
+        // Fallback for edge cases
+        if (token && (mongoId || publicId)) {
+          try {
+            const form = await rsvpApi.getForm(mongoId || publicId);
+            if (active) setEvent(form);
+          } catch (innerErr) {
+            if (active) setEvent(null);
+          }
+        } else {
+          if (active) setEvent(null);
+        }
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    };
+
+    void fetchData();
     return () => {
       active = false;
     };
-  }, [publicId]);
+  }, [publicId, isPreview, mongoId]);
 
   const sections = useMemo(
     () =>
@@ -171,9 +206,26 @@ export default function RsvpFlow() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">
         <div className="container flex h-16 items-center justify-between">
-          <h1 className="font-semibold text-slate-900 dark:text-white">
-            {event.name}
-          </h1>
+          <div className="flex items-center gap-3">
+            {useAdminAuthStore.getState().token && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-full h-9"
+                onClick={() => router.push(`/organizer/rsvp-builder/${event.id}`)}
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Editor
+              </Button>
+            )}
+            <h1 className="font-semibold text-slate-900 dark:text-white">
+              {event.name}
+            </h1>
+          </div>
+          {event.status === 'draft' && (
+            <span className="text-[10px] uppercase tracking-widest font-bold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 px-2.5 py-1 rounded-full">
+              Draft Preview
+            </span>
+          )}
         </div>
       </header>
 
@@ -285,11 +337,13 @@ export default function RsvpFlow() {
                 <Button
                   variant="ghost"
                   className="rounded-full"
-                  onClick={() =>
-                    step === 0
-                      ? window.history.back()
-                      : setStep(step - 1)
-                  }
+                  onClick={() => {
+                    if (step === 0) {
+                      router.push(`/organizer/rsvp-builder/${event.id}`);
+                    } else {
+                      setStep(step - 1);
+                    }
+                  }}
                 >
                   <ArrowLeft className="mr-1 h-4 w-4" /> Back
                 </Button>

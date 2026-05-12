@@ -36,6 +36,7 @@ import {
   Settings as SettingsIcon,
   GripVertical,
   Layers,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -130,8 +131,31 @@ export default function Builder() {
             <ArrowLeft className="mr-1 h-4 w-4" /> Back
           </Button>
           <div className="ml-auto flex gap-2">
+            <Button
+              onClick={async () => {
+                const emptyQs = event.questions.filter((q) => !q.label.trim());
+                if (emptyQs.length > 0) {
+                  toast.info(`Note: ${emptyQs.length} question(s) were missing titles. They have been set to "Untitled Question" for the live form.`);
+                  // Update empty questions in the store (which will sync to backend)
+                  for (const q of emptyQs) {
+                    await updateQuestion(event.id, q.id, { label: "Untitled Question" });
+                  }
+                } else {
+                  toast.success("Form saved successfully");
+                }
+              }}
+              variant="default"
+              className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
+            >
+              <Save className="mr-1.5 h-4 w-4" /> Save
+            </Button>
             <Button asChild variant="outline" className="rounded-full">
-              <Link href={`/rsvp-form/${event.publicId || event.id}`}>
+              <Link 
+                href={event.type === 'review' 
+                  ? `/review-form/${event.publicId || event.id}?preview=true&id=${event.id}` 
+                  : `/rsvp-form/${event.publicId || event.id}?preview=true&id=${event.id}`
+                }
+              >
                 <Eye className="mr-1 h-4 w-4" /> Preview
               </Link>
             </Button>
@@ -263,16 +287,34 @@ export default function Builder() {
               <div className="mt-6 space-y-5">
                 <div>
                   <Label className="text-sm text-slate-900 dark:text-white">
-                    Cover image URL
+                    Cover image
                   </Label>
-                  <Input
-                    value={event.coverImage || ""}
-                    onChange={(e) =>
-                      updateEvent(event.id, { coverImage: e.target.value })
-                    }
-                    placeholder="https://…"
-                    className="mt-1.5 h-10 rounded-lg"
-                  />
+                  <div className="mt-1.5 space-y-3">
+                    {event.coverImage && (
+                      <div className="relative w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600 aspect-video bg-slate-100 dark:bg-slate-700">
+                        <img
+                          src={typeof event.coverImage === 'string' && event.coverImage.startsWith('data:') ? event.coverImage : event.coverImage}
+                          alt="Cover preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            updateEvent(event.id, { coverImage: ev.target?.result as string });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                    />
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -541,6 +583,12 @@ function QuestionCard({
   onMove: (d: -1 | 1) => void;
   previousNumeric: Question[];
 }) {
+  const [localLabel, setLocalLabel] = useState(q.label);
+  
+  useEffect(() => {
+    setLocalLabel(q.label);
+  }, [q.label]);
+
   const needsOptions =
     q.type === "single_choice" ||
     q.type === "multi_choice" ||
@@ -573,9 +621,15 @@ function QuestionCard({
             </span>
           </div>
           <Input
-            value={q.label}
-            onChange={(e) => onPatch({ label: e.target.value })}
-            className="h-11 rounded-lg text-base font-medium text-slate-900 dark:text-white border border-slate-200 dark:border-slate-600"
+            value={localLabel}
+            onChange={(e) => setLocalLabel(e.target.value)}
+            onBlur={() => {
+              if (localLabel !== q.label) {
+                onPatch({ label: localLabel });
+              }
+            }}
+            placeholder="Untitled Question"
+            className="h-11 rounded-lg text-base font-medium text-slate-900 dark:text-white border border-slate-200 dark:border-slate-600 focus-visible:ring-blue-500"
           />
 
           {needsOptions && (
