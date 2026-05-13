@@ -461,7 +461,11 @@ function DetailRow({
     <div className="flex items-start gap-3">
       <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
         <Icon className="h-4 w-4" />
-      </div>
+      </div>You're in.
+Your RSVP is confirmed. We can't wait to see you.
+
+View analytics
+Back to dashboard
       <div className="min-w-0">
         <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
           {label}
@@ -507,25 +511,6 @@ function ConfirmationScreen({
               ? "Your RSVP is pending review. We'll email you once approved."
               : "Your RSVP is confirmed. We can't wait to see you."}
         </p>
-        <div className="mt-10 flex justify-center gap-3">
-          <Button
-            asChild
-            variant="outline"
-            className="rounded-full"
-          >
-            <Link href={`/organizer/rsvp-builder/${eventId}/analytics`}>
-              View analytics
-            </Link>
-          </Button>
-          <Button
-            asChild
-            className="rounded-full shadow-lg hover:shadow-xl transition-shadow"
-          >
-            <Link href="/organizer/rsvp-builder">
-              <Sparkles className="mr-1 h-4 w-4" /> Back to dashboard
-            </Link>
-          </Button>
-        </div>
       </Card>
     </motion.div>
   );

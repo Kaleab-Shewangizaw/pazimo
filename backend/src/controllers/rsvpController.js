@@ -73,7 +73,15 @@ const buildFormPayload = (body = {}) => ({
 
 const assertFormOwnership = async (formId, organizerId) => {
   if (!mongoose.Types.ObjectId.isValid(organizerId)) return null;
-  return RsvpForm.findOne({ _id: formId, organizerId });
+  const query = { organizerId };
+  
+  if (mongoose.Types.ObjectId.isValid(formId)) {
+    query.$or = [{ _id: formId }, { publicId: formId }, { formId: formId }];
+  } else {
+    query.$or = [{ publicId: formId }, { formId: formId }];
+  }
+  
+  return RsvpForm.findOne(query);
 };
 
 const createForm = async (req, res) => {
@@ -124,9 +132,18 @@ const listForms = async (req, res) => {
     if (req.query.type) query.type = req.query.type;
 
     const forms = await RsvpForm.find(query).sort({ updatedAt: -1 }).lean();
+    
+    // Get response counts for all forms
+    const formsWithCounts = await Promise.all(
+      forms.map(async (form) => {
+        const responseCount = await RsvpResponse.countDocuments({ formId: form._id });
+        return { ...form, shareUrl: buildShareUrl(form), responseCount };
+      })
+    );
+    
     return res.json({
       success: true,
-      data: forms.map((form) => ({ ...form, shareUrl: buildShareUrl(form) })),
+      data: formsWithCounts,
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -146,9 +163,12 @@ const getForm = async (req, res) => {
       });
     }
 
+    // Calculate response count
+    const responseCount = await RsvpResponse.countDocuments({ formId: form._id });
+
     return res.json({
       success: true,
-      data: { ...form.toObject(), shareUrl: buildShareUrl(form) },
+      data: { ...form.toObject(), shareUrl: buildShareUrl(form), responseCount },
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -230,16 +250,26 @@ const duplicateForm = async (req, res) => {
       });
     }
 
+    const source = form.toObject();
     const copy = await RsvpForm.create({
-      ...form.toObject(),
-      _id: undefined,
-      formId: undefined,
-      publicId: undefined,
-      slug: undefined,
-      status: "draft",
-      publishedAt: undefined,
-      archivedAt: undefined,
+      organizerId: form.organizerId,
       title: `${form.title} (Copy)`,
+      description: source.description || "",
+      type: source.type,
+      status: "draft",
+      coverImage: source.coverImage || "",
+      date: source.date || "",
+      hostedBy: source.hostedBy || "",
+      startTime: source.startTime || "",
+      endTime: source.endTime || "",
+      location: source.location || "",
+      venue: source.venue || "",
+      rsvpLimit: source.rsvpLimit,
+      approvalMode: source.approvalMode || "auto",
+      payment: source.payment,
+      anonymous: !!source.anonymous,
+      sections: Array.isArray(source.sections) ? source.sections : [],
+      questions: Array.isArray(source.questions) ? source.questions : [],
     });
 
     return res.status(StatusCodes.CREATED).json({
@@ -312,12 +342,20 @@ const submitResponse = async (req, res) => {
   try {
     const form = await RsvpForm.findOne({
       publicId: req.params.publicId,
-      status: "published",
     });
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: "Form not found",
+      });
+    }
+    
+    // Only allow responses for published forms, unless it's for internal preview/testing
+    // Allow draft forms to accept responses for preview/testing purposes
+    if (form.status !== "published" && form.status !== "draft") {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Form is not available for responses",
       });
     }
 

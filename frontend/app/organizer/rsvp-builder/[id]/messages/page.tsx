@@ -65,6 +65,12 @@ export default function Messages() {
   const setResponseTag = useStore((s) => s.setResponseTag);
   const sendBulkMessage = useStore((s) => s.sendBulkMessage);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Set<AttendeeTag>>(
+    new Set(["VIP", "Guest", "Press"])
+  );
+  const [channel, setChannel] = useState<MessageChannel>("email");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
 
   const event = useMemo(() => events.find((e) => e.id === id), [events, id]);
   const responses = useMemo(
@@ -76,12 +82,19 @@ export default function Messages() {
     [allMessages, id]
   );
 
-  const [selected, setSelected] = useState<Set<AttendeeTag>>(
-    new Set(["VIP", "Guest", "Press"])
+  const segmentCounts = useMemo(() => {
+    const c: Record<AttendeeTag, number> = { VIP: 0, Guest: 0, Press: 0 };
+    responses.forEach((r) => {
+      const t = (r.tag || "Guest") as AttendeeTag;
+      c[t] = (c[t] || 0) + 1;
+    });
+    return c;
+  }, [responses]);
+
+  const recipientCount = useMemo(
+    () => Array.from(selected).reduce((sum, s) => sum + (segmentCounts[s] || 0), 0),
+    [selected, segmentCounts]
   );
-  const [channel, setChannel] = useState<MessageChannel>("email");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
 
   useEffect(() => {
     setLoading(true);
@@ -102,21 +115,6 @@ export default function Messages() {
       </div>
     );
   }
-
-  const segmentCounts = useMemo(() => {
-    const c: Record<AttendeeTag, number> = { VIP: 0, Guest: 0, Press: 0 };
-    responses.forEach((r) => {
-      const t = (r.tag || "Guest") as AttendeeTag;
-      c[t] = (c[t] || 0) + 1;
-    });
-    return c;
-  }, [responses]);
-
-  const recipientCount = useMemo(
-    () =>
-      Array.from(selected).reduce((sum, s) => sum + (segmentCounts[s] || 0), 0),
-    [selected, segmentCounts]
-  );
 
   if (!event || event.type !== "rsvp") {
     return (
@@ -167,8 +165,9 @@ export default function Messages() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <main className="container py-10">
-        <div className="flex flex-wrap items-center gap-3">
+      <main className="container mx-auto px-4 py-10 flex flex-col items-center">
+        <div className="w-full max-w-6xl">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
           <Button
             asChild
             variant="ghost"
@@ -460,6 +459,7 @@ export default function Messages() {
               )}
             </Card>
           </div>
+        </div>
         </div>
       </main>
     </div>

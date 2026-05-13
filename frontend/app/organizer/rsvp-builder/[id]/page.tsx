@@ -121,9 +121,10 @@ export default function Builder() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      <main className="container py-8">
+      <main className="container mx-auto px-4 py-8 flex flex-col items-center">
+        <div className="w-full max-w-6xl">
         {/* Header */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 mb-8">
           <Button
             variant="ghost"
             size="sm"
@@ -565,6 +566,7 @@ export default function Builder() {
               </div>
             )}
           </Card>
+        </div>
         </div>
       </main>
     </div>
