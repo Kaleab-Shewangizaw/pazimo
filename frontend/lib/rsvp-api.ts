@@ -50,7 +50,7 @@ type BackendResponse = {
   formPublicId: string;
   organizerId: string;
   answers: Record<string, any>;
-  status: "pending" | "approved" | "paid" | "unpaid";
+  status: "pending" | "approved" | "paid" | "unpaid" | "rejected";
   tag?: AttendeeTag;
   metadata?: Record<string, any>;
   submittedAt: string;
@@ -194,6 +194,17 @@ export const rsvpApi = {
       await request<BackendResponse>(`/rsvp/forms/${id}/responses/${responseId}/tag`, {
         method: "PATCH",
         body: JSON.stringify({ tag }),
+      })
+    ),
+  updateResponseStatus: async (
+    id: string,
+    responseId: string,
+    status: "pending" | "approved" | "paid" | "unpaid" | "rejected"
+  ) =>
+    mapResponse(
+      await request<BackendResponse>(`/rsvp/forms/${id}/responses/${responseId}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
       })
     ),
   getAnalytics: async (id: string) => request(`/rsvp/forms/${id}/analytics`),

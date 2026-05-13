@@ -9,11 +9,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
+  CheckCircle2,
   Download,
   Users,
   TrendingDown,
   Star,
   ThumbsUp,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -33,6 +35,7 @@ export default function Analytics() {
   const allResponses = useStore((s) => s.responses);
   const loadEvent = useStore((s) => s.loadEvent);
   const loadResponses = useStore((s) => s.loadResponses);
+  const updateResponseStatus = useStore((s) => s.updateResponseStatus);
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -203,6 +206,17 @@ export default function Analytics() {
     toast.success("Exported");
   };
 
+  const handleStatusUpdate = async (
+    responseId: string,
+    status: "approved" | "rejected"
+  ) => {
+    await updateResponseStatus(responseId, status);
+    setSelectedResponse((current) =>
+      current && current.id === responseId ? { ...current, status } : current
+    );
+    toast.success(status === "approved" ? "Response approved" : "Response declined");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <main className="container mx-auto px-4 py-10 flex flex-col items-center">
@@ -296,11 +310,11 @@ export default function Analytics() {
                     <th className="py-3 pr-4">Submitted</th>
                     <th className="py-3 pr-4">Status</th>
                     <th className="py-3 pr-4">Actions</th>
-                            {event.questions.slice(0, 3).map((q) => (
-                              <th key={q.id} className="py-3 pr-4 max-w-[200px] truncate hidden md:table-cell">
-                                {q.label}
-                              </th>
-                            ))}
+                    {event.questions.slice(0, 3).map((q) => (
+                      <th key={q.id} className="py-3 pr-4 max-w-[200px] truncate hidden md:table-cell">
+                        {q.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -312,16 +326,36 @@ export default function Analytics() {
                       <td className="py-3 pr-4 text-slate-600 dark:text-slate-400">{new Date(r.submittedAt).toLocaleString()}</td>
                       <td className="py-3 pr-4"><StatusBadge status={r.status} /></td>
                       <td className="py-3 pr-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedResponse(r);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          View
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() => handleStatusUpdate(r.id, "approved")}
+                            disabled={r.status === "approved"}
+                          >
+                            <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
+                            onClick={() => handleStatusUpdate(r.id, "rejected")}
+                            disabled={r.status === "rejected"}
+                          >
+                            <XCircle className="mr-1 h-4 w-4" /> Decline
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedResponse(r);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </div>
                       </td>
                       {event.questions.slice(0, 3).map((q) => (
                         <td key={q.id} className="py-3 pr-4 max-w-[200px] truncate text-slate-900 dark:text-white hidden md:table-cell">
@@ -365,6 +399,26 @@ export default function Analytics() {
               ))}
             </div>
             <DialogFooter className="mt-4">
+              {selectedResponse && (
+                <div className="mr-auto flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={async () => handleStatusUpdate(selectedResponse.id, "approved")}
+                    disabled={selectedResponse.status === "approved"}
+                  >
+                    <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
+                    onClick={async () => handleStatusUpdate(selectedResponse.id, "rejected")}
+                    disabled={selectedResponse.status === "rejected"}
+                  >
+                    <XCircle className="mr-1 h-4 w-4" /> Decline
+                  </Button>
+                </div>
+              )}
               <Button onClick={() => setDialogOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>

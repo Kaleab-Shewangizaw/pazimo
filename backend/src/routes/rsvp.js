@@ -18,5 +18,6 @@ router.patch("/forms/:id/publish", rsvpController.publishForm);
 router.get("/forms/:id/responses", rsvpController.listResponses);
 router.get("/forms/:id/analytics", rsvpController.getAnalytics);
 router.patch("/forms/:id/responses/:responseId/tag", rsvpController.updateResponseTag);
+router.patch("/forms/:id/responses/:responseId/status", rsvpController.updateResponseStatus);
 
 module.exports = router;

@@ -73,7 +73,7 @@ export interface Response {
   id: string;
   eventId: string;
   answers: Record<string, any>;
-  status: "pending" | "approved" | "paid" | "unpaid";
+  status: "pending" | "approved" | "paid" | "unpaid" | "rejected";
   tag?: AttendeeTag;
   submittedAt: string;
 }

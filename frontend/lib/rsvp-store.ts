@@ -36,6 +36,10 @@ interface RsvpStore {
   deleteSection: (eventId: string, sectionId: string) => Promise<void>;
   submitResponse: (data: { eventId: string; answers: Record<string, any>; status: string }) => void;
   setResponseTag: (responseId: string, tag: AttendeeTag) => Promise<void>;
+  updateResponseStatus: (
+    responseId: string,
+    status: "pending" | "approved" | "paid" | "unpaid" | "rejected"
+  ) => Promise<void>;
   sendBulkMessage: (data: {
     eventId: string;
     channel: "email" | "sms" | "push";
@@ -445,6 +449,23 @@ export const useStore = create<RsvpStore>((set, get) => ({
       }));
     } catch (error) {
       console.error("Failed to update RSVP response tag", error);
+    }
+  },
+
+  updateResponseStatus: async (
+    responseId: string,
+    status: "pending" | "approved" | "paid" | "unpaid" | "rejected"
+  ) => {
+    const response = get().responses.find((item) => item.id === responseId);
+    if (!response) return;
+
+    try {
+      const saved = await rsvpApi.updateResponseStatus(response.eventId, responseId, status);
+      set((state) => ({
+        responses: state.responses.map((item) => (item.id === responseId ? saved : item)),
+      }));
+    } catch (error) {
+      console.error("Failed to update RSVP response status", error);
     }
   },
 

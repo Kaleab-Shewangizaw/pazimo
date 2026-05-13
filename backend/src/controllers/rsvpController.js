@@ -472,6 +472,49 @@ const updateResponseTag = async (req, res) => {
   }
 };
 
+const updateResponseStatus = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user._id);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    const status = req.body.status;
+    if (!["pending", "approved", "paid", "unpaid", "rejected"].includes(status)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid status",
+      });
+    }
+
+    const response = await RsvpResponse.findOneAndUpdate(
+      { _id: req.params.responseId, formId: form._id },
+      { status },
+      { new: true }
+    );
+
+    if (!response) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Response not found",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: response,
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const getAnalytics = async (req, res) => {
   try {
     const form = await assertFormOwnership(req.params.id, req.user._id);
@@ -563,5 +606,6 @@ module.exports = {
   submitResponse,
   listResponses,
   updateResponseTag,
+  updateResponseStatus,
   getAnalytics,
 };

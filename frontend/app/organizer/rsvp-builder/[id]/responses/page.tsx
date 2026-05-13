@@ -15,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, Download, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ResponsesPage() {
@@ -26,6 +26,7 @@ export default function ResponsesPage() {
   const allResponses = useStore((s) => s.responses);
   const loadEvent = useStore((s) => s.loadEvent);
   const loadResponses = useStore((s) => s.loadResponses);
+  const updateResponseStatus = useStore((s) => s.updateResponseStatus);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
@@ -82,6 +83,17 @@ export default function ResponsesPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleStatusUpdate = async (
+    responseId: string,
+    status: "approved" | "rejected"
+  ) => {
+    await updateResponseStatus(responseId, status);
+    setSelectedResponse((current) =>
+      current && current.id === responseId ? { ...current, status } : current
+    );
+    toast.success(status === "approved" ? "Response approved" : "Response declined");
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
@@ -106,18 +118,18 @@ export default function ResponsesPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <main className="container mx-auto px-4 py-10 flex flex-col items-center">
         <div className="w-full max-w-6xl">
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <Button asChild variant="ghost" size="sm" className="rounded-full">
-            <Link href={`/organizer/rsvp-builder/${event.id}/analytics`}>
-              <ArrowLeft className="mr-1 h-4 w-4" /> Back to analytics
-            </Link>
-          </Button>
-          <div className="ml-auto flex gap-2">
-            <Button onClick={exportCsv} className="rounded-full shadow-lg hover:shadow-xl transition-shadow">
-              <Download className="mr-1 h-4 w-4" /> Export CSV
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <Button asChild variant="ghost" size="sm" className="rounded-full">
+              <Link href={`/organizer/rsvp-builder/${event.id}/analytics`}>
+                <ArrowLeft className="mr-1 h-4 w-4" /> Back to analytics
+              </Link>
             </Button>
+            <div className="ml-auto flex gap-2">
+              <Button onClick={exportCsv} className="rounded-full shadow-lg hover:shadow-xl transition-shadow">
+                <Download className="mr-1 h-4 w-4" /> Export CSV
+              </Button>
+            </div>
           </div>
-        </div>
 
         <div className="mt-6">
           <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
@@ -169,16 +181,36 @@ export default function ResponsesPage() {
                         </Badge>
                       </td>
                       <td className="py-3 pr-4">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedResponse(response);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          View
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() => handleStatusUpdate(response.id, "approved")}
+                            disabled={response.status === "approved"}
+                          >
+                            <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
+                            onClick={() => handleStatusUpdate(response.id, "rejected")}
+                            disabled={response.status === "rejected"}
+                          >
+                            <XCircle className="mr-1 h-4 w-4" /> Decline
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedResponse(response);
+                              setDialogOpen(true);
+                            }}
+                          >
+                            View
+                          </Button>
+                        </div>
                       </td>
                       {event.questions.map((q) => {
                         const value = response.answers[q.id];
@@ -225,6 +257,26 @@ export default function ResponsesPage() {
               ))}
             </div>
             <DialogFooter className="mt-4">
+              {selectedResponse && (
+                <div className="mr-auto flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={async () => handleStatusUpdate(selectedResponse.id, "approved")}
+                    disabled={selectedResponse.status === "approved"}
+                  >
+                    <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
+                    onClick={async () => handleStatusUpdate(selectedResponse.id, "rejected")}
+                    disabled={selectedResponse.status === "rejected"}
+                  >
+                    <XCircle className="mr-1 h-4 w-4" /> Decline
+                  </Button>
+                </div>
+              )}
               <Button onClick={() => setDialogOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
