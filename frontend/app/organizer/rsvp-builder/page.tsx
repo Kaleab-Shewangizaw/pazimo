@@ -41,6 +41,9 @@ export default function RSVPDashboard() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<"rsvp" | "review">("rsvp");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteEventId, setDeleteEventId] = useState<string | null>(null);
+  const [deleteInputValue, setDeleteInputValue] = useState("");
 
   useEffect(() => {
     void loadEvents().catch(() => toast.error("Failed to load RSVP forms"));
@@ -61,6 +64,28 @@ export default function RSVPDashboard() {
     setOpen(false);
     setName("");
     router.push(`/organizer/rsvp-builder/${id}`);
+  };
+
+  const onOpenDeleteDialog = (eventId: string) => {
+    setDeleteEventId(eventId);
+    setDeleteInputValue("");
+    setDeleteDialogOpen(true);
+  };
+
+  const onConfirmDelete = async () => {
+    const eventToDelete = events.find((e) => e.id === deleteEventId);
+    if (!eventToDelete) return;
+
+    if (deleteInputValue.trim() !== eventToDelete.name) {
+      toast.error("Event name does not match. Please try again.");
+      return;
+    }
+
+    void deleteEvent(deleteEventId!);
+    setDeleteDialogOpen(false);
+    setDeleteEventId(null);
+    setDeleteInputValue("");
+    toast.success("Event deleted successfully");
   };
 
   return (
@@ -218,10 +243,7 @@ export default function RSVPDashboard() {
                           size="icon"
                           variant="ghost"
                           className="h-8 w-8 rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
-                          onClick={() => {
-                            void deleteEvent(e.id);
-                            toast.success("Deleted");
-                          }}
+                          onClick={() => onOpenDeleteDialog(e.id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
@@ -254,6 +276,51 @@ export default function RSVPDashboard() {
         )}
       </main>
 
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="rounded-2xl max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold text-red-600 dark:text-red-400">
+              Delete event?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-slate-600 dark:text-slate-400">
+              This action cannot be undone. All responses and data associated with this event will be permanently deleted.
+            </p>
+            <div>
+              <label className="text-sm font-medium text-slate-900 dark:text-white">
+                Type the event name to confirm: <span className="text-red-600 dark:text-red-400 font-semibold">"{events.find((e) => e.id === deleteEventId)?.name}"</span>
+              </label>
+              <Input
+                value={deleteInputValue}
+                onChange={(e) => setDeleteInputValue(e.target.value)}
+                placeholder="Event name"
+                className="mt-2 h-11 rounded-xl"
+              />
+            </div>
+          </div>
+          <DialogFooter className="pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              className="rounded-full"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={onConfirmDelete}
+              disabled={deleteInputValue.trim() !== events.find((e) => e.id === deleteEventId)?.name}
+              variant="destructive"
+              className="rounded-full shadow-lg hover:shadow-xl transition-shadow"
+            >
+              Delete event
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Event Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-2xl max-w-lg">
           <DialogHeader>

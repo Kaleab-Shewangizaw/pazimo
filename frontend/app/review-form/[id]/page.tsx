@@ -223,16 +223,16 @@ function ReviewContent() {
                 Thank you.
               </h1>
               <p className="mt-3 text-slate-600 dark:text-slate-400">
-                Your feedback helps shape the next experience.
+                Your feedback has been submitted successfully.
               </p>
-              <Button
+              {/* <Button
                 asChild
                 className="mt-8 rounded-full shadow-lg hover:shadow-xl transition-shadow"
               >
                 <Link href={`/organizer/rsvp-builder/${event.id}/analytics`}>
                   See results
                 </Link>
-              </Button>
+              </Button> */}
             </Card>
           </motion.div>
         )}
