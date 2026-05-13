@@ -7,7 +7,7 @@ import type { RsvpEvent } from "@/lib/rsvp-types";
 import { rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Check, Lock } from "lucide-react";
+import { Check, Calendar, Clock, Lock, MapPin, Users } from "lucide-react";
 import { FieldRenderer } from "@/app/rsvp-form/[id]/page";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { ArrowLeft } from "lucide-react";
@@ -129,36 +129,20 @@ function ReviewContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
-      {isPreview && (
-        <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-950/80 backdrop-blur-sm">
-          <div className="container flex h-16 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full h-9"
-                onClick={() => router.push(`/organizer/rsvp-builder/${event?.id || mongoId}`)}
-              >
-                <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Editor
-              </Button>
-              <h1 className="font-semibold text-slate-900 dark:text-white">
-                {event?.name}
-              </h1>
-            </div>
-            <span className="text-[10px] uppercase tracking-widest font-bold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 px-2.5 py-1 rounded-full">
-              Preview Mode
-            </span>
-          </div>
-        </header>
-      )}
-
       <main className="container mx-auto max-w-2xl py-10 md:py-16">
         {!done ? (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            {!done && event.coverImage && (
+              <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
+                <img
+                  src={event.coverImage}
+                  alt={event.name}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            )}
+
             <div className="text-center">
-              <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                Quick feedback
-              </p>
               <h1 className="mt-2 text-4xl md:text-5xl font-semibold tracking-tight text-slate-900 dark:text-white">
                 {event.name}
               </h1>
@@ -173,6 +157,60 @@ function ReviewContent() {
                 </p>
               )}
             </div>
+
+            {(event.date || event.hostedBy || event.location || event.venue || event.startTime || event.endTime) && (
+              <Card className="mt-8 rounded-2xl bg-white dark:bg-slate-800 p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {event.date && (
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900 p-3">
+                      <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Date</div>
+                        <div className="text-sm text-slate-900 dark:text-white">{event.date}</div>
+                      </div>
+                    </div>
+                  )}
+                  {event.hostedBy && (
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900 p-3">
+                      <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Hosted by</div>
+                        <div className="text-sm text-slate-900 dark:text-white">{event.hostedBy}</div>
+                      </div>
+                    </div>
+                  )}
+                  {event.location && (
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900 p-3">
+                      <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Location</div>
+                        <div className="text-sm text-slate-900 dark:text-white">{event.location}</div>
+                      </div>
+                    </div>
+                  )}
+                  {event.venue && (
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900 p-3">
+                      <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Venue</div>
+                        <div className="text-sm text-slate-900 dark:text-white">{event.venue}</div>
+                      </div>
+                    </div>
+                  )}
+                  {(event.startTime || event.endTime) && (
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-50 dark:bg-slate-900 p-3 sm:col-span-2">
+                      <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">Time</div>
+                        <div className="text-sm text-slate-900 dark:text-white">
+                          {[event.startTime, event.endTime].filter(Boolean).join(" - ")}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
 
             <Card className="mt-8 rounded-2xl bg-white dark:bg-slate-800 p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-700">
               <div className="space-y-7">

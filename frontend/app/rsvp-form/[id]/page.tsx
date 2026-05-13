@@ -428,6 +428,20 @@ function EventDetail({
         )}
       </div>
 
+      {(dateLabel || timeLabel || event.location || event.venue || event.hostedBy) && (
+        <Card className="mt-8 rounded-2xl bg-white dark:bg-slate-800 p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {event.hostedBy && (
+              <DetailRow icon={Users} label="Hosted by" value={event.hostedBy} />
+            )}
+            {dateLabel && <DetailRow icon={Calendar} label="Date" value={dateLabel} />}
+            {timeLabel && <DetailRow icon={Clock} label="Time" value={timeLabel} />}
+            {event.location && <DetailRow icon={MapPin} label="Location" value={event.location} />}
+            {event.venue && <DetailRow icon={MapPin} label="Venue" value={event.venue} />}
+          </div>
+        </Card>
+      )}
+
 
       <div className="mt-8 flex flex-col items-center gap-3">
         <Button
@@ -461,11 +475,7 @@ function DetailRow({
     <div className="flex items-start gap-3">
       <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
         <Icon className="h-4 w-4" />
-      </div>You're in.
-Your RSVP is confirmed. We can't wait to see you.
-
-View analytics
-Back to dashboard
+      </div>
       <div className="min-w-0">
         <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
           {label}

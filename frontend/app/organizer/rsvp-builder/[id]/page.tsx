@@ -287,284 +287,290 @@ export default function Builder() {
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Settings</h2>
             </div>
 
-            {event.type === "rsvp" ? (
-              <div className="mt-6 space-y-5">
+            <div className="mt-6 space-y-5">
+              <div>
+                <Label className="text-sm text-slate-900 dark:text-white">
+                  Cover image
+                </Label>
+                <div className="mt-1.5 space-y-3">
+                  {event.coverImage && (
+                    <div className="relative w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600 aspect-video bg-slate-100 dark:bg-slate-700">
+                      <img
+                        src={typeof event.coverImage === "string" && event.coverImage.startsWith("data:") ? event.coverImage : event.coverImage}
+                        alt="Cover preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          updateEvent(event.id, { coverImage: ev.target?.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm text-slate-900 dark:text-white">
+                  Hosted by
+                </Label>
+                <Input
+                  value={event.hostedBy || ""}
+                  onChange={(e) =>
+                    updateEvent(event.id, { hostedBy: e.target.value })
+                  }
+                  className="mt-1.5 h-10 rounded-lg"
+                />
+              </div>
+
+              {event.type === "rsvp" && (
+                <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-sm text-slate-900 dark:text-white">Date</Label>
+                  <Input
+                    type="date"
+                    value={event.date || ""}
+                    onChange={(e) => updateEvent(event.id, { date: e.target.value })}
+                    className="mt-1.5 h-10 rounded-lg"
+                  />
+                </div>
                 <div>
                   <Label className="text-sm text-slate-900 dark:text-white">
-                    Cover image
+                    Start time
                   </Label>
-                  <div className="mt-1.5 space-y-3">
-                    {event.coverImage && (
-                      <div className="relative w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600 aspect-video bg-slate-100 dark:bg-slate-700">
-                        <img
-                          src={typeof event.coverImage === 'string' && event.coverImage.startsWith('data:') ? event.coverImage : event.coverImage}
-                          alt="Cover preview"
-                          className="w-full h-full object-cover"
-                        />
+                  <Input
+                    type="time"
+                    value={event.startTime || ""}
+                    onChange={(e) =>
+                      updateEvent(event.id, { startTime: e.target.value })
+                    }
+                    className="mt-1.5 h-10 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm text-slate-900 dark:text-white">
+                    End time
+                  </Label>
+                  <Input
+                    type="time"
+                    value={event.endTime || ""}
+                    onChange={(e) =>
+                      updateEvent(event.id, { endTime: e.target.value })
+                    }
+                    className="mt-1.5 h-10 rounded-lg"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm text-slate-900 dark:text-white">
+                  Location
+                </Label>
+                <Input
+                  value={event.location || ""}
+                  onChange={(e) =>
+                    updateEvent(event.id, { location: e.target.value })
+                  }
+                  placeholder="Address"
+                  className="mt-1.5 h-10 rounded-lg"
+                />
+              </div>
+              <div>
+                <Label className="text-sm text-slate-900 dark:text-white">
+                  Venue / area
+                </Label>
+                <Input
+                  value={event.venue || ""}
+                  onChange={(e) =>
+                    updateEvent(event.id, { venue: e.target.value })
+                  }
+                  placeholder="Neighborhood, city"
+                  className="mt-1.5 h-10 rounded-lg"
+                />
+              </div>
+
+                  <div>
+                    <Label className="text-sm text-slate-900 dark:text-white">
+                      RSVP limit
+                    </Label>
+                    <Input
+                      type="number"
+                      value={event.rsvpLimit ?? ""}
+                      onChange={(e) =>
+                        updateEvent(event.id, {
+                          rsvpLimit: Number(e.target.value) || undefined,
+                        })
+                      }
+                      className="mt-1.5 h-10 rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-sm text-slate-900 dark:text-white">
+                      Approval mode
+                    </Label>
+                    <Select
+                      value={event.approvalMode}
+                      onValueChange={(v: any) =>
+                        updateEvent(event.id, { approvalMode: v })
+                      }
+                    >
+                      <SelectTrigger className="mt-1.5 h-10 rounded-lg">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Automatic — instant RSVP</SelectItem>
+                        <SelectItem value="manual">Manual — organizer reviews</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-sm font-medium text-slate-900 dark:text-white">
+                          Require payment after RSVP
+                        </Label>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+                          Tickets issue after payment.
+                        </p>
                       </div>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => {
-                            updateEvent(event.id, { coverImage: ev.target?.result as string });
-                          };
-                          reader.readAsDataURL(file);
+                      <Switch
+                        checked={!!event.payment?.enabled}
+                        onCheckedChange={(v) =>
+                          updateEvent(event.id, {
+                            payment: {
+                              ...(event.payment || {
+                                price: 0,
+                                currency: "USD",
+                              }),
+                              enabled: v,
+                            },
+                          })
                         }
-                      }}
-                      className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-sm text-slate-900 dark:text-white">Date</Label>
-                    <Input
-                      type="date"
-                      value={event.date || ""}
-                      onChange={(e) => updateEvent(event.id, { date: e.target.value })}
-                      className="mt-1.5 h-10 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-slate-900 dark:text-white">
-                      Hosted by
-                    </Label>
-                    <Input
-                      value={event.hostedBy || ""}
-                      onChange={(e) =>
-                        updateEvent(event.id, { hostedBy: e.target.value })
-                      }
-                      className="mt-1.5 h-10 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-slate-900 dark:text-white">
-                      Start time
-                    </Label>
-                    <Input
-                      type="time"
-                      value={event.startTime || ""}
-                      onChange={(e) =>
-                        updateEvent(event.id, { startTime: e.target.value })
-                      }
-                      className="mt-1.5 h-10 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-sm text-slate-900 dark:text-white">
-                      End time
-                    </Label>
-                    <Input
-                      type="time"
-                      value={event.endTime || ""}
-                      onChange={(e) =>
-                        updateEvent(event.id, { endTime: e.target.value })
-                      }
-                      className="mt-1.5 h-10 rounded-lg"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm text-slate-900 dark:text-white">
-                    Location
-                  </Label>
-                  <Input
-                    value={event.location || ""}
-                    onChange={(e) =>
-                      updateEvent(event.id, { location: e.target.value })
-                    }
-                    placeholder="Address"
-                    className="mt-1.5 h-10 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm text-slate-900 dark:text-white">
-                    Venue / area
-                  </Label>
-                  <Input
-                    value={event.venue || ""}
-                    onChange={(e) =>
-                      updateEvent(event.id, { venue: e.target.value })
-                    }
-                    placeholder="Neighborhood, city"
-                    className="mt-1.5 h-10 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <Label className="text-sm text-slate-900 dark:text-white">
-                    RSVP limit
-                  </Label>
-                  <Input
-                    type="number"
-                    value={event.rsvpLimit ?? ""}
-                    onChange={(e) =>
-                      updateEvent(event.id, {
-                        rsvpLimit: Number(e.target.value) || undefined,
-                      })
-                    }
-                    className="mt-1.5 h-10 rounded-lg"
-                  />
-                </div>
+                      />
+                    </div>
 
-                <div>
-                  <Label className="text-sm text-slate-900 dark:text-white">
-                    Approval mode
-                  </Label>
-                  <Select
-                    value={event.approvalMode}
-                    onValueChange={(v: any) =>
-                      updateEvent(event.id, { approvalMode: v })
-                    }
-                  >
-                    <SelectTrigger className="mt-1.5 h-10 rounded-lg">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="auto">Automatic — instant RSVP</SelectItem>
-                      <SelectItem value="manual">Manual — organizer reviews</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                    <AnimatePresence>
+                      {event.payment?.enabled && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-4 grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs text-slate-900 dark:text-white">
+                                Price
+                              </Label>
+                              <Input
+                                type="number"
+                                value={event.payment.price}
+                                onChange={(e) =>
+                                  updateEvent(event.id, {
+                                    payment: {
+                                      ...event.payment!,
+                                      price: Number(e.target.value),
+                                    },
+                                  })
+                                }
+                                className="mt-1 h-10 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs text-slate-900 dark:text-white">
+                                Currency
+                              </Label>
+                              <Select
+                                value={event.payment.currency}
+                                onValueChange={(v) =>
+                                  updateEvent(event.id, {
+                                    payment: {
+                                      ...event.payment!,
+                                      currency: v,
+                                    },
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="mt-1 h-10 rounded-lg">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {["USD", "EUR", "GBP", "AED", "SAR", "INR", "ETB"].map((c) => (
+                                    <SelectItem key={c} value={c}>
+                                      {c}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-xs text-slate-900 dark:text-white">
+                                Payment deadline
+                              </Label>
+                              <Input
+                                type="date"
+                                value={event.payment.deadline || ""}
+                                onChange={(e) =>
+                                  updateEvent(event.id, {
+                                    payment: {
+                                      ...event.payment!,
+                                      deadline: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="mt-1 h-10 rounded-lg"
+                              />
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
+                )}
 
-                <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30">
-                  <div className="flex items-center justify-between">
+              {event.type === "review" && (
+                <>
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
                     <div>
                       <Label className="text-sm font-medium text-slate-900 dark:text-white">
-                        Require payment after RSVP
+                        Anonymous responses
                       </Label>
                       <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                        Tickets issue after payment.
+                        Hide attendee identity.
                       </p>
                     </div>
                     <Switch
-                      checked={!!event.payment?.enabled}
+                      checked={!!event.anonymous}
                       onCheckedChange={(v) =>
-                        updateEvent(event.id, {
-                          payment: {
-                            ...(event.payment || {
-                              price: 0,
-                              currency: "USD",
-                            }),
-                            enabled: v,
-                          },
-                        })
+                        updateEvent(event.id, { anonymous: v })
                       }
                     />
                   </div>
 
-                  <AnimatePresence>
-                    {event.payment?.enabled && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="mt-4 grid grid-cols-2 gap-3">
-                          <div>
-                            <Label className="text-xs text-slate-900 dark:text-white">
-                              Price
-                            </Label>
-                            <Input
-                              type="number"
-                              value={event.payment.price}
-                              onChange={(e) =>
-                                updateEvent(event.id, {
-                                  payment: {
-                                    ...event.payment!,
-                                    price: Number(e.target.value),
-                                  },
-                                })
-                              }
-                              className="mt-1 h-10 rounded-lg"
-                            />
-                          </div>
-                          <div>
-                            <Label className="text-xs text-slate-900 dark:text-white">
-                              Currency
-                            </Label>
-                            <Select
-                              value={event.payment.currency}
-                              onValueChange={(v) =>
-                                updateEvent(event.id, {
-                                  payment: {
-                                    ...event.payment!,
-                                    currency: v,
-                                  },
-                                })
-                              }
-                            >
-                              <SelectTrigger className="mt-1 h-10 rounded-lg">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {["USD", "EUR", "GBP", "AED", "SAR", "INR", "ETB"].map((c) => (
-                                  <SelectItem key={c} value={c}>
-                                    {c}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="col-span-2">
-                            <Label className="text-xs text-slate-900 dark:text-white">
-                              Payment deadline
-                            </Label>
-                            <Input
-                              type="date"
-                              value={event.payment.deadline || ""}
-                              onChange={(e) =>
-                                updateEvent(event.id, {
-                                  payment: {
-                                    ...event.payment!,
-                                    deadline: e.target.value,
-                                  },
-                                })
-                              }
-                              className="mt-1 h-10 rounded-lg"
-                            />
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-6 space-y-5">
-                <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
-                  <div>
-                    <Label className="text-sm font-medium text-slate-900 dark:text-white">
-                      Anonymous responses
-                    </Label>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                      Hide attendee identity.
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 text-sm">
+                    <p className="font-medium text-blue-900 dark:text-blue-300">
+                      Conditional logic
+                    </p>
+                    <p className="mt-1 text-slate-600 dark:text-slate-400 text-xs">
+                      Add a Long Text question and set its condition to a previous
+                      Rating or NPS question to ask follow-ups only when needed.
                     </p>
                   </div>
-                  <Switch
-                    checked={!!event.anonymous}
-                    onCheckedChange={(v) =>
-                      updateEvent(event.id, { anonymous: v })
-                    }
-                  />
-                </div>
-
-                <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 text-sm">
-                  <p className="font-medium text-blue-900 dark:text-blue-300">
-                    Conditional logic
-                  </p>
-                  <p className="mt-1 text-slate-600 dark:text-slate-400 text-xs">
-                    Add a Long Text question and set its condition to a previous
-                    Rating or NPS question to ask follow-ups only when needed.
-                  </p>
-                </div>
-              </div>
-            )}
+                </>
+              )}
+            </div>
           </Card>
         </div>
         </div>
