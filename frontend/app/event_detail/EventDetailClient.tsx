@@ -934,12 +934,13 @@ export default function EventDetailClient() {
               onClick={handleShare}
             >
               <Share2 className="h-4 w-4" />
+              
             </Button>
           </div>
 
           <div className="flex gap-4 items-start">
             <div className="shrink-0 bg-white dark:bg-[#1A1D24] border border-gray-200 dark:border-white/10 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
-              <div className="text-xs font-medium text-gray-600 dark:text-gray-400 text-yellow-600 dark:text-yellow-400 uppercase tracking-wide">
+              <div className="text-xs font-medium text-gray-600 dark:text-yellow-400 uppercase tracking-wide">
                 {getDayName(event.startDate)}
               </div>
               <div className="text-2xl font-bold text-gray-900 dark:text-white leading-none mt-1">
