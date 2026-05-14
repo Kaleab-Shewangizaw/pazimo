@@ -150,6 +150,16 @@ const initiateChapaInvitationPayment = async (req, res) => {
         successUrl ||
         `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success?txn=${transactionId}`;
 
+      // ⚠️ CRITICAL LOG: Verify return_url is correct for Visa/Cardinal Commerce redirect
+      console.log(`[CHAPA-INVITE] 🔴 CRITICAL - Chapa Redirect Configuration:`, {
+        transactionId,
+        returnUrl,
+        frontendUrl: process.env.FRONTEND_URL,
+        nodeEnv: process.env.NODE_ENV,
+        callbackUrl: chapaCallbackUrl,
+        paymentMethod: reqPaymentMethod,
+      });
+
     // Map payment method to Chapa supported types (case-sensitive)
     let chapaType = "telebirr"; // Default
     if (reqPaymentMethod) {

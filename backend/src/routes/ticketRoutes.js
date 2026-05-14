@@ -361,6 +361,16 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       req.body.successUrl ||
       `${process.env.FRONTEND_URL || "http://localhost:3000"}/payment/success?txn=${transactionId}`;
 
+    // ⚠️ CRITICAL LOG: Verify return_url is correct for Visa/Cardinal Commerce redirect
+    console.log(`[CHAPA-INIT] 🔴 CRITICAL - Chapa Redirect Configuration:`, {
+      transactionId,
+      returnUrl,
+      frontendUrl: process.env.FRONTEND_URL,
+      nodeEnv: process.env.NODE_ENV,
+      callbackUrl: chapaCallbackUrl,
+      paymentMethod: method,
+    });
+
     // Map payment method to Chapa supported types (case-sensitive)
     let chapaType = "telebirr"; // Default
     let useWebCheckout = false; // Flag for web checkout vs direct charge
@@ -426,12 +436,14 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
           },
         };
         
-        console.log(`[CHAPA-INIT] Sending to Chapa.initialize():`, {
+        console.log(`[CHAPA-INIT] 🟢 Web Checkout Payload (Visa Card Payment):`, {
           amount: initializePayload.amount,
           currency: initializePayload.currency,
           email: initializePayload.email,
           tx_ref: initializePayload.tx_ref,
           phone_number: initializePayload.phone_number,
+          return_url: initializePayload.return_url,
+          callback_url: initializePayload.callback_url,
         });
         
         response = await ChapaService.initialize(initializePayload);

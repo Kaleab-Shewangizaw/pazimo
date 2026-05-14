@@ -1153,7 +1153,8 @@ export default function EventDetailClient() {
                             {ticketsToDisplay.map((ticketType) => (
                               <div
                                 key={ticketType.name}
-                                className="flex items-center justify-between space-x-2 border border-gray-200 dark:border-white/10 rounded-lg p-4"
+                                onClick={() => setSelectedTicketType(ticketType.name)}
+                                className="flex items-center justify-between space-x-2 border border-gray-200 dark:border-white/10 rounded-lg p-4 cursor-pointer hover:border-gray-300 dark:hover:border-white/20 transition-colors"
                               >
                                 <div className="flex items-center space-x-2">
                                   <RadioGroupItem
@@ -1163,7 +1164,7 @@ export default function EventDetailClient() {
                                   <div>
                                     <Label
                                       htmlFor={ticketType.name}
-                                      className="font-medium text-gray-900 dark:text-white"
+                                      className="font-medium text-gray-900 dark:text-white cursor-pointer"
                                     >
                                       {ticketType.name}
                                     </Label>
@@ -1410,6 +1411,7 @@ export default function EventDetailClient() {
                         {ticketsToDisplay.map((ticketType) => (
                           <div
                             key={ticketType.name}
+                            onClick={() => setSelectedTicketType(ticketType.name)}
                             className={`flex items-center justify-between gap-3 border rounded-xl p-4 cursor-pointer transition-colors ${selectedTicketType === ticketType.name
                               ? "border-[#0D47A1]/50 bg-blue-50/60 dark:border-yellow-500/50 dark:bg-yellow-500/10"
                               : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"

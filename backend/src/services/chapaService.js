@@ -43,6 +43,7 @@ class ChapaService {
       tx_ref: payload.tx_ref,
       phone_number: payload.phone_number ? payload.phone_number.substring(0, 8) + "***" : "(omitted - international number)",
       callback_url: payload.callback_url?.substring(0, 40) + "...",
+      return_url: payload.return_url,
       hide_receipt: payload.meta?.hide_receipt,
     });
 
