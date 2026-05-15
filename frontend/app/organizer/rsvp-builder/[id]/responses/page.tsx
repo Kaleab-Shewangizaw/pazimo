@@ -191,15 +191,17 @@ export default function ResponsesPage() {
                           >
                             <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
-                            onClick={() => handleStatusUpdate(response.id, "rejected")}
-                            disabled={response.status === "rejected"}
-                          >
-                            <XCircle className="mr-1 h-4 w-4" /> Decline
-                          </Button>
+                          {response.status !== "approved" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
+                              onClick={() => handleStatusUpdate(response.id, "rejected")}
+                              disabled={response.status === "rejected"}
+                            >
+                              <XCircle className="mr-1 h-4 w-4" /> Decline
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

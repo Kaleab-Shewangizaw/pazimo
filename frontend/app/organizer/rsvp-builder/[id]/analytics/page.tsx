@@ -336,15 +336,17 @@ export default function Analytics() {
                           >
                             <CheckCircle2 className="mr-1 h-4 w-4" /> Approve
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
-                            onClick={() => handleStatusUpdate(r.id, "rejected")}
-                            disabled={r.status === "rejected"}
-                          >
-                            <XCircle className="mr-1 h-4 w-4" /> Decline
-                          </Button>
+                          {r.status !== "approved" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="rounded-full text-red-600 hover:text-red-600 dark:text-red-400"
+                              onClick={() => handleStatusUpdate(r.id, "rejected")}
+                              disabled={r.status === "rejected"}
+                            >
+                              <XCircle className="mr-1 h-4 w-4" /> Decline
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
