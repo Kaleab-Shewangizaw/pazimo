@@ -6,6 +6,7 @@ import { ArrowRight, Calendar, MapPin, ImageIcon, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import { buildEventUrl } from "@/lib/event-url";
 
 export type FeaturedEventCardData = {
   id: string;
@@ -38,7 +39,7 @@ export default function FeaturedEventCard({
   showCTA = true,
   index = 0,
 }: FeaturedEventCardProps) {
-  const href = data.href || `/event_detail?id=${data.id}`;
+  const href = data.href || buildEventUrl(data);
   const isWishlisted = wishlist.includes(data.id);
   const ref = useRef<HTMLDivElement>(null);
   const [animClass, setAnimClass] = useState("card-hidden");

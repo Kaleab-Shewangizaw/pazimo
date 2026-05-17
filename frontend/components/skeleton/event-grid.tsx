@@ -277,7 +277,7 @@ export default function EventGrid({
             key={event._id}
             data={{
               id: event._id,
-              href: `/event_detail?id=${event._id}`,
+              href: buildEventUrl(event),
               title: event.title,
               tag: event.category?.name || "",
               dateLabel: new Date(event.startDate).toLocaleDateString(

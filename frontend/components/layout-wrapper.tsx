@@ -22,7 +22,7 @@ export default function LayoutWrapper({
   const isAdminRoute = pathname?.startsWith("/admin");
   const isSignIn = pathname?.startsWith("/sign-in");
   const isOrganizerRoute = pathname?.startsWith("/organizer");
-  const isEventDetail = pathname?.startsWith("/event_detail");
+  const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isSignatureInvitation = pathname?.includes(
     "/guest-invitation/signature"
   );

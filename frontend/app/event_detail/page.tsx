@@ -1,122 +1,34 @@
-import { Metadata } from "next";
-import { Suspense } from "react";
-import EventDetailClient from "./EventDetailClient";
+import { redirect } from "next/navigation";
 
 type Props = {
   searchParams: Promise<{ id?: string }>;
 };
 
-export async function generateMetadata({
-  searchParams,
-}: Props): Promise<Metadata> {
+export default async function EventDetailPage({ searchParams }: Props) {
   const resolvedSearchParams = await searchParams;
   const eventId = resolvedSearchParams.id;
 
   if (!eventId) {
-    return {
-      title: "Event Not Found",
-      description: "The requested event could not be found.",
-    };
+    redirect("/event_explore");
   }
 
   try {
-    const res = await fetch(
+    const response = await fetch(
       `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`,
-      { next: { revalidate: 60 } }
+      { cache: "no-store" }
     );
 
-    if (!res.ok) throw new Error("Event not found");
+    if (!response.ok) {
+      redirect("/event_explore");
+    }
 
-    const { data: event } = await res.json();
+    const { data: event } = await response.json();
+    if (!event?.slug || !event?.shortId) {
+      redirect("/event_explore");
+    }
 
-    const title = `${event.title} | Buy Tickets Online`;
-    const description =
-      event.description?.slice(0, 160) ||
-      `Join ${event.title} on ${new Date(
-        event.startDate
-      ).toLocaleDateString()}. Get your tickets now!`;
-
-    const coverImage = event.coverImages?.[0]
-      ? event.coverImages[0].startsWith("http")
-        ? event.coverImages[0]
-        : `${process.env.NEXT_PUBLIC_API_URL}${
-            event.coverImages[0].startsWith("/")
-              ? event.coverImages[0]
-              : `/${event.coverImages[0]}`
-          }`
-      : null;
-
-    const ogImage = coverImage || "/og-fallback.png";
-
-    const url = `${
-      process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.com"
-    }/event_detail?id=${eventId}`;
-
-    return {
-      title,
-      description,
-      keywords: [
-        event.title,
-        event.title.split(" ")[0],
-        event.title.split(" ")[1],
-        event.title.split(" ")[2],
-        event.title.split(" ")[3],
-        event.category?.name,
-        "event tickets",
-        "Ethiopia events",
-        "buy tickets online",
-        event.location.city,
-        "ethiopia",
-        "dance",
-        "music",
-        "festival",
-        "festival in Ethiopia",
-        "concert",
-        "theater",
-        "workshop",
-        "networking",
-        "sports event",
-        "art exhibition",
-        "cultural event",
-        "sport in ethiopia",
-      ].filter(Boolean),
-      openGraph: {
-        title,
-        description,
-        url,
-        siteName: "Pazimo",
-        images: [{ url: ogImage, width: 1200, height: 630, alt: event.title }],
-        locale: "en_US",
-        type: "website",
-      },
-      twitter: {
-        card: "summary_large_image",
-        title,
-        description,
-        images: [ogImage],
-      },
-      robots: { index: true, follow: true },
-      alternates: { canonical: url },
-    };
+    redirect(`/events/${event.slug}-${event.shortId}`);
   } catch {
-    return {
-      title: "Event Not Found",
-      description: "The event you're looking for is no longer available.",
-      robots: { index: false, follow: false },
-    };
+    redirect("/event_explore");
   }
-}
-
-export default function EventDetailPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-screen bg-white dark:bg-[#0A0A0A] text-gray-900 dark:text-gray-100">
-          Loading event...
-        </div>
-      }
-    >
-      <EventDetailClient />
-    </Suspense>
-  );
 }

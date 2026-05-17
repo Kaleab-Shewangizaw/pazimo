@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
+import { buildEventUrl } from "@/lib/event-url";
 import {
   Dialog,
   DialogContent,
@@ -273,7 +274,7 @@ export default function EventsPage() {
     try {
       const baseUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
-      const shareQrUrl = `${baseUrl}/event_detail?id=${event._id}`;
+      const shareQrUrl = `${baseUrl}${buildEventUrl(event)}`;
       const qrDataUrl = await QRCode.toDataURL(shareQrUrl, {
         width: 300,
         margin: 2,
@@ -304,7 +305,7 @@ export default function EventsPage() {
     if (!qrEvent) return;
     const baseUrl =
       process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
-    const shareQrUrl = `${baseUrl}/event_detail?id=${qrEvent._id}`;
+    const shareQrUrl = `${baseUrl}${buildEventUrl(qrEvent)}`;
     navigator.clipboard.writeText(shareQrUrl);
     toast.success("Buy link copied");
   };

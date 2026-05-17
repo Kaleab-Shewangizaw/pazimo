@@ -39,6 +39,7 @@ import BulkInvite from "./bulkInviteModel";
 import AttendeesModal from "./invitations/AttendeesModal";
 import { useRouter, useSearchParams } from "next/navigation";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
+import { buildEventUrl } from "@/lib/event-url";
 
 interface Event {
   id: number;
@@ -364,7 +365,8 @@ export default function InvitationPage() {
     eventId: number,
     customerName: string,
     contact: string,
-    guestType: "guest" | "paid" = "guest"
+    guestType: "guest" | "paid" = "guest",
+    eventUrl?: string
   ) => {
     try {
       const baseUrl =
@@ -372,7 +374,7 @@ export default function InvitationPage() {
 
       let qrUrl: string;
       if (guestType === "paid") {
-        qrUrl = `${baseUrl}/event_detail?id=${eventId}`;
+        qrUrl = eventUrl || `${baseUrl}/event_explore`;
       } else {
         // For guest type, include event and customer details in QR code
         const guestData = {
@@ -866,7 +868,12 @@ export default function InvitationPage() {
         selectedEvent?.id || 0,
         customerName,
         contact,
-        guestType
+        guestType,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        buildEventUrl(selectedEvent as any)
       );
       const qrCodeLink = qrCodeData.url;
       const eventDetails = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;
@@ -1301,7 +1308,12 @@ export default function InvitationPage() {
             selectedEvent?.id || 0,
             contact.name,
             contact.contact,
-            "guest"
+            "guest",
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            buildEventUrl(selectedEvent as any)
           );
           const qrCodeLink = qrCodeData.url;
           const eventDetailsWithQR = `Event: ${selectedEvent?.title}\nDate: ${selectedEvent?.date}\nTime: ${selectedEvent?.time}\nLocation: ${selectedEvent?.location}\n\nRSVP Link: ${qrCodeLink}`;

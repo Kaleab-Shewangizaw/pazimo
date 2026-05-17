@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import ThemeToggle from "@/components/theme-toggle";
 import { useTheme } from "next-themes";
+import { buildEventUrl } from "@/lib/event-url";
 
 const Header = () => {
   const router = useRouter();
@@ -174,8 +175,8 @@ const Header = () => {
     setDialogOpen(false);
   };
 
-  const handleEventClick = (eventId: string) => {
-    router.push(`/event_detail?id=${eventId}`);
+  const handleEventClick = (event: any) => {
+    router.push(buildEventUrl(event));
     setDialogOpen(false);
     setSearchTerm("");
     setSelectedCategory("");
@@ -410,7 +411,7 @@ const Header = () => {
                         {searchResults.slice(0, visibleResultsCount).map((event) => (
                           <button
                             key={event._id || event.id}
-                            onClick={() => handleEventClick(event._id || event.id)}
+                            onClick={() => handleEventClick(event)}
                             className="w-full px-6 py-4 hover:bg-muted/50 transition-colors text-left group"
                           >
                             <div className="flex justify-between items-start">

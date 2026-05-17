@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import FeaturedEventCard, {
   type FeaturedEventCardData,
 } from "@/components/featured-event-card";
+import { buildEventUrl } from "@/lib/event-url";
 
 import Link from "next/link";
 import { toast } from "sonner";
@@ -269,7 +270,7 @@ export default function UpcomingEvents({
 
     return {
       id: event._id,
-      href: `/event_detail?id=${event._id}`,
+      href: buildEventUrl(event),
       title: event.title,
       tag: event.category?.name || "Uncategorized",
       dateLabel: new Date(event.startDate).toLocaleDateString("en-US", {
@@ -289,6 +290,7 @@ export default function UpcomingEvents({
   if (isLoading) {
     return (
       <div className="px-4 sm:px-8 md:px-16 py-12">
+      href: buildEventUrl(event),
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1a2d5a] mx-auto"></div>
       </div>
     );

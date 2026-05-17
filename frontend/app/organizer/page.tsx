@@ -78,6 +78,7 @@ import {
 } from "recharts";
 import QRCode from "qrcode";
 import { toast } from "sonner";
+import { buildEventUrl } from "@/lib/event-url";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 const SkeletonCard = () => (
@@ -925,7 +926,7 @@ export default function OrganizerDashboard() {
   // QR Code functionality
   const generateQRCode = async (event: any) => {
     try {
-      const shareQrUrl = `${window.location.origin}/events/${event._id}`;
+      const shareQrUrl = `${window.location.origin}${buildEventUrl(event)}`;
       const qrDataUrl = await QRCode.toDataURL(shareQrUrl, {
         width: 300,
         margin: 2,
@@ -952,7 +953,7 @@ export default function OrganizerDashboard() {
 
   const copyBuyLink = () => {
     if (!selectedEvent) return;
-    const shareQrUrl = `${window.location.origin}/events/${selectedEvent._id}`;
+    const shareQrUrl = `${window.location.origin}${buildEventUrl(selectedEvent)}`;
     navigator.clipboard.writeText(shareQrUrl);
     toast.success("Buy link copied");
   };

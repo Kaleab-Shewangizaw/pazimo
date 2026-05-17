@@ -13,6 +13,7 @@ import TrendingEvents, {
 } from "@/components/trending-events";
 import TrendingEventsSkeleton from "@/components/skeleton/trending-events-skeleton";
 import type { Event as CardEvent } from "@/components/upcoming-events";
+import { buildEventUrl } from "@/lib/event-url";
 
 type PublicEventResponse = {
   events: any[];
@@ -158,6 +159,7 @@ const isEventSoldOut = (event: any) => {
 
 const toFeaturedCard = (event: any): FeaturedCardEvent => ({
   id: event._id,
+  href: buildEventUrl(event),
   title: event.title,
   tag: event.category?.name || "Featured",
   dateLabel: new Date(event.startDate).toLocaleDateString("en-GB", {
@@ -175,6 +177,7 @@ const toFeaturedCard = (event: any): FeaturedCardEvent => ({
 
 const toTrendingCard = (event: any): TrendingCardEvent => ({
   id: event._id,
+  href: buildEventUrl(event),
   title: event.title,
   dateLabel: new Date(event.startDate).toLocaleDateString("en-GB", {
     day: "numeric",

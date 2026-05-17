@@ -7,6 +7,7 @@ const { authenticateUser } = require("../middlewares/auth");
 // Public routes
 router.get("/public-events", eventController.getPublicEvents);
 router.get("/", eventController.getAllEvents);
+router.get("/short/:shortId", eventController.getEventDetailsByShortId);
 router.get("/details/:id", eventController.getEventDetails);
 
 // Protected routes

@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/authStore";
 import FeaturedEventCard, {
   type FeaturedEventCardData,
 } from "@/components/featured-event-card";
+import { buildEventUrl } from "@/lib/event-url";
 
 type Event = {
   _id: string;
@@ -138,7 +139,7 @@ export default function WishlistPage() {
 
     return {
       id: event._id,
-      href: `/event_detail?id=${event._id}`,
+      href: buildEventUrl(event),
       title: event.title,
       tag: categoryName,
       dateLabel: formatDate(event.startDate),

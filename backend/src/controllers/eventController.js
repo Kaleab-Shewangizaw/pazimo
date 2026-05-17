@@ -6,6 +6,10 @@ const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const {
+  generateShortId,
+  slugify,
+} = require("../utils/eventUrl");
 
 const toBoolean = (value, fallback = false) => {
   if (typeof value === "boolean") return value;
@@ -144,6 +148,44 @@ const createTicketTypeKey = (ticket = {}) => {
       ? ""
       : String(ticket.waveOrder);
   return `${name}::${waveGroup}::${waveOrder}`;
+};
+
+const ensureEventUrlFields = async (event) => {
+  if (!event) return event;
+
+  let changed = false;
+
+  if (!event.slug && event.title) {
+    event.slug = slugify(event.title);
+    changed = true;
+  }
+
+  if (!event.shortId) {
+    let shortId;
+    let attempts = 0;
+
+    while (!shortId && attempts < 20) {
+      attempts += 1;
+      const candidate = await generateShortId();
+      const existing = await Event.exists({ shortId: candidate });
+      if (!existing) {
+        shortId = candidate;
+      }
+    }
+
+    if (!shortId) {
+      throw new Error("Failed to generate a unique event short ID");
+    }
+
+    event.shortId = shortId;
+    changed = true;
+  }
+
+  if (changed) {
+    await event.save();
+  }
+
+  return event;
 };
 
 // Preserve and infer manual disable intent from admin edits.
@@ -370,7 +412,9 @@ const getOrganizerEvents = async (req, res) => {
     .populate("category", "name description")
     .select("-__v") // Exclude version key
     .sort("-createdAt")
-    .lean(); // Convert to plain JavaScript objects
+    ;
+
+  await Promise.all(events.map((event) => ensureEventUrlFields(event)));
 
   // Optionally include tickets if requested
   if (includeTickets && events.length > 0) {
@@ -561,6 +605,8 @@ const getAllEvents = async (req, res) => {
     .skip((page - 1) * limit)
     .limit(Number(limit));
 
+  await Promise.all(events.map((event) => ensureEventUrlFields(event)));
+
   const eventIds = events.map((event) => event._id);
 
   let ticketStatsByEvent = new Map();
@@ -677,6 +723,8 @@ const getEventDetails = async (req, res) => {
       });
     }
 
+    await ensureEventUrlFields(event);
+
     if (applyTicketAvailabilityRules(event).changed) {
       await event.save();
     }
@@ -684,6 +732,51 @@ const getEventDetails = async (req, res) => {
     res.status(StatusCodes.OK).json({ status: "success", data: event });
   } catch (error) {
     console.error("[EVENT-DETAILS] Error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to fetch event details",
+    });
+  }
+};
+
+const getEventDetailsByShortId = async (req, res) => {
+  try {
+    const { shortId } = req.params;
+
+    if (!shortId || !/^[a-z0-9]{4}$/i.test(shortId)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Invalid event short ID format",
+      });
+    }
+
+    const event = await Event.findOne({ shortId: shortId.toLowerCase() })
+      .populate("category", "name description")
+      .populate({
+        path: "organizer",
+        select: "firstName lastName email",
+        populate: {
+          path: "organizerProfile",
+          select: "organization",
+        },
+      });
+
+    if (!event) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: "error",
+        message: "Event not found",
+      });
+    }
+
+    await ensureEventUrlFields(event);
+
+    if (applyTicketAvailabilityRules(event).changed) {
+      await event.save();
+    }
+
+    res.status(StatusCodes.OK).json({ status: "success", data: event });
+  } catch (error) {
+    console.error("[EVENT-DETAILS-BY-SHORT-ID] Error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: "Failed to fetch event details",
@@ -739,6 +832,8 @@ const getPublicEvents = async (req, res) => {
       findQuery,
       Event.countDocuments(query),
     ]);
+
+      await Promise.all(events.map((event) => ensureEventUrlFields(event)));
 
     for (const event of events) {
       if (applyTicketAvailabilityRules(event).changed) {
@@ -1007,6 +1102,7 @@ module.exports = {
   updateTicketTypes,
   getPublicEvents,
   getEventDetails,
+  getEventDetailsByShortId,
   getWishlist,
   updateWishlist,
   toggleBannerStatus,

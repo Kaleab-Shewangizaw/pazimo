@@ -10,7 +10,8 @@ export const generateQRCode = async (
   eventTitle: string = "Event",
   eventDate: string = "",
   eventTime: string = "",
-  eventLocation: string = ""
+  eventLocation: string = "",
+  eventUrl?: string
 ) => {
   try {
     const baseUrl =
@@ -18,7 +19,7 @@ export const generateQRCode = async (
     let qrUrl: string;
 
     if (guestType === "paid") {
-      qrUrl = `${baseUrl}/event_detail?id=${eventId}`;
+      qrUrl = eventUrl || `${baseUrl}/event_explore`;
     } else {
       const guestData = {
         eventId,

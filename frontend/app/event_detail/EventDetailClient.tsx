@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +53,11 @@ import { useAuthStore } from "@/store/authStore";
 import { useWishlist } from "@/hooks/useWishlist";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
+import {
+  buildCanonicalEventUrl,
+  buildEventUrl,
+  extractShortIdFromEventSlug,
+} from "@/lib/event-url";
 
 type TicketType = {
   _id: string;
@@ -68,6 +73,8 @@ type TicketType = {
 
 type Event = {
   _id: string;
+  slug?: string;
+  shortId?: string;
   title: string;
   description: string;
   startDate: string;
@@ -131,9 +138,21 @@ const eventCache = new Map<string, { data: Event; timestamp: number }>();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export default function EventDetailClient() {
+  const params = useParams<{ eventSlug?: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const eventId = searchParams.get("id");
+  const eventSlug = Array.isArray(params?.eventSlug)
+    ? params.eventSlug[0]
+    : params?.eventSlug;
+  const shortIdFromSlug = extractShortIdFromEventSlug(eventSlug);
+  const legacyEventId = searchParams.get("id");
+  const eventLookupId = shortIdFromSlug || legacyEventId;
+  const eventId = eventLookupId;
+  const currentEventPath = eventSlug
+    ? `/events/${eventSlug}`
+    : legacyEventId
+      ? `/event_detail?id=${legacyEventId}`
+      : "/event_explore";
 
   const getSearchParamValue = useCallback(
     (...keys: string[]) => {
@@ -178,6 +197,13 @@ export default function EventDetailClient() {
   const [showFullDescription, setShowFullDescription] = useState(false);
   const { toggleWishlist, isInWishlist, isLoading: isWishlistLoading } =
     useWishlist();
+
+  const eventUrl = useMemo(() => {
+    if (event?.slug && event?.shortId) {
+      return buildCanonicalEventUrl(event.slug, event.shortId);
+    }
+    return currentEventPath;
+  }, [currentEventPath, event?.shortId, event?.slug]);
 
   // Memoized computed values - prevent unnecessary re-renders
   const ticketsToDisplay = useMemo(() => {
@@ -230,10 +256,10 @@ export default function EventDetailClient() {
 
   // Fetch event details with caching
   const fetchEventDetails = useCallback(async () => {
-    if (!eventId) return;
+    if (!eventLookupId) return;
 
     // Check cache first
-    const cached = eventCache.get(eventId);
+    const cached = eventCache.get(eventLookupId);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       setEvent(cached.data);
       setIsLoading(false);
@@ -243,14 +269,21 @@ export default function EventDetailClient() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${eventId}`,
+        shortIdFromSlug
+          ? `${process.env.NEXT_PUBLIC_API_URL}/api/events/short/${shortIdFromSlug}`
+          : `${process.env.NEXT_PUBLIC_API_URL}/api/events/details/${legacyEventId}`,
       );
       if (!response.ok) throw new Error("Failed to fetch");
       const data = await response.json();
 
       // Cache the event data
-      eventCache.set(eventId, { data: data.data, timestamp: Date.now() });
+      eventCache.set(eventLookupId, { data: data.data, timestamp: Date.now() });
       setEvent(data.data);
+
+      const canonicalUrl = buildEventUrl(data.data) || currentEventPath;
+      if (canonicalUrl !== currentEventPath) {
+        router.replace(canonicalUrl);
+      }
 
       // Set first available ticket as default
       const firstAvailableTicket = data.data.ticketTypes.find(
@@ -264,7 +297,7 @@ export default function EventDetailClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [eventId, selectedTicketType]);
+  }, [currentEventPath, eventId, eventLookupId, legacyEventId, router, shortIdFromSlug, selectedTicketType]);
 
   // Verify and show tickets with retry logic - OPTIMIZED & GUARANTEED delivery
   const verifyAndShowTickets = useCallback(async (txRef: string, retryCount = 0, canceledRef?: React.MutableRefObject<boolean>) => {
@@ -305,21 +338,21 @@ export default function EventDetailClient() {
       if (statusData.status === "CANCELLED" || statusData.status === "CANCELED") {
         setIsProcessingPayment(false);
         toast.error("Payment was cancelled. Please try again if you wish to purchase tickets.");
-        router.replace(`/event_detail?id=${eventId || ""}`);
+        router.replace(eventUrl);
         return false;
       }
 
       if (statusData.status === "FAILED") {
         setIsProcessingPayment(false);
         toast.error("Payment failed. Please check your payment method and try again.");
-        router.replace(`/event_detail?id=${eventId || ""}`);
+        router.replace(eventUrl);
         return false;
       }
 
       if (statusData.status === "NOT_FOUND") {
         setIsProcessingPayment(false);
         toast.error("Payment not found. Please try again.");
-        router.replace(`/event_detail?id=${eventId || ""}`);
+        router.replace(eventUrl);
         return false;
       }
 
@@ -334,7 +367,7 @@ export default function EventDetailClient() {
         // Timeout - payment might still be processing on user's phone
         setIsProcessingPayment(false);
         toast.error("Payment verification timeout. If you completed payment, check 'My Tickets' in a few minutes.");
-        router.replace(`/event_detail?id=${eventId || ""}`);
+        router.replace(eventUrl);
         return false;
       }
 
@@ -355,7 +388,7 @@ export default function EventDetailClient() {
               setPurchasedTickets(directTickets);
               setIsProcessingPayment(false);
               setShowTicketModal(true);
-              router.replace(`/event_detail?id=${eventId || ""}`);
+              router.replace(eventUrl);
               toast.success("🎉 Payment confirmed! Your ticket is ready.");
               return true;
             }
@@ -427,7 +460,7 @@ export default function EventDetailClient() {
             setPurchasedTickets(newTickets);
             setIsProcessingPayment(false);
             setShowTicketModal(true);
-            router.replace(`/event_detail?id=${eventId || ""}`);
+            router.replace(eventUrl);
             toast.success(`🎉 ${newTickets.length} ticket(s) received successfully!`);
             return true;
           }
@@ -460,10 +493,10 @@ export default function EventDetailClient() {
       console.error("[VERIFY] ❌ Failed after all retries");
       setIsProcessingPayment(false);
       toast.error(`Failed to load tickets. Please check 'My Tickets' or contact support with reference: ${txRef}`);
-      router.replace(`/event_detail?id=${eventId || ""}`);
+      router.replace(eventUrl);
       return false;
     }
-  }, [eventId, router, waitingTicketId]);
+  }, [currentEventPath, eventLookupId, legacyEventId, router, shortIdFromSlug, waitingTicketId]);
 
   // Handle payment initiation - streamlined and optimized
   const handleMobilePayment = useCallback(async (e: React.FormEvent) => {
@@ -552,7 +585,7 @@ export default function EventDetailClient() {
           fullName: paymentForm.fullName,
           email: finalEmail,
         },
-        successUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}/event_detail?id=${eventId}&payment_status=success&tx_ref=${orderId}`,
+        successUrl: `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}${eventUrl}?payment_status=success&tx_ref=${orderId}`,
         callbackUrl: `${process.env.NEXT_PUBLIC_API_URL}/api/payments/callback`,
       };
 
@@ -814,9 +847,9 @@ export default function EventDetailClient() {
     return !hasAvailableTickets;
   }, [event]);
 
-  const shareUrl = useMemo(() =>
-    `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}/event_detail?id=${eventId || ""}`,
-    [eventId]
+  const shareUrl = useMemo(
+    () => `${process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin}${eventUrl}`,
+    [eventUrl]
   );
 
   const coverImageUrl = useMemo(() => {
@@ -1885,7 +1918,7 @@ export default function EventDetailClient() {
                   }
                 }
 
-                router.replace(`/event_detail?id=${eventId || ""}`);
+                router.replace(eventUrl);
               }}
               className="mt-4 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-500/10"
             >

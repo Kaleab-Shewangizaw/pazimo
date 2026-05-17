@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import FeaturedEventCard, {
   type FeaturedEventCardData,
 } from "@/components/featured-event-card";
+import { buildEventUrl } from "@/lib/event-url";
 
 export type PublicEvent = {
   _id: string;
@@ -182,7 +183,7 @@ export default function AllEventsInfinite({
     return {
       id: event._id,
       title: event.title,
-      href: `event_detail?id=${event._id}`,
+      href: buildEventUrl(event),
       image,
       dateLabel: new Date(event.startDate).toLocaleDateString("en-US", {
         month: "short",

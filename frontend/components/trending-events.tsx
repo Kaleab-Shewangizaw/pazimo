@@ -6,6 +6,7 @@ import { Calendar, MapPin, Star, Users, Gift, UserCheck, Ticket, ArrowUpRight } 
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { toast } from "sonner";
+import { buildEventUrl } from "@/lib/event-url";
 
 export type FeaturedEvent = {
   id: string;
@@ -705,7 +706,7 @@ export default function LargeEventCarousel({
                     </div>
 
                     {!isEventSoldOut(currentEvent.originalEvent) ? (
-                      <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
+                      <Link href={buildEventUrl(currentEvent.originalEvent)} passHref>
                         <button className="mt-5 group inline-flex items-center gap-2 rounded-full px-5 py-3 text-[13px] font-semibold active:scale-[0.98] transition-transform bg-[linear-gradient(135deg,hsl(43,96%,58%),hsl(36,80%,48%))] text-white dark:text-[hsl(0,0%,6%)] shadow-[0_20px_60px_-20px_hsla(43,96%,58%,0.45)]">
                           <Ticket className="h-4 w-4" strokeWidth={2.4} />
                           Get Tickets
@@ -822,7 +823,7 @@ export default function LargeEventCarousel({
 
               {/* Action Button */}
               {!isEventSoldOut(currentEvent.originalEvent) ? (
-                <Link href={`/event_detail?id=${currentEvent.id}`} passHref>
+                <Link href={buildEventUrl(currentEvent.originalEvent)} passHref>
                   <Button
                     className="bg-amber-500 hover:bg-amber-600 text-black font-black px-8 h-12 text-sm rounded-xl shadow-lg flex items-center gap-2 group transition-all"
                   >

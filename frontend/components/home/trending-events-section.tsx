@@ -6,9 +6,13 @@ import { ArrowRight, Calendar, MapPin, Flame, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
+import { buildEventUrl } from "@/lib/event-url";
 
 export type TrendingCardEvent = {
   id: string;
+  slug?: string;
+  shortId?: string;
+  href?: string;
   title: string;
   dateLabel: string;
   locationLabel: string;
@@ -47,7 +51,7 @@ function TrendingCard({ event, index }: { event: TrendingCardEvent; index: numbe
 
   return (
     <div ref={ref} className={animClass}>
-      <Link href={`/event_detail?id=${event.id}`}>
+      <Link href={event.href || buildEventUrl(event)}>
         <div className="group rounded-2xl overflow-hidden flex flex-col md:flex-row cursor-pointer transition-all duration-300   dark:border-white/10 bg-card dark:bg-white/[0.07] hover:bg-white/[0.05]">
           <div className="relative md:w-80 md:h-60 shrink-0 overflow-hidden bg-muted">
             {isSoldOut && (

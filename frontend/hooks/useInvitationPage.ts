@@ -3,6 +3,7 @@ import QRCode from "qrcode";
 import { toast } from "sonner";
 import { Event, Invitation, Attendee, Pricing } from "@/types/invitation";
 import { createGuestTicket } from "@/lib/invitationUtils";
+import { buildEventUrl } from "@/lib/event-url";
 
 interface PendingInvitation {
   contact: string;
@@ -388,7 +389,8 @@ export function useInvitationPage() {
     eventId: number | string,
     customerName: string,
     contact: string,
-    guestType: "guest" | "paid" = "guest"
+    guestType: "guest" | "paid" = "guest",
+    eventUrl?: string
   ) => {
     try {
       const baseUrl =
@@ -396,7 +398,7 @@ export function useInvitationPage() {
       let qrUrl: string;
 
       if (guestType === "paid") {
-        qrUrl = `${baseUrl}/event_detail?id=${eventId}`;
+        qrUrl = eventUrl || `${baseUrl}/event_explore`;
       } else {
         const guestData = {
           eventId,
@@ -1238,7 +1240,7 @@ export function useInvitationPage() {
           process.env.NEXT_PUBLIC_FRONTEND_URL || "https://pazimo.vercel.app";
 
         if (guestType === "paid") {
-          qrCodeLink = `${baseUrl}/event_detail?id=${selectedEvent?.id}`;
+          qrCodeLink = `${baseUrl}${buildEventUrl(selectedEvent as any)}`;
         } else {
           qrCodeLink = `${baseUrl}/guest-invitation?inv=${invitationId}`;
         }

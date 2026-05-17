@@ -1,4 +1,13 @@
 const mongoose = require("mongoose");
+const { generateShortId, slugify } = require("../utils/eventUrl");
+
+const createUniqueShortId = async (EventModel) => {
+  while (true) {
+    const shortId = await generateShortId();
+    const existing = await EventModel.exists({ shortId });
+    if (!existing) return shortId;
+  }
+};
 
 const EventSchema = new mongoose.Schema(
   {
@@ -7,6 +16,17 @@ const EventSchema = new mongoose.Schema(
       required: [true, "Please provide an event title"],
       trim: true,
       maxlength: [100, "Title cannot be more than 100 characters"],
+    },
+    slug: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    shortId: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
     },
     isFeatured: {
       type: Boolean,
@@ -196,6 +216,23 @@ EventSchema.index({ organizer: 1, createdAt: -1 }); // For organizer event queri
 EventSchema.index({ status: 1, startDate: 1 }); // For filtering published/active events
 EventSchema.index({ category: 1, status: 1 }); // For category-based filtering
 EventSchema.index({ createdAt: -1 }); // For sorting by creation date
+EventSchema.index({ shortId: 1 }, { unique: true, sparse: true });
+
+EventSchema.pre("validate", async function ensureEventUrlFields(next) {
+  try {
+    if (this.isNew || this.isModified("title") || !this.slug) {
+      this.slug = slugify(this.title);
+    }
+
+    if (!this.shortId) {
+      this.shortId = await createUniqueShortId(this.constructor);
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 const Event = mongoose.model("Event", EventSchema);
 
