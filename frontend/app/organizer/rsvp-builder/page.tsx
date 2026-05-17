@@ -60,10 +60,14 @@ export default function RSVPDashboard() {
   }, [events, responses]);
 
   const onCreate = async () => {
-    const id = await createEvent(type, name.trim());
-    setOpen(false);
-    setName("");
-    router.push(`/organizer/rsvp-builder/${id}`);
+    try {
+      const id = await createEvent(type, name.trim());
+      setOpen(false);
+      setName("");
+      router.push(`/organizer/rsvp-builder/${id}`);
+    } catch {
+      toast.error("Failed to create RSVP form. Please try again.");
+    }
   };
 
   const onOpenDeleteDialog = (eventId: string) => {

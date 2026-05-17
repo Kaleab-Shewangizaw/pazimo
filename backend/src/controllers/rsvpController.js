@@ -215,6 +215,38 @@ const updateForm = async (req, res) => {
   }
 };
 
+const uploadCoverImage = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user._id);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Cover image file is required",
+      });
+    }
+
+    form.coverImage = `/uploads/${req.file.filename}`;
+    await form.save();
+
+    return res.json({
+      success: true,
+      data: { ...form.toObject(), shareUrl: buildShareUrl(form) },
+    });
+  } catch (error) {
+    return res.status(StatusCodes.BAD_REQUEST).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const deleteForm = async (req, res) => {
   try {
     const form = await assertFormOwnership(req.params.id, req.user._id);
@@ -599,6 +631,7 @@ module.exports = {
   listForms,
   getForm,
   updateForm,
+  uploadCoverImage,
   deleteForm,
   duplicateForm,
   publishForm,

@@ -4,7 +4,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState, Suspense } from "react";
 import type { Question, RsvpEvent } from "@/lib/rsvp-types";
-import { rsvpApi } from "@/lib/rsvp-api";
+import { resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,6 +57,7 @@ function RsvpContent() {
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [paying, setPaying] = useState(false);
 
@@ -113,6 +114,9 @@ function RsvpContent() {
     [sections.length, event?.payment?.enabled]
   );
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const phoneRegex = /^\+?[0-9][0-9\s().-]{6,}$/;
+
   const isPayStep = event?.payment?.enabled && step === sections.length;
   const currentSection = sections[step];
   const sectionQs = useMemo(
@@ -154,18 +158,32 @@ function RsvpContent() {
   }
 
   const validate = () => {
+    const nextErrors: Record<string, string> = {};
+
     for (const q of sectionQs) {
       if (q.required) {
         const v = answers[q.id];
         if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0))
-          return false;
+          nextErrors[q.id] = "This field is required.";
+      }
+
+      const value = answers[q.id];
+      if (q.type === "email" && value && !emailRegex.test(String(value).trim())) {
+        nextErrors[q.id] = "Enter a valid email address, like name@example.com.";
+      }
+
+      if (q.type === "phone" && value && !phoneRegex.test(String(value).trim())) {
+        nextErrors[q.id] = "Enter a valid phone number, like +1 555 000 0000.";
       }
     }
-    return true;
+
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const next = () => {
     if (!isPayStep && !validate()) return;
+    setFieldErrors({});
     if (step < totalSteps - 1) setStep(step + 1);
     else submitForm();
   };
@@ -173,6 +191,11 @@ function RsvpContent() {
   const submitForm = async () => {
     setSubmitting(true);
     try {
+      if (!validate()) {
+        setSubmitting(false);
+        return;
+      }
+      setFieldErrors({});
       await rsvpApi.submitPublicResponse(event.publicId || publicId, {
         answers,
         metadata: {
@@ -239,7 +262,7 @@ function RsvpContent() {
         {!done && event.coverImage && (
           <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
             <img
-              src={event.coverImage}
+              src={resolveRsvpImageUrl(event.coverImage)}
               alt={event.name}
               className="h-full w-full object-cover"
             />
@@ -292,6 +315,7 @@ function RsvpContent() {
                           key={q.id}
                           q={q}
                           value={answers[q.id]}
+                          error={fieldErrors[q.id]}
                           onChange={(v) =>
                             setAnswers({ ...answers, [q.id]: v })
                           }
@@ -360,7 +384,7 @@ function RsvpContent() {
                 )}
                 <Button
                   onClick={next}
-                  disabled={!validate() || submitting}
+                  disabled={submitting}
                   className="rounded-full px-6 shadow-lg hover:shadow-xl transition-shadow min-w-[120px]"
                 >
                   {submitting ? (
@@ -529,10 +553,12 @@ function ConfirmationScreen({
 export function FieldRenderer({
   q,
   value,
+  error,
   onChange,
 }: {
   q: Question;
   value: any;
+  error?: string;
   onChange: (v: any) => void;
 }) {
   return (
@@ -540,6 +566,7 @@ export function FieldRenderer({
       <Label className="text-sm font-medium text-slate-900 dark:text-white">
         {q.label} {q.required && <span className="text-red-500">*</span>}
       </Label>
+      {error && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="mt-2">
         {q.type === "short_text" && (
           <Input
@@ -558,18 +585,22 @@ export function FieldRenderer({
         {q.type === "email" && (
           <Input
             type="email"
+            inputMode="email"
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
             className="h-11 rounded-lg border border-slate-200 dark:border-slate-600"
+            pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
             placeholder="you@example.com"
           />
         )}
         {q.type === "phone" && (
           <Input
             type="tel"
+            inputMode="tel"
             value={value || ""}
             onChange={(e) => onChange(e.target.value)}
             className="h-11 rounded-lg border border-slate-200 dark:border-slate-600"
+            pattern="^\+?[0-9][0-9\s().-]{6,}$"
             placeholder="+1 555 000 0000"
           />
         )}

@@ -4,7 +4,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useEffect, useState, Suspense } from "react";
 import type { RsvpEvent } from "@/lib/rsvp-types";
-import { rsvpApi } from "@/lib/rsvp-api";
+import { resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Check, Calendar, Clock, Lock, MapPin, Users } from "lucide-react";
@@ -135,7 +135,7 @@ function ReviewContent() {
             {!done && event.coverImage && (
               <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
                 <img
-                  src={event.coverImage}
+                  src={resolveRsvpImageUrl(event.coverImage)}
                   alt={event.name}
                   className="h-full w-full object-cover"
                 />

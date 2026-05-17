@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { protect, restrictTo } = require("../middlewares/auth");
+const upload = require("../middlewares/upload");
 const rsvpController = require("../controllers/rsvpController");
 
 router.get("/public/:publicId", rsvpController.getFormByPublicId);
@@ -12,6 +13,7 @@ router.get("/forms", rsvpController.listForms);
 router.post("/forms", rsvpController.createForm);
 router.get("/forms/:id", rsvpController.getForm);
 router.patch("/forms/:id", rsvpController.updateForm);
+router.patch("/forms/:id/cover-image", upload.single("coverImage"), rsvpController.uploadCoverImage);
 router.delete("/forms/:id", rsvpController.deleteForm);
 router.post("/forms/:id/duplicate", rsvpController.duplicateForm);
 router.patch("/forms/:id/publish", rsvpController.publishForm);

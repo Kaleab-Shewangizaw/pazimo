@@ -1,4 +1,4 @@
-import { rsvpApi } from "@/lib/rsvp-api";
+import { resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
 import { Metadata } from "next";
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
@@ -8,7 +8,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
     const title = `${event.name} - Review | Pazimo`;
     const description = event.description || "Leave your feedback for this event on Pazimo";
-    const image = event.coverImage || "";
+    const image = resolveRsvpImageUrl(event.coverImage);
 
     return {
       title,

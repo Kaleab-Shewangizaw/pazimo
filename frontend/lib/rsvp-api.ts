@@ -1,4 +1,6 @@
 import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { useAuthStore } from "@/store/authStore";
+import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
 import type {
   AttendeeTag,
   PaymentConfig,
@@ -9,6 +11,29 @@ import type {
 } from "./rsvp-types";
 
 const API_URL = `${process.env.NEXT_PUBLIC_API_URL}/api`;
+
+export const resolveRsvpImageUrl = (image?: string) => {
+  if (!image) return "";
+  if (
+    image.startsWith("http://") ||
+    image.startsWith("https://") ||
+    image.startsWith("data:") ||
+    image.startsWith("blob:")
+  ) {
+    return image;
+  }
+  const base = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+  const normalized = image.startsWith("/") ? image : `/${image}`;
+  return `${base}${normalized}`;
+};
+
+const getAuthToken = () => {
+  // Prefer organizer/customer auth first because RSVP builder is organizer-facing.
+  const authToken = useAuthStore.getState().token;
+  const organizerToken = useOrganizerAuthStore.getState().token;
+  const adminToken = useAdminAuthStore.getState().token;
+  return authToken || organizerToken || adminToken || null;
+};
 
 type ApiEnvelope<T> = {
   success?: boolean;
@@ -59,9 +84,13 @@ type BackendResponse = {
 };
 
 const request = async <T>(endpoint: string, options: RequestInit = {}, auth = true) => {
-  const token = useAdminAuthStore.getState().token;
+  const token = auth ? getAuthToken() : null;
   const headers = new Headers(options.headers || {});
-  headers.set("Content-Type", "application/json");
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+
+  if (!isFormData && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
 
   if (auth && token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -159,6 +188,16 @@ export const rsvpApi = {
         body: JSON.stringify(mapFormPayload(data)),
       })
     ),
+  uploadCoverImage: async (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append("coverImage", file);
+    return mapForm(
+      await request<BackendForm>(`/rsvp/forms/${id}/cover-image`, {
+        method: "PATCH",
+        body: formData,
+      })
+    );
+  },
   deleteForm: async (id: string) => request<void>(`/rsvp/forms/${id}`, { method: "DELETE" }),
   duplicateForm: async (id: string) =>
     mapForm(await request<BackendForm>(`/rsvp/forms/${id}/duplicate`, { method: "POST" })),

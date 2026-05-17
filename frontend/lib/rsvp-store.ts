@@ -14,15 +14,57 @@ import { buildDefaultEvent, rsvpApi } from "./rsvp-api";
 
 const newId = () => crypto.randomUUID();
 
+const isObjectId = (value: string) => /^[a-fA-F0-9]{24}$/.test(value);
+
+const QUESTION_LABELS: Record<QuestionType, string> = {
+  short_text: "Short text",
+  long_text: "Long text",
+  single_choice: "Multiple choice",
+  multi_choice: "Checkboxes",
+  dropdown: "Dropdown",
+  phone: "Phone",
+  email: "Email",
+  file: "File upload",
+  date: "Date",
+  rating: "Star rating",
+  emoji: "Emoji reaction",
+  nps: "NPS",
+  yes_no: "Yes / No",
+};
+
+const pendingCoverImages = new Map<string, File>();
+
+const buildQuestionLabel = (type: QuestionType) => QUESTION_LABELS[type] || "Question";
+
+const normalizeEventForSave = (event: RsvpEvent, includeCoverImage = true): Partial<RsvpEvent> => ({
+  ...event,
+  name: event.name.trim(),
+  description: event.description || "",
+  coverImage: includeCoverImage ? event.coverImage || "" : "",
+  sections: event.sections.map((section, index) => ({
+    ...section,
+    title: section.title.trim() || `Section ${index + 1}`,
+  })),
+  questions: event.questions.map((question) => ({
+    ...question,
+    label: question.label.trim() || buildQuestionLabel(question.type),
+  })),
+});
+
 interface RsvpStore {
   events: RsvpEvent[];
   responses: Response[];
   messages: BulkMessage[];
+  dirtyEvents: Record<string, boolean>;
+  eventAliases: Record<string, string>;
   loadEvents: (type?: "rsvp" | "review") => Promise<void>;
   loadEvent: (id: string) => Promise<RsvpEvent | undefined>;
   loadResponses: (eventId: string) => Promise<void>;
   createEvent: (type: "rsvp" | "review", name: string) => Promise<string>;
   updateEvent: (id: string, data: Partial<RsvpEvent>) => Promise<void>;
+  stageCoverImage: (id: string, file: File) => void;
+  saveEvent: (id: string) => Promise<string>;
+  discardEventChanges: (id: string) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   duplicateEvent: (id: string) => Promise<string | void>;
   addQuestion: (eventId: string, sectionId: string, type: QuestionType) => Promise<void>;
@@ -54,30 +96,40 @@ export const useStore = create<RsvpStore>((set, get) => ({
   events: [],
   responses: [],
   messages: [],
+  dirtyEvents: {},
+  eventAliases: {},
 
   loadEvents: async (type?: "rsvp" | "review") => {
     try {
       const events = await rsvpApi.getForms(type);
-      set({ events });
+      set({ events, dirtyEvents: {}, eventAliases: {} });
     } catch (error) {
       console.error("Failed to load RSVP forms", error);
+      throw error;
     }
   },
 
   loadEvent: async (id: string) => {
     try {
-      const event = await rsvpApi.getForm(id);
+      const resolvedId = get().eventAliases[id] || id;
+      const existing = get().events.find((item) => item.id === resolvedId);
+      if (existing) {
+        return existing;
+      }
+
+      const event = await rsvpApi.getForm(resolvedId);
       set((state) => {
-        const existing = state.events.find((item) => item.id === id);
         return {
-          events: existing
-            ? state.events.map((item) => (item.id === id ? event : item))
+          events: state.events.some((item) => item.id === resolvedId)
+            ? state.events.map((item) => (item.id === resolvedId ? event : item))
             : [...state.events, event],
+          dirtyEvents: { ...state.dirtyEvents, [resolvedId]: false },
         };
       });
       return event;
     } catch (error) {
       console.error("Failed to load RSVP form", error);
+      throw error;
     }
   },
 
@@ -89,58 +141,101 @@ export const useStore = create<RsvpStore>((set, get) => ({
       }));
     } catch (error) {
       console.error("Failed to load RSVP responses", error);
+      throw error;
     }
   },
 
   createEvent: async (type: "rsvp" | "review", name: string) => {
     const draft = buildDefaultEvent(type, name);
     const localEvent = { ...draft, id: newId() };
-    set((state) => ({ events: [...state.events, localEvent] }));
-
-    try {
-      const created = await rsvpApi.createForm(draft);
-      set((state) => ({
-        events: state.events.map((event) => (event.id === localEvent.id ? created : event)),
-      }));
-      return created.id;
-    } catch (error) {
-      console.error("Failed to create RSVP form", error);
-      return localEvent.id;
-    }
+    set((state) => ({
+      events: [...state.events, localEvent],
+      dirtyEvents: { ...state.dirtyEvents, [localEvent.id]: true },
+    }));
+    return localEvent.id;
   },
 
   updateEvent: async (id: string, data: Partial<RsvpEvent>) => {
-    let nextEvent: RsvpEvent | undefined;
     set((state) => {
       const events = state.events.map((event) =>
         event.id === id ? { ...event, ...data, updatedAt: new Date().toISOString() } : event
       );
-      nextEvent = events.find((event) => event.id === id);
-      return { events };
+      return { events, dirtyEvents: { ...state.dirtyEvents, [id]: true } };
     });
-    if (nextEvent) {
-      try {
-        const saved = await rsvpApi.updateForm(id, nextEvent);
-        set((state) => ({
-          events: state.events.map((event) => (event.id === id ? saved : event)),
-        }));
-      } catch (error) {
-        console.error("Failed to sync RSVP form", error);
-      }
+  },
+
+  stageCoverImage: (id: string, file: File) => {
+    const previewUrl = URL.createObjectURL(file);
+    pendingCoverImages.set(id, file);
+    set((state) => ({
+      events: state.events.map((event) =>
+        event.id === id ? { ...event, coverImage: previewUrl, updatedAt: new Date().toISOString() } : event
+      ),
+      dirtyEvents: { ...state.dirtyEvents, [id]: true },
+    }));
+  },
+
+  saveEvent: async (id: string) => {
+    const event = get().events.find((item) => item.id === id);
+    if (!event) {
+      throw new Error("Event not found");
     }
+
+    const coverFile = pendingCoverImages.get(id);
+    const payload = normalizeEventForSave(event, !coverFile);
+
+    let saved = isObjectId(id)
+      ? await rsvpApi.updateForm(id, payload)
+      : await rsvpApi.createForm(payload);
+
+    if (coverFile) {
+      saved = await rsvpApi.uploadCoverImage(saved.id, coverFile);
+      pendingCoverImages.delete(id);
+    }
+
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+      dirtyEvents: { ...state.dirtyEvents, [id]: false, [saved.id]: false },
+      eventAliases: isObjectId(id) ? state.eventAliases : { ...state.eventAliases, [id]: saved.id },
+    }));
+
+    return saved.id;
+  },
+
+  discardEventChanges: async (id: string) => {
+    if (!isObjectId(id)) {
+      set((state) => ({
+        events: state.events.filter((event) => event.id !== id),
+        dirtyEvents: Object.fromEntries(Object.entries(state.dirtyEvents).filter(([eventId]) => eventId !== id)),
+        eventAliases: Object.fromEntries(Object.entries(state.eventAliases).filter(([eventId]) => eventId !== id)),
+      }));
+      pendingCoverImages.delete(id);
+      return;
+    }
+
+    const event = await rsvpApi.getForm(id);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? event : item)),
+      dirtyEvents: { ...state.dirtyEvents, [id]: false },
+    }));
+    pendingCoverImages.delete(id);
   },
 
   deleteEvent: async (id: string) => {
-    try {
-      await rsvpApi.deleteForm(id);
-    } catch (error) {
-      console.error("Failed to delete RSVP form", error);
-    }
     set((state) => ({
       events: state.events.filter((e) => e.id !== id),
       responses: state.responses.filter((r) => r.eventId !== id),
       messages: state.messages.filter((m) => m.eventId !== id),
+      dirtyEvents: Object.fromEntries(Object.entries(state.dirtyEvents).filter(([eventId]) => eventId !== id)),
     }));
+
+    if (isObjectId(id)) {
+      try {
+        await rsvpApi.deleteForm(id);
+      } catch (error) {
+        console.error("Failed to delete RSVP form", error);
+      }
+    }
   },
 
   duplicateEvent: async (id: string) => {
@@ -149,13 +244,28 @@ export const useStore = create<RsvpStore>((set, get) => ({
     if (!event) return;
 
     try {
-      const copy = await rsvpApi.duplicateForm(event.id);
-      set((state) => ({ events: [...state.events, copy] }));
-      return copy.id;
+      if (isObjectId(event.id)) {
+        const copy = await rsvpApi.duplicateForm(event.id);
+        set((state) => ({
+          events: [...state.events, copy],
+          dirtyEvents: { ...state.dirtyEvents, [copy.id]: false },
+        }));
+        return copy.id;
+      }
+
+      const fallback = { ...event, id: newId(), name: `${event.name} (Copy)` };
+      set((state) => ({
+        events: [...state.events, fallback],
+        dirtyEvents: { ...state.dirtyEvents, [fallback.id]: true },
+      }));
+      return fallback.id;
     } catch (error) {
       console.error("Failed to duplicate RSVP form", error);
       const fallback = { ...event, id: newId(), name: `${event.name} (Copy)` };
-      set((state) => ({ events: [...state.events, fallback] }));
+      set((state) => ({
+        events: [...state.events, fallback],
+        dirtyEvents: { ...state.dirtyEvents, [fallback.id]: true },
+      }));
       return fallback.id;
     }
   },
@@ -163,7 +273,7 @@ export const useStore = create<RsvpStore>((set, get) => ({
   addQuestion: async (eventId: string, sectionId: string, type: QuestionType) => {
     const newQuestion: Question = {
       id: newId(),
-      label: "",
+      label: buildQuestionLabel(type),
       type,
       required: false,
       sectionId,
@@ -178,19 +288,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
           ? { ...e, questions: [...e.questions, newQuestion], updatedAt: new Date().toISOString() }
           : e
       ),
+      dirtyEvents: { ...state.dirtyEvents, [eventId]: true },
     }));
-
-    const event = get().events.find((item) => item.id === eventId);
-    if (event) {
-      try {
-        const saved = await rsvpApi.updateForm(eventId, event);
-        set((state) => ({
-          events: state.events.map((item) => (item.id === eventId ? saved : item)),
-        }));
-      } catch (error) {
-        console.error("Failed to sync RSVP question", error);
-      }
-    }
   },
 
   updateQuestion: async (eventId: string, questionId: string, data: Partial<Question>) => {
@@ -206,19 +305,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
             }
           : e
       ),
+      dirtyEvents: { ...state.dirtyEvents, [eventId]: true },
     }));
-
-    const event = get().events.find((item) => item.id === eventId);
-    if (event) {
-      try {
-        const saved = await rsvpApi.updateForm(eventId, event);
-        set((state) => ({
-          events: state.events.map((item) => (item.id === eventId ? saved : item)),
-        }));
-      } catch (error) {
-        console.error("Failed to sync RSVP question", error);
-      }
-    }
   },
 
   addOption: async (eventId: string, questionId: string) => {
@@ -241,19 +329,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
             }
           : e
       ),
+      dirtyEvents: { ...state.dirtyEvents, [eventId]: true },
     }));
-
-    const event = get().events.find((e) => e.id === eventId);
-    if (event) {
-      try {
-        const saved = await rsvpApi.updateForm(eventId, event);
-        set((state) => ({
-          events: state.events.map((item) => (item.id === eventId ? saved : item)),
-        }));
-      } catch (error) {
-        console.error("Failed to sync RSVP option", error);
-      }
-    }
   },
 
   deleteOption: async (eventId: string, questionId: string, index: number) => {
@@ -298,19 +375,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
             }
           : e
       ),
+      dirtyEvents: { ...state.dirtyEvents, [eventId]: true },
     }));
-
-    const event = get().events.find((item) => item.id === eventId);
-    if (event) {
-      try {
-        const saved = await rsvpApi.updateForm(eventId, event);
-        set((state) => ({
-          events: state.events.map((item) => (item.id === eventId ? saved : item)),
-        }));
-      } catch (error) {
-        console.error("Failed to sync RSVP question", error);
-      }
-    }
   },
 
   reorderQuestion: async (eventId: string, questionId: string, direction: -1 | 1) => {
@@ -388,19 +454,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
             }
           : e
       ),
+      dirtyEvents: { ...state.dirtyEvents, [eventId]: true },
     }));
-
-    const event = get().events.find((item) => item.id === eventId);
-    if (event) {
-      try {
-        const saved = await rsvpApi.updateForm(eventId, event);
-        set((state) => ({
-          events: state.events.map((item) => (item.id === eventId ? saved : item)),
-        }));
-      } catch (error) {
-        console.error("Failed to sync RSVP question", error);
-      }
-    }
   },
 
   deleteSection: async (eventId: string, sectionId: string) => {
@@ -415,15 +470,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
             }
           : e
       ),
+      dirtyEvents: { ...state.dirtyEvents, [eventId]: true },
     }));
-
-    const event = get().events.find((item) => item.id === eventId);
-    if (event) {
-      const saved = await rsvpApi.updateForm(eventId, event);
-      set((state) => ({
-        events: state.events.map((item) => (item.id === eventId ? saved : item)),
-      }));
-    }
   },
 
   submitResponse: (data: { eventId: string; answers: Record<string, any>; status: string }) => {

@@ -4,6 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
+import { resolveRsvpImageUrl } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { QuestionType, Question } from "@/lib/rsvp-types";
 import {
   Plus,
@@ -66,9 +68,14 @@ export default function Builder() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
-  const event = useStore((s) => s.events.find((e) => e.id === id));
+  const resolvedId = useStore((s) => s.eventAliases[id] || id);
+  const event = useStore((s) => s.events.find((e) => e.id === resolvedId));
+  const isDirty = useStore((s) => !!s.dirtyEvents[resolvedId]);
   const loadEvent = useStore((s) => s.loadEvent);
   const updateEvent = useStore((s) => s.updateEvent);
+  const stageCoverImage = useStore((s) => s.stageCoverImage);
+  const saveEvent = useStore((s) => s.saveEvent);
+  const discardEventChanges = useStore((s) => s.discardEventChanges);
   const addQuestion = useStore((s) => s.addQuestion);
   const updateQuestion = useStore((s) => s.updateQuestion);
   const deleteQuestion = useStore((s) => s.deleteQuestion);
@@ -79,7 +86,19 @@ export default function Builder() {
   const addOption = useStore((s) => s.addOption);
   const deleteOption = useStore((s) => s.deleteOption);
   const [activeSection, setActiveSection] = useState<string>("");
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [loading, setLoading] = useState(!event);
+
+  useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isDirty]);
 
   useEffect(() => {
     if (!event && id) {
@@ -119,6 +138,48 @@ export default function Builder() {
     ["rating", "nps"].includes(q.type)
   );
 
+  const persistForm = async () => {
+    const savedId = await saveEvent(event.id);
+    if (savedId !== event.id) {
+      router.replace(`/organizer/rsvp-builder/${savedId}`);
+    }
+    return savedId;
+  };
+
+  const handleBack = () => {
+    if (isDirty) {
+      setLeaveDialogOpen(true);
+      return;
+    }
+
+    router.back();
+  };
+
+  const handleSave = async () => {
+    try {
+      await persistForm();
+      toast.success("Form saved successfully");
+    } catch (error) {
+      toast.error("Failed to save form. Please try again.");
+    }
+  };
+
+  const handleSaveAndLeave = async () => {
+    try {
+      await persistForm();
+      setLeaveDialogOpen(false);
+      router.back();
+    } catch {
+      setLeaveDialogOpen(true);
+    }
+  };
+
+  const handleLeaveWithoutSaving = async () => {
+    await discardEventChanges(resolvedId);
+    setLeaveDialogOpen(false);
+    router.back();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
       <main className="container mx-auto px-4 py-8 flex flex-col items-center">
@@ -129,26 +190,13 @@ export default function Builder() {
             variant="ghost"
             size="sm"
             className="rounded-full"
-            onClick={() => router.back()}
+            onClick={handleBack}
           >
             <ArrowLeft className="mr-1 h-4 w-4" /> Back
           </Button>
           <div className="ml-auto flex gap-2">
             <Button
-              onClick={async () => {
-                const emptyQs = event.questions.filter((q) => !q.label.trim());
-                if (emptyQs.length > 0) {
-                  toast.info(`Note: ${emptyQs.length} question(s) were missing titles. They have been set to "Untitled Question" for the live form.`);
-                  // Update empty questions in the store (which will sync to backend)
-                  for (const q of emptyQs) {
-                    await updateQuestion(event.id, q.id, { label: "Untitled Question" });
-                  }
-                }
-                
-                // Always ensure status is published when explicitly saving
-                await updateEvent(event.id, { status: "published" });
-                toast.success("Form saved and published successfully");
-              }}
+              onClick={handleSave}
               variant="default"
               className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
             >
@@ -296,7 +344,11 @@ export default function Builder() {
                   {event.coverImage && (
                     <div className="relative w-full rounded-lg overflow-hidden border border-slate-200 dark:border-slate-600 aspect-video bg-slate-100 dark:bg-slate-700">
                       <img
-                        src={typeof event.coverImage === "string" && event.coverImage.startsWith("data:") ? event.coverImage : event.coverImage}
+                        src={
+                          event.coverImage.startsWith("blob:") || event.coverImage.startsWith("data:")
+                            ? event.coverImage
+                            : resolveRsvpImageUrl(event.coverImage)
+                        }
                         alt="Cover preview"
                         className="w-full h-full object-cover"
                       />
@@ -307,13 +359,11 @@ export default function Builder() {
                     accept="image/*"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          updateEvent(event.id, { coverImage: ev.target?.result as string });
-                        };
-                        reader.readAsDataURL(file);
-                      }
+                      if (!file) return;
+
+                      stageCoverImage(event.id, file);
+
+                      e.currentTarget.value = "";
                     }}
                     className="w-full h-10 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-900 dark:text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700"
                   />
@@ -575,6 +625,30 @@ export default function Builder() {
         </div>
         </div>
       </main>
+
+      <Dialog open={leaveDialogOpen} onOpenChange={setLeaveDialogOpen}>
+        <DialogContent className="rounded-2xl max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-semibold text-slate-900 dark:text-white">
+              Save before leaving?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600 dark:text-slate-400 pt-1">
+            You have unsaved changes. Save them now or discard them before going back.
+          </p>
+          <DialogFooter className="pt-4 gap-2">
+            <Button variant="outline" className="rounded-full" onClick={() => setLeaveDialogOpen(false)}>
+              Keep editing
+            </Button>
+            <Button variant="ghost" className="rounded-full" onClick={handleLeaveWithoutSaving}>
+              Leave without saving
+            </Button>
+            <Button className="rounded-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveAndLeave}>
+              Save and leave
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -643,7 +717,7 @@ function QuestionCard({
                 onPatch({ label: localLabel });
               }
             }}
-            placeholder="Untitled Question"
+            placeholder={QTYPES.find((t) => t.id === q.type)?.label || "Question"}
             className="h-11 rounded-lg text-base font-medium text-slate-900 dark:text-white border border-slate-200 dark:border-slate-600 focus-visible:ring-blue-500"
           />
 
