@@ -23,6 +23,7 @@ export default function LayoutWrapper({
   const isSignIn = pathname?.startsWith("/sign-in");
   const isOrganizerRoute = pathname?.startsWith("/organizer");
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
+  const isRsvpForm = pathname?.startsWith("/rsvp-form/");
   const isSignatureInvitation = pathname?.includes(
     "/guest-invitation/signature"
   );
@@ -41,7 +42,7 @@ export default function LayoutWrapper({
         <Header variant={isSignatureInvitation ? "signature" : "default"} />
       )}
       <main className="flex-1">{children}</main>
-      {!hideGlobalHeaderFooter && !isSignIn && !isEventDetail && (
+      {!hideGlobalHeaderFooter && !isSignIn && !isEventDetail && !isRsvpForm && (
         <Footer variant={isSignatureInvitation ? "signature" : "default"} />
       )}
     </>

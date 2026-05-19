@@ -3,6 +3,7 @@
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState, Suspense } from "react";
+import Image from "next/image";
 import type { Question, RsvpEvent } from "@/lib/rsvp-types";
 import { resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
@@ -259,150 +260,349 @@ function RsvpContent() {
       )}
 
       <main className="container mx-auto max-w-2xl py-10 md:py-16">
-        {!done && event.coverImage && (
-          <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
-            <img
-              src={resolveRsvpImageUrl(event.coverImage)}
-              alt={event.name}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        )}
-        {!done && !started ? (
-          <EventDetail event={event} onStart={() => setStarted(true)} />
-        ) : !done ? (
-          <>
-            <div className="mb-8 text-center">
-              <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                RSVP
-              </p>
-              <h1 className="mt-2 text-4xl md:text-5xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                {event.name}
-              </h1>
-              {event.description && (
-                <p className="mt-3 text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
-                  {event.description}
-                </p>
-              )}
-            </div>
+        <div className="md:hidden">
+          <AnimatePresence mode="wait" initial={false}>
+            {!done && !started ? (
+              <motion.div
+                key="intro"
+                initial={{ opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+                className="space-y-5"
+              >
+                {event.coverImage ? (
+                  <div className="overflow-hidden rounded-[2rem] shadow-lg aspect-[16/10] mx-4">
+                    <Image
+                      src={resolveRsvpImageUrl(event.coverImage)}
+                      alt={event.name}
+                      width={1200}
+                      height={750}
+                      className="h-full w-full object-cover"
+                      priority
+                    />
+                  </div>
+                ) : (
+                  <div className="mx-4 aspect-[16/10] rounded-[2rem] bg-gradient-to-br from-slate-200 via-white to-slate-100 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800 shadow-lg" />
+                )}
 
-            <div className="mb-6">
-              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-2">
-                <span>
-                  Step {step + 1} of {totalSteps}
-                </span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <Progress value={progress} className="h-1.5" />
-            </div>
-
-            <AnimatePresence mode="wait">
-              {!isPayStep && currentSection ? (
-                <motion.div
-                  key={currentSection.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.35 }}
-                >
-                  <Card className="rounded-2xl bg-white dark:bg-slate-800 p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-700">
-                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">
-                      {currentSection.title}
-                    </h2>
-                    <div className="mt-6 space-y-6">
-                      {sectionQs.map((q) => (
-                        <FieldRenderer
-                          key={q.id}
-                          q={q}
-                          value={answers[q.id]}
-                          error={fieldErrors[q.id]}
-                          onChange={(v) =>
-                            setAnswers({ ...answers, [q.id]: v })
-                          }
-                        />
-                      ))}
-                    </div>
-                  </Card>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="pay"
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.35 }}
-                >
-                  <Card className="rounded-2xl bg-white dark:bg-slate-800 p-6 md:p-10 shadow-sm border border-slate-200 dark:border-slate-700 text-center">
-                    <div className="mx-auto h-14 w-14 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                      <CreditCard className="h-6 w-6" />
-                    </div>
-                    <h2 className="mt-5 text-3xl font-semibold text-slate-900 dark:text-white">
-                      Confirm with payment
-                    </h2>
-                    <p className="mt-2 text-slate-600 dark:text-slate-400">
-                      Your seat is reserved. Complete payment to receive your
-                      ticket.
-                    </p>
-                    <div className="mt-8 inline-flex items-baseline gap-1.5">
-                      <span className="text-5xl font-semibold text-slate-900 dark:text-white">
-                        {event.payment!.price}
-                      </span>
-                      <span className="text-lg text-slate-600 dark:text-slate-400">
-                        {event.payment!.currency}
-                      </span>
-                    </div>
-                    {event.payment!.deadline && (
-                      <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
-                        Pay before{" "}
-                        {new Date(
-                          event.payment!.deadline
-                        ).toLocaleDateString()}
-                      </p>
-                    )}
-                    <Button
-                      onClick={completePayment}
-                      disabled={paying}
-                      className="mt-8 rounded-full px-8 h-12 shadow-lg hover:shadow-xl transition-shadow"
-                    >
-                      {paying ? "Processing…" : "Pay now"}
-                    </Button>
-                  </Card>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {!isPayStep && (
-              <div className="mt-6 flex items-center justify-end">
-                {step > 0 && (
+                <div className="px-4 pb-6">
+                  <EventDetail event={event} onStart={() => setStarted(true)} />
+                </div>
+              </motion.div>
+            ) : !done ? (
+              <motion.div
+                key="form"
+                initial={{ opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+                className="px-4 pb-8"
+              >
+                <div className="mb-6 flex items-center justify-between">
                   <Button
+                    type="button"
                     variant="ghost"
-                    className="rounded-full mr-auto"
-                    onClick={() => setStep(step - 1)}
+                    onClick={() => {
+                      setStarted(false);
+                      setStep(0);
+                      setFieldErrors({});
+                    }}
+                    className="rounded-full -ml-2 px-3 text-slate-700 dark:text-slate-200"
                   >
                     <ArrowLeft className="mr-1 h-4 w-4" /> Back
                   </Button>
-                )}
-                <Button
-                  onClick={next}
-                  disabled={submitting}
-                  className="rounded-full px-6 shadow-lg hover:shadow-xl transition-shadow min-w-[120px]"
-                >
-                  {submitting ? (
-                    "Submitting..."
-                  ) : step === totalSteps - 1 ? (
-                    "Submit RSVP"
-                  ) : (
-                    <>
-                      Continue <ArrowRight className="ml-1 h-4 w-4" />
-                    </>
+                  <span className="text-[10px] uppercase tracking-[0.28em] font-bold text-slate-500 dark:text-slate-400">
+                    RSVP
+                  </span>
+                </div>
+
+                <div className="mb-8 text-center">
+                  <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                    RSVP
+                  </p>
+                  <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                    {event.name}
+                  </h1>
+                  {event.description && (
+                    <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
+                      {event.description}
+                    </p>
                   )}
-                </Button>
-              </div>
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-2">
+                    <span>
+                      Step {step + 1} of {totalSteps}
+                    </span>
+                    <span>{Math.round(progress)}%</span>
+                  </div>
+                  <Progress value={progress} className="h-1.5" />
+                </div>
+
+                <AnimatePresence mode="wait">
+                  {!isPayStep && currentSection ? (
+                    <motion.div
+                      key={currentSection.id}
+                      initial={{ opacity: 0, y: 18 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -18 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="rounded-[1.5rem] bg-white dark:bg-slate-800 p-5 shadow-sm border border-slate-200 dark:border-slate-700">
+                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                          {currentSection.title}
+                        </h2>
+                        <div className="mt-5 space-y-5">
+                          {sectionQs.map((q) => (
+                            <FieldRenderer
+                              key={q.id}
+                              q={q}
+                              value={answers[q.id]}
+                              error={fieldErrors[q.id]}
+                              onChange={(v) =>
+                                setAnswers({ ...answers, [q.id]: v })
+                              }
+                            />
+                          ))}
+                        </div>
+                      </Card>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="pay"
+                      initial={{ opacity: 0, y: 18 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -18 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="rounded-[1.5rem] bg-white dark:bg-slate-800 p-5 shadow-sm border border-slate-200 dark:border-slate-700 text-center">
+                        <div className="mx-auto h-14 w-14 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                          <CreditCard className="h-6 w-6" />
+                        </div>
+                        <h2 className="mt-5 text-2xl font-semibold text-slate-900 dark:text-white">
+                          Confirm with payment
+                        </h2>
+                        <p className="mt-2 text-slate-600 dark:text-slate-400">
+                          Your seat is reserved. Complete payment to receive your ticket.
+                        </p>
+                        <div className="mt-8 inline-flex items-baseline gap-1.5">
+                          <span className="text-4xl font-semibold text-slate-900 dark:text-white">
+                            {event.payment!.price}
+                          </span>
+                          <span className="text-base text-slate-600 dark:text-slate-400">
+                            {event.payment!.currency}
+                          </span>
+                        </div>
+                        {event.payment!.deadline && (
+                          <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                            Pay before {new Date(event.payment!.deadline).toLocaleDateString()}
+                          </p>
+                        )}
+                        <Button
+                          onClick={completePayment}
+                          disabled={paying}
+                          className="mt-8 rounded-full px-8 h-12 shadow-lg hover:shadow-xl transition-shadow"
+                        >
+                          {paying ? "Processing…" : "Pay now"}
+                        </Button>
+                      </Card>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {!isPayStep && (
+                  <div className="mt-6 flex items-center justify-end">
+                    {step > 0 && (
+                      <Button
+                        variant="ghost"
+                        className="rounded-full mr-auto"
+                        onClick={() => setStep(step - 1)}
+                      >
+                        <ArrowLeft className="mr-1 h-4 w-4" /> Back
+                      </Button>
+                    )}
+                    <Button
+                      onClick={next}
+                      disabled={submitting}
+                      className="rounded-full px-6 shadow-lg hover:shadow-xl transition-shadow min-w-[120px]"
+                    >
+                      {submitting ? (
+                        "Submitting..."
+                      ) : step === totalSteps - 1 ? (
+                        "Submit RSVP"
+                      ) : (
+                        <>
+                          Continue <ArrowRight className="ml-1 h-4 w-4" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="done"
+                initial={{ opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -24 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+                className="px-4 pb-8"
+              >
+                <ConfirmationScreen event={event} eventId={event.id} />
+              </motion.div>
             )}
-          </>
-        ) : (
-          <ConfirmationScreen event={event} eventId={event.id} />
-        )}
+          </AnimatePresence>
+        </div>
+
+        <div className="hidden md:block">
+          {!done && event.coverImage && (
+            <div className="relative overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
+              <Image
+                src={resolveRsvpImageUrl(event.coverImage)}
+                alt={event.name}
+                fill
+                className="object-cover"
+              />
+            </div>
+          )}
+          {!done && !started ? (
+            <EventDetail event={event} onStart={() => setStarted(true)} />
+          ) : !done ? (
+            <>
+              <div className="mb-8 text-center">
+                <p className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                  RSVP
+                </p>
+                <h1 className="mt-2 text-4xl md:text-5xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                  {event.name}
+                </h1>
+                {event.description && (
+                  <p className="mt-3 text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
+                    {event.description}
+                  </p>
+                )}
+              </div>
+
+              <div className="mb-6">
+                <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 mb-2">
+                  <span>
+                    Step {step + 1} of {totalSteps}
+                  </span>
+                  <span>{Math.round(progress)}%</span>
+                </div>
+                <Progress value={progress} className="h-1.5" />
+              </div>
+
+              <AnimatePresence mode="wait">
+                {!isPayStep && currentSection ? (
+                  <motion.div
+                    key={currentSection.id}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.35 }}
+                  >
+                    <Card className="rounded-2xl bg-white dark:bg-slate-800 p-6 md:p-8 shadow-sm border border-slate-200 dark:border-slate-700">
+                      <h2 className="text-2xl font-semibold text-slate-900 dark:text-white">
+                        {currentSection.title}
+                      </h2>
+                      <div className="mt-6 space-y-6">
+                        {sectionQs.map((q) => (
+                          <FieldRenderer
+                            key={q.id}
+                            q={q}
+                            value={answers[q.id]}
+                            error={fieldErrors[q.id]}
+                            onChange={(v) =>
+                              setAnswers({ ...answers, [q.id]: v })
+                            }
+                          />
+                        ))}
+                      </div>
+                    </Card>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="pay"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.35 }}
+                  >
+                    <Card className="rounded-2xl bg-white dark:bg-slate-800 p-6 md:p-10 shadow-sm border border-slate-200 dark:border-slate-700 text-center">
+                      <div className="mx-auto h-14 w-14 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                        <CreditCard className="h-6 w-6" />
+                      </div>
+                      <h2 className="mt-5 text-3xl font-semibold text-slate-900 dark:text-white">
+                        Confirm with payment
+                      </h2>
+                      <p className="mt-2 text-slate-600 dark:text-slate-400">
+                        Your seat is reserved. Complete payment to receive your
+                        ticket.
+                      </p>
+                      <div className="mt-8 inline-flex items-baseline gap-1.5">
+                        <span className="text-5xl font-semibold text-slate-900 dark:text-white">
+                          {event.payment!.price}
+                        </span>
+                        <span className="text-lg text-slate-600 dark:text-slate-400">
+                          {event.payment!.currency}
+                        </span>
+                      </div>
+                      {event.payment!.deadline && (
+                        <p className="mt-2 text-xs text-slate-600 dark:text-slate-400">
+                          Pay before{" "}
+                          {new Date(
+                            event.payment!.deadline
+                          ).toLocaleDateString()}
+                        </p>
+                      )}
+                      <Button
+                        onClick={completePayment}
+                        disabled={paying}
+                        className="mt-8 rounded-full px-8 h-12 shadow-lg hover:shadow-xl transition-shadow"
+                      >
+                        {paying ? "Processing…" : "Pay now"}
+                      </Button>
+                    </Card>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {!isPayStep && (
+                <div className="mt-6 flex items-center justify-end">
+                  {step > 0 && (
+                    <Button
+                      variant="ghost"
+                      className="rounded-full mr-auto"
+                      onClick={() => setStep(step - 1)}
+                    >
+                      <ArrowLeft className="mr-1 h-4 w-4" /> Back
+                    </Button>
+                  )}
+                  <Button
+                    onClick={next}
+                    disabled={submitting}
+                    className="rounded-full px-6 shadow-lg hover:shadow-xl transition-shadow min-w-[120px]"
+                  >
+                    {submitting ? (
+                      "Submitting..."
+                    ) : step === totalSteps - 1 ? (
+                      "Submit RSVP"
+                    ) : (
+                      <>
+                        Continue <ArrowRight className="ml-1 h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
+          ) : (
+            <ConfirmationScreen event={event} eventId={event.id} />
+          )}
+        </div>
       </main>
     </div>
   );
