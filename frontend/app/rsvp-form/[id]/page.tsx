@@ -462,7 +462,7 @@ function RsvpContent() {
 
             <TabsContent value="images" className="mt-0">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Event Images</h2>
-              <div className="mt-4 relative aspect-video rounded-lg overflow-hidden">
+              <div className="mt-4 relative aspect-video  rounded-lg overflow-hidden">
                 {event.coverImage ? (
                   <Image src={resolveRsvpImageUrl(event.coverImage)} alt={`${event.name} cover`} fill className="object-cover" />
                 ) : (
@@ -488,7 +488,7 @@ function RsvpContent() {
 
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Event Image</h2>
-                  <div className="relative aspect-video rounded-xl overflow-hidden border border-gray-200 dark:border-white/10">
+                  <div className="relative h-70 w-100 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10">
                     {event.coverImage ? (
                       <Image src={resolveRsvpImageUrl(event.coverImage)} alt={`${event.name} image`} fill className="object-cover" />
                     ) : (
@@ -576,14 +576,14 @@ function EventStartCard({
           </span>
         </div>
 
-        <div className="mt-5 space-y-4">
+        {/* <div className="mt-5 space-y-4">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
             Ready to RSVP?
           </h2>
           <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">
             Review the event details, then continue into the RSVP flow without losing the page's event-detail look.
           </p>
-        </div>
+        </div> */}
 
         <div className="mt-6 grid gap-3">
           <InfoRow icon={Calendar} label="Date" value={eventDateLabel} compact />
