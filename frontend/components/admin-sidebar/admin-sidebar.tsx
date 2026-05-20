@@ -15,6 +15,7 @@ import {
   Building2,
   CreditCard,
   X,
+  ClipboardList,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -288,6 +289,19 @@ export default function AdminSidebar({
                 </div>
               )}
             </div>
+
+            <Link
+              href="/admin/rsvps"
+              onClick={onClose}
+              className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-lg transition-all duration-200 ${
+                pathname.startsWith("/admin/rsvps")
+                  ? "bg-blue-50 text-blue-600 shadow-sm border border-blue-100"
+                  : "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+              }`}
+            >
+              <ClipboardList className="h-5 w-5 flex-shrink-0" />
+              <span className="font-medium text-sm sm:text-base">RSVP Forms</span>
+            </Link>
 
             {/* Invitations Section */}
             {!isPartner && (

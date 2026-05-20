@@ -173,6 +173,11 @@ export const rsvpApi = {
     const forms = await request<BackendForm[]>(`/rsvp/forms${query}`);
     return forms.map(mapForm);
   },
+  getPublishedForms: async (type?: "rsvp" | "review") => {
+    const query = type ? `?type=${encodeURIComponent(type)}&limit=12` : "?limit=12";
+    const forms = await request<BackendForm[]>(`/rsvp/public/forms${query}`, {}, false);
+    return forms.map(mapForm);
+  },
   getForm: async (id: string) => mapForm(await request<BackendForm>(`/rsvp/forms/${id}`)),
   createForm: async (data: Partial<RsvpEvent>) =>
     mapForm(

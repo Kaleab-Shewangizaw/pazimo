@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Link from "next/link";
 import CategoryIcons, { Category } from "@/components/category-icons";
 import FeaturedEventsSection, {
   FeaturedCardEvent,
@@ -18,6 +19,20 @@ import { buildEventUrl } from "@/lib/event-url";
 type PublicEventResponse = {
   events: any[];
   meta?: { hasMore?: boolean };
+};
+
+type PublicRsvpForm = {
+  _id: string;
+  publicId: string;
+  title: string;
+  description?: string;
+  coverImage?: string;
+  date?: string;
+  location?: string;
+  venue?: string;
+  hostedBy?: string;
+  responseCount?: number;
+  publishedAt?: string;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -40,6 +55,12 @@ const buildImageUrl = (coverImages?: string[]) => {
     return `${API_URL}${img.startsWith("/") ? img : `/${img}`}`;
   }
   return ""; // use icon placeholder instead of fetching a fallback image
+};
+
+const buildRsvpImageUrl = (image?: string) => {
+  if (!image) return "";
+  if (image.startsWith("http")) return image;
+  return `${API_URL}${image.startsWith("/") ? image : `/${image}`}`;
 };
 
 const buildPriceLabel = (event: any) => {
@@ -313,14 +334,29 @@ async function getBannerEvents(): Promise<BannerCarouselEvent[]> {
   }
 }
 
+async function getPublishedRsvpForms(): Promise<PublicRsvpForm[]> {
+  try {
+    const response = await fetch(withBase("/api/rsvp/public/forms?type=rsvp&limit=6"), {
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.data || [];
+  } catch (error) {
+    console.error("Error fetching published RSVP forms:", error);
+    return [];
+  }
+}
+
 export default async function Page() {
-  const [categories, featuredRes, trendingRes, otherRes, bannerEvents] =
+  const [categories, featuredRes, trendingRes, otherRes, bannerEvents, publishedRsvpForms] =
     await Promise.all([
     getCategories(),
     getPublicEvents({ isFeatured: true, limit: 8, sort: "-startDate" }),
     getPublicEvents({ isTrending: true, limit: 6, sort: "-startDate" }),
     getPublicEvents({ limit: 12, skip: 0, sort: "-startDate" }),
       getBannerEvents(),
+      getPublishedRsvpForms(),
     ]);
 
   const featuredEvents = (featuredRes.events || [])
@@ -346,6 +382,79 @@ export default async function Page() {
       </section>
 
       <TrendingEventsSection events={trendingEvents} />
+
+      {/* {publishedRsvpForms.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+          <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-blue-600">RSVP Forms</p>
+              <h2 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Published RSVP forms</h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-400">
+                Open RSVP forms that the admin has published and made available on the home page.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {publishedRsvpForms.map((form) => {
+              const imageUrl = buildRsvpImageUrl(form.coverImage);
+              return (
+                <article
+                  key={form._id}
+                  className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-transform duration-300 hover:-translate-y-1 hover:shadow-xl dark:border-white/10 dark:bg-slate-900"
+                >
+                  <div className="relative h-52 bg-slate-100 dark:bg-white/5">
+                    {imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={imageUrl} alt={form.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-50 via-slate-100 to-indigo-100 text-blue-600 dark:from-slate-800 dark:via-slate-900 dark:to-slate-800">
+                        <span className="text-sm font-semibold uppercase tracking-[0.3em]">RSVP</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-5 text-white">
+                      <p className="text-xs uppercase tracking-[0.3em] text-blue-200">Published</p>
+                      <h3 className="mt-2 text-2xl font-semibold leading-tight">{form.title}</h3>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4 p-5">
+                    <p className="line-clamp-2 text-sm text-slate-600 dark:text-slate-400">
+                      {form.description || "No description provided yet."}
+                    </p>
+
+                    <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span>{form.date || "Date TBA"}</span>
+                      <span>•</span>
+                      <span>{form.location || form.venue || "Location TBA"}</span>
+                      {form.hostedBy ? (
+                        <>
+                          <span>•</span>
+                          <span>{form.hostedBy}</span>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm text-slate-600 dark:text-slate-400">
+                      <span>{form.responseCount || 0} responses</span>
+                      <span>{form.publishedAt ? new Date(form.publishedAt).toLocaleDateString() : "Live now"}</span>
+                    </div>
+
+                    <div>
+                      <Link
+                        href={`/rsvp-form/${form.publicId}`}
+                        className="inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+                      >
+                        Open RSVP
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )} */}
 
       <AllEventsInfinite
         initialEvents={initialOtherEvents}

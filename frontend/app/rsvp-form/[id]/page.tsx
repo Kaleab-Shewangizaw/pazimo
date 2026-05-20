@@ -486,16 +486,7 @@ function RsvpContent() {
                   </div>
                 </div>
 
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Event Image</h2>
-                  <div className="relative h-70 w-100 rounded-xl overflow-hidden border border-gray-200 dark:border-white/10">
-                    {event.coverImage ? (
-                      <Image src={resolveRsvpImageUrl(event.coverImage)} alt={`${event.name} image`} fill className="object-cover" />
-                    ) : (
-                      <div className="absolute inset-0 bg-gray-200 dark:bg-white/10" />
-                    )}
-                  </div>
-                </div>
+                
               </div>
 
               <div className="lg:col-span-1">
