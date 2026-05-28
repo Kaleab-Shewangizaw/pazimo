@@ -1101,7 +1101,8 @@ export default function AdminEditEventPage() {
                     </div>
                   </div>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
