@@ -61,10 +61,20 @@ export default function ResponsesPage() {
       return;
     }
 
-    const headers = ["submittedAt", "status", ...event.questions.map((q) => q.label)];
+    const headers = [
+      "submittedAt",
+      "status",
+      "fullName",
+      "email",
+      "phone",
+      ...event.questions.map((q) => q.label),
+    ];
     const rows = responses.map((response) => [
       response.submittedAt,
       response.status,
+      `"${String(response.attendee?.fullName || "").replace(/"/g, '""')}"`,
+      `"${String(response.attendee?.email || "").replace(/"/g, '""')}"`,
+      `"${String(response.attendee?.phone || "").replace(/"/g, '""')}"`,
       ...event.questions.map((q) => {
         const value = response.answers[q.id];
         if (Array.isArray(value)) return `"${value.join(", ")}"`;
@@ -161,6 +171,9 @@ export default function ResponsesPage() {
                   <tr className="text-left text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                     <th className="py-3 pr-4">Submitted</th>
                     <th className="py-3 pr-4">Status</th>
+                    <th className="py-3 pr-4">Name</th>
+                    <th className="py-3 pr-4">Email</th>
+                    <th className="py-3 pr-4">Phone</th>
                     <th className="py-3 pr-4">Actions</th>
                     {event.questions.map((q) => (
                       <th key={q.id} className="py-3 pr-4 max-w-[200px] truncate hidden md:table-cell">
@@ -179,6 +192,15 @@ export default function ResponsesPage() {
                         <Badge variant="outline" className="rounded-full capitalize">
                           {response.status}
                         </Badge>
+                      </td>
+                      <td className="py-3 pr-4 text-slate-900 dark:text-white">
+                        {response.attendee?.fullName || "—"}
+                      </td>
+                      <td className="py-3 pr-4 text-slate-900 dark:text-white">
+                        {response.attendee?.email || "—"}
+                      </td>
+                      <td className="py-3 pr-4 text-slate-900 dark:text-white">
+                        {response.attendee?.phone || "—"}
                       </td>
                       <td className="py-3 pr-4">
                         <div className="flex flex-wrap items-center gap-2">
@@ -241,6 +263,14 @@ export default function ResponsesPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="mt-4 space-y-4">
+              {selectedResponse && (
+                <div className="rounded-md bg-slate-50 dark:bg-slate-900 p-3">
+                  <div className="text-sm text-slate-600 dark:text-slate-400">Attendee</div>
+                  <div className="mt-1 text-slate-900 dark:text-white">
+                    {(selectedResponse.attendee?.fullName || "—") + " · " + (selectedResponse.attendee?.email || "—") + " · " + (selectedResponse.attendee?.phone || "—")}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-600 dark:text-slate-400">Status</div>
                 <div>

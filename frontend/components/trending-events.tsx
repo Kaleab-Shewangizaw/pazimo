@@ -709,7 +709,7 @@ export default function LargeEventCarousel({
                       <Link href={buildEventUrl(currentEvent.originalEvent)} passHref>
                         <button className="mt-5 group inline-flex items-center gap-2 rounded-full px-5 py-3 text-[13px] font-semibold active:scale-[0.98] transition-transform bg-[linear-gradient(135deg,hsl(43,96%,58%),hsl(36,80%,48%))] text-white dark:text-[hsl(0,0%,6%)] shadow-[0_20px_60px_-20px_hsla(43,96%,58%,0.45)]">
                           <Ticket className="h-4 w-4" strokeWidth={2.4} />
-                          Get Tickets
+                          {currentEvent.originalEvent?.type === "rsvp" ? "RSVP" : "Get Tickets"}
                           <ArrowUpRight className="h-4 w-4 -mr-1 transition-transform group-hover:translate-x-0.5" strokeWidth={2.4} />
                         </button>
                       </Link>
@@ -828,7 +828,7 @@ export default function LargeEventCarousel({
                     className="bg-amber-500 hover:bg-amber-600 text-black font-black px-8 h-12 text-sm rounded-xl shadow-lg flex items-center gap-2 group transition-all"
                   >
                     <Gift className="h-4 w-4 transition-transform group-hover:scale-110" />
-                    Get Tickets
+                    {currentEvent.originalEvent?.type === "rsvp" ? "RSVP" : "Get Tickets"}
                   </Button>
                 </Link>
               ) : (

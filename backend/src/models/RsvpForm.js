@@ -105,10 +105,17 @@ const rsvpFormSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["draft", "published", "archived"],
+      enum: ["draft", "published", "cancelled", "hidden", "archived", "review", "closed"],
       default: "draft",
       index: true,
     },
+    isFeatured: { type: Boolean, default: false, index: true },
+    isTrending: { type: Boolean, default: false, index: true },
+    bannerStatus: { type: Boolean, default: false, index: true },
+    isPublic: { type: Boolean, default: true, index: true },
+    isClosed: { type: Boolean, default: false, index: true },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null, index: true },
     coverImage: { type: String, default: "" },
     date: { type: String, default: "" },
     hostedBy: { type: String, default: "" },
@@ -126,7 +133,10 @@ const rsvpFormSchema = new mongoose.Schema(
     anonymous: { type: Boolean, default: false },
     sections: { type: [sectionSchema], default: [] },
     questions: { type: [questionSchema], default: [] },
+    responseCount: { type: Number, default: 0 },
+    viewCount: { type: Number, default: 0 },
     publishedAt: { type: Date },
+    cancelledAt: { type: Date },
     archivedAt: { type: Date },
   },
   {
@@ -136,14 +146,13 @@ const rsvpFormSchema = new mongoose.Schema(
   }
 );
 
-rsvpFormSchema.virtual("responseCount", {
-  ref: "RsvpResponse",
-  localField: "_id",
-  foreignField: "formId",
-  count: true,
-});
-
 rsvpFormSchema.index({ organizerId: 1, updatedAt: -1 });
+rsvpFormSchema.index({ status: 1, createdAt: -1 });
+rsvpFormSchema.index({ isTrending: 1, status: 1, createdAt: -1 });
+rsvpFormSchema.index({ isFeatured: 1, status: 1, createdAt: -1 });
+rsvpFormSchema.index({ bannerStatus: 1, status: 1, createdAt: -1 });
+rsvpFormSchema.index({ isPublic: 1, status: 1, createdAt: -1 });
+rsvpFormSchema.index({ deletedAt: 1, createdAt: -1 });
 rsvpFormSchema.index({ publicId: 1, status: 1 });
 
 module.exports = mongoose.model("RsvpForm", rsvpFormSchema);

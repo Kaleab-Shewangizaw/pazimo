@@ -47,7 +47,7 @@ type BackendForm = {
   title: string;
   description?: string;
   type: "rsvp" | "review";
-  status: "draft" | "published" | "archived";
+  status: "draft" | "published" | "cancelled" | "hidden" | "archived" | "review" | "closed";
   coverImage?: string;
   date?: string;
   hostedBy?: string;
@@ -64,7 +64,16 @@ type BackendForm = {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
+  cancelledAt?: string;
   archivedAt?: string;
+  isFeatured?: boolean;
+  isTrending?: boolean;
+  bannerStatus?: boolean;
+  isPublic?: boolean;
+  isClosed?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  viewCount?: number;
   responseCount?: number;
   shareUrl?: string;
 };
@@ -75,6 +84,7 @@ type BackendResponse = {
   formPublicId: string;
   organizerId: string;
   answers: Record<string, any>;
+  attendee?: { fullName?: string; email?: string; phone?: string };
   status: "pending" | "approved" | "paid" | "unpaid" | "rejected";
   tag?: AttendeeTag;
   metadata?: Record<string, any>;
@@ -131,7 +141,16 @@ const mapForm = (form: BackendForm): RsvpEvent => ({
   createdAt: form.createdAt,
   updatedAt: form.updatedAt,
   publishedAt: form.publishedAt,
+  cancelledAt: form.cancelledAt,
   archivedAt: form.archivedAt,
+  isFeatured: form.isFeatured,
+  isTrending: form.isTrending,
+  bannerStatus: form.bannerStatus,
+  isPublic: form.isPublic,
+  isClosed: form.isClosed,
+  isDeleted: form.isDeleted,
+  deletedAt: form.deletedAt,
+  viewCount: form.viewCount,
   responseCount: form.responseCount,
   shareUrl: form.shareUrl,
 });
@@ -160,6 +179,7 @@ const mapResponse = (response: BackendResponse): Response => ({
   id: response._id,
   eventId: response.formId,
   answers: response.answers || {},
+  attendee: response.attendee,
   status: response.status,
   tag: response.tag,
   submittedAt: response.submittedAt || response.createdAt || new Date().toISOString(),
@@ -206,18 +226,57 @@ export const rsvpApi = {
   deleteForm: async (id: string) => request<void>(`/rsvp/forms/${id}`, { method: "DELETE" }),
   duplicateForm: async (id: string) =>
     mapForm(await request<BackendForm>(`/rsvp/forms/${id}/duplicate`, { method: "POST" })),
-  publishForm: async (id: string, published: boolean) =>
+  publishForm: async (id: string, published?: boolean) =>
     mapForm(
-      await request<BackendForm>(`/rsvp/forms/${id}/publish`, {
+      await request<BackendForm>(
+        published === false ? `/rsvp/forms/${id}/cancel` : `/rsvp/forms/${id}/publish`,
+        {
+          method: "PATCH",
+        }
+      )
+    ),
+  cancelForm: async (id: string) =>
+    mapForm(await request<BackendForm>(`/rsvp/forms/${id}/cancel`, { method: "PATCH" })),
+  archiveForm: async (id: string) =>
+    mapForm(await request<BackendForm>(`/rsvp/forms/${id}/archive`, { method: "PATCH" })),
+  toggleVisibility: async (id: string, isPublic?: boolean) =>
+    mapForm(
+      await request<BackendForm>(`/rsvp/forms/${id}/visibility`, {
         method: "PATCH",
-        body: JSON.stringify({ status: published ? "published" : "draft" }),
+        body: JSON.stringify(typeof isPublic === "boolean" ? { isPublic } : {}),
+      })
+    ),
+  toggleFeatured: async (id: string, isFeatured?: boolean) =>
+    mapForm(
+      await request<BackendForm>(`/rsvp/forms/${id}/featured`, {
+        method: "PATCH",
+        body: JSON.stringify(typeof isFeatured === "boolean" ? { isFeatured } : {}),
+      })
+    ),
+  toggleTrending: async (id: string, isTrending?: boolean) =>
+    mapForm(
+      await request<BackendForm>(`/rsvp/forms/${id}/trending`, {
+        method: "PATCH",
+        body: JSON.stringify(typeof isTrending === "boolean" ? { isTrending } : {}),
+      })
+    ),
+  toggleBanner: async (id: string, bannerStatus?: boolean) =>
+    mapForm(
+      await request<BackendForm>(`/rsvp/forms/${id}/banner`, {
+        method: "PATCH",
+        body: JSON.stringify(typeof bannerStatus === "boolean" ? { bannerStatus } : {}),
       })
     ),
   getPublicForm: async (publicId: string) =>
     mapForm(await request<BackendForm>(`/rsvp/public/${publicId}`, {}, false)),
   submitPublicResponse: async (
     publicId: string,
-    data: { answers: Record<string, any>; tag?: AttendeeTag; metadata?: Record<string, any> }
+    data: {
+      answers: Record<string, any>;
+      attendee?: { fullName: string; email: string; phone: string };
+      tag?: AttendeeTag;
+      metadata?: Record<string, any>;
+    }
   ) =>
     mapResponse(
       await request<BackendResponse>(

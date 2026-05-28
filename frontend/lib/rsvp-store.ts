@@ -66,6 +66,13 @@ interface RsvpStore {
   saveEvent: (id: string) => Promise<string>;
   discardEventChanges: (id: string) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
+  publishEvent: (id: string) => Promise<void>;
+  cancelEvent: (id: string) => Promise<void>;
+  archiveEvent: (id: string) => Promise<void>;
+  toggleVisibility: (id: string, isPublic?: boolean) => Promise<void>;
+  toggleFeatured: (id: string, isFeatured?: boolean) => Promise<void>;
+  toggleTrending: (id: string, isTrending?: boolean) => Promise<void>;
+  toggleBanner: (id: string, bannerStatus?: boolean) => Promise<void>;
   duplicateEvent: (id: string) => Promise<string | void>;
   addQuestion: (eventId: string, sectionId: string, type: QuestionType) => Promise<void>;
   updateQuestion: (eventId: string, questionId: string, data: Partial<Question>) => Promise<void>;
@@ -236,6 +243,55 @@ export const useStore = create<RsvpStore>((set, get) => ({
         console.error("Failed to delete RSVP form", error);
       }
     }
+  },
+
+  publishEvent: async (id: string) => {
+    const saved = await rsvpApi.publishForm(id);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
+  },
+
+  cancelEvent: async (id: string) => {
+    const saved = await rsvpApi.cancelForm(id);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
+  },
+
+  archiveEvent: async (id: string) => {
+    const saved = await rsvpApi.archiveForm(id);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
+  },
+
+  toggleVisibility: async (id: string, isPublic?: boolean) => {
+    const saved = await rsvpApi.toggleVisibility(id, isPublic);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
+  },
+
+  toggleFeatured: async (id: string, isFeatured?: boolean) => {
+    const saved = await rsvpApi.toggleFeatured(id, isFeatured);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
+  },
+
+  toggleTrending: async (id: string, isTrending?: boolean) => {
+    const saved = await rsvpApi.toggleTrending(id, isTrending);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
+  },
+
+  toggleBanner: async (id: string, bannerStatus?: boolean) => {
+    const saved = await rsvpApi.toggleBanner(id, bannerStatus);
+    set((state) => ({
+      events: state.events.map((item) => (item.id === id ? saved : item)),
+    }));
   },
 
   duplicateEvent: async (id: string) => {

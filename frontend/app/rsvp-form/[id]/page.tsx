@@ -63,6 +63,8 @@ function RsvpContent() {
   const [mobileTab, setMobileTab] = useState<"rsvp" | "description" | "images">("rsvp");
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [attendee, setAttendee] = useState({ fullName: "", email: "", phone: "" });
+  const [attendeeErrors, setAttendeeErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
   const [paying, setPaying] = useState(false);
 
@@ -114,16 +116,20 @@ function RsvpContent() {
     [event]
   );
 
+  const requiresAttendeeInfo = Boolean(event?.type === "rsvp" && !isPreview);
+
   const totalSteps = useMemo(
-    () => sections.length + (event?.payment?.enabled ? 1 : 0),
-    [sections.length, event?.payment?.enabled]
+    () => (requiresAttendeeInfo ? 1 : 0) + sections.length + (event?.payment?.enabled ? 1 : 0),
+    [requiresAttendeeInfo, sections.length, event?.payment?.enabled]
   );
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const phoneRegex = /^\+?[0-9][0-9\s().-]{6,}$/;
 
-  const isPayStep = Boolean(event?.payment?.enabled && step === sections.length);
-  const currentSection = sections[step];
+  const isAttendeeStep = requiresAttendeeInfo && step === 0;
+  const sectionStepIndex = requiresAttendeeInfo ? step - 1 : step;
+  const isPayStep = Boolean(event?.payment?.enabled && step === (requiresAttendeeInfo ? sections.length + 1 : sections.length));
+  const currentSection = !isPayStep && !isAttendeeStep ? sections[sectionStepIndex] : undefined;
   const sectionQs = useMemo(
     () =>
       event?.questions.filter((q) => q.sectionId === currentSection?.id) || [],
@@ -186,8 +192,27 @@ function RsvpContent() {
     return Object.keys(nextErrors).length === 0;
   };
 
+  const validateAttendee = () => {
+    const next: Record<string, string> = {};
+    const fullName = attendee.fullName.trim();
+    const email = attendee.email.trim();
+    const phone = attendee.phone.trim();
+
+    if (!fullName) next.fullName = "Full name is required.";
+    if (!email || !emailRegex.test(email)) next.email = "Enter a valid email address, like name@example.com.";
+    if (!phone || !phoneRegex.test(phone)) next.phone = "Enter a valid phone number, like +1 555 000 0000.";
+
+    setAttendeeErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
   const next = () => {
-    if (!isPayStep && !validate()) return;
+    if (isAttendeeStep) {
+      if (!validateAttendee()) return;
+    } else if (!isPayStep && !validate()) {
+      return;
+    }
+    setAttendeeErrors({});
     setFieldErrors({});
     if (step < totalSteps - 1) setStep(step + 1);
     else submitForm();
@@ -203,10 +228,12 @@ function RsvpContent() {
       setFieldErrors({});
       await rsvpApi.submitPublicResponse(event.publicId || publicId, {
         answers,
+        attendee: requiresAttendeeInfo ? attendee : undefined,
         metadata: {
           sourceUrl: typeof window !== "undefined" ? window.location.href : "",
           referrer: typeof document !== "undefined" ? document.referrer : "",
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          preview: isPreview,
         },
       });
       toast.success("RSVP submitted successfully!");
@@ -224,10 +251,12 @@ function RsvpContent() {
       void rsvpApi
         .submitPublicResponse(event.publicId || publicId, {
           answers,
+          attendee: requiresAttendeeInfo ? attendee : undefined,
           metadata: {
             sourceUrl: typeof window !== "undefined" ? window.location.href : "",
             referrer: typeof document !== "undefined" ? document.referrer : "",
             userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+            preview: isPreview,
           },
         })
         .then(() => setDone(true))
@@ -434,21 +463,26 @@ function RsvpContent() {
                   totalSteps={totalSteps}
                   progress={progress}
                   isPayStep={isPayStep}
+                  isAttendeeStep={isAttendeeStep}
                   currentSection={currentSection}
                   sectionQs={sectionQs}
                   answers={answers}
                   fieldErrors={fieldErrors}
+                  attendee={attendee}
+                  attendeeErrors={attendeeErrors}
                   submitting={submitting}
                   paying={paying}
                   onBack={() => {
                     setStarted(false);
                     setStep(0);
                     setFieldErrors({});
+                    setAttendeeErrors({});
                   }}
                   onPrev={() => setStep(step - 1)}
                   onNext={next}
                   onCompletePayment={completePayment}
                   onChangeAnswer={(questionId, value) => setAnswers({ ...answers, [questionId]: value })}
+                  onChangeAttendee={(nextAttendee) => setAttendee(nextAttendee)}
                 />
               ) : (
                 <ConfirmationScreen event={event} eventId={event.id} />
@@ -514,21 +548,26 @@ function RsvpContent() {
                 totalSteps={totalSteps}
                 progress={progress}
                 isPayStep={isPayStep}
+                isAttendeeStep={isAttendeeStep}
                 currentSection={currentSection}
                 sectionQs={sectionQs}
                 answers={answers}
                 fieldErrors={fieldErrors}
+                attendee={attendee}
+                attendeeErrors={attendeeErrors}
                 submitting={submitting}
                 paying={paying}
                 onBack={() => {
                   setStarted(false);
                   setStep(0);
                   setFieldErrors({});
+                  setAttendeeErrors({});
                 }}
                 onPrev={() => setStep(step - 1)}
                 onNext={next}
                 onCompletePayment={completePayment}
                 onChangeAnswer={(questionId, value) => setAnswers({ ...answers, [questionId]: value })}
+                onChangeAttendee={(nextAttendee) => setAttendee(nextAttendee)}
               />
             ) : (
               <ConfirmationScreen event={event} eventId={event.id} />
@@ -599,10 +638,13 @@ function RsvpFlowCard({
   totalSteps,
   progress,
   isPayStep,
+  isAttendeeStep,
   currentSection,
   sectionQs,
   answers,
   fieldErrors,
+  attendee,
+  attendeeErrors,
   submitting,
   paying,
   onBack,
@@ -610,16 +652,20 @@ function RsvpFlowCard({
   onNext,
   onCompletePayment,
   onChangeAnswer,
+  onChangeAttendee,
 }: {
   event: any;
   step: number;
   totalSteps: number;
   progress: number;
   isPayStep: boolean;
+  isAttendeeStep: boolean;
   currentSection?: { id: string; title: string };
   sectionQs: Question[];
   answers: Record<string, any>;
   fieldErrors: Record<string, string>;
+  attendee: { fullName: string; email: string; phone: string };
+  attendeeErrors: Record<string, string>;
   submitting: boolean;
   paying: boolean;
   onBack: () => void;
@@ -627,6 +673,7 @@ function RsvpFlowCard({
   onNext: () => void;
   onCompletePayment: () => void;
   onChangeAnswer: (questionId: string, value: any) => void;
+  onChangeAttendee: (nextAttendee: { fullName: string; email: string; phone: string }) => void;
   mobile?: boolean;
 }) {
   return (
@@ -652,7 +699,76 @@ function RsvpFlowCard({
       </div>
 
       <AnimatePresence mode="wait">
-        {!isPayStep && currentSection ? (
+        {isAttendeeStep ? (
+          <motion.div
+            key="attendee"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -18 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
+            <div className="mt-6 rounded-[1.5rem] border border-slate-200/80 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+              <h3 className="text-xl font-semibold text-slate-950 dark:text-white">Contact information</h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                We use this to identify who submitted the RSVP.
+              </p>
+
+              <div className="mt-5 space-y-5">
+                <div>
+                  <Label className="text-sm font-medium text-slate-950 dark:text-white">
+                    Full name <span className="text-red-500">*</span>
+                  </Label>
+                  {attendeeErrors.fullName && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{attendeeErrors.fullName}</p>}
+                  <div className="mt-2">
+                    <Input
+                      value={attendee.fullName}
+                      onChange={(e) => onChangeAttendee({ ...attendee, fullName: e.target.value })}
+                      className="h-11 rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[#0f172a]"
+                      placeholder="e.g. Kaleab Tesfaye"
+                      autoComplete="name"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-slate-950 dark:text-white">
+                    Email <span className="text-red-500">*</span>
+                  </Label>
+                  {attendeeErrors.email && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{attendeeErrors.email}</p>}
+                  <div className="mt-2">
+                    <Input
+                      type="email"
+                      inputMode="email"
+                      value={attendee.email}
+                      onChange={(e) => onChangeAttendee({ ...attendee, email: e.target.value })}
+                      className="h-11 rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[#0f172a]"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-slate-950 dark:text-white">
+                    Phone number <span className="text-red-500">*</span>
+                  </Label>
+                  {attendeeErrors.phone && <p className="mt-1 text-sm text-red-600 dark:text-red-400">{attendeeErrors.phone}</p>}
+                  <div className="mt-2">
+                    <Input
+                      type="tel"
+                      inputMode="tel"
+                      value={attendee.phone}
+                      onChange={(e) => onChangeAttendee({ ...attendee, phone: e.target.value })}
+                      className="h-11 rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[#0f172a]"
+                      placeholder="+251 9xx xxx xxx"
+                      autoComplete="tel"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ) : !isPayStep && currentSection ? (
           <motion.div
             key={currentSection.id}
             initial={{ opacity: 0, y: 18 }}

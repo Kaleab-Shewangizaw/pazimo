@@ -47,7 +47,7 @@ export interface RsvpEvent {
   name: string;
   description?: string;
   type: "rsvp" | "review";
-  status?: "draft" | "published" | "archived";
+  status?: "draft" | "published" | "cancelled" | "hidden" | "archived" | "review" | "closed";
   coverImage?: string;
   date?: string;
   hostedBy?: string;
@@ -64,7 +64,16 @@ export interface RsvpEvent {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
+  cancelledAt?: string;
   archivedAt?: string;
+  isFeatured?: boolean;
+  isTrending?: boolean;
+  bannerStatus?: boolean;
+  isPublic?: boolean;
+  isClosed?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  viewCount?: number;
   responseCount?: number;
   shareUrl?: string;
 }
@@ -73,6 +82,11 @@ export interface Response {
   id: string;
   eventId: string;
   answers: Record<string, any>;
+  attendee?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+  };
   status: "pending" | "approved" | "paid" | "unpaid" | "rejected";
   tag?: AttendeeTag;
   submittedAt: string;

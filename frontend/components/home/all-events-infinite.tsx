@@ -1,11 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import FeaturedEventCard, {
   type FeaturedEventCardData,
 } from "@/components/featured-event-card";
 import { buildEventUrl } from "@/lib/event-url";
+
+export type PublicRsvpForm = {
+  _id: string;
+  publicId: string;
+  title: string;
+  description?: string;
+  coverImage?: string;
+  date?: string;
+  location?: string;
+  venue?: string;
+  hostedBy?: string;
+  responseCount?: number;
+  publishedAt?: string;
+  shareUrl?: string;
+  isPublic?: boolean;
+};
 
 export type PublicEvent = {
   _id: string;
@@ -49,14 +65,17 @@ const DEFAULT_PAGE_SIZE = 12;
 
 export default function AllEventsInfinite({
   initialEvents,
+  initialRsvpForms = [],
   initialHasMore,
   pageSize = DEFAULT_PAGE_SIZE,
 }: {
   initialEvents: PublicEvent[];
+  initialRsvpForms?: PublicRsvpForm[];
   initialHasMore: boolean;
   pageSize?: number;
 }) {
   const [events, setEvents] = useState<PublicEvent[]>(initialEvents || []);
+  const [rsvpForms] = useState<PublicRsvpForm[]>(initialRsvpForms || []);
   const [page, setPage] = useState(1); // page 0 already loaded
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -169,6 +188,38 @@ export default function AllEventsInfinite({
     return "Free";
   };
 
+  const buildRsvpCardData = (form: PublicRsvpForm): FeaturedEventCardData => {
+    const image = form.coverImage
+      ? form.coverImage.startsWith("http")
+        ? form.coverImage
+        : `${process.env.NEXT_PUBLIC_API_URL}${
+            form.coverImage.startsWith("/") ? form.coverImage : `/${form.coverImage}`
+          }`
+      : undefined;
+
+    const dateSource = form.date || form.publishedAt || "";
+    const parsedDate = dateSource ? new Date(dateSource) : null;
+
+    return {
+      id: `rsvp-${form._id}`,
+      href: form.shareUrl || `/rsvp-form/${form.publicId}`,
+      title: form.title,
+      tag: "RSVP",
+      dateLabel:
+        parsedDate && !isNaN(parsedDate.getTime())
+          ? parsedDate.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })
+          : "RSVP",
+      locationLabel:
+        [form.location, form.venue].filter(Boolean).join(", ") || "Location TBA",
+      priceLabel: "RSVP",
+      image,
+      ctaLabel: "RSVP",
+    };
+  };
+
   const buildCardData = (event: PublicEvent): FeaturedEventCardData => {
     const image = event.coverImages?.[0]
       ? event.coverImages[0].startsWith("http")
@@ -195,6 +246,22 @@ export default function AllEventsInfinite({
       soldOut: isEventSoldOut(event),
     };
   };
+
+  const feedItems = useMemo(() => {
+    const eventItems = events.map((event) => ({
+      sortAt: new Date(event.startDate).getTime(),
+      data: buildCardData(event),
+    }));
+
+    const rsvpItems = rsvpForms
+      .filter((form) => form.isPublic !== false)
+      .map((form) => ({
+        sortAt: new Date(form.date || form.publishedAt || Date.now()).getTime(),
+        data: buildRsvpCardData(form),
+      }));
+
+    return [...eventItems, ...rsvpItems].sort((left, right) => right.sortAt - left.sortAt);
+  }, [events, rsvpForms]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || isLoadingMore) return;
@@ -246,14 +313,14 @@ export default function AllEventsInfinite({
   return (
     <section className="px-4 sm:px-8 md:px-16 py-14 bg-background">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-primary dark:text-white">All Events</h3>
+        <h3 className="text-lg font-semibold text-primary dark:text-white">All Events & RSVPs</h3>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 sm:gap-x-5 gap-y-8">
-        {events.map((event, i) => (
+        {feedItems.map((item, i) => (
           <FeaturedEventCard
-            key={event._id}
-            data={buildCardData(event)}
+            key={item.data.id}
+            data={item.data}
             index={i}
           />
         ))}

@@ -14,6 +14,8 @@ const sanitizePublicForm = (form) => {
   return publicForm;
 };
 
+const hasAdminAccess = (user) => user?.role === "admin";
+
 const normalizeSections = (sections = []) =>
   sections.map((section, index) => ({
     id: section.id || uuidv4(),
@@ -71,15 +73,59 @@ const buildFormPayload = (body = {}) => ({
   questions: normalizeQuestions(Array.isArray(body.questions) ? body.questions : []),
 });
 
-const assertFormOwnership = async (formId, organizerId) => {
-  if (!mongoose.Types.ObjectId.isValid(organizerId)) return null;
-  const query = { organizerId };
+const toFormResponse = async (form) => ({
+  ...form.toObject(),
+  responseCount:
+    form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id })),
+  shareUrl: buildShareUrl(form),
+});
+
+const applyStatusLifecycle = (form, nextStatus) => {
+  const status = nextStatus || form.status || "draft";
+  form.status = status;
+  form.isClosed = ["cancelled", "archived", "closed"].includes(status);
+  if (status === "published") {
+    form.isPublic = true;
+  }
+  if (["cancelled", "archived", "closed"].includes(status)) {
+    form.isPublic = false;
+  }
+
+  if (status === "published" && !form.publishedAt) {
+    form.publishedAt = new Date();
+  }
+
+  if (status === "cancelled" && !form.cancelledAt) {
+    form.cancelledAt = new Date();
+  }
+
+  if (status === "archived" && !form.archivedAt) {
+    form.archivedAt = new Date();
+  }
+
+  if (status === "hidden") {
+    form.isPublic = false;
+  }
+
+  return form;
+};
+
+const assertFormOwnership = async (formId, user) => {
+  const query = {};
+
+  if (!hasAdminAccess(user)) {
+    if (!mongoose.Types.ObjectId.isValid(user?._id)) return null;
+    query.organizerId = user._id;
+  }
   
   if (mongoose.Types.ObjectId.isValid(formId)) {
     query.$or = [{ _id: formId }, { publicId: formId }, { formId: formId }];
   } else {
     query.$or = [{ publicId: formId }, { formId: formId }];
   }
+
+  query.isDeleted = { $ne: true };
+  query.deletedAt = null;
   
   return RsvpForm.findOne(query);
 };
@@ -109,14 +155,17 @@ const createForm = async (req, res) => {
       slug: req.body.slug || undefined,
       status: payload.status === "published" ? "published" : "draft",
       publishedAt: payload.status === "published" ? new Date() : undefined,
+      isPublic: payload.status === "published",
+      isClosed: false,
+      isDeleted: false,
+      deletedAt: null,
+      responseCount: 0,
+      viewCount: 0,
     });
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
-      data: {
-        ...form.toObject(),
-        shareUrl: buildShareUrl(form),
-      },
+      data: await toFormResponse(form),
     });
   } catch (error) {
     return res.status(StatusCodes.BAD_REQUEST).json({
@@ -128,15 +177,18 @@ const createForm = async (req, res) => {
 
 const listForms = async (req, res) => {
   try {
-    const query = { organizerId: req.user._id };
+    const query = hasAdminAccess(req.user) ? {} : { organizerId: req.user._id };
     if (req.query.type) query.type = req.query.type;
+    if (req.query.status) query.status = req.query.status;
+    if (req.query.approvalMode) query.approvalMode = req.query.approvalMode;
+    query.isDeleted = { $ne: true };
+    query.deletedAt = null;
 
     const forms = await RsvpForm.find(query).sort({ updatedAt: -1 }).lean();
-    
-    // Get response counts for all forms
+
     const formsWithCounts = await Promise.all(
       forms.map(async (form) => {
-        const responseCount = await RsvpResponse.countDocuments({ formId: form._id });
+        const responseCount = form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id }));
         return { ...form, shareUrl: buildShareUrl(form), responseCount };
       })
     );
@@ -153,9 +205,43 @@ const listForms = async (req, res) => {
   }
 };
 
+const listPublishedForms = async (req, res) => {
+  try {
+    const query = { status: "published", isPublic: true, isDeleted: { $ne: true }, deletedAt: null };
+    if (req.query.type) query.type = req.query.type;
+
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 50)
+      : 6;
+
+    const forms = await RsvpForm.find(query)
+      .sort({ publishedAt: -1, updatedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const formsWithCounts = await Promise.all(
+      forms.map(async (form) => {
+        const responseCount = form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id }));
+        return { ...sanitizePublicForm(form), shareUrl: buildShareUrl(form), responseCount };
+      })
+    );
+
+    return res.json({
+      success: true,
+      data: formsWithCounts,
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const getForm = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -163,8 +249,10 @@ const getForm = async (req, res) => {
       });
     }
 
-    // Calculate response count
-    const responseCount = await RsvpResponse.countDocuments({ formId: form._id });
+    form.viewCount = (form.viewCount || 0) + 1;
+    await form.save();
+
+    const responseCount = form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id }));
 
     return res.json({
       success: true,
@@ -180,7 +268,7 @@ const getForm = async (req, res) => {
 
 const updateForm = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -193,19 +281,15 @@ const updateForm = async (req, res) => {
     Object.assign(form, {
       ...payload,
       title: payload.title ? payload.title.trim() : form.title,
-      status: nextStatus,
-      publishedAt:
-        nextStatus === "published" && !form.publishedAt
-          ? new Date()
-          : form.publishedAt,
-      archivedAt: nextStatus === "archived" ? new Date() : form.archivedAt,
     });
+
+    applyStatusLifecycle(form, nextStatus);
 
     await form.save();
 
     return res.json({
       success: true,
-      data: { ...form.toObject(), shareUrl: buildShareUrl(form) },
+      data: await toFormResponse(form),
     });
   } catch (error) {
     return res.status(StatusCodes.BAD_REQUEST).json({
@@ -217,7 +301,7 @@ const updateForm = async (req, res) => {
 
 const uploadCoverImage = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -237,7 +321,7 @@ const uploadCoverImage = async (req, res) => {
 
     return res.json({
       success: true,
-      data: { ...form.toObject(), shareUrl: buildShareUrl(form) },
+      data: await toFormResponse(form),
     });
   } catch (error) {
     return res.status(StatusCodes.BAD_REQUEST).json({
@@ -249,7 +333,7 @@ const uploadCoverImage = async (req, res) => {
 
 const deleteForm = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -257,12 +341,17 @@ const deleteForm = async (req, res) => {
       });
     }
 
-    await RsvpResponse.deleteMany({ formId: form._id });
-    await form.deleteOne();
+    form.isDeleted = true;
+    form.deletedAt = new Date();
+    form.isPublic = false;
+    form.isClosed = true;
+    form.status = "archived";
+    await form.save();
 
     return res.json({
       success: true,
       message: "Form deleted",
+      data: await toFormResponse(form),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -274,7 +363,7 @@ const deleteForm = async (req, res) => {
 
 const duplicateForm = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -302,11 +391,19 @@ const duplicateForm = async (req, res) => {
       anonymous: !!source.anonymous,
       sections: Array.isArray(source.sections) ? source.sections : [],
       questions: Array.isArray(source.questions) ? source.questions : [],
+      status: "draft",
+      isFeatured: false,
+      isTrending: false,
+      bannerStatus: false,
+      isPublic: false,
+      isClosed: false,
+      isDeleted: false,
+      deletedAt: null,
     });
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
-      data: { ...copy.toObject(), shareUrl: buildShareUrl(copy) },
+      data: await toFormResponse(copy),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -318,7 +415,7 @@ const duplicateForm = async (req, res) => {
 
 const publishForm = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -326,16 +423,14 @@ const publishForm = async (req, res) => {
       });
     }
 
-    form.status = req.body.status === "draft" ? "draft" : "published";
-    form.publishedAt =
-      form.status === "published" && !form.publishedAt
-        ? new Date()
-        : form.publishedAt;
+    applyStatusLifecycle(form, "published");
+    form.isPublic = true;
+    form.isClosed = false;
     await form.save();
 
     return res.json({
       success: true,
-      data: { ...form.toObject(), shareUrl: buildShareUrl(form) },
+      data: await toFormResponse(form),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -350,6 +445,9 @@ const getFormByPublicId = async (req, res) => {
     const form = await RsvpForm.findOne({
       publicId: req.params.publicId,
       status: "published",
+      isPublic: true,
+      isDeleted: { $ne: true },
+      deletedAt: null,
     }).lean();
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
@@ -382,21 +480,55 @@ const submitResponse = async (req, res) => {
       });
     }
     
-    // Only allow responses for published forms, unless it's for internal preview/testing
-    // Allow draft forms to accept responses for preview/testing purposes
-    if (form.status !== "published" && form.status !== "draft") {
+    if (form.isDeleted || form.deletedAt) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: "Form is not available for responses",
       });
     }
 
-    const { answers, tag, metadata = {} } = req.body || {};
+    if (!["published", "draft"].includes(form.status) || form.isPublic === false) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Form is not available for responses",
+      });
+    }
+
+    const { answers, tag, metadata = {}, attendee = {} } = req.body || {};
     if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: "Answers are required",
       });
+    }
+
+    const previewBypass = metadata?.preview === true;
+    if (form.type === "rsvp" && !previewBypass) {
+      const fullName = String(attendee?.fullName || "").trim();
+      const email = String(attendee?.email || "").trim().toLowerCase();
+      const phone = String(attendee?.phone || "").trim();
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const phoneRegex = /^\+?[0-9][0-9\s().-]{6,}$/;
+
+      if (!fullName) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Full name is required",
+        });
+      }
+      if (!email || !emailRegex.test(email)) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "A valid email address is required",
+        });
+      }
+      if (!phone || !phoneRegex.test(phone)) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "A valid phone number is required",
+        });
+      }
     }
 
     const responseStatus =
@@ -413,6 +545,11 @@ const submitResponse = async (req, res) => {
       formPublicId: form.publicId,
       organizerId: form.organizerId,
       answers,
+      attendee: {
+        fullName: String(attendee?.fullName || "").trim(),
+        email: String(attendee?.email || "").trim().toLowerCase(),
+        phone: String(attendee?.phone || "").trim(),
+      },
       status: responseStatus,
       tag: tag && ["VIP", "Guest", "Press"].includes(tag) ? tag : "Guest",
       metadata: {
@@ -423,6 +560,8 @@ const submitResponse = async (req, res) => {
       },
       submittedAt: new Date(),
     });
+
+    await RsvpForm.updateOne({ _id: form._id }, { $inc: { responseCount: 1 } });
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
@@ -438,7 +577,7 @@ const submitResponse = async (req, res) => {
 
 const listResponses = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -463,7 +602,7 @@ const listResponses = async (req, res) => {
 
 const updateResponseTag = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -506,7 +645,7 @@ const updateResponseTag = async (req, res) => {
 
 const updateResponseStatus = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -549,7 +688,7 @@ const updateResponseStatus = async (req, res) => {
 
 const getAnalytics = async (req, res) => {
   try {
-    const form = await assertFormOwnership(req.params.id, req.user._id);
+    const form = await assertFormOwnership(req.params.id, req.user);
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -626,15 +765,127 @@ const getAnalytics = async (req, res) => {
   }
 };
 
+const cancelForm = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    applyStatusLifecycle(form, "cancelled");
+    await form.save();
+
+    return res.json({ success: true, data: await toFormResponse(form) });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+  }
+};
+
+const archiveForm = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    applyStatusLifecycle(form, "archived");
+    await form.save();
+
+    return res.json({ success: true, data: await toFormResponse(form) });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+  }
+};
+
+const toggleVisibilityForm = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    form.isPublic = typeof req.body.isPublic === "boolean" ? req.body.isPublic : !form.isPublic;
+    if (form.isPublic && form.status === "hidden") {
+      form.status = "published";
+    }
+
+    await form.save();
+    return res.json({ success: true, data: await toFormResponse(form) });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+  }
+};
+
+const toggleFeaturedForm = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({ success: false, message: "Form not found" });
+    }
+
+    form.isFeatured = typeof req.body.isFeatured === "boolean" ? req.body.isFeatured : !form.isFeatured;
+    await form.save();
+    return res.json({ success: true, data: await toFormResponse(form) });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+  }
+};
+
+const toggleTrendingForm = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({ success: false, message: "Form not found" });
+    }
+
+    form.isTrending = typeof req.body.isTrending === "boolean" ? req.body.isTrending : !form.isTrending;
+    await form.save();
+    return res.json({ success: true, data: await toFormResponse(form) });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+  }
+};
+
+const toggleBannerForm = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({ success: false, message: "Form not found" });
+    }
+
+    form.bannerStatus = typeof req.body.bannerStatus === "boolean" ? req.body.bannerStatus : !form.bannerStatus;
+    await form.save();
+    return res.json({ success: true, data: await toFormResponse(form) });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   createForm,
   listForms,
+  listPublishedForms,
   getForm,
   updateForm,
   uploadCoverImage,
   deleteForm,
   duplicateForm,
   publishForm,
+  cancelForm,
+  archiveForm,
+  toggleVisibilityForm,
+  toggleFeaturedForm,
+  toggleTrendingForm,
+  toggleBannerForm,
   getFormByPublicId,
   submitResponse,
   listResponses,

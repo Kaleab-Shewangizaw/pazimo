@@ -357,6 +357,7 @@ export default function Builder() {
                   <input
                     type="file"
                     accept="image/*"
+                    required
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;

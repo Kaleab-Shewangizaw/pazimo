@@ -18,6 +18,7 @@ export type TrendingCardEvent = {
   locationLabel: string;
   attendeesLabel: string;
   priceLabel: string;
+  ctaLabel?: string;
   image?: string;
   soldOut?: boolean;
 };
@@ -95,7 +96,7 @@ function TrendingCard({ event, index }: { event: TrendingCardEvent; index: numbe
                 className={`dark:text-black dark:bg-yellow-400 text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer text-sm px-6`}
                 variant={isSoldOut ? "outline" : "default"}
               >
-                {isSoldOut ? "Sold Out" : "Get Tickets"} <ArrowRight className="h-4 w-4 ml-2" />
+                {isSoldOut ? "Sold Out" : event.ctaLabel || "Get Tickets"} <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             </div>
           </div>

@@ -18,6 +18,7 @@ export type FeaturedEventCardData = {
   priceLabel: string;
   image?: string;
   soldOut?: boolean;
+  ctaLabel?: string;
 };
 
 interface FeaturedEventCardProps {
@@ -137,7 +138,7 @@ export default function FeaturedEventCard({
               size="sm"
               className="text-xs text-muted-foreground hover:text-foreground p-0"
             >
-              Get Tickets <ArrowRight className="h-3 w-3 ml-1" />
+              {data.ctaLabel || "Get Tickets"} <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           )}
         </div>

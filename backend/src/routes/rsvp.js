@@ -4,6 +4,7 @@ const { protect, restrictTo } = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
 const rsvpController = require("../controllers/rsvpController");
 
+router.get("/public/forms", rsvpController.listPublishedForms);
 router.get("/public/:publicId", rsvpController.getFormByPublicId);
 router.post("/public/:publicId/responses", rsvpController.submitResponse);
 
@@ -17,9 +18,24 @@ router.patch("/forms/:id/cover-image", upload.single("coverImage"), rsvpControll
 router.delete("/forms/:id", rsvpController.deleteForm);
 router.post("/forms/:id/duplicate", rsvpController.duplicateForm);
 router.patch("/forms/:id/publish", rsvpController.publishForm);
+router.patch("/forms/:id/cancel", rsvpController.cancelForm);
+router.patch("/forms/:id/featured", rsvpController.toggleFeaturedForm);
+router.patch("/forms/:id/trending", rsvpController.toggleTrendingForm);
+router.patch("/forms/:id/banner", rsvpController.toggleBannerForm);
+router.patch("/forms/:id/visibility", rsvpController.toggleVisibilityForm);
+router.patch("/forms/:id/archive", rsvpController.archiveForm);
 router.get("/forms/:id/responses", rsvpController.listResponses);
 router.get("/forms/:id/analytics", rsvpController.getAnalytics);
 router.patch("/forms/:id/responses/:responseId/tag", rsvpController.updateResponseTag);
 router.patch("/forms/:id/responses/:responseId/status", rsvpController.updateResponseStatus);
+
+router.patch("/:id/publish", rsvpController.publishForm);
+router.patch("/:id/cancel", rsvpController.cancelForm);
+router.patch("/:id/featured", rsvpController.toggleFeaturedForm);
+router.patch("/:id/trending", rsvpController.toggleTrendingForm);
+router.patch("/:id/banner", rsvpController.toggleBannerForm);
+router.patch("/:id/visibility", rsvpController.toggleVisibilityForm);
+router.patch("/:id/archive", rsvpController.archiveForm);
+router.delete("/:id", rsvpController.deleteForm);
 
 module.exports = router;

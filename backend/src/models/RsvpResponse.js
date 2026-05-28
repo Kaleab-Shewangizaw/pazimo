@@ -30,6 +30,11 @@ const rsvpResponseSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       required: true,
     },
+    attendee: {
+      fullName: { type: String, trim: true, default: "" },
+      email: { type: String, trim: true, lowercase: true, default: "" },
+      phone: { type: String, trim: true, default: "" },
+    },
     status: {
       type: String,
       enum: ["pending", "approved", "paid", "unpaid", "rejected"],
