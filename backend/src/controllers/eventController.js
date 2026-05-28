@@ -50,7 +50,7 @@ const normalizeWaveSwitchMode = (value) => {
   if (["date", "quantity", "date_or_quantity"].includes(lowered)) {
     return lowered;
   }
-  return "date_or_quantity";
+  return "date";
 };
 
 const parseBracketTicketTypes = (body) => {

@@ -49,7 +49,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       <aside
         className={`bg-white w-full max-w-[280px] fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
-        } lg:relative shadow-lg lg:shadow-md border-r border-gray-200 flex-shrink-0`}
+        } h-screen overflow-hidden lg:relative lg:top-0 lg:h-screen shadow-lg lg:shadow-md border-r border-gray-200 flex-shrink-0`}
       >
         <div className="flex flex-col h-full">
           {/* Profile / Header Section */}
@@ -79,7 +79,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-3 sm:p-4 space-y-1 overflow-y-auto">
+          <nav className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-1">
             <Link
               href="/organizer"
               onClick={handleLinkClick}

@@ -6,12 +6,12 @@ const WAVE_NAME_ORDER = {
 };
 
 const normalizeWaveMode = (modeValue) => {
-  const mode = (modeValue || "date_or_quantity").toLowerCase();
+  const mode = (modeValue || "date").toLowerCase();
   if (mode === "by_time") return "date";
   if (mode === "by_sold_out") return "quantity";
   if (mode === "by_time_or_sold_out") return "date_or_quantity";
   if (["date", "quantity", "date_or_quantity"].includes(mode)) return mode;
-  return "date_or_quantity";
+  return "date";
 };
 
 const toSafeNumber = (value) => {

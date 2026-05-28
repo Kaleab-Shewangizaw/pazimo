@@ -8,6 +8,11 @@ import Sidebar from "@/components/organizer-sidebar/sidebar";
 import OrganizerHeader from "@/components/organizer-header/organizer-header"; // Import the new OrganizerHeader
 import { toast } from "sonner";
 
+type PersistApi = {
+  hasHydrated?: () => boolean;
+  onFinishHydration?: (callback: () => void) => (() => void) | void;
+};
+
 export default function ClientLayout({
   children,
 }: {
@@ -36,7 +41,9 @@ export default function ClientLayout({
 
   // Wait for persisted auth state to rehydrate before making any redirect decisions
   useEffect(() => {
-    const persist = (useAuthStore as any).persist;
+    const persist = (
+      useAuthStore as typeof useAuthStore & { persist?: PersistApi }
+    ).persist;
     if (persist?.hasHydrated) {
       setHasHydrated(persist.hasHydrated());
       const unsub = persist.onFinishHydration?.(() => setHasHydrated(true));
@@ -72,13 +79,15 @@ export default function ClientLayout({
   }
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden bg-gray-50">
       {/* Organizer Sidebar */}
       <Sidebar open={isSidebarOpen} onClose={closeSidebar} />
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Organizer Header */}
         <OrganizerHeader onMenuClick={toggleSidebar} />
-        <main className="flex-1 bg-gray-50">{children}</main>
+        <main className="flex-1 overflow-y-auto bg-gray-50">
+          {children}
+        </main>
       </div>
     </div>
   );

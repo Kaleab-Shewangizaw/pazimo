@@ -6,6 +6,8 @@ import { useAuthStore } from "@/store/authStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ReactDatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -844,30 +846,30 @@ export default function EditEventPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="grid gap-2">
                               <Label>Sale Start Date</Label>
-                              <Input
-                                type="date"
-                                value={ticket.saleStartDate || ""}
-                                onChange={(e) =>
-                                  handleTicketTypeChange(
-                                    index,
-                                    "saleStartDate",
-                                    e.target.value
-                                  )
-                                }
-                              />
+                                <ReactDatePicker
+                                  selected={ticket.saleStartDate ? new Date(ticket.saleStartDate) : null}
+                                  onChange={(date) =>
+                                    handleTicketTypeChange(
+                                      index,
+                                      "saleStartDate",
+                                      date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}` : ""
+                                    )
+                                  }
+                                  dateFormat="yyyy-MM-dd"
+                                />
                             </div>
                             <div className="grid gap-2">
                               <Label>Sale End Date</Label>
-                              <Input
-                                type="date"
-                                value={ticket.saleEndDate || ""}
-                                onChange={(e) =>
+                              <ReactDatePicker
+                                selected={ticket.saleEndDate ? new Date(ticket.saleEndDate) : null}
+                                onChange={(date) =>
                                   handleTicketTypeChange(
                                     index,
                                     "saleEndDate",
-                                    e.target.value
+                                    date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}` : ""
                                   )
                                 }
+                                dateFormat="yyyy-MM-dd"
                               />
                             </div>
                           </div>

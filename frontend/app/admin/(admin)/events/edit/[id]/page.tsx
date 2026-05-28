@@ -6,6 +6,8 @@ import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ReactDatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -37,10 +39,34 @@ interface Category {
 const isWaveTicket = (ticket: any) =>
   Boolean(ticket?.waveOrder || ticket?.waveGroup || /wave/i.test(ticket?.name || ""));
 
+const isWaveChildTicket = (ticket: any) =>
+  Boolean(ticket?.waveGroup) && Number(ticket?.waveOrder || 0) > 1;
+
+const getWaveGroupId = (ticket: any) => String(ticket?.waveGroup || "").trim();
+
+const getWaveChildren = (ticket: any, ticketTypes: any[] = []) => {
+  const waveGroup = getWaveGroupId(ticket);
+  if (!waveGroup) return [];
+
+  return ticketTypes
+    .filter(
+      (candidate) =>
+        getWaveGroupId(candidate) === waveGroup &&
+        Number(candidate.waveOrder || 0) > 1
+    )
+    .sort(
+      (a: any, b: any) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0)
+    );
+};
+
+const getVisibleTicketEntries = (ticketTypes: any[]) =>
+  ticketTypes
+    .map((ticket, index) => ({ ticket, index }))
+    .filter(({ ticket }) => !isWaveChildTicket(ticket));
+
 const WAVE_MODE_OPTIONS = [
   { value: "date", label: "By Time" },
   { value: "quantity", label: "When Previous Wave Is Sold Out" },
-  { value: "date_or_quantity", label: "By Time or Sold Out" },
 ];
 
 export default function AdminEditEventPage() {
@@ -87,7 +113,7 @@ export default function AdminEditEventPage() {
         saleStartDate: "",
         saleEndDate: "",
         hasDateRange: false,
-        waveSwitchMode: "date_or_quantity",
+        waveSwitchMode: "date",
         waveOrder: undefined,
         waveGroup: "",
       },
@@ -164,7 +190,7 @@ export default function AdminEditEventPage() {
                   ? new Date(ticket.endDate).toISOString().split("T")[0]
                   : "",
                 hasDateRange: !!(ticket.startDate && ticket.endDate),
-                waveSwitchMode: ticket.waveSwitchMode || "date_or_quantity",
+                waveSwitchMode: ticket.waveSwitchMode || "date",
                 waveOrder: ticket.waveOrder,
                 waveGroup: ticket.waveGroup || "",
               }))
@@ -180,7 +206,7 @@ export default function AdminEditEventPage() {
                   saleStartDate: "",
                   saleEndDate: "",
                   hasDateRange: false,
-                  waveSwitchMode: "date_or_quantity",
+                  waveSwitchMode: "date",
                   waveOrder: undefined,
                   waveGroup: "",
                 },
@@ -285,7 +311,7 @@ export default function AdminEditEventPage() {
           saleStartDate: "",
           saleEndDate: "",
           hasDateRange: false,
-          waveSwitchMode: "date_or_quantity",
+          waveSwitchMode: "date",
           waveOrder: undefined,
           waveGroup: "",
         },
@@ -294,10 +320,24 @@ export default function AdminEditEventPage() {
   };
 
   const removeTicketType = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      ticketTypes: prev.ticketTypes.filter((_, i) => i !== index),
-    }));
+    setFormData((prev) => {
+      const ticket = prev.ticketTypes[index] as any;
+      const waveGroup = getWaveGroupId(ticket);
+
+      if (!waveGroup) {
+        return {
+          ...prev,
+          ticketTypes: prev.ticketTypes.filter((_, i) => i !== index),
+        };
+      }
+
+      return {
+        ...prev,
+        ticketTypes: prev.ticketTypes.filter(
+          (candidate) => getWaveGroupId(candidate) !== waveGroup
+        ),
+      };
+    });
   };
 
   const validateTicketTypes = (): boolean => {
@@ -402,7 +442,7 @@ export default function AdminEditEventPage() {
             ? {
                 waveOrder: Number(ticket.waveOrder),
                 waveGroup: ticket.waveGroup || "regular_wave",
-                waveSwitchMode: ticket.waveSwitchMode || "date_or_quantity",
+                waveSwitchMode: ticket.waveSwitchMode || "date",
               }
             : {}),
           ...((ticket.hasDateRange || ticket.waveSwitchMode !== "quantity") &&
@@ -551,25 +591,23 @@ export default function AdminEditEventPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="startDate">Start Date</Label>
-                <Input
-                  id="startDate"
-                  name="startDate"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={handleInputChange}
-                  required
+                <ReactDatePicker
+                  selected={formData.startDate ? new Date(formData.startDate) : null}
+                  onChange={(date) =>
+                    handleInputChange({ target: { name: "startDate", value: date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}` : "" } } as any)
+                  }
+                  dateFormat="yyyy-MM-dd"
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="endDate">End Date</Label>
-                <Input
-                  id="endDate"
-                  name="endDate"
-                  type="date"
-                  value={formData.endDate}
-                  min={formData.startDate}
-                  onChange={handleInputChange}
-                  required
+                <ReactDatePicker
+                  selected={formData.endDate ? new Date(formData.endDate) : null}
+                  onChange={(date) =>
+                    handleInputChange({ target: { name: "endDate", value: date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}` : "" } } as any)
+                  }
+                  dateFormat="yyyy-MM-dd"
+                  minDate={formData.startDate ? new Date(formData.startDate) : undefined}
                 />
               </div>
             </div>
@@ -827,6 +865,15 @@ export default function AdminEditEventPage() {
 
             {/* Ticket Types */}
             <div className="space-y-4">
+              {formData.ticketTypes.some(isWaveTicket) && (
+                <div className="p-4 rounded-lg border border-blue-200 bg-blue-50">
+                  <p className="font-medium text-blue-900">Wave tickets detected</p>
+                  <p className="text-sm text-blue-800 mt-1">
+                    Organizer-created waves are listed below in the same event ticket list.
+                    Wave 1 starts the chain, and later waves replace the previous wave by date or sold-out quantity.
+                  </p>
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <Label>Ticket Types</Label>
                 <Button
@@ -839,10 +886,26 @@ export default function AdminEditEventPage() {
                   Add Ticket Type
                 </Button>
               </div>
-              {formData.ticketTypes.map((ticket, index) => (
+              {getVisibleTicketEntries(formData.ticketTypes).map(({ ticket: ticketRaw, index }) => {
+                const ticket: any = ticketRaw;
+                const childWaves = getWaveChildren(ticket, formData.ticketTypes);
+
+                return (
                 <Card key={index} className="p-4">
                   <div className="flex justify-between items-start mb-4">
-                    <h4 className="font-medium">Ticket Type {index + 1}</h4>
+                    <div className="flex flex-col gap-1">
+                      <h4 className="font-medium">
+                        {Number(ticket.waveOrder || 0) === 1 && ticket.waveGroup
+                          ? `Wave 1: ${ticket.name}`
+                          : `Ticket Type ${index + 1}`}
+                      </h4>
+                      {Number(ticket.waveOrder || 0) === 1 && ticket.waveGroup && (
+                        <p className="text-xs text-gray-500">
+                          {ticket.waveGroup ? `Group: ${ticket.waveGroup}` : "Wave ticket"}
+                          {ticket.waveSwitchMode ? ` · Trigger: ${ticket.waveSwitchMode}` : ""}
+                        </p>
+                      )}
+                    </div>
                     {formData.ticketTypes.length > 1 && (
                       <Button
                         type="button"
@@ -855,6 +918,31 @@ export default function AdminEditEventPage() {
                       </Button>
                     )}
                   </div>
+
+                  {(Number(ticket.waveOrder || 0) === 1 && ticket.waveGroup) || childWaves.length > 0 ? (
+                    <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-blue-900">Wave chain</p>
+                        <p className="text-xs text-blue-700">{1 + childWaves.length} waves</p>
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        <div className="flex items-center justify-between rounded bg-white/70 px-2 py-1 text-xs text-blue-800">
+                          <span>{ticket.name || "Wave 1"}</span>
+                          <span>{ticket.waveSwitchMode || "date"}</span>
+                        </div>
+                        {childWaves.map((wave: any) => (
+                          <div
+                            key={`${wave.waveGroup}-${wave.waveOrder}`}
+                            className="flex items-center justify-between rounded bg-white/70 px-2 py-1 text-xs text-blue-800"
+                          >
+                            <span>{wave.name || `Wave ${wave.waveOrder}`}</span>
+                            <span>{wave.waveSwitchMode || "date"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="grid gap-4">
                     <div className="grid gap-2">
                       <Label>Name</Label>
