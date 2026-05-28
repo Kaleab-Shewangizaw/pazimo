@@ -19,14 +19,6 @@ const toSafeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const endOfDay = (dateValue) => {
-  if (!dateValue) return null;
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(23, 59, 59, 999);
-  return date;
-};
-
 const hasStarted = (ticket, now) => {
   if (!ticket.startDate) return true;
   const start = new Date(ticket.startDate);
@@ -36,12 +28,14 @@ const hasStarted = (ticket, now) => {
 
 const hasNotEnded = (ticket, now) => {
   if (!ticket.endDate) return true;
-  const end = endOfDay(ticket.endDate);
-  if (!end) return true;
+  const end = new Date(ticket.endDate);
+  if (Number.isNaN(end.getTime())) return true;
+  end.setHours(23, 59, 59, 999);
   return now <= end;
 };
 
-const isWithinDateWindow = (ticket, now) => hasStarted(ticket, now) && hasNotEnded(ticket, now);
+const isWithinDateWindow = (ticket, now) =>
+  hasStarted(ticket, now) && hasNotEnded(ticket, now);
 
 const detectWaveOrder = (ticket) => {
   if (Number.isFinite(Number(ticket.waveOrder))) {
@@ -61,28 +55,17 @@ const isWaveTicket = (ticket) => {
   return detectWaveOrder(ticket) !== null;
 };
 
-const shouldSwitchWave = (ticket, now) => {
-  const mode = normalizeWaveMode(ticket.waveSwitchMode);
-  const soldOut = toSafeNumber(ticket.quantity) <= 0;
-  const ended = !!ticket.endDate && !hasNotEnded(ticket, now);
+const shouldActivateWave = (wave, previousWave, now) => {
+  if (!wave || !previousWave) return false;
+  if (toSafeNumber(wave.quantity) <= 0) return false;
 
-  if (mode === "quantity") return { shouldSwitch: soldOut, reason: soldOut ? "quantity" : null };
-  if (mode === "date") return { shouldSwitch: ended, reason: ended ? "date" : null };
+  const mode = normalizeWaveMode(wave.waveSwitchMode);
 
-  if (soldOut) return { shouldSwitch: true, reason: "quantity" };
-  if (ended) return { shouldSwitch: true, reason: "date" };
-  return { shouldSwitch: false, reason: null };
-};
-
-const canActivateNextWave = (nextWave, now, triggerReason) => {
-  if (toSafeNumber(nextWave.quantity) <= 0) return false;
-
-  // Quantity-triggered switches may activate the next wave immediately.
-  if (triggerReason === "quantity") {
-    return hasNotEnded(nextWave, now);
+  if (mode === "quantity") {
+    return toSafeNumber(previousWave.quantity) <= 0;
   }
 
-  return isWithinDateWindow(nextWave, now);
+  return hasStarted(wave, now);
 };
 
 const applyTicketAvailabilityRules = (event, now = new Date()) => {
@@ -118,8 +101,7 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     .filter((item) => item.order !== null)
     .sort((a, b) => a.order - b.order);
 
-  // First pass keeps current wave active state coherent with date windows and quantity.
-  waveTickets.forEach(({ ticket }) => {
+  waveTickets.forEach(({ ticket }, index) => {
     if (ticket.manualDisabled === true) {
       if (ticket.available !== false) {
         ticket.available = false;
@@ -129,7 +111,8 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     }
 
     const hasQuantity = toSafeNumber(ticket.quantity) > 0;
-    const shouldBeAvailable = hasQuantity && isWithinDateWindow(ticket, now);
+    const shouldBeAvailable =
+      index === 0 ? hasQuantity : false;
 
     if (ticket.available !== shouldBeAvailable) {
       ticket.available = shouldBeAvailable;
@@ -141,46 +124,36 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     return { changed };
   }
 
-  // Transition pass: previous wave can unlock next by date or quantity.
-  for (let i = 0; i < waveTickets.length - 1; i++) {
-    const current = waveTickets[i].ticket;
-    const next = waveTickets[i + 1].ticket;
+  let activeWaveIndex = 0;
 
-    const { shouldSwitch, reason } = shouldSwitchWave(current, now);
-    if (!shouldSwitch) continue;
+  for (let index = 1; index < waveTickets.length; index += 1) {
+    const previousWave = waveTickets[index - 1].ticket;
+    const currentWave = waveTickets[index].ticket;
 
-    if (current.available !== false) {
-      current.available = false;
-      changed = true;
-    }
-
-    const shouldActivateNext =
-      next.manualDisabled === true
-        ? false
-        : canActivateNextWave(next, now, reason);
-    if (next.available !== shouldActivateNext) {
-      next.available = shouldActivateNext;
-      changed = true;
-    }
-  }
-
-  // Ensure only the latest active wave stays visible.
-  let latestActiveIndex = -1;
-  for (let i = waveTickets.length - 1; i >= 0; i--) {
-    const wave = waveTickets[i].ticket;
-    if (wave.manualDisabled === true) {
+    if (currentWave.manualDisabled === true) {
       continue;
     }
-    if (wave.available === true && toSafeNumber(wave.quantity) > 0) {
-      latestActiveIndex = i;
-      break;
+
+    if (shouldActivateWave(currentWave, previousWave, now)) {
+      activeWaveIndex = index;
     }
   }
 
-  if (latestActiveIndex > 0) {
-    for (let i = 0; i < latestActiveIndex; i++) {
-      if (waveTickets[i].ticket.available !== false) {
-        waveTickets[i].ticket.available = false;
+  waveTickets.forEach(({ ticket }, index) => {
+    const hasQuantity = toSafeNumber(ticket.quantity) > 0;
+    const shouldBeAvailable =
+      ticket.manualDisabled === true ? false : index === activeWaveIndex && hasQuantity;
+
+    if (ticket.available !== shouldBeAvailable) {
+      ticket.available = shouldBeAvailable;
+      changed = true;
+    }
+  });
+
+  if (activeWaveIndex > 0) {
+    for (let index = 0; index < activeWaveIndex; index += 1) {
+      if (waveTickets[index].ticket.available !== false) {
+        waveTickets[index].ticket.available = false;
         changed = true;
       }
     }

@@ -52,7 +52,7 @@ export function WaveTicketDialog({
             Wave Tickets
           </DialogTitle>
           <DialogDescription className="max-w-2xl text-sm leading-6 text-slate-500">
-            Configure wave order, pricing, and the trigger that passes one wave to the next.
+            Wave 1 is the default live ticket. Each later wave replaces the previous one by date or sell-out.
           </DialogDescription>
         </DialogHeader>
 
@@ -99,9 +99,11 @@ export function WaveTicketDialog({
                       Wave {index + 1}
                     </p>
                     <p className="text-sm text-slate-500">
-                      {index < waveDrafts.length - 1
-                        ? "This wave hands off to the next one."
-                        : "Final wave in the sequence."}
+                      {index === 0
+                        ? "Default active wave for this ticket type."
+                        : index < waveDrafts.length - 1
+                          ? "Replaces the previous wave when its trigger is met."
+                          : "Final wave in the sequence."}
                     </p>
                   </div>
                   {waveDrafts.length > 1 ? (
@@ -131,26 +133,35 @@ export function WaveTicketDialog({
                       />
                     </FieldGroup>
 
-                    <FieldGroup>
-                      <Label>Activation type</Label>
-                      <Select
-                        value={wave.waveSwitchMode}
-                        onValueChange={(value) =>
-                          onUpdateWaveDraft(wave.id, "waveSwitchMode", value)
-                        }
-                      >
-                        <SelectTrigger className="h-11 rounded-xl border-slate-200">
-                          <SelectValue placeholder="Select mode" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {WAVE_SWITCH_MODES.map((mode) => (
-                            <SelectItem key={mode.value} value={mode.value}>
-                              {mode.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
+                    {index > 0 ? (
+                      <FieldGroup>
+                        <Label>Activation type</Label>
+                        <Select
+                          value={wave.waveSwitchMode}
+                          onValueChange={(value) =>
+                            onUpdateWaveDraft(wave.id, "waveSwitchMode", value)
+                          }
+                        >
+                          <SelectTrigger className="h-11 rounded-xl border-slate-200">
+                            <SelectValue placeholder="Select mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {WAVE_SWITCH_MODES.map((mode) => (
+                              <SelectItem key={mode.value} value={mode.value}>
+                                {mode.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                    ) : (
+                      <FieldGroup>
+                        <Label>Activation</Label>
+                        <div className="flex h-11 items-center rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-600">
+                          Always active until the next wave replaces it
+                        </div>
+                      </FieldGroup>
+                    )}
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-3">
@@ -211,36 +222,24 @@ export function WaveTicketDialog({
                     />
                   </FieldGroup>
 
-                  {wave.waveSwitchMode !== "quantity" ? (
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FieldGroup>
-                        <Label>Start date</Label>
-                        <DatePickerInput
-                          value={wave.saleStartDate}
-                          onChange={(value) =>
-                            onUpdateWaveDraft(wave.id, "saleStartDate", value)
-                          }
-                          placeholder="Choose start date"
-                        />
-                      </FieldGroup>
+                  {index > 0 && wave.waveSwitchMode !== "quantity" ? (
+                    <FieldGroup>
+                      <Label>Activation date</Label>
+                      <DatePickerInput
+                        value={wave.saleStartDate}
+                        onChange={(value) =>
+                          onUpdateWaveDraft(wave.id, "saleStartDate", value)
+                        }
+                        placeholder="Choose the replacement date"
+                      />
+                    </FieldGroup>
+                  ) : null}
 
-                      <FieldGroup>
-                        <Label>End date</Label>
-                        <DatePickerInput
-                          value={wave.saleEndDate}
-                          minDate={wave.saleStartDate}
-                          onChange={(value) =>
-                            onUpdateWaveDraft(wave.id, "saleEndDate", value)
-                          }
-                          placeholder="Choose end date"
-                        />
-                      </FieldGroup>
-                    </div>
-                  ) : (
+                  {index > 0 && wave.waveSwitchMode === "quantity" ? (
                     <FieldHint>
-                      This wave becomes active when the previous wave sells out. No date window is needed.
+                      This wave becomes active when the previous wave sells out.
                     </FieldHint>
-                  )}
+                  ) : null}
                 </div>
               </div>
             ))}

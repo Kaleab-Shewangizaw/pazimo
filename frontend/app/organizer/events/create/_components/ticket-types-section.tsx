@@ -14,6 +14,7 @@ import type { TicketType, VisibleTicketEntry } from "../_lib/event-form-types";
 import {
   TICKET_TYPES,
   formatDateWindow,
+  formatWaveActivationSummary,
   formatTicketPrice,
 } from "../_lib/event-form-utils";
 
@@ -88,7 +89,7 @@ export function TicketTypesSection({
                     {formatTicketPrice(ticket)}
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {formatDateWindow(ticket.saleStartDate, ticket.saleEndDate)}
+                    {formatWaveActivationSummary(ticket)}
                   </p>
                 </div>
               ))}
@@ -169,7 +170,7 @@ export function TicketTypesSection({
                     </div>
                     <p className="text-sm text-slate-500">
                       {isWaveParent
-                        ? "This ticket is the first entry in a wave chain."
+                        ? "This ticket is the default live wave until a later wave replaces it."
                         : "Choose a ticket type and pricing for this audience segment."}
                     </p>
                   </div>
@@ -268,14 +269,14 @@ export function TicketTypesSection({
                       </div>
                       <div className="mt-3 space-y-2">
                         <div className="rounded-2xl bg-white/80 px-3 py-2 text-sm text-slate-700">
-                          Wave 1: {ticket.name}
+                          Wave 1: {ticket.name} • Default active wave
                         </div>
                         {childWaves.map((wave) => (
                           <div
                             key={`${wave.waveGroup}-${wave.waveOrder}`}
                             className="rounded-2xl bg-white/80 px-3 py-2 text-sm text-slate-700"
                           >
-                            {wave.name || `Wave ${wave.waveOrder}`} • {wave.waveSwitchMode || "date"}
+                            {wave.name || `Wave ${wave.waveOrder}`} • {formatWaveActivationSummary(wave)}
                           </div>
                         ))}
                       </div>

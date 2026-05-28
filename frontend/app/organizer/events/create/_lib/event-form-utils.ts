@@ -9,8 +9,8 @@ import type {
 export const TICKET_TYPES = ["Regular", "VIP", "VVIP", "Group"] as const;
 
 export const WAVE_SWITCH_MODES: { value: WaveSwitchMode; label: string }[] = [
-  { value: "date", label: "By Date / Time Window" },
-  { value: "quantity", label: "When Previous Wave Is Sold Out" },
+  { value: "date", label: "Starts On Specific Date" },
+  { value: "quantity", label: "When Previous Wave Sells Out" },
 ];
 
 const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -198,4 +198,24 @@ export const formatDateWindow = (startDate: string, endDate: string) => {
     value ? new Date(value).toLocaleDateString() : "Not set";
 
   return `${formatDate(startDate)} - ${formatDate(endDate)}`;
+};
+
+export const formatWaveActivationSummary = (
+  ticket: Pick<TicketType, "waveOrder" | "waveSwitchMode" | "saleStartDate">,
+) => {
+  const waveOrder = Number(ticket.waveOrder || 0);
+
+  if (waveOrder <= 1) {
+    return "Default active wave";
+  }
+
+  if (ticket.waveSwitchMode === "quantity") {
+    return "Starts when previous wave sells out";
+  }
+
+  if (ticket.saleStartDate) {
+    return `Starts ${new Date(ticket.saleStartDate).toLocaleDateString()}`;
+  }
+
+  return "Start date not set";
 };

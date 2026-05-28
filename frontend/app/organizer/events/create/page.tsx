@@ -75,35 +75,31 @@ const recalculateTicketAvailability = (ticketTypes: TicketType[]) => {
       ticket.isActive = false;
     });
 
-    const activeDateWave = orderedGroup.find(
-      (ticket) =>
-        ticket.waveSwitchMode !== "quantity" &&
-        ticket.saleStartDate &&
-        ticket.saleEndDate &&
-        isTicketActiveByDate(ticket.saleStartDate, ticket.saleEndDate),
-    );
-
-    if (activeDateWave) {
-      activeDateWave.isActive = true;
-      return;
-    }
-
     const firstWave = orderedGroup[0];
     if (!firstWave) {
       return;
     }
 
-    if (firstWave.waveSwitchMode === "quantity") {
-      firstWave.isActive = Number(firstWave.quantity || 0) > 0;
-      return;
+    let activeIndex = 0;
+
+    for (let index = 1; index < orderedGroup.length; index += 1) {
+      const wave = orderedGroup[index];
+      const previousWave = orderedGroup[index - 1];
+      const startsByDate =
+        wave.waveSwitchMode === "date" &&
+        wave.saleStartDate &&
+        new Date(wave.saleStartDate) <= new Date();
+      const startsByQuantity =
+        wave.waveSwitchMode === "quantity" &&
+        Number(previousWave?.quantity || 0) <= 0;
+
+      if (startsByDate || startsByQuantity) {
+        activeIndex = index;
+      }
     }
 
-    if (firstWave.saleStartDate && firstWave.saleEndDate) {
-      firstWave.isActive = isTicketActiveByDate(
-        firstWave.saleStartDate,
-        firstWave.saleEndDate,
-      );
-    }
+    orderedGroup[activeIndex].isActive =
+      Number(orderedGroup[activeIndex].quantity || 0) > 0;
   });
 
   return nextTicketTypes.map(syncLegacyPriceField);
@@ -419,17 +415,16 @@ export default function CreateEventPage() {
         (a, b) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0),
       );
 
-      for (const wave of orderedGroup) {
-        if (wave.waveSwitchMode !== "quantity") {
-          if (!wave.saleStartDate || !wave.saleEndDate) {
-            toast.error(`Wave "${wave.name}" requires start and end dates`);
-            return false;
-          }
+      for (let index = 0; index < orderedGroup.length; index += 1) {
+        const wave = orderedGroup[index];
 
-          const start = new Date(wave.saleStartDate);
-          const end = new Date(wave.saleEndDate);
-          if (start >= end) {
-            toast.error(`Wave "${wave.name}" must have start date before end date`);
+        if (index === 0) {
+          continue;
+        }
+
+        if (wave.waveSwitchMode !== "quantity") {
+          if (!wave.saleStartDate) {
+            toast.error(`Wave "${wave.name}" requires a start date`);
             return false;
           }
         }
@@ -440,12 +435,14 @@ export default function CreateEventPage() {
         const nextWave = orderedGroup[index + 1];
 
         if (
-          currentWave.saleEndDate &&
           nextWave.saleStartDate &&
-          new Date(currentWave.saleEndDate) >= new Date(nextWave.saleStartDate)
+          currentWave.saleStartDate &&
+          currentWave.waveOrder &&
+          currentWave.waveOrder > 1 &&
+          new Date(currentWave.saleStartDate) >= new Date(nextWave.saleStartDate)
         ) {
           toast.error(
-            `Wave "${currentWave.name}" should end before "${nextWave.name}" starts`,
+            `Wave "${currentWave.name}" should start before "${nextWave.name}" starts`,
           );
           return false;
         }
@@ -541,7 +538,7 @@ export default function CreateEventPage() {
     const waveGroup = getWaveGroupId(baseTicket) || `wave_group_${Date.now()}`;
 
     const buildWaveTicket = (draft: WaveDraft, waveOrder: number): TicketType => {
-      const usesDates = draft.waveSwitchMode !== "quantity";
+      const usesDates = waveOrder > 1 && draft.waveSwitchMode !== "quantity";
 
       return syncLegacyPriceField({
         name: draft.name,
@@ -551,7 +548,7 @@ export default function CreateEventPage() {
         quantity: draft.quantity || baseTicket.quantity || "0",
         description: draft.description || baseTicket.description || "",
         saleStartDate: usesDates ? draft.saleStartDate : "",
-        saleEndDate: usesDates ? draft.saleEndDate : "",
+        saleEndDate: "",
         isActive: false,
         hasDateRange: usesDates,
         waveOrder,
@@ -624,24 +621,21 @@ export default function CreateEventPage() {
         return `Please enter a valid quantity for wave "${wave.name}"`;
       }
 
-      if (wave.waveSwitchMode !== "quantity") {
-        if (!wave.saleStartDate || !wave.saleEndDate) {
-          return `Please set start and end dates for wave "${wave.name}"`;
-        }
-
-        if (new Date(wave.saleStartDate) >= new Date(wave.saleEndDate)) {
-          return `Wave "${wave.name}" start date must be before end date`;
+      if (index > 0 && wave.waveSwitchMode !== "quantity") {
+        if (!wave.saleStartDate) {
+          return `Please set a start date for wave "${wave.name}"`;
         }
       }
 
       if (index < waveDrafts.length - 1) {
         const nextWave = waveDrafts[index + 1];
         if (
-          wave.saleEndDate &&
           nextWave.saleStartDate &&
-          new Date(wave.saleEndDate) >= new Date(nextWave.saleStartDate)
+          index > 0 &&
+          wave.saleStartDate &&
+          new Date(wave.saleStartDate) >= new Date(nextWave.saleStartDate)
         ) {
-          return `Wave "${wave.name}" must end before "${nextWave.name || `Wave ${index + 2}`}" starts`;
+          return `Wave "${wave.name}" must start before "${nextWave.name || `Wave ${index + 2}`}" starts`;
         }
       }
 
@@ -810,8 +804,7 @@ export default function CreateEventPage() {
         }
 
         if (
-          (isWaveTicket(ticket) ||
-            (ticket.name === "Regular" && ticket.hasDateRange)) &&
+          (ticket.name === "Regular" && ticket.hasDateRange) &&
           ticket.saleStartDate &&
           ticket.saleEndDate
         ) {
@@ -823,6 +816,13 @@ export default function CreateEventPage() {
           payload.append(
             `ticketTypes[${index}][hasDateRange]`,
             String(ticket.hasDateRange),
+          );
+        }
+
+        if (isWaveTicket(ticket) && ticket.saleStartDate) {
+          payload.append(
+            `ticketTypes[${index}][startDate]`,
+            ticket.saleStartDate,
           );
         }
       });

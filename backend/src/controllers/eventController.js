@@ -120,6 +120,10 @@ const normalizeTicketTypes = (rawTickets = []) =>
     );
     const hasWaveMetadata =
       !!ticket.waveGroup || waveOrder !== undefined || /wave/i.test(ticket.name || "");
+    const normalizedStartDate =
+      hasWaveMetadata && waveOrder === 1 ? undefined : startDate;
+    const normalizedEndDate =
+      hasWaveMetadata ? undefined : endDate;
 
     return {
       name: ticket.name,
@@ -132,8 +136,8 @@ const normalizeTicketTypes = (rawTickets = []) =>
       ...(typeof ticket.manualDisabled === "boolean"
         ? { manualDisabled: ticket.manualDisabled }
         : {}),
-      startDate,
-      endDate,
+      startDate: normalizedStartDate,
+      endDate: normalizedEndDate,
       ...(ticket.waveGroup ? { waveGroup: ticket.waveGroup } : {}),
       ...(waveOrder !== undefined ? { waveOrder } : {}),
       ...(hasWaveMetadata ? { waveSwitchMode } : {}),
