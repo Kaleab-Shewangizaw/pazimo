@@ -55,6 +55,7 @@ function RsvpContent() {
   const publicId = params.id as string;
   const isPreview = searchParams.get("preview") === "true";
   const mongoId = searchParams.get("id");
+  const returnTo = searchParams.get("returnTo");
   
   const [event, setEvent] = useState<RsvpEvent | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,7 +130,11 @@ function RsvpContent() {
   );
   const paymentEnabled = false;
 
-  const requiresAttendeeInfo = Boolean(event?.type === "rsvp" && !isPreview);
+  const requiresAttendeeInfo = Boolean(
+    event?.type === "rsvp" &&
+      event?.collectAttendeeInfo !== false &&
+      !isPreview
+  );
 
   const totalSteps = useMemo(
     () => (requiresAttendeeInfo ? 1 : 0) + sections.length + (paymentEnabled ? 1 : 0),
@@ -345,7 +350,13 @@ function RsvpContent() {
                 variant="ghost"
                 size="sm"
                 className="rounded-full h-9"
-                onClick={() => router.push(`/organizer/rsvp-builder/${event?.id || mongoId}`)}
+                onClick={() =>
+                  router.push(
+                    returnTo
+                      ? decodeURIComponent(returnTo)
+                      : `/organizer/rsvp-builder/${event?.id || mongoId}`
+                  )
+                }
               >
                 <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Editor
               </Button>
@@ -908,11 +919,11 @@ function ConfirmationScreen({
         </motion.div>
         <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">You&apos;re in.</h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-600 dark:text-slate-400">
-          {paymentEnabled
-            ? "Payment confirmed. Your ticket and QR code are on the way."
-            : event.approvalMode === "manual"
-              ? "Your RSVP is pending review. We'll email you once approved."
-              : "Your RSVP is confirmed. Download your QR pass and use it at entry."}
+          {event.approvalMode === "manual"
+            ? "Your RSVP is pending review. We'll email you once approved."
+            : canShowQr
+              ? "Your RSVP is confirmed. Download your QR pass and use it at entry."
+              : "Your RSVP is confirmed."}
         </p>
 
         {canShowQr ? (

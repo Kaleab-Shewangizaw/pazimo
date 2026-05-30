@@ -118,6 +118,10 @@ const normalizeFormVisibility = (form) => ({
     form.type === "review"
       ? false
       : form.isPublic !== false,
+  collectAttendeeInfo:
+    form.type === "review"
+      ? false
+      : form.collectAttendeeInfo !== false,
   payment: form.payment
     ? {
         ...form.payment,
@@ -170,6 +174,14 @@ const buildFormPayload = (body = {}) => ({
       ? undefined
       : Number(body.rsvpLimit),
   approvalMode: body.approvalMode || "auto",
+  collectAttendeeInfo:
+    body.type === "review"
+      ? false
+      : typeof body.collectAttendeeInfo === "boolean"
+        ? body.collectAttendeeInfo
+        : body.collectAttendeeInfo === "false"
+          ? false
+          : true,
   payment: body.payment
     ? {
         enabled: false,
@@ -223,6 +235,80 @@ const applyStatusLifecycle = (form, nextStatus) => {
   }
 
   return form;
+};
+
+const CONTACT_NAME_LABEL_PATTERN = /\b(full\s*name|name)\b/i;
+const CONTACT_FIRST_NAME_LABEL_PATTERN = /\bfirst\s*name\b/i;
+const CONTACT_LAST_NAME_LABEL_PATTERN = /\blast\s*name\b/i;
+const CONTACT_PHONE_LABEL_PATTERN = /\b(phone|mobile|telephone|tel)\b/i;
+const CONTACT_EMAIL_LABEL_PATTERN = /\bemail|e-mail\b/i;
+
+const findAnswerValue = (form, answers, predicate) => {
+  const question = (form.questions || []).find(predicate);
+  if (!question) return "";
+
+  const value = answers?.[question.id];
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number") return String(value);
+  return "";
+};
+
+const buildSubmittedAttendee = (form, attendee = {}, answers = {}) => {
+  if (form.type === "review") {
+    return {
+      fullName: "",
+      email: "",
+      phone: "",
+    };
+  }
+
+  if (form.collectAttendeeInfo !== false) {
+    return {
+      fullName: String(attendee?.fullName || "").trim(),
+      email: String(attendee?.email || "").trim().toLowerCase(),
+      phone: String(attendee?.phone || "").trim(),
+    };
+  }
+
+  const fullName = findAnswerValue(
+    form,
+    answers,
+    (question) =>
+      ["short_text", "long_text"].includes(question.type) &&
+      CONTACT_NAME_LABEL_PATTERN.test(String(question.label || ""))
+  );
+  const firstName = findAnswerValue(
+    form,
+    answers,
+    (question) =>
+      ["short_text", "long_text"].includes(question.type) &&
+      CONTACT_FIRST_NAME_LABEL_PATTERN.test(String(question.label || ""))
+  );
+  const lastName = findAnswerValue(
+    form,
+    answers,
+    (question) =>
+      ["short_text", "long_text"].includes(question.type) &&
+      CONTACT_LAST_NAME_LABEL_PATTERN.test(String(question.label || ""))
+  );
+
+  return {
+    fullName: fullName || [firstName, lastName].filter(Boolean).join(" ").trim(),
+    email: findAnswerValue(
+      form,
+      answers,
+      (question) =>
+        question.type === "email" ||
+        CONTACT_EMAIL_LABEL_PATTERN.test(String(question.label || ""))
+    ).toLowerCase(),
+    phone: findAnswerValue(
+      form,
+      answers,
+      (question) =>
+        question.type === "phone" ||
+        CONTACT_PHONE_LABEL_PATTERN.test(String(question.label || ""))
+    ),
+  };
 };
 
 const assertFormOwnership = async (formId, user) => {
@@ -650,10 +736,12 @@ const submitResponse = async (req, res) => {
         message: "Answers are required",
       });
     }
+    const submittedAttendee = buildSubmittedAttendee(form, attendee, answers);
+
     if (form.type === "rsvp" && !previewBypass) {
-      const fullName = String(attendee?.fullName || "").trim();
-      const email = String(attendee?.email || "").trim().toLowerCase();
-      const phone = String(attendee?.phone || "").trim();
+      const fullName = submittedAttendee.fullName;
+      const email = submittedAttendee.email;
+      const phone = submittedAttendee.phone;
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const phoneRegex = /^\+?[0-9][0-9\s().-]{6,}$/;
@@ -661,19 +749,28 @@ const submitResponse = async (req, res) => {
       if (!fullName) {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
-          message: "Full name is required",
+          message:
+            form.collectAttendeeInfo === false
+              ? "Add a full name field to the form or enable attendee contact collection"
+              : "Full name is required",
         });
       }
       if (!email || !emailRegex.test(email)) {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
-          message: "A valid email address is required",
+          message:
+            form.collectAttendeeInfo === false
+              ? "Add an email field to the form or enable attendee contact collection"
+              : "A valid email address is required",
         });
       }
       if (!phone || !phoneRegex.test(phone)) {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
-          message: "A valid phone number is required",
+          message:
+            form.collectAttendeeInfo === false
+              ? "Add a phone field to the form or enable attendee contact collection"
+              : "A valid phone number is required",
         });
       }
     }
@@ -690,11 +787,7 @@ const submitResponse = async (req, res) => {
       formPublicId: form.publicId,
       organizerId: form.organizerId,
       answers,
-      attendee: {
-        fullName: String(attendee?.fullName || "").trim(),
-        email: String(attendee?.email || "").trim().toLowerCase(),
-        phone: String(attendee?.phone || "").trim(),
-      },
+      attendee: submittedAttendee,
       status: responseStatus,
       tag: tag && ["VIP", "Guest", "Press"].includes(tag) ? tag : "Guest",
       metadata: {

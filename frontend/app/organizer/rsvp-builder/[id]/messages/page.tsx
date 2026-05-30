@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
@@ -54,8 +54,11 @@ const CHANNELS: {
 
 export default function Messages() {
   const params = useParams();
+  const pathname = usePathname();
   const id = params.id as string;
-  const router = useRouter();
+  const basePath = pathname.startsWith("/admin/")
+    ? "/admin/rsvps"
+    : "/organizer/rsvp-builder";
   
   const events = useStore((s) => s.events);
   const allResponses = useStore((s) => s.responses);
@@ -124,7 +127,7 @@ export default function Messages() {
             Bulk messaging is available for RSVP events.
           </p>
           <Button asChild className="rounded-full">
-            <Link href="/organizer/rsvp-builder">
+            <Link href={basePath}>
               Back to dashboard
             </Link>
           </Button>
@@ -135,7 +138,8 @@ export default function Messages() {
 
   const toggleSegment = (s: AttendeeTag) => {
     const next = new Set(selected);
-    next.has(s) ? next.delete(s) : next.add(s);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
     setSelected(next);
   };
 
@@ -174,12 +178,12 @@ export default function Messages() {
             size="sm"
             className="rounded-full"
           >
-            <Link href="/organizer/rsvp-builder">
+            <Link href={basePath}>
               <ArrowLeft className="mr-1 h-4 w-4" /> Back
             </Link>
           </Button>
           <Button asChild variant="ghost" size="sm" className="rounded-full">
-            <Link href={`/organizer/rsvp-builder/${event.id}/analytics`}>
+            <Link href={`${basePath}/${event.id}/analytics`}>
               Analytics
             </Link>
           </Button>
@@ -343,16 +347,9 @@ export default function Messages() {
               ) : (
                 <div className="mt-4 max-h-72 overflow-y-auto pr-1 space-y-2">
                   {responses.map((r) => {
-                    const nameQ = event.questions.find(
-                      (q) => q.type === "short_text"
-                    );
-                    const emailQ = event.questions.find(
-                      (q) => q.type === "email"
-                    );
-                    const name =
-                      (nameQ && r.answers[nameQ.id]) || "Attendee";
-                    const email =
-                      (emailQ && r.answers[emailQ.id]) || "";
+                    const name = r.attendee?.fullName || "Attendee";
+                    const email = r.attendee?.email || "";
+                    const phone = r.attendee?.phone || "";
                     return (
                       <div
                         key={r.id}
@@ -363,7 +360,7 @@ export default function Messages() {
                             {String(name)}
                           </div>
                           <div className="truncate text-xs text-slate-600 dark:text-slate-400">
-                            {String(email)}
+                            {String(email || phone || "No contact captured")}
                           </div>
                         </div>
                         <Select

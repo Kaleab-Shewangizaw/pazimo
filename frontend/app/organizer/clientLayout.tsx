@@ -4,6 +4,7 @@ import type React from "react";
 import { useEffect, useState } from "react"; // Import useState
 import { useRouter, usePathname } from "next/navigation"; // Import usePathname
 import { useAuthStore } from "@/store/authStore";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
 import Sidebar from "@/components/organizer-sidebar/sidebar";
 import OrganizerHeader from "@/components/organizer-header/organizer-header"; // Import the new OrganizerHeader
 import { toast } from "sonner";
@@ -21,12 +22,22 @@ export default function ClientLayout({
   const router = useRouter();
   const pathname = usePathname(); // Get current pathname
   const { isAuthenticated, user } = useAuthStore();
+  const admin = useAdminAuthStore((state) => state.admin);
+  const adminToken = useAdminAuthStore((state) => state.token);
   // Track hydration to avoid redirecting before zustand rehydrates from storage
-  const [hasHydrated, setHasHydrated] = useState(false);
+  const [authHydrated, setAuthHydrated] = useState(false);
+  const [adminHydrated, setAdminHydrated] = useState(false);
 
   const isOrganizerRoute = pathname.startsWith("/organizer");
   const isSignInOrSignUp =
     pathname === "/organizer/sign-in" || pathname === "/organizer/sign-up";
+  const hasAdminAccess = Boolean(admin && adminToken && admin.role === "admin");
+  const hasOrganizerAccess = Boolean(
+    isAuthenticated &&
+      user &&
+      (user.role === "organizer" || user.role === "admin")
+  );
+  const canAccessOrganizerArea = hasOrganizerAccess || hasAdminAccess;
 
   // State for sidebar open/close
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -45,28 +56,38 @@ export default function ClientLayout({
       useAuthStore as typeof useAuthStore & { persist?: PersistApi }
     ).persist;
     if (persist?.hasHydrated) {
-      setHasHydrated(persist.hasHydrated());
-      const unsub = persist.onFinishHydration?.(() => setHasHydrated(true));
+      setAuthHydrated(persist.hasHydrated());
+      const unsub = persist.onFinishHydration?.(() => setAuthHydrated(true));
       return () => unsub?.();
     } else {
       // Fallback: assume hydrated after first render if persist helpers are unavailable
-      setHasHydrated(true);
+      setAuthHydrated(true);
     }
   }, []);
 
   useEffect(() => {
+    const persist = (
+      useAdminAuthStore as typeof useAdminAuthStore & { persist?: PersistApi }
+    ).persist;
+    if (persist?.hasHydrated) {
+      setAdminHydrated(persist.hasHydrated());
+      const unsub = persist.onFinishHydration?.(() => setAdminHydrated(true));
+      return () => unsub?.();
+    } else {
+      setAdminHydrated(true);
+    }
+  }, []);
+
+  const hasHydrated = authHydrated && adminHydrated;
+
+  useEffect(() => {
     if (!isOrganizerRoute || !hasHydrated) return;
-    if (!isAuthenticated || !user) {
+    if (!canAccessOrganizerArea) {
       toast.error("Please login to access organizer features");
       router.replace("/sign-in");
       return;
     }
-    if (user.role !== "organizer") {
-      toast.error("Only organizers can access this area");
-      router.replace("/");
-      return;
-    }
-  }, [isAuthenticated, user, router, isOrganizerRoute, hasHydrated]);
+  }, [canAccessOrganizerArea, router, isOrganizerRoute, hasHydrated]);
 
   // If it's not an organizer route or it's sign-in/sign-up, render children directly without layout
   if (!isOrganizerRoute || isSignInOrSignUp) {
@@ -74,7 +95,7 @@ export default function ClientLayout({
   }
 
   // If it's an organizer route but not authenticated or not an organizer, return null (handled by useEffect redirect)
-  if (!hasHydrated || !isAuthenticated || !user || user.role !== "organizer") {
+  if (!hasHydrated || !canAccessOrganizerArea) {
     return null;
   }
 

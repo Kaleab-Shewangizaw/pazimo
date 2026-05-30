@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
@@ -30,13 +30,16 @@ import {
 
 export default function Analytics() {
   const params = useParams();
+  const pathname = usePathname();
   const id = params.id as string;
+  const basePath = pathname.startsWith("/admin/")
+    ? "/admin/rsvps"
+    : "/organizer/rsvp-builder";
   const events = useStore((s) => s.events);
   const allResponses = useStore((s) => s.responses);
   const loadEvent = useStore((s) => s.loadEvent);
   const loadResponses = useStore((s) => s.loadResponses);
   const updateResponseStatus = useStore((s) => s.updateResponseStatus);
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
@@ -169,7 +172,7 @@ export default function Analytics() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
         <div className="container py-20 text-center">
           <Button asChild className="rounded-full">
-            <Link href="/organizer/rsvp-builder">Back</Link>
+            <Link href={basePath}>Back</Link>
           </Button>
         </div>
       </div>
@@ -228,19 +231,19 @@ export default function Analytics() {
             size="sm"
             className="rounded-full"
           >
-            <Link href="/organizer/rsvp-builder">
+            <Link href={basePath}>
               <ArrowLeft className="mr-1 h-4 w-4" /> Back
             </Link>
           </Button>
           <div className="ml-auto flex flex-wrap gap-2">
             <Button asChild variant="outline" className="rounded-full">
-              <Link href={`/organizer/rsvp-builder/${event.id}/responses`}>
+              <Link href={`${basePath}/${event.id}/responses`}>
                 Responses
               </Link>
             </Button>
             {event.type === "rsvp" && (
               <Button asChild variant="outline" className="rounded-full">
-                <Link href={`/organizer/rsvp-builder/${event.id}/messages`}>
+                <Link href={`${basePath}/${event.id}/messages`}>
                   Messages
                 </Link>
               </Button>

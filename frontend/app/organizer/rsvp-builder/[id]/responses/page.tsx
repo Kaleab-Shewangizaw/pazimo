@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useStore } from "@/lib/rsvp-store";
 import type { Response } from "@/lib/rsvp-types";
@@ -23,7 +23,11 @@ import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 export default function ResponsesPage() {
   const params = useParams();
+  const pathname = usePathname();
   const id = params.id as string;
+  const basePath = pathname.startsWith("/admin/")
+    ? "/admin/rsvps"
+    : "/organizer/rsvp-builder";
   const events = useStore((s) => s.events);
   const allResponses = useStore((s) => s.responses);
   const loadEvent = useStore((s) => s.loadEvent);
@@ -119,7 +123,7 @@ export default function ResponsesPage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
         <div className="container py-20 text-center">
           <Button asChild className="rounded-full">
-            <Link href="/organizer/rsvp-builder">Back</Link>
+            <Link href={basePath}>Back</Link>
           </Button>
         </div>
       </div>
@@ -132,7 +136,7 @@ export default function ResponsesPage() {
         <div className="w-full max-w-6xl">
           <div className="flex flex-wrap items-center gap-3 mb-6">
             <Button asChild variant="ghost" size="sm" className="rounded-full">
-              <Link href={`/organizer/rsvp-builder/${event.id}/analytics`}>
+              <Link href={`${basePath}/${event.id}/analytics`}>
                 <ArrowLeft className="mr-1 h-4 w-4" /> Back to analytics
               </Link>
             </Button>

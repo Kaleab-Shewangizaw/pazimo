@@ -57,6 +57,7 @@ export interface RsvpEvent {
   venue?: string;
   rsvpLimit?: number;
   approvalMode: "auto" | "manual";
+  collectAttendeeInfo?: boolean;
   payment?: PaymentConfig;
   anonymous?: boolean;
   sections: Section[];

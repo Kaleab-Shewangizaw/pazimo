@@ -129,6 +129,10 @@ const rsvpFormSchema = new mongoose.Schema(
       enum: ["auto", "manual"],
       default: "auto",
     },
+    collectAttendeeInfo: {
+      type: Boolean,
+      default: true,
+    },
     payment: { type: paymentSchema, default: undefined },
     anonymous: { type: Boolean, default: false },
     sections: { type: [sectionSchema], default: [] },

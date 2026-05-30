@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
@@ -66,8 +66,11 @@ const QTYPES: {
 
 export default function Builder() {
   const params = useParams();
+  const pathname = usePathname();
   const id = params.id as string;
   const router = useRouter();
+  const isAdminView = pathname.startsWith("/admin/");
+  const basePath = isAdminView ? "/admin/rsvps" : "/organizer/rsvp-builder";
   const resolvedId = useStore((s) => s.eventAliases[id] || id);
   const event = useStore((s) => s.events.find((e) => e.id === resolvedId));
   const isDirty = useStore((s) => !!s.dirtyEvents[resolvedId]);
@@ -123,7 +126,7 @@ export default function Builder() {
         <div className="container py-20 text-center">
           <p className="text-slate-600 dark:text-slate-400">Event not found.</p>
           <Button asChild className="mt-4 rounded-full">
-            <Link href="/organizer/rsvp-builder">Back</Link>
+            <Link href={basePath}>Back</Link>
           </Button>
         </div>
       </div>
@@ -134,6 +137,19 @@ export default function Builder() {
   const allowedTypes = QTYPES.filter(
     (t) => t.group === "both" || t.group === event.type
   );
+  const hasNameQuestion = event.questions.some(
+    (question) =>
+      ["short_text", "long_text"].includes(question.type) &&
+      /\b(full\s*name|name)\b/i.test(question.label || "")
+  );
+  const hasEmailQuestion = event.questions.some(
+    (question) => question.type === "email"
+  );
+  const hasPhoneQuestion = event.questions.some(
+    (question) => question.type === "phone"
+  );
+  const hasEmbeddedContactQuestions =
+    hasNameQuestion && hasEmailQuestion && hasPhoneQuestion;
   const previousNumeric = event.questions.filter((q) =>
     ["rating", "nps"].includes(q.type)
   );
@@ -141,7 +157,7 @@ export default function Builder() {
   const persistForm = async () => {
     const savedId = await saveEvent(event.id);
     if (savedId !== event.id) {
-      router.replace(`/organizer/rsvp-builder/${savedId}`);
+      router.replace(`${basePath}/${savedId}`);
     }
     return savedId;
   };
@@ -205,8 +221,8 @@ export default function Builder() {
             <Button asChild variant="outline" className="rounded-full">
               <Link 
                 href={event.type === 'review' 
-                  ? `/review-form/${event.publicId || event.id}?preview=true&id=${event.id}` 
-                  : `/rsvp-form/${event.publicId || event.id}?preview=true&id=${event.id}`
+                  ? `/review-form/${event.publicId || event.id}?preview=true&id=${event.id}&returnTo=${encodeURIComponent(`${basePath}/${event.id}`)}` 
+                  : `/rsvp-form/${event.publicId || event.id}?preview=true&id=${event.id}&returnTo=${encodeURIComponent(`${basePath}/${event.id}`)}`
                 }
               >
                 <Eye className="mr-1 h-4 w-4" /> Preview
@@ -340,11 +356,11 @@ export default function Builder() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <Label className="text-sm font-medium text-slate-900 dark:text-white">
-                      {event.type === "review" ? "Private review link" : "Public form"}
+                      {event.type === "review" ? "Private review" : "Public form"}
                     </Label>
                     <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
                       {event.type === "review"
-                        ? "Review forms are always private. Admin still needs to publish the form before people can respond."
+                        ? ""
                         : "Public forms appear on discovery pages after admin publishes them. Private forms only work for people with the direct link."}
                     </p>
                   </div>
@@ -357,6 +373,34 @@ export default function Builder() {
                   />
                 </div>
               </div>
+
+              {event.type === "rsvp" && (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-slate-900 dark:text-white">
+                        Collect attendee contact before the form
+                      </Label>
+                      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                        Ask for full name, email, and phone number before attendees start the RSVP questions.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={event.collectAttendeeInfo !== false}
+                      onCheckedChange={(checked) =>
+                        updateEvent(event.id, { collectAttendeeInfo: checked })
+                      }
+                    />
+                  </div>
+                  {event.collectAttendeeInfo === false ? (
+                    <p className="mt-3 text-xs text-slate-600 dark:text-slate-400">
+                      {hasEmbeddedContactQuestions
+                        ? "Messages will use the name, email, and phone fields that already exist inside the form."
+                        : "Add name, email, and phone questions to the form before publishing, or turn this back on."}
+                    </p>
+                  ) : null}
+                </div>
+              )}
 
               <div>
                 <Label className="text-sm text-slate-900 dark:text-white">

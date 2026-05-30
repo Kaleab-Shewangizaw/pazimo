@@ -58,6 +58,7 @@ type BackendForm = {
   venue?: string;
   rsvpLimit?: number;
   approvalMode: "auto" | "manual";
+  collectAttendeeInfo?: boolean;
   payment?: PaymentConfig;
   anonymous?: boolean;
   sections?: Section[];
@@ -140,6 +141,8 @@ const mapForm = (form: BackendForm): RsvpEvent => ({
   venue: form.venue || "",
   rsvpLimit: form.rsvpLimit,
   approvalMode: form.approvalMode,
+  collectAttendeeInfo:
+    form.type === "review" ? false : form.collectAttendeeInfo !== false,
   payment: form.payment
     ? {
         ...form.payment,
@@ -180,6 +183,8 @@ const mapFormPayload = (event: Partial<RsvpEvent>) => ({
   venue: event.venue || "",
   rsvpLimit: event.rsvpLimit,
   approvalMode: event.approvalMode || "auto",
+  collectAttendeeInfo:
+    event.type === "review" ? false : event.collectAttendeeInfo !== false,
   payment: event.payment
     ? {
         ...event.payment,
@@ -356,6 +361,7 @@ export const buildDefaultEvent = (type: "rsvp" | "review", name: string): RsvpEv
   type,
   status: "draft",
   isPublic: type === "review" ? false : true,
+  collectAttendeeInfo: type === "review" ? false : true,
   sections: [{ id: crypto.randomUUID(), title: "Basic Information" }],
   questions: [],
   approvalMode: "auto",
