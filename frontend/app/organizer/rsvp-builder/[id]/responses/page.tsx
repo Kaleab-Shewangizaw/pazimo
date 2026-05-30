@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useStore } from "@/lib/rsvp-store";
+import type { Response } from "@/lib/rsvp-types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,13 +17,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { ArrowLeft, CheckCircle2, Download, Users, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, ScanLine, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 export default function ResponsesPage() {
   const params = useParams();
   const id = params.id as string;
-  const router = useRouter();
   const events = useStore((s) => s.events);
   const allResponses = useStore((s) => s.responses);
   const loadEvent = useStore((s) => s.loadEvent);
@@ -29,7 +31,7 @@ export default function ResponsesPage() {
   const updateResponseStatus = useStore((s) => s.updateResponseStatus);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
+  const [selectedResponse, setSelectedResponse] = useState<Response | null>(null);
 
   const event = useMemo(() => events.find((item) => item.id === id), [events, id]);
   const responses = useMemo(
@@ -135,6 +137,12 @@ export default function ResponsesPage() {
               </Link>
             </Button>
             <div className="ml-auto flex gap-2">
+              <Button asChild variant="outline" className="rounded-full">
+                <Link href={`/organizer/qr-scanner?mode=rsvp&formId=${id}`}>
+                  <ScanLine className="mr-1 h-4 w-4" />
+                  Open scanner
+                </Link>
+              </Button>
               <Button onClick={exportCsv} className="rounded-full shadow-lg hover:shadow-xl transition-shadow">
                 <Download className="mr-1 h-4 w-4" /> Export CSV
               </Button>
@@ -234,6 +242,20 @@ export default function ResponsesPage() {
                           >
                             View
                           </Button>
+                          {response.qrCodeDataUrl ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                downloadHighQualityQR(
+                                  response.qrCodeDataUrl,
+                                  `${event.name.replace(/\s+/g, "-").toLowerCase()}-${response.responseId || response.id}.png`,
+                                )
+                              }
+                            >
+                              QR
+                            </Button>
+                          ) : null}
                         </div>
                       </td>
                       {event.questions.map((q) => {
@@ -271,6 +293,34 @@ export default function ResponsesPage() {
                   </div>
                 </div>
               )}
+              {selectedResponse?.qrCodeDataUrl ? (
+                <div className="rounded-md bg-slate-50 dark:bg-slate-900 p-4">
+                  <div className="text-sm text-slate-600 dark:text-slate-400">QR pass</div>
+                  <div className="mt-3 flex flex-col items-center gap-3">
+                    <Image
+                      src={selectedResponse.qrCodeDataUrl}
+                      alt={`${selectedResponse.attendee?.fullName || "Attendee"} QR pass`}
+                      width={192}
+                      height={192}
+                      className="h-48 w-48 rounded-lg border bg-white p-3"
+                      unoptimized
+                    />
+                    <Button
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={() =>
+                        downloadHighQualityQR(
+                          selectedResponse.qrCodeDataUrl,
+                          `${event.name.replace(/\s+/g, "-").toLowerCase()}-${selectedResponse.responseId || selectedResponse.id}.png`,
+                        )
+                      }
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download QR
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
               <div className="flex items-center justify-between">
                 <div className="text-sm text-slate-600 dark:text-slate-400">Status</div>
                 <div>
@@ -323,7 +373,7 @@ function StatCard({
   label,
   value,
 }: {
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
 }) {

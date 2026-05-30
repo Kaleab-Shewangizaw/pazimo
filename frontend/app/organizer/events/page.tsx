@@ -47,6 +47,7 @@ import {
   Tag,
   Ticket,
   QrCode,
+  ScanLine,
   Download,
   Copy,
   Loader2,
@@ -535,6 +536,18 @@ export default function EventsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/organizer/qr-scanner?mode=ticket&eventId=${event._id}`);
+                          }}
+                          className="text-blue-600 hover:text-blue-700"
+                          title="Open scoped scanner"
+                        >
+                          <ScanLine className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

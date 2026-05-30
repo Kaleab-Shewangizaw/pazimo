@@ -1,6 +1,9 @@
 const { StatusCodes } = require("http-status-codes");
 const mongoose = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
+const QRCode = require("qrcode");
+const fs = require("fs");
+const path = require("path");
 const RsvpForm = require("../models/RsvpForm");
 const RsvpResponse = require("../models/RsvpResponse");
 
@@ -15,6 +18,113 @@ const sanitizePublicForm = (form) => {
 };
 
 const hasAdminAccess = (user) => user?.role === "admin";
+
+const RSVP_SCANNER_TYPES = new Set(["rsvp_response", "rsvp"]);
+
+const buildRsvpQrPayload = (_form, response) =>
+  JSON.stringify({
+    rid: response.responseId,
+  });
+
+const buildBrandedQrDataUrl = async (payload) => {
+  let svg = await QRCode.toString(payload, {
+    errorCorrectionLevel: "H",
+    type: "svg",
+    margin: 2,
+    color: {
+      dark: "#000000",
+      light: "#FFFFFF",
+    },
+  });
+
+  svg = svg.replace(
+    /<rect([^>]*)width="1" height="1"/g,
+    '<circle$1 r="0.5" cx="0.5" cy="0.5"',
+  );
+
+  let logoPath = path.join(__dirname, "../../uploads/logo/miniLogo.png");
+  if (!fs.existsSync(logoPath)) {
+    logoPath = path.join(__dirname, "../../../frontend/public/logo.png");
+  }
+
+  let logoSvg = "";
+  if (fs.existsSync(logoPath)) {
+    const logoBase64 = fs.readFileSync(logoPath, "base64");
+    const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+    const size = viewBox ? parseInt(viewBox[1], 10) : 41;
+    const logoSize = size * 0.2;
+    const center = size / 2;
+    const x = center - logoSize / 2;
+    const y = center - logoSize / 2;
+    const padding = 1;
+    const bgSize = logoSize + padding * 2;
+    const bgX = x - padding;
+    const bgY = y - padding;
+
+    logoSvg = `
+      <rect
+        x="${bgX}"
+        y="${bgY}"
+        width="${bgSize}"
+        height="${bgSize}"
+        fill="white"
+        rx="1" ry="1"
+      />
+      <image
+        x="${x}"
+        y="${y}"
+        width="${logoSize}"
+        height="${logoSize}"
+        href="data:image/png;base64,${logoBase64}"
+        preserveAspectRatio="xMidYMid meet"
+      />
+    `;
+  }
+
+  svg = svg.replace(
+    /<rect x="0" y="0" width="7" height="7"[^>]*>/g,
+    `<rect x="0" y="0" width="7" height="7" rx="2" ry="2" fill="#115db1"/>`,
+  );
+
+  svg = svg.replace(
+    /<rect x="1" y="1" width="5" height="5"[^>]*>/g,
+    `<rect x="1" y="1" width="5" height="5" rx="1.5" ry="1.5" fill="white"/>`,
+  );
+
+  svg = svg.replace(
+    /<rect x="2" y="2" width="3" height="3"[^>]*>/g,
+    `<rect x="2" y="2" width="3" height="3" rx="1" ry="1" fill="#115db1"/>`,
+  );
+
+  svg = svg.replace("</svg>", `${logoSvg}</svg>`);
+
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+};
+
+const toResponseDto = (response) => {
+  const responseObject =
+    typeof response.toObject === "function" ? response.toObject() : response;
+
+  return {
+    ...responseObject,
+    qrCodePayload: responseObject.qrCodePayload || "",
+    qrCodeDataUrl: responseObject.qrCodeDataUrl || "",
+  };
+};
+
+const normalizeFormVisibility = (form) => ({
+  ...form,
+  isPublic:
+    form.type === "review"
+      ? false
+      : form.isPublic !== false,
+  payment: form.payment
+    ? {
+        ...form.payment,
+        enabled: false,
+      }
+    : form.payment,
+});
 
 const normalizeSections = (sections = []) =>
   sections.map((section, index) => ({
@@ -62,34 +172,39 @@ const buildFormPayload = (body = {}) => ({
   approvalMode: body.approvalMode || "auto",
   payment: body.payment
     ? {
-        enabled: !!body.payment.enabled,
+        enabled: false,
         price: Number(body.payment.price || 0),
         currency: body.payment.currency || "USD",
         deadline: body.payment.deadline || undefined,
       }
     : undefined,
   anonymous: !!body.anonymous,
+  isPublic:
+    body.type === "review"
+      ? false
+      : typeof body.isPublic === "boolean"
+        ? body.isPublic
+        : body.isPublic === "false"
+          ? false
+          : true,
   sections: normalizeSections(Array.isArray(body.sections) ? body.sections : []),
   questions: normalizeQuestions(Array.isArray(body.questions) ? body.questions : []),
 });
 
-const toFormResponse = async (form) => ({
-  ...form.toObject(),
-  responseCount:
-    form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id })),
-  shareUrl: buildShareUrl(form),
-});
+const toFormResponse = async (form) => {
+  const formObject = normalizeFormVisibility(form.toObject());
+  return {
+    ...formObject,
+    responseCount:
+      form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id })),
+    shareUrl: buildShareUrl(form),
+  };
+};
 
 const applyStatusLifecycle = (form, nextStatus) => {
   const status = nextStatus || form.status || "draft";
   form.status = status;
   form.isClosed = ["cancelled", "archived", "closed"].includes(status);
-  if (status === "published") {
-    form.isPublic = true;
-  }
-  if (["cancelled", "archived", "closed"].includes(status)) {
-    form.isPublic = false;
-  }
 
   if (status === "published" && !form.publishedAt) {
     form.publishedAt = new Date();
@@ -104,7 +219,7 @@ const applyStatusLifecycle = (form, nextStatus) => {
   }
 
   if (status === "hidden") {
-    form.isPublic = false;
+    form.isClosed = true;
   }
 
   return form;
@@ -155,7 +270,7 @@ const createForm = async (req, res) => {
       slug: req.body.slug || undefined,
       status: payload.status === "published" ? "published" : "draft",
       publishedAt: payload.status === "published" ? new Date() : undefined,
-      isPublic: payload.status === "published",
+      isPublic: payload.isPublic,
       isClosed: false,
       isDeleted: false,
       deletedAt: null,
@@ -189,7 +304,7 @@ const listForms = async (req, res) => {
     const formsWithCounts = await Promise.all(
       forms.map(async (form) => {
         const responseCount = form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id }));
-        return { ...form, shareUrl: buildShareUrl(form), responseCount };
+        return { ...normalizeFormVisibility(form), shareUrl: buildShareUrl(form), responseCount };
       })
     );
     
@@ -207,8 +322,21 @@ const listForms = async (req, res) => {
 
 const listPublishedForms = async (req, res) => {
   try {
-    const query = { status: "published", isPublic: true, isDeleted: { $ne: true }, deletedAt: null };
-    if (req.query.type) query.type = req.query.type;
+    const requestedType = String(req.query.type || "").trim().toLowerCase();
+    if (requestedType === "review") {
+      return res.json({
+        success: true,
+        data: [],
+      });
+    }
+
+    const query = {
+      status: "published",
+      isPublic: true,
+      type: "rsvp",
+      isDeleted: { $ne: true },
+      deletedAt: null,
+    };
 
     const requestedLimit = Number(req.query.limit);
     const limit = Number.isFinite(requestedLimit)
@@ -223,7 +351,11 @@ const listPublishedForms = async (req, res) => {
     const formsWithCounts = await Promise.all(
       forms.map(async (form) => {
         const responseCount = form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id }));
-        return { ...sanitizePublicForm(form), shareUrl: buildShareUrl(form), responseCount };
+        return {
+          ...normalizeFormVisibility(sanitizePublicForm(form)),
+          shareUrl: buildShareUrl(form),
+          responseCount,
+        };
       })
     );
 
@@ -256,7 +388,11 @@ const getForm = async (req, res) => {
 
     return res.json({
       success: true,
-      data: { ...form.toObject(), shareUrl: buildShareUrl(form), responseCount },
+      data: {
+        ...normalizeFormVisibility(form.toObject()),
+        shareUrl: buildShareUrl(form),
+        responseCount,
+      },
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -284,6 +420,7 @@ const updateForm = async (req, res) => {
     });
 
     applyStatusLifecycle(form, nextStatus);
+    form.isPublic = form.type === "review" ? false : payload.isPublic;
 
     await form.save();
 
@@ -423,8 +560,13 @@ const publishForm = async (req, res) => {
       });
     }
 
-    applyStatusLifecycle(form, "published");
-    form.isPublic = true;
+    const nextStatus =
+      String(req.body?.status || "").toLowerCase() === "draft"
+        ? "draft"
+        : "published";
+
+    applyStatusLifecycle(form, nextStatus);
+    form.isPublic = form.type === "review" ? false : form.isPublic !== false;
     form.isClosed = false;
     await form.save();
 
@@ -445,7 +587,6 @@ const getFormByPublicId = async (req, res) => {
     const form = await RsvpForm.findOne({
       publicId: req.params.publicId,
       status: "published",
-      isPublic: true,
       isDeleted: { $ne: true },
       deletedAt: null,
     }).lean();
@@ -458,7 +599,10 @@ const getFormByPublicId = async (req, res) => {
 
     return res.json({
       success: true,
-      data: { ...sanitizePublicForm(form), shareUrl: buildShareUrl(form) },
+      data: {
+        ...normalizeFormVisibility(sanitizePublicForm(form)),
+        shareUrl: buildShareUrl(form),
+      },
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -470,16 +614,23 @@ const getFormByPublicId = async (req, res) => {
 
 const submitResponse = async (req, res) => {
   try {
-    const form = await RsvpForm.findOne({
-      publicId: req.params.publicId,
-    });
+    const form =
+      req.rsvpForm ||
+      (await RsvpForm.findOne({
+        publicId: req.params.publicId,
+      }));
     if (!form) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: "Form not found",
       });
     }
-    
+
+    const { answers, tag, metadata = {}, attendee = {} } = req.body || {};
+    const normalizedStatus = String(form.status || "").toLowerCase();
+    const previewBypass =
+      req.allowPrivateRsvpSubmit === true && metadata?.preview === true;
+
     if (form.isDeleted || form.deletedAt) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
@@ -487,22 +638,18 @@ const submitResponse = async (req, res) => {
       });
     }
 
-    if (!["published", "draft"].includes(form.status) || form.isPublic === false) {
+    if (!previewBypass && normalizedStatus !== "published") {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: "Form is not available for responses",
       });
     }
-
-    const { answers, tag, metadata = {}, attendee = {} } = req.body || {};
     if (!answers || typeof answers !== "object" || Array.isArray(answers)) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message: "Answers are required",
       });
     }
-
-    const previewBypass = metadata?.preview === true;
     if (form.type === "rsvp" && !previewBypass) {
       const fullName = String(attendee?.fullName || "").trim();
       const email = String(attendee?.email || "").trim().toLowerCase();
@@ -534,11 +681,9 @@ const submitResponse = async (req, res) => {
     const responseStatus =
       form.type === "review"
           ? "approved"
-          : form.payment?.enabled
-            ? "unpaid"
-            : form.approvalMode === "manual"
-              ? "pending"
-              : "approved";
+          : form.approvalMode === "manual"
+            ? "pending"
+            : "approved";
 
     const response = await RsvpResponse.create({
       formId: form._id,
@@ -561,16 +706,47 @@ const submitResponse = async (req, res) => {
       submittedAt: new Date(),
     });
 
+    if (form.type === "rsvp") {
+      const qrCodePayload = buildRsvpQrPayload(form, response);
+      const qrCodeDataUrl = await buildBrandedQrDataUrl(qrCodePayload);
+
+      response.qrCodePayload = qrCodePayload;
+      response.qrCodeDataUrl = qrCodeDataUrl;
+      await response.save();
+    }
+
     await RsvpForm.updateOne({ _id: form._id }, { $inc: { responseCount: 1 } });
 
     return res.status(StatusCodes.CREATED).json({
       success: true,
-      data: response.toObject(),
+      data: toResponseDto(response),
     });
   } catch (error) {
     return res.status(StatusCodes.BAD_REQUEST).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+const submitResponseByFormId = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    req.params.publicId = form.publicId;
+    req.rsvpForm = form;
+    req.allowPrivateRsvpSubmit = true;
+    return submitResponse(req, res);
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to submit response",
     });
   }
 };
@@ -590,7 +766,7 @@ const listResponses = async (req, res) => {
       .lean();
     return res.json({
       success: true,
-      data: responses,
+      data: responses.map(toResponseDto),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -633,7 +809,7 @@ const updateResponseTag = async (req, res) => {
 
     return res.json({
       success: true,
-      data: response,
+      data: toResponseDto(response),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -676,12 +852,226 @@ const updateResponseStatus = async (req, res) => {
 
     return res.json({
       success: true,
-      data: response,
+      data: toResponseDto(response),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+const validateRsvpQr = async (req, res) => {
+  try {
+    const { qrData } = req.body || {};
+
+    if (!qrData) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "QR code data is required",
+      });
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(qrData);
+    } catch (error) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid QR code format",
+      });
+    }
+
+    const hasRsvpResponseId = Boolean(parsed.rid || parsed.responseId);
+    const hasSupportedType = RSVP_SCANNER_TYPES.has(
+      String(parsed.type || "").toLowerCase(),
+    );
+
+    if (!hasRsvpResponseId && !hasSupportedType) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Unsupported RSVP QR code",
+      });
+    }
+
+    const responseId = parsed.rid || parsed.responseId;
+    if (!responseId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid QR code: missing response ID",
+      });
+    }
+
+    const response = await RsvpResponse.findOne({ responseId })
+      .populate("formId", "title date startTime endTime location organizerId approvalMode")
+      .lean();
+
+    if (!response || !response.formId) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "RSVP response not found",
+      });
+    }
+
+    const form = response.formId;
+    if (
+      !hasAdminAccess(req.user) &&
+      String(form.organizerId) !== String(req.user?._id)
+    ) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: "You are not allowed to scan this RSVP response",
+      });
+    }
+
+    const scopeFormId = String(req.body?.scopeFormId || "").trim();
+    if (scopeFormId && String(form._id) !== scopeFormId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "This RSVP response does not belong to the selected RSVP form",
+      });
+    }
+
+    const status = String(response.status || "").toLowerCase();
+    const entryApproved = ["approved", "paid"].includes(status);
+
+    if (response.checkedIn) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        alreadyCheckedIn: true,
+        message: "RSVP already checked in",
+        data: {
+          responseId: response.responseId,
+          entryType: "rsvp",
+          eventTitle: form.title,
+          eventDate: form.date,
+          eventTime: [form.startTime, form.endTime].filter(Boolean).join(" - "),
+          eventLocation: form.location,
+          userName: response.attendee?.fullName || "Attendee",
+          userEmail: response.attendee?.email || "",
+          userPhone: response.attendee?.phone || "",
+          checkedIn: true,
+          checkedInAt: response.checkedInAt,
+          status: response.status,
+          approvalMode: form.approvalMode,
+          requiresApproval: form.approvalMode === "manual",
+          eligibleForEntry: entryApproved,
+        },
+      });
+    }
+
+    if (!entryApproved) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message:
+          form.approvalMode === "manual"
+            ? "RSVP is not approved yet"
+            : "RSVP is not ready for entry",
+      });
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        responseId: response.responseId,
+        entryType: "rsvp",
+        eventTitle: form.title,
+        eventDate: form.date,
+        eventTime: [form.startTime, form.endTime].filter(Boolean).join(" - "),
+        eventLocation: form.location,
+        userName: response.attendee?.fullName || "Attendee",
+        userEmail: response.attendee?.email || "",
+        userPhone: response.attendee?.phone || "",
+        checkedIn: false,
+        status: response.status,
+        approvalMode: form.approvalMode,
+        requiresApproval: form.approvalMode === "manual",
+        eligibleForEntry: true,
+      },
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to validate RSVP QR",
+    });
+  }
+};
+
+const checkInRsvpResponse = async (req, res) => {
+  try {
+    const { responseId } = req.params;
+    const scopeFormId = String(req.body?.scopeFormId || "").trim();
+
+    const response = await RsvpResponse.findOne({ responseId }).populate(
+      "formId",
+      "title approvalMode organizerId",
+    );
+
+    if (!response || !response.formId) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "RSVP response not found",
+      });
+    }
+
+    if (
+      !hasAdminAccess(req.user) &&
+      String(response.formId.organizerId) !== String(req.user?._id)
+    ) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: "You are not allowed to check in this RSVP response",
+      });
+    }
+
+    if (scopeFormId && String(response.formId._id) !== scopeFormId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "This RSVP response does not belong to the selected RSVP form",
+      });
+    }
+
+    if (response.checkedIn) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        alreadyCheckedIn: true,
+        message: "RSVP already checked in",
+        data: {
+          responseId: response.responseId,
+          checkedIn: true,
+          checkedInAt: response.checkedInAt,
+        },
+      });
+    }
+
+    if (!["approved", "paid"].includes(response.status)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message:
+          response.formId.approvalMode === "manual"
+            ? "RSVP is not approved yet"
+            : "RSVP is not ready for entry",
+      });
+    }
+
+    response.checkedIn = true;
+    response.checkedInAt = new Date();
+    await response.save();
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      message: "RSVP attendee checked in",
+      data: {
+        responseId: response.responseId,
+        checkedIn: true,
+        checkedInAt: response.checkedInAt,
+      },
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to check in RSVP attendee",
     });
   }
 };
@@ -813,9 +1203,15 @@ const toggleVisibilityForm = async (req, res) => {
       });
     }
 
-    form.isPublic = typeof req.body.isPublic === "boolean" ? req.body.isPublic : !form.isPublic;
+    form.isPublic =
+      form.type === "review"
+        ? false
+        : typeof req.body.isPublic === "boolean"
+          ? req.body.isPublic
+          : !form.isPublic;
     if (form.isPublic && form.status === "hidden") {
       form.status = "published";
+      form.isClosed = false;
     }
 
     await form.save();
@@ -888,8 +1284,11 @@ module.exports = {
   toggleBannerForm,
   getFormByPublicId,
   submitResponse,
+  submitResponseByFormId,
   listResponses,
   updateResponseTag,
   updateResponseStatus,
   getAnalytics,
+  validateRsvpQr,
+  checkInRsvpResponse,
 };

@@ -35,6 +35,14 @@ const rsvpResponseSchema = new mongoose.Schema(
       email: { type: String, trim: true, lowercase: true, default: "" },
       phone: { type: String, trim: true, default: "" },
     },
+    qrCodePayload: {
+      type: String,
+      default: "",
+    },
+    qrCodeDataUrl: {
+      type: String,
+      default: "",
+    },
     status: {
       type: String,
       enum: ["pending", "approved", "paid", "unpaid", "rejected"],
@@ -57,6 +65,15 @@ const rsvpResponseSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    checkedIn: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    checkedInAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -65,5 +82,6 @@ const rsvpResponseSchema = new mongoose.Schema(
 
 rsvpResponseSchema.index({ formId: 1, createdAt: -1 });
 rsvpResponseSchema.index({ organizerId: 1, createdAt: -1 });
+rsvpResponseSchema.index({ responseId: 1, checkedIn: 1 });
 
 module.exports = mongoose.model("RsvpResponse", rsvpResponseSchema);

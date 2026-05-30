@@ -78,10 +78,19 @@ export interface RsvpEvent {
   shareUrl?: string;
 }
 
+export type AnswerValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | null
+  | undefined;
+
 export interface Response {
   id: string;
+  responseId?: string;
   eventId: string;
-  answers: Record<string, any>;
+  answers: Record<string, AnswerValue>;
   attendee?: {
     fullName?: string;
     email?: string;
@@ -90,6 +99,10 @@ export interface Response {
   status: "pending" | "approved" | "paid" | "unpaid" | "rejected";
   tag?: AttendeeTag;
   submittedAt: string;
+  qrCodePayload?: string;
+  qrCodeDataUrl?: string;
+  checkedIn?: boolean;
+  checkedInAt?: string;
 }
 
 export type AttendeeTag = "VIP" | "Guest" | "Press";

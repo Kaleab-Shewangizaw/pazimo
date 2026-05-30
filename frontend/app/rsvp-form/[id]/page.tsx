@@ -4,8 +4,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useMemo, useState, Suspense } from "react";
 import Image from "next/image";
-import type { Question, RsvpEvent } from "@/lib/rsvp-types";
-import { resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
+import type { AnswerValue, Question, Response, RsvpEvent } from "@/lib/rsvp-types";
+import { getRsvpAuthToken, resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +28,7 @@ import {
   ArrowRight,
   Check,
   CreditCard,
+  Download,
   Sparkles,
   BookOpen,
   ImageIcon,
@@ -36,7 +38,6 @@ import {
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useAdminAuthStore } from "@/store/adminAuthStore";
 import Link from "next/link";
 
 export default function RsvpFlow() {
@@ -61,37 +62,48 @@ function RsvpContent() {
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
   const [mobileTab, setMobileTab] = useState<"rsvp" | "description" | "images">("rsvp");
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [attendee, setAttendee] = useState({ fullName: "", email: "", phone: "" });
   const [attendeeErrors, setAttendeeErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState(false);
+  const [submittedResponse, setSubmittedResponse] = useState<Response | null>(null);
   const [paying, setPaying] = useState(false);
+  const [submitMode, setSubmitMode] = useState<"public" | "protected">("public");
 
   useEffect(() => {
     let active = true;
     setLoading(true);
 
-    const token = useAdminAuthStore.getState().token;
+    const token = getRsvpAuthToken();
 
     const fetchData = async () => {
       try {
         // If it's a preview and we have a mongoId + token, use the private endpoint
         if (isPreview && mongoId && token) {
           const form = await rsvpApi.getForm(mongoId);
-          if (active) setEvent(form);
+          if (active) {
+            setEvent(form);
+            setSubmitMode("protected");
+          }
         } else {
           // Normal public fetch
           const form = await rsvpApi.getPublicForm(publicId);
-          if (active) setEvent(form);
+          if (active) {
+            setEvent(form);
+            setSubmitMode("public");
+          }
         }
-      } catch (err) {
+      } catch {
         // Fallback for edge cases
         if (token && (mongoId || publicId)) {
           try {
             const form = await rsvpApi.getForm(mongoId || publicId);
-            if (active) setEvent(form);
-          } catch (innerErr) {
+            if (active) {
+              setEvent(form);
+              setSubmitMode("protected");
+            }
+          } catch {
             if (active) setEvent(null);
           }
         } else {
@@ -115,12 +127,13 @@ function RsvpContent() {
       ) || [],
     [event]
   );
+  const paymentEnabled = false;
 
   const requiresAttendeeInfo = Boolean(event?.type === "rsvp" && !isPreview);
 
   const totalSteps = useMemo(
-    () => (requiresAttendeeInfo ? 1 : 0) + sections.length + (event?.payment?.enabled ? 1 : 0),
-    [requiresAttendeeInfo, sections.length, event?.payment?.enabled]
+    () => (requiresAttendeeInfo ? 1 : 0) + sections.length + (paymentEnabled ? 1 : 0),
+    [requiresAttendeeInfo, sections.length, paymentEnabled]
   );
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -128,7 +141,7 @@ function RsvpContent() {
 
   const isAttendeeStep = requiresAttendeeInfo && step === 0;
   const sectionStepIndex = requiresAttendeeInfo ? step - 1 : step;
-  const isPayStep = Boolean(event?.payment?.enabled && step === (requiresAttendeeInfo ? sections.length + 1 : sections.length));
+  const isPayStep = Boolean(paymentEnabled && step === (requiresAttendeeInfo ? sections.length + 1 : sections.length));
   const currentSection = !isPayStep && !isAttendeeStep ? sections[sectionStepIndex] : undefined;
   const sectionQs = useMemo(
     () =>
@@ -226,7 +239,7 @@ function RsvpContent() {
         return;
       }
       setFieldErrors({});
-      await rsvpApi.submitPublicResponse(event.publicId || publicId, {
+      const payload = {
         answers,
         attendee: requiresAttendeeInfo ? attendee : undefined,
         metadata: {
@@ -235,11 +248,20 @@ function RsvpContent() {
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
           preview: isPreview,
         },
-      });
+      };
+      const response =
+        submitMode === "protected" && (mongoId || event.id)
+          ? await rsvpApi.submitProtectedResponse(mongoId || event.id, payload)
+          : await rsvpApi.submitPublicResponse(event.publicId || publicId, payload);
+      setSubmittedResponse(response);
       toast.success("RSVP submitted successfully!");
       setDone(true);
     } catch (error) {
-      toast.error("Failed to submit RSVP. Please try again.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit RSVP. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -248,19 +270,33 @@ function RsvpContent() {
   const completePayment = () => {
     setPaying(true);
     setTimeout(() => {
-      void rsvpApi
-        .submitPublicResponse(event.publicId || publicId, {
-          answers,
-          attendee: requiresAttendeeInfo ? attendee : undefined,
-          metadata: {
-            sourceUrl: typeof window !== "undefined" ? window.location.href : "",
-            referrer: typeof document !== "undefined" ? document.referrer : "",
-            userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-            preview: isPreview,
-          },
+      const payload = {
+        answers,
+        attendee: requiresAttendeeInfo ? attendee : undefined,
+        metadata: {
+          sourceUrl: typeof window !== "undefined" ? window.location.href : "",
+          referrer: typeof document !== "undefined" ? document.referrer : "",
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          preview: isPreview,
+        },
+      };
+      const submitPromise =
+        submitMode === "protected" && (mongoId || event.id)
+          ? rsvpApi.submitProtectedResponse(mongoId || event.id, payload)
+          : rsvpApi.submitPublicResponse(event.publicId || publicId, payload);
+
+      void submitPromise
+        .then((response) => {
+          setSubmittedResponse(response);
+          setDone(true);
         })
-        .then(() => setDone(true))
-        .catch(() => {})
+        .catch((error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to submit RSVP. Please try again.",
+          );
+        })
         .finally(() => setPaying(false));
     }, 1200);
   };
@@ -285,7 +321,7 @@ function RsvpContent() {
   const mobileTimeLabel = event?.startTime
     ? `${event.startTime}${event.endTime ? ` - ${event.endTime}` : ""}`
     : null;
-  const mobileCtaLabel = event?.payment?.enabled
+  const mobileCtaLabel = paymentEnabled
     ? `RSVP · ${event.payment.price} ${event.payment.currency}`
     : "RSVP";
   const mobileDescription = event?.description?.trim() || "No description available.";
@@ -485,7 +521,7 @@ function RsvpContent() {
                   onChangeAttendee={(nextAttendee) => setAttendee(nextAttendee)}
                 />
               ) : (
-                <ConfirmationScreen event={event} eventId={event.id} />
+                <ConfirmationScreen event={event} eventId={event.id} response={submittedResponse} />
               )}
             </TabsContent>
 
@@ -570,7 +606,7 @@ function RsvpContent() {
                 onChangeAttendee={(nextAttendee) => setAttendee(nextAttendee)}
               />
             ) : (
-              <ConfirmationScreen event={event} eventId={event.id} />
+              <ConfirmationScreen event={event} eventId={event.id} response={submittedResponse} />
             )}
           </div>
         </section>
@@ -587,7 +623,7 @@ function EventStartCard({
   eventLocationLabel,
   onStart,
 }: {
-  event: any;
+  event: RsvpEvent;
   mobileCtaLabel: string;
   mobileTimeLabel: string | null;
   eventDateLabel: string;
@@ -654,7 +690,7 @@ function RsvpFlowCard({
   onChangeAnswer,
   onChangeAttendee,
 }: {
-  event: any;
+  event: RsvpEvent;
   step: number;
   totalSteps: number;
   progress: number;
@@ -662,7 +698,7 @@ function RsvpFlowCard({
   isAttendeeStep: boolean;
   currentSection?: { id: string; title: string };
   sectionQs: Question[];
-  answers: Record<string, any>;
+  answers: Record<string, AnswerValue>;
   fieldErrors: Record<string, string>;
   attendee: { fullName: string; email: string; phone: string };
   attendeeErrors: Record<string, string>;
@@ -672,9 +708,8 @@ function RsvpFlowCard({
   onPrev: () => void;
   onNext: () => void;
   onCompletePayment: () => void;
-  onChangeAnswer: (questionId: string, value: any) => void;
+  onChangeAnswer: (questionId: string, value: AnswerValue) => void;
   onChangeAttendee: (nextAttendee: { fullName: string; email: string; phone: string }) => void;
-  mobile?: boolean;
 }) {
   return (
     <Card className="rounded-[1.75rem] border border-white/70 bg-white p-6 shadow-[0_16px_50px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#111827]">
@@ -724,7 +759,7 @@ function RsvpFlowCard({
                       value={attendee.fullName}
                       onChange={(e) => onChangeAttendee({ ...attendee, fullName: e.target.value })}
                       className="h-11 rounded-xl border border-slate-200 bg-white dark:border-white/10 dark:bg-[#0f172a]"
-                      placeholder="e.g. Kaleab Tesfaye"
+                      placeholder="full name"
                       autoComplete="name"
                     />
                   </div>
@@ -834,7 +869,7 @@ function InfoRow({
   value,
   compact = false,
 }: {
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
   compact?: boolean;
@@ -852,69 +887,64 @@ function InfoRow({
   );
 }
 
-function HeroStat({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: any;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[1.4rem] border border-white/70 bg-white/85 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-md dark:border-white/10 dark:bg-white/5">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="mt-1 truncate text-sm font-medium text-slate-950 dark:text-white">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SectionHeading({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-blue-600 dark:text-blue-300">{eyebrow}</p>
-      <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">{title}</h3>
-      <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600 dark:text-slate-400">{description}</p>
-    </div>
-  );
-}
-
 function ConfirmationScreen({
   event,
   eventId,
+  response,
 }: {
-  event: any;
+  event: RsvpEvent;
   eventId: string;
+  response: Response | null;
 }) {
+  const canShowQr = Boolean(
+    response?.qrCodeDataUrl && ["approved", "paid"].includes(response?.status || "")
+  );
+
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
       <Card className="rounded-[1.75rem] border border-white/70 bg-white p-8 text-center shadow-[0_16px_50px_rgba(15,23,42,0.08)] dark:border-white/10 dark:bg-[#111827]">
         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 200, damping: 15 }} className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-lg dark:bg-emerald-500/15 dark:text-emerald-300">
           <Check className="h-8 w-8" strokeWidth={3} />
         </motion.div>
-        <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">You're in.</h1>
+        <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">You&apos;re in.</h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-600 dark:text-slate-400">
-          {event.payment?.enabled
+          {paymentEnabled
             ? "Payment confirmed. Your ticket and QR code are on the way."
             : event.approvalMode === "manual"
               ? "Your RSVP is pending review. We'll email you once approved."
-              : "Your RSVP is confirmed. We can't wait to see you."}
+              : "Your RSVP is confirmed. Download your QR pass and use it at entry."}
         </p>
+
+        {canShowQr ? (
+          <div className="mx-auto mt-8 flex max-w-sm flex-col items-center rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+            <div className="rounded-[1.25rem] bg-white p-4 shadow-sm">
+              <Image
+                src={response.qrCodeDataUrl}
+                alt={`${event.name} RSVP QR code`}
+                width={224}
+                height={224}
+                className="h-56 w-56 object-contain"
+                unoptimized
+              />
+            </div>
+            <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
+              Show this QR code at the entrance.
+            </p>
+            <Button
+              type="button"
+              className="mt-4 rounded-full px-6"
+              onClick={() =>
+                downloadHighQualityQR(
+                  response.qrCodeDataUrl,
+                  `${(event.name || "rsvp").replace(/\s+/g, "-").toLowerCase()}-${response.responseId || eventId}.png`,
+                )
+              }
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download QR
+            </Button>
+          </div>
+        ) : null}
       </Card>
     </motion.div>
   );
@@ -927,9 +957,9 @@ export function FieldRenderer({
   onChange,
 }: {
   q: Question;
-  value: any;
+  value: AnswerValue;
   error?: string;
-  onChange: (v: any) => void;
+  onChange: (v: AnswerValue) => void;
 }) {
   return (
     <div>

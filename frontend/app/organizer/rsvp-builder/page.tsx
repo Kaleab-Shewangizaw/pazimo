@@ -25,6 +25,7 @@ import {
   Users,
   BarChart3,
   Link as LinkIcon,
+  ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
@@ -216,6 +217,19 @@ export default function RSVPDashboard() {
                         >
                           <Link href={`/organizer/rsvp-builder/${e.id}/messages`}>
                             Messages
+                          </Link>
+                        </Button>
+                      )}
+                      {e.type === "rsvp" && (
+                        <Button
+                          asChild
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full"
+                        >
+                          <Link href={`/organizer/qr-scanner?mode=rsvp&formId=${e.id}`}>
+                            <ScanLine className="mr-1 h-3.5 w-3.5" />
+                            Scan
                           </Link>
                         </Button>
                       )}

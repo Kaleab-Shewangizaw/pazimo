@@ -1,16 +1,15 @@
 "use client";
 
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useEffect, useState, Suspense } from "react";
-import type { RsvpEvent } from "@/lib/rsvp-types";
-import { resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
+import Image from "next/image";
+import type { AnswerValue, RsvpEvent } from "@/lib/rsvp-types";
+import { getRsvpAuthToken, resolveRsvpImageUrl, rsvpApi } from "@/lib/rsvp-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Check, Calendar, Clock, Lock, MapPin, Users } from "lucide-react";
 import { FieldRenderer } from "@/app/rsvp-form/[id]/page";
-import { useAdminAuthStore } from "@/store/adminAuthStore";
-import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -24,7 +23,6 @@ export default function ReviewFlow() {
 
 function ReviewContent() {
   const params = useParams();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const publicId = params.id as string;
   const isPreview = searchParams.get("preview") === "true";
@@ -33,30 +31,40 @@ function ReviewContent() {
   const [event, setEvent] = useState<RsvpEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
   const [done, setDone] = useState(false);
+  const [submitMode, setSubmitMode] = useState<"public" | "protected">("public");
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     
-    const token = useAdminAuthStore.getState().token;
+    const token = getRsvpAuthToken();
 
     const fetchData = async () => {
       try {
         if (isPreview && mongoId && token) {
           const form = await rsvpApi.getForm(mongoId);
-          if (active) setEvent(form);
+          if (active) {
+            setEvent(form);
+            setSubmitMode("protected");
+          }
         } else {
           const form = await rsvpApi.getPublicForm(publicId);
-          if (active) setEvent(form);
+          if (active) {
+            setEvent(form);
+            setSubmitMode("public");
+          }
         }
-      } catch (err) {
+      } catch {
         if (token && (mongoId || publicId)) {
           try {
             const form = await rsvpApi.getForm(mongoId || publicId);
-            if (active) setEvent(form);
-          } catch (innerErr) {
+            if (active) {
+              setEvent(form);
+              setSubmitMode("protected");
+            }
+          } catch {
             if (active) setEvent(null);
           }
         } else {
@@ -110,17 +118,23 @@ function ReviewContent() {
   const submitReview = async () => {
     setSubmitting(true);
     try {
-      await rsvpApi.submitPublicResponse(event.publicId || publicId, {
+      const payload = {
         answers,
         metadata: {
           sourceUrl: typeof window !== "undefined" ? window.location.href : "",
           referrer: typeof document !== "undefined" ? document.referrer : "",
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+          preview: isPreview,
         },
-      });
+      };
+      if (submitMode === "protected" && (mongoId || event.id)) {
+        await rsvpApi.submitProtectedResponse(mongoId || event.id, payload);
+      } else {
+        await rsvpApi.submitPublicResponse(event.publicId || publicId, payload);
+      }
       toast.success("Review submitted! Thank you for your feedback.");
       setDone(true);
-    } catch (error) {
+    } catch {
       toast.error("Failed to submit review. Please try again.");
     } finally {
       setSubmitting(false);
@@ -134,10 +148,13 @@ function ReviewContent() {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             {!done && event.coverImage && (
               <div className="overflow-hidden rounded-2xl shadow-lg aspect-[16/10] mb-10">
-                <img
+                <Image
                   src={resolveRsvpImageUrl(event.coverImage)}
                   alt={event.name}
+                  width={1280}
+                  height={800}
                   className="h-full w-full object-cover"
+                  unoptimized
                 />
               </div>
             )}

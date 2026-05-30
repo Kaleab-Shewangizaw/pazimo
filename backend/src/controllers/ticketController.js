@@ -1534,6 +1534,7 @@ const checkInTicket = async (req, res) => {
   try {
     const { ticketId } = req.params;
     const { count = 1 } = req.body; // Default to 1 if not provided
+    const scopeEventId = String(req.body?.scopeEventId || "").trim();
 
     console.log(`[CHECK-IN] ⚡ Checking in ticket ${ticketId}, count: ${count}`);
     const startTime = Date.now();
@@ -1552,6 +1553,31 @@ const checkInTicket = async (req, res) => {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: "Ticket not found",
+      });
+    }
+
+    const event = await Event.findById(ticket.event).select("organizer");
+    const ticketOrganizerId = event?.organizer ? String(event.organizer) : "";
+    const requesterOrganizerId =
+      req.user?.userId || req.user?._id
+        ? String(req.user.userId || req.user._id)
+        : "";
+
+    if (
+      req.user?.role === "organizer" &&
+      ticketOrganizerId &&
+      ticketOrganizerId !== requesterOrganizerId
+    ) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: "You are not allowed to check in tickets for this event",
+      });
+    }
+
+    if (scopeEventId && String(ticket.event || "") !== scopeEventId) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "This ticket does not belong to the selected event",
       });
     }
 
@@ -1810,6 +1836,31 @@ const validateQRCode = async (req, res) => {
 
     if (!ticket) {
       throw new NotFoundError("Ticket not found");
+    }
+
+    const ticketOrganizerId = ticket.event?.organizer
+      ? String(ticket.event.organizer)
+      : "";
+    const requesterOrganizerId =
+      req.user?.userId || req.user?._id
+        ? String(req.user.userId || req.user._id)
+        : "";
+    const scopeEventId = String(req.body?.scopeEventId || "").trim();
+
+    if (
+      req.user?.role === "organizer" &&
+      ticketOrganizerId &&
+      ticketOrganizerId !== requesterOrganizerId
+    ) {
+      throw new UnauthorizedError(
+        "You are not allowed to scan tickets for this event",
+      );
+    }
+
+    if (scopeEventId && String(ticket.event?._id || "") !== scopeEventId) {
+      throw new BadRequestError(
+        "This ticket does not belong to the selected event",
+      );
     }
 
     // Check if ticket is still valid

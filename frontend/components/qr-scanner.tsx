@@ -1,273 +1,372 @@
-"use client"
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Scanner } from "@yudiel/react-qr-scanner"
-import { QrCode, CheckCircle, XCircle, User, Calendar, Clock, Ticket as TicketIcon, ScanLine } from "lucide-react"
-import { toast } from "sonner"
-import { Input } from "@/components/ui/input"
+"use client";
 
-interface TicketData {
-  ticketId: string
-  eventTitle: string
-  userName: string
-  userEmail: string
-  eventDate: string
-  ticketType: string
-  ticketCount: number
-  checkedIn: boolean
-  alreadyCheckedIn?: boolean
-  price?: number
-}
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Scanner } from "@yudiel/react-qr-scanner";
+import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { useAuthStore } from "@/store/authStore";
+import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
 
-export default function QRScanner() {
-  const [scannedData, setScannedData] = useState<string>("")
-  const [ticketInfo, setTicketInfo] = useState<TicketData | null>(null)
-  const [isVerifying, setIsVerifying] = useState(false)
-  const [scanResult, setScanResult] = useState<'success' | 'error' | null>(null)
-  const [checkInQuantity, setCheckInQuantity] = useState<number>(1)
-  const [isCheckingIn, setIsCheckingIn] = useState(false)
-  
-  const verifyTicket = async (qrData: string) => {
-    if (isVerifying || ticketInfo) return; // Prevent double firing
-    
-    setIsVerifying(true)
-    setScanResult(null)
-    setScannedData(qrData)
-    
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tickets/validate-qr`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ qrData }),
-      })
+type ScanTarget = "ticket" | "rsvp";
 
-      const result = await response.json()
+type ValidateResult = {
+  success?: boolean;
+  message?: string;
+  alreadyCheckedIn?: boolean;
+  data?: {
+    entryType?: ScanTarget;
+    ticketId?: string;
+    responseId?: string;
+    userName?: string;
+    eventTitle?: string;
+    checkedIn?: boolean;
+  };
+};
 
-      if (response.ok && result.success) {
-        setTicketInfo({
-          ...result.data,
-          alreadyCheckedIn: result.alreadyCheckedIn
-        })
-        setScanResult(result.alreadyCheckedIn ? 'error' : 'success')
-        setCheckInQuantity(1)
-        toast.success(result.alreadyCheckedIn ? 'Ticket is already checked in' : 'Ticket found')
-      } else {
-        setScanResult('error')
-        toast.error(result.message || 'Ticket verification failed')
-      }
-    } catch (error) {
-      console.error('Verification error:', error)
-      setScanResult('error')
-      toast.error('Failed to verify QR code')
-    } finally {
-      setIsVerifying(false)
-    }
+type OverlayState = {
+  tone: "idle" | "processing" | "success" | "error";
+  title: string;
+  detail: string;
+};
+
+const SCAN_DEBOUNCE_MS = 2200;
+const OVERLAY_RESET_MS = 1800;
+
+const RSVP_SCANNER_TYPES = new Set(["rsvp_response", "rsvp"]);
+
+const parsePersistedToken = (storageKey: string) => {
+  if (typeof window === "undefined") return null;
+
+  const raw = window.localStorage.getItem(storageKey);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.token || parsed?.token || null;
+  } catch {
+    return null;
   }
+};
 
-  const handleManualInput = () => {
-    if (scannedData.trim()) {
-      verifyTicket(scannedData)
-    }
-  }
-  
-  const handleScanResult = (result: any) => {
-    if (!result) return;
-    
-    let qrText = "";
-    if (typeof result === 'string') {
-      qrText = result;
-    } else if (Array.isArray(result) && result.length > 0) {
-      qrText = result[0].rawValue || result[0].text || "";
-    } else if (result.text) {
-      qrText = result.text;
-    }
-    
-    if (qrText) {
-      verifyTicket(qrText);
-    }
-  }
-
-  const handleCheckIn = async () => {
-    if (!ticketInfo) return;
-    
-    setIsCheckingIn(true)
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/tickets/${ticketInfo.ticketId}/check-in`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ count: checkInQuantity }),
-      })
-
-      const result = await response.json()
-
-      if (response.ok && result.success) {
-        toast.success(result.message || 'Ticket checked in successfully')
-        setTicketInfo(prev => prev ? { 
-          ...prev, 
-          ticketCount: result.data?.remainingUses ?? Math.max(0, prev.ticketCount - checkInQuantity),
-          checkedIn: result.data?.fullyUsed ?? true,
-          alreadyCheckedIn: result.data?.fullyUsed ?? true
-        } : null)
-        setScanResult('success')
-      } else {
-        toast.error(result.message || 'Check-in failed')
-      }
-    } catch (error) {
-      console.error('Check-in error:', error)
-      toast.error('An error occurred while checking in')
-    } finally {
-      setIsCheckingIn(false)
-    }
-  }
-
-  const resetScanner = () => {
-    setScannedData("")
-    setTicketInfo(null)
-    setScanResult(null)
-  }
+const resolveAuthToken = () => {
+  if (typeof window === "undefined") return null;
 
   return (
-    <div className="max-w-md mx-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ScanLine className="h-5 w-5" />
-            Scanner Tool
-          </CardTitle>
-          <CardDescription>
-            Scan QR code or enter manual data to verify tickets.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className={ticketInfo ? "hidden" : "block"}>
-            <div className="w-full overflow-hidden rounded-lg border border-gray-200 mb-4 bg-gray-50 aspect-square flex items-center justify-center relative">
-              {!ticketInfo && (
-                <Scanner 
-                  onScan={handleScanResult}
-                  onError={(error) => {
-                    if (error && typeof error !== 'string' && error.name === 'NotAllowedError') {
-                      toast.error('Camera access denied. Please allow camera permissions.');
-                    }
-                  }}
-                  components={{
-                    audio: false,
-                    zoom: true,
-                    finder: true
-                  }}
-                  allowMultiple={false}
-                />
-              )}
-            </div>
-            
-            <div className="pt-4 border-t border-gray-200">
-              <label className="block text-sm font-medium mb-2">
-                Or paste QR data manually:
-              </label>
-              <textarea
-                value={scannedData}
-                onChange={(e) => setScannedData(e.target.value)}
-                placeholder="Paste QR code JSON here..."
-                className="w-full p-3 border rounded-lg h-24 text-sm mb-3"
-              />
-              <Button 
-                onClick={handleManualInput}
-                disabled={!scannedData.trim() || isVerifying}
-                className="w-full"
-              >
-                {isVerifying ? "Verifying..." : "Verify Manually"}
-              </Button>
+    useAuthStore.getState().token ||
+    useOrganizerAuthStore.getState().token ||
+    useAdminAuthStore.getState().token ||
+    parsePersistedToken("auth-storage") ||
+    parsePersistedToken("organizer-auth") ||
+    parsePersistedToken("admin-auth-storage") ||
+    window.localStorage.getItem("token") ||
+    null
+  );
+};
+
+const isRsvpQr = (qrData: string) => {
+  try {
+    const parsed = JSON.parse(qrData);
+    return Boolean(
+      parsed?.rid ||
+        parsed?.responseId ||
+        RSVP_SCANNER_TYPES.has(String(parsed?.type || "").toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+};
+
+const extractQrText = (
+  result:
+    | string
+    | { text?: string; rawValue?: string }
+    | { text?: string; rawValue?: string }[]
+    | undefined
+) => {
+  if (!result) return "";
+  if (typeof result === "string") return result;
+  if (Array.isArray(result)) {
+    const first = result.find((item) => item?.rawValue || item?.text);
+    return first?.rawValue || first?.text || "";
+  }
+  return result.rawValue || result.text || "";
+};
+
+export default function QRScanner() {
+  const searchParams = useSearchParams();
+  const lastScanRef = useRef<{ text: string; timestamp: number }>({
+    text: "",
+    timestamp: 0,
+  });
+  const busyRef = useRef(false);
+  const resetTimerRef = useRef<number | null>(null);
+  const [overlay, setOverlay] = useState<OverlayState>({
+    tone: "idle",
+    title: "",
+    detail: "",
+  });
+
+  const scope = useMemo(() => {
+    const mode = searchParams.get("mode");
+    const eventId = (searchParams.get("eventId") || "").trim();
+    const formId = (searchParams.get("formId") || "").trim();
+
+    if (mode === "ticket" && eventId) {
+      return { type: "ticket" as const, id: eventId };
+    }
+    if (mode === "rsvp" && formId) {
+      return { type: "rsvp" as const, id: formId };
+    }
+    return { type: null, id: "" };
+  }, [searchParams]);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
+
+  const queueReset = () => {
+    if (resetTimerRef.current) {
+      window.clearTimeout(resetTimerRef.current);
+    }
+
+    resetTimerRef.current = window.setTimeout(() => {
+      busyRef.current = false;
+      setOverlay({ tone: "idle", title: "", detail: "" });
+    }, OVERLAY_RESET_MS);
+  };
+
+  const showOverlay = (
+    tone: OverlayState["tone"],
+    title: string,
+    detail = ""
+  ) => {
+    setOverlay({ tone, title, detail });
+
+    if (tone === "idle") {
+      busyRef.current = false;
+      return;
+    }
+
+    if (tone === "processing") {
+      if (resetTimerRef.current) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+      return;
+    }
+
+    queueReset();
+  };
+
+  const validateAndCheckIn = async (qrData: string) => {
+    const authToken = resolveAuthToken();
+    if (!authToken) {
+      showOverlay("error", "Authentication required", "Sign in again to scan.");
+      toast.error("Authentication required");
+      return;
+    }
+
+    const scannedType: ScanTarget = isRsvpQr(qrData) ? "rsvp" : "ticket";
+    if (scope.type && scannedType !== scope.type) {
+      showOverlay("error", "Wrong QR code", "This scanner is scoped to another pass type.");
+      toast.error("Wrong QR code for this scanner");
+      return;
+    }
+
+    showOverlay("processing", "Checking pass", "Hold steady...");
+
+    const validateEndpoint =
+      scannedType === "rsvp"
+        ? "/api/rsvp/responses/validate-qr"
+        : "/api/tickets/validate-qr";
+
+    const scopedBody =
+      scannedType === "rsvp" && scope.type === "rsvp"
+        ? { scopeFormId: scope.id }
+        : scannedType === "ticket" && scope.type === "ticket"
+          ? { scopeEventId: scope.id }
+          : {};
+
+    try {
+      const validateResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}${validateEndpoint}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            qrData,
+            ...scopedBody,
+          }),
+        }
+      );
+
+      const validateResult = (await validateResponse.json().catch(() => ({}))) as ValidateResult;
+
+      if (!validateResponse.ok || !validateResult.success || !validateResult.data) {
+        const message = validateResult.message || "Failed to validate QR code";
+        showOverlay("error", "Pass rejected", message);
+        toast.error(message);
+        return;
+      }
+
+      if (validateResult.alreadyCheckedIn || validateResult.data.checkedIn) {
+        const message = validateResult.message || "Pass already checked in";
+        showOverlay("error", "Already checked in", message);
+        toast.error(message);
+        return;
+      }
+
+      const scanData = validateResult.data;
+      const checkInEndpoint =
+        scannedType === "rsvp"
+          ? `/api/rsvp/responses/${scanData.responseId}/check-in`
+          : `/api/tickets/${scanData.ticketId}/check-in`;
+
+      const checkInResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}${checkInEndpoint}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(
+            scannedType === "rsvp"
+              ? scopedBody
+              : {
+                  count: 1,
+                  ...scopedBody,
+                }
+          ),
+        }
+      );
+
+      const checkInResult = (await checkInResponse.json().catch(() => ({}))) as ValidateResult & {
+        data?: { remainingUses?: number };
+      };
+
+      if (!checkInResponse.ok || !checkInResult.success) {
+        const message = checkInResult.message || "Check-in failed";
+        showOverlay("error", "Check-in failed", message);
+        toast.error(message);
+        return;
+      }
+
+      if (checkInResult.alreadyCheckedIn) {
+        const message = checkInResult.message || "Pass already checked in";
+        showOverlay("error", "Already checked in", message);
+        toast.error(message);
+        return;
+      }
+
+      const remainingUses =
+        scannedType === "ticket" && typeof checkInResult.data?.remainingUses === "number"
+          ? `Remaining uses: ${checkInResult.data.remainingUses}`
+          : scanData.eventTitle || "";
+
+      showOverlay(
+        "success",
+        scanData.userName || "Attendee checked in",
+        remainingUses
+      );
+      toast.success(checkInResult.message || "Check-in successful");
+    } catch (error) {
+      console.error("Scanner error:", error);
+      showOverlay("error", "Scanner error", "Please try again.");
+      toast.error("Failed to process scan");
+    }
+  };
+
+  const handleScan = (
+    result:
+      | string
+      | { text?: string; rawValue?: string }
+      | { text?: string; rawValue?: string }[]
+      | undefined
+  ) => {
+    const qrText = extractQrText(result).trim();
+    if (!qrText || busyRef.current) return;
+
+    const now = Date.now();
+    if (
+      lastScanRef.current.text === qrText &&
+      now - lastScanRef.current.timestamp < SCAN_DEBOUNCE_MS
+    ) {
+      return;
+    }
+
+    lastScanRef.current = { text: qrText, timestamp: now };
+    busyRef.current = true;
+    void validateAndCheckIn(qrText);
+  };
+
+  const handleError = (error: unknown) => {
+    const name =
+      typeof error === "object" && error && "name" in error
+        ? String(error.name)
+        : "";
+
+    if (name === "NotAllowedError") {
+      showOverlay("error", "Camera blocked", "Allow camera access to continue.");
+      toast.error("Camera access denied");
+      return;
+    }
+
+    showOverlay("error", "Camera error", "Unable to access the scanner.");
+    toast.error("Scanner camera failed");
+  };
+
+  const overlayClasses =
+    overlay.tone === "success"
+      ? "border-emerald-400/60 bg-emerald-500/15 text-white"
+      : overlay.tone === "error"
+        ? "border-red-400/60 bg-red-500/15 text-white"
+        : "border-white/25 bg-black/50 text-white";
+
+  return (
+    <div className="relative h-full min-h-[calc(100vh-4rem)] w-full overflow-hidden bg-black">
+      <div className="absolute inset-0 [&>div]:h-full [&>div]:w-full">
+        <Scanner
+          onScan={handleScan}
+          onError={handleError}
+          allowMultiple={false}
+          components={{
+            audio: false,
+            finder: true,
+            zoom: true,
+          }}
+        />
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-5">
+        {overlay.tone !== "idle" ? (
+          <div
+            className={`flex min-w-[18rem] max-w-md items-center gap-3 rounded-3xl border px-4 py-3 shadow-2xl backdrop-blur ${overlayClasses}`}
+          >
+            {overlay.tone === "processing" ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : overlay.tone === "success" ? (
+              <CheckCircle2 className="h-5 w-5" />
+            ) : (
+              <AlertCircle className="h-5 w-5" />
+            )}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{overlay.title}</p>
+              {overlay.detail ? (
+                <p className="truncate text-xs text-white/80">{overlay.detail}</p>
+              ) : null}
             </div>
           </div>
-          
-          {ticketInfo && (
-            <div className="space-y-4">
-              {ticketInfo.alreadyCheckedIn ? (
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <XCircle className="h-5 w-5 text-red-600" />
-                  <span className="text-red-800 font-medium">Ticket Already Used or Invalid</span>
-                </div>
-              ) : ticketInfo.checkedIn ? (
-                <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="text-green-800 font-medium">Ticket Successfully Checked In</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-blue-600" />
-                  <span className="text-blue-800 font-medium">Ticket Found - Ready for Check In</span>
-                </div>
-              )}
-
-              <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-gray-600" />
-                  <span className="font-medium text-lg">{ticketInfo.userName}</span>
-                </div>
-                {ticketInfo.userEmail && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 ml-6">
-                    <span>{ticketInfo.userEmail}</span>
-                  </div>
-                )}
-                
-                <div className="flex items-center gap-2 mt-4">
-                  <Calendar className="h-4 w-4 text-gray-600" />
-                  <span className="text-sm font-medium">{ticketInfo.eventTitle}</span>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <TicketIcon className="h-4 w-4 text-gray-600" />
-                  <span className="text-sm font-semibold capitalize text-blue-700">{ticketInfo.ticketType} Ticket</span>
-                </div>
-                
-                <div className="flex items-center justify-between mt-4 p-3 bg-white border rounded-md">
-                  <span className="text-sm text-gray-700 font-medium">Available Uses:</span>
-                  <span className="text-lg font-bold text-gray-900">{ticketInfo.ticketCount}</span>
-                </div>
-
-                <div className="text-xs text-gray-500 mt-2 break-all">
-                  ID: {ticketInfo.ticketId}
-                </div>
-              </div>
-
-              {!ticketInfo.checkedIn && !ticketInfo.alreadyCheckedIn && ticketInfo.ticketCount > 0 && (
-                <div className="p-4 border rounded-lg bg-gray-50">
-                  <label className="block text-sm font-medium mb-2 text-gray-800">
-                    Quantity to Check In:
-                  </label>
-                  <div className="flex gap-2">
-                    <Input 
-                      type="number" 
-                      min={1} 
-                      max={ticketInfo.ticketCount} 
-                      value={checkInQuantity}
-                      onChange={(e) => setCheckInQuantity(Math.min(ticketInfo.ticketCount, Math.max(1, parseInt(e.target.value) || 1)))}
-                      className="border-gray-300"
-                    />
-                    <Button 
-                      onClick={handleCheckIn}
-                      disabled={isCheckingIn || ticketInfo.ticketCount < 1}
-                      className="bg-green-600 hover:bg-green-700 text-white min-w-[120px]"
-                    >
-                      {isCheckingIn ? "Processing..." : "Check In"}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <Button onClick={resetScanner} variant="outline" className="w-full mt-4 border-gray-300">
-                Scan Another Ticket
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        ) : null}
+      </div>
     </div>
-  )
+  );
 }

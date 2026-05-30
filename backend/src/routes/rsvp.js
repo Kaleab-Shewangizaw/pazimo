@@ -7,12 +7,15 @@ const rsvpController = require("../controllers/rsvpController");
 router.get("/public/forms", rsvpController.listPublishedForms);
 router.get("/public/:publicId", rsvpController.getFormByPublicId);
 router.post("/public/:publicId/responses", rsvpController.submitResponse);
+router.post("/responses/validate-qr", protect, restrictTo("admin", "organizer", "partner"), rsvpController.validateRsvpQr);
+router.patch("/responses/:responseId/check-in", protect, restrictTo("admin", "organizer", "partner"), rsvpController.checkInRsvpResponse);
 
 router.use(protect, restrictTo("admin", "organizer", "partner"));
 
 router.get("/forms", rsvpController.listForms);
 router.post("/forms", rsvpController.createForm);
 router.get("/forms/:id", rsvpController.getForm);
+router.post("/forms/:id/responses", rsvpController.submitResponseByFormId);
 router.patch("/forms/:id", rsvpController.updateForm);
 router.patch("/forms/:id/cover-image", upload.single("coverImage"), rsvpController.uploadCoverImage);
 router.delete("/forms/:id", rsvpController.deleteForm);

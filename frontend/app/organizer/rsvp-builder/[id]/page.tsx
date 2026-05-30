@@ -336,6 +336,28 @@ export default function Builder() {
             </div>
 
             <div className="mt-6 space-y-5">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-slate-900 dark:text-white">
+                      {event.type === "review" ? "Private review link" : "Public form"}
+                    </Label>
+                    <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                      {event.type === "review"
+                        ? "Review forms are always private. Admin still needs to publish the form before people can respond."
+                        : "Public forms appear on discovery pages after admin publishes them. Private forms only work for people with the direct link."}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={event.type === "review" ? false : event.isPublic !== false}
+                    disabled={event.type === "review"}
+                    onCheckedChange={(checked) =>
+                      updateEvent(event.id, { isPublic: checked })
+                    }
+                  />
+                </div>
+              </div>
+
               <div>
                 <Label className="text-sm text-slate-900 dark:text-white">
                   Cover image
@@ -486,107 +508,12 @@ export default function Builder() {
                   </div>
 
                   <div className="rounded-xl border border-slate-200 dark:border-slate-600 p-4 bg-slate-50 dark:bg-slate-700/30">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-sm font-medium text-slate-900 dark:text-white">
-                          Require payment after RSVP
-                        </Label>
-                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-                          Tickets issue after payment.
-                        </p>
-                      </div>
-                      <Switch
-                        checked={!!event.payment?.enabled}
-                        onCheckedChange={(v) =>
-                          updateEvent(event.id, {
-                            payment: {
-                              ...(event.payment || {
-                                price: 0,
-                                currency: "USD",
-                              }),
-                              enabled: v,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-
-                    <AnimatePresence>
-                      {event.payment?.enabled && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="mt-4 grid grid-cols-2 gap-3">
-                            <div>
-                              <Label className="text-xs text-slate-900 dark:text-white">
-                                Price
-                              </Label>
-                              <Input
-                                type="number"
-                                value={event.payment.price}
-                                onChange={(e) =>
-                                  updateEvent(event.id, {
-                                    payment: {
-                                      ...event.payment!,
-                                      price: Number(e.target.value),
-                                    },
-                                  })
-                                }
-                                className="mt-1 h-10 rounded-lg"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs text-slate-900 dark:text-white">
-                                Currency
-                              </Label>
-                              <Select
-                                value={event.payment.currency}
-                                onValueChange={(v) =>
-                                  updateEvent(event.id, {
-                                    payment: {
-                                      ...event.payment!,
-                                      currency: v,
-                                    },
-                                  })
-                                }
-                              >
-                                <SelectTrigger className="mt-1 h-10 rounded-lg">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {["USD", "EUR", "GBP", "AED", "SAR", "INR", "ETB"].map((c) => (
-                                    <SelectItem key={c} value={c}>
-                                      {c}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="col-span-2">
-                              <Label className="text-xs text-slate-900 dark:text-white">
-                                Payment deadline
-                              </Label>
-                              <Input
-                                type="date"
-                                value={event.payment.deadline || ""}
-                                onChange={(e) =>
-                                  updateEvent(event.id, {
-                                    payment: {
-                                      ...event.payment!,
-                                      deadline: e.target.value,
-                                    },
-                                  })
-                                }
-                                className="mt-1 h-10 rounded-lg"
-                              />
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                    <Label className="text-sm font-medium text-slate-900 dark:text-white">
+                      RSVP payment
+                    </Label>
+                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                      This feature is temporarily disabled until the RSVP flow is fully stabilized.
+                    </p>
                   </div>
                 </>
                 )}

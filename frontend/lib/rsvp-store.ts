@@ -66,7 +66,7 @@ interface RsvpStore {
   saveEvent: (id: string) => Promise<string>;
   discardEventChanges: (id: string) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
-  publishEvent: (id: string) => Promise<void>;
+  publishEvent: (id: string, published?: boolean) => Promise<void>;
   cancelEvent: (id: string) => Promise<void>;
   archiveEvent: (id: string) => Promise<void>;
   toggleVisibility: (id: string, isPublic?: boolean) => Promise<void>;
@@ -245,8 +245,8 @@ export const useStore = create<RsvpStore>((set, get) => ({
     }
   },
 
-  publishEvent: async (id: string) => {
-    const saved = await rsvpApi.publishForm(id);
+  publishEvent: async (id: string, published = true) => {
+    const saved = await rsvpApi.publishForm(id, published);
     set((state) => ({
       events: state.events.map((item) => (item.id === id ? saved : item)),
     }));

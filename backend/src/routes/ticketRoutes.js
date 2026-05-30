@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { authenticateUser, protect } = require("../middlewares/auth");
+const { authenticateUser, protect, restrictTo } = require("../middlewares/auth");
 
 const {
   createTicket,
@@ -599,8 +599,18 @@ router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
 router.get("/public/details/:id", getPublicTicketDetails);
 router.post("/payment/cancel", cancelPaymentIntent);
-router.patch("/:ticketId/check-in", checkInTicket);
-router.post("/validate-qr", validateQRCode);
+router.patch(
+  "/:ticketId/check-in",
+  protect,
+  restrictTo("admin", "organizer", "partner"),
+  checkInTicket
+);
+router.post(
+  "/validate-qr",
+  protect,
+  restrictTo("admin", "organizer", "partner"),
+  validateQRCode
+);
 
 // All other routes use authentication
 router.use(authenticateUser);

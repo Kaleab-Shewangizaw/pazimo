@@ -2,6 +2,7 @@ import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { useAuthStore } from "@/store/authStore";
 import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
 import type {
+  AnswerValue,
   AttendeeTag,
   PaymentConfig,
   Question,
@@ -27,7 +28,7 @@ export const resolveRsvpImageUrl = (image?: string) => {
   return `${base}${normalized}`;
 };
 
-const getAuthToken = () => {
+export const getRsvpAuthToken = () => {
   // Prefer organizer/customer auth first because RSVP builder is organizer-facing.
   const authToken = useAuthStore.getState().token;
   const organizerToken = useOrganizerAuthStore.getState().token;
@@ -80,21 +81,26 @@ type BackendForm = {
 
 type BackendResponse = {
   _id: string;
+  responseId?: string;
   formId: string;
   formPublicId: string;
   organizerId: string;
-  answers: Record<string, any>;
+  answers: Record<string, AnswerValue>;
   attendee?: { fullName?: string; email?: string; phone?: string };
   status: "pending" | "approved" | "paid" | "unpaid" | "rejected";
   tag?: AttendeeTag;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   submittedAt: string;
   createdAt?: string;
   updatedAt?: string;
+  qrCodePayload?: string;
+  qrCodeDataUrl?: string;
+  checkedIn?: boolean;
+  checkedInAt?: string;
 };
 
 const request = async <T>(endpoint: string, options: RequestInit = {}, auth = true) => {
-  const token = auth ? getAuthToken() : null;
+  const token = auth ? getRsvpAuthToken() : null;
   const headers = new Headers(options.headers || {});
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
 
@@ -134,7 +140,12 @@ const mapForm = (form: BackendForm): RsvpEvent => ({
   venue: form.venue || "",
   rsvpLimit: form.rsvpLimit,
   approvalMode: form.approvalMode,
-  payment: form.payment,
+  payment: form.payment
+    ? {
+        ...form.payment,
+        enabled: false,
+      }
+    : form.payment,
   anonymous: !!form.anonymous,
   sections: form.sections || [],
   questions: form.questions || [],
@@ -169,20 +180,31 @@ const mapFormPayload = (event: Partial<RsvpEvent>) => ({
   venue: event.venue || "",
   rsvpLimit: event.rsvpLimit,
   approvalMode: event.approvalMode || "auto",
-  payment: event.payment,
+  payment: event.payment
+    ? {
+        ...event.payment,
+        enabled: false,
+      }
+    : event.payment,
   anonymous: !!event.anonymous,
+  isPublic: event.type === "review" ? false : event.isPublic !== false,
   sections: event.sections || [],
   questions: event.questions || [],
 });
 
 const mapResponse = (response: BackendResponse): Response => ({
   id: response._id,
+  responseId: response.responseId,
   eventId: response.formId,
   answers: response.answers || {},
   attendee: response.attendee,
   status: response.status,
   tag: response.tag,
   submittedAt: response.submittedAt || response.createdAt || new Date().toISOString(),
+  qrCodePayload: response.qrCodePayload,
+  qrCodeDataUrl: response.qrCodeDataUrl,
+  checkedIn: response.checkedIn,
+  checkedInAt: response.checkedInAt,
 });
 
 export const rsvpApi = {
@@ -228,12 +250,12 @@ export const rsvpApi = {
     mapForm(await request<BackendForm>(`/rsvp/forms/${id}/duplicate`, { method: "POST" })),
   publishForm: async (id: string, published?: boolean) =>
     mapForm(
-      await request<BackendForm>(
-        published === false ? `/rsvp/forms/${id}/cancel` : `/rsvp/forms/${id}/publish`,
-        {
-          method: "PATCH",
-        }
-      )
+      await request<BackendForm>(`/rsvp/forms/${id}/publish`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          status: published === false ? "draft" : "published",
+        }),
+      })
     ),
   cancelForm: async (id: string) =>
     mapForm(await request<BackendForm>(`/rsvp/forms/${id}/cancel`, { method: "PATCH" })),
@@ -272,10 +294,10 @@ export const rsvpApi = {
   submitPublicResponse: async (
     publicId: string,
     data: {
-      answers: Record<string, any>;
+      answers: Record<string, AnswerValue>;
       attendee?: { fullName: string; email: string; phone: string };
       tag?: AttendeeTag;
-      metadata?: Record<string, any>;
+      metadata?: Record<string, unknown>;
     }
   ) =>
     mapResponse(
@@ -287,6 +309,21 @@ export const rsvpApi = {
         },
         false
       )
+    ),
+  submitProtectedResponse: async (
+    id: string,
+    data: {
+      answers: Record<string, AnswerValue>;
+      attendee?: { fullName: string; email: string; phone: string };
+      tag?: AttendeeTag;
+      metadata?: Record<string, unknown>;
+    }
+  ) =>
+    mapResponse(
+      await request<BackendResponse>(`/rsvp/forms/${id}/responses`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      })
     ),
   getResponses: async (id: string) => {
     const responses = await request<BackendResponse[]>(`/rsvp/forms/${id}/responses`);
@@ -318,6 +355,7 @@ export const buildDefaultEvent = (type: "rsvp" | "review", name: string): RsvpEv
   name: name.trim() || `New ${type === "rsvp" ? "RSVP" : "Review"} Event`,
   type,
   status: "draft",
+  isPublic: type === "review" ? false : true,
   sections: [{ id: crypto.randomUUID(), title: "Basic Information" }],
   questions: [],
   approvalMode: "auto",

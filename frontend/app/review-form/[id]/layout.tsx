@@ -4,9 +4,9 @@ import { Metadata } from "next";
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   try {
     const event = await rsvpApi.getPublicForm(params.id);
-    if (!event) return { title: "Review | Pazimo" };
+    if (!event) return { title: "Review" };
 
-    const title = `${event.name} - Review | Pazimo`;
+    const title = event.name ? `${event.name} - Review` : "Review";
     const description = event.description || "Leave your feedback for this event on Pazimo";
     const image = resolveRsvpImageUrl(event.coverImage);
 
@@ -26,8 +26,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
         images: image ? [image] : [],
       },
     };
-  } catch (error) {
-    return { title: "Review | Pazimo" };
+  } catch {
+    return { title: "Review" };
   }
 }
 

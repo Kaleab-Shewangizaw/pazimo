@@ -32,6 +32,9 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import EventCardSkeleton from "@/components/skeleton/event-card-skeleton";
+import FeaturedEventCard, {
+  type FeaturedEventCardData,
+} from "@/components/featured-event-card";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -71,6 +74,22 @@ type Event = {
   capacity?: number;
   isPublic?: boolean;
   isSoldOut?: boolean;
+};
+
+type PublicRsvpForm = {
+  _id: string;
+  publicId: string;
+  title: string;
+  description?: string;
+  coverImage?: string;
+  date?: string;
+  location?: string;
+  venue?: string;
+  hostedBy?: string;
+  responseCount?: number;
+  publishedAt?: string;
+  shareUrl?: string;
+  isPublic?: boolean;
 };
 
 const AGE_RESTRICTIONS = ["3+", "13+", "18+", "21+", "25+"];
@@ -139,6 +158,7 @@ const isEventSoldOut = (event: Event) => {
 export default function EventSearchPage() {
   const [isClient, setIsClient] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
+  const [rsvpForms, setRsvpForms] = useState<PublicRsvpForm[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isNavigating, setIsNavigating] = useState(false);
@@ -213,15 +233,20 @@ export default function EventSearchPage() {
   const fetchEvents = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`
-      );
-      if (!response.ok) throw new Error("Failed to fetch events");
+      const [eventsResponse, formsResponse] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/events/public-events`),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/rsvp/public/forms?type=rsvp&limit=12`),
+      ]);
+      if (!eventsResponse.ok) throw new Error("Failed to fetch events");
 
-      const data = await response.json();
+      const data = await eventsResponse.json();
+      const formsData = formsResponse.ok ? await formsResponse.json() : { data: [] };
 
       // The API now returns only published and public events, so we don't need to filter manually
       const publishedEvents = data.data;
+      const publishedForms = (formsData.data || []).filter(
+        (form: PublicRsvpForm) => form.isPublic !== false
+      );
 
       const categories = Array.from(
         new Set(
@@ -233,6 +258,7 @@ export default function EventSearchPage() {
 
       setCategoriesFromEvents(categories);
       setEvents(publishedEvents);
+      setRsvpForms(publishedForms);
       setFilteredEvents(publishedEvents);
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -368,6 +394,38 @@ export default function EventSearchPage() {
     (selectedAge ? 1 : 0) +
     (!showSoldOut ? 1 : 0) +
     (priceRange[0] !== 0 || priceRange[1] !== 2000 ? 1 : 0);
+
+  const buildRsvpCardData = (form: PublicRsvpForm): FeaturedEventCardData => {
+    const image = form.coverImage
+      ? form.coverImage.startsWith("http")
+        ? form.coverImage
+        : `${process.env.NEXT_PUBLIC_API_URL}${
+            form.coverImage.startsWith("/") ? form.coverImage : `/${form.coverImage}`
+          }`
+      : undefined;
+
+    const dateSource = form.date || form.publishedAt || "";
+    const parsedDate = dateSource ? new Date(dateSource) : null;
+
+    return {
+      id: `rsvp-${form._id}`,
+      href: form.shareUrl || `/rsvp-form/${form.publicId}`,
+      title: form.title,
+      tag: "RSVP",
+      dateLabel:
+        parsedDate && !isNaN(parsedDate.getTime())
+          ? parsedDate.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })
+          : "RSVP",
+      locationLabel:
+        [form.location, form.venue].filter(Boolean).join(", ") || "Location TBA",
+      priceLabel: "RSVP",
+      image,
+      ctaLabel: "RSVP",
+    };
+  };
 
   // Wishlist toggle handled by useWishlist hook
 
@@ -835,6 +893,28 @@ export default function EventSearchPage() {
             <p className="text-center text-gray-500 mt-10">
               No events match your filters.
             </p>
+          )}
+
+          {rsvpForms.length > 0 && (
+            <section className="mb-10">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Public RSVP Forms
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Published RSVP forms that anyone can discover here.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {rsvpForms.map((form, index) => (
+                  <FeaturedEventCard
+                    key={form._id}
+                    data={buildRsvpCardData(form)}
+                    index={index}
+                  />
+                ))}
+              </div>
+            </section>
           )}
 
           {isClient ? (

@@ -64,7 +64,7 @@ import {
 
 const STATUS_OPTIONS = ["All", "draft", "published", "cancelled", "hidden", "archived", "review", "closed"] as const;
 const TYPE_OPTIONS = ["All", "rsvp", "review"] as const;
-const VISIBILITY_OPTIONS = ["All", "Visible", "Hidden"] as const;
+const VISIBILITY_OPTIONS = ["All", "Public", "Private"] as const;
 const FLAG_OPTIONS = ["All", "Featured", "Trending", "Banner"] as const;
 
 type StatusFilter = (typeof STATUS_OPTIONS)[number];
@@ -140,7 +140,7 @@ export default function AdminRsvpPage() {
       const matchesType = typeFilter === "All" || event.type === typeFilter;
       const matchesVisibility =
         visibilityFilter === "All" ||
-        (visibilityFilter === "Visible" ? event.isPublic !== false : event.isPublic === false);
+        (visibilityFilter === "Public" ? event.isPublic !== false : event.isPublic === false);
       const matchesFlag =
         flagFilter === "All" ||
         (flagFilter === "Featured" ? !!event.isFeatured : flagFilter === "Trending" ? !!event.isTrending : !!event.bannerStatus);
@@ -422,7 +422,7 @@ export default function AdminRsvpPage() {
                         <TableCell className="align-top">
                           <div className="flex flex-wrap gap-2">
                             <Badge variant="outline" className={`rounded-full border ${event.isPublic === false ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-emerald-100 text-emerald-700 border-emerald-200"}`}>
-                              {event.isPublic === false ? "Hidden" : "Public"}
+                              {event.isPublic === false ? "Private" : "Public"}
                             </Badge>
                             {event.isClosed ? <Badge variant="outline" className="rounded-full border bg-rose-100 text-rose-700 border-rose-200">Closed</Badge> : null}
                           </div>
@@ -504,7 +504,13 @@ export default function AdminRsvpPage() {
                                   ? "text-gray-600 hover:text-gray-700"
                                   : "text-blue-600 hover:text-blue-700"
                               }
-                              onClick={() => void runRowAction(event, status === "published" ? () => publishEvent(event.id) : () => publishEvent(event.id), status === "published" ? "Form unpublished" : "Form published")}
+                              onClick={() =>
+                                void runRowAction(
+                                  event,
+                                  () => publishEvent(event.id, status !== "published"),
+                                  status === "published" ? "Form unpublished" : "Form published"
+                                )
+                              }
                             >
                               {status === "published" ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                             </Button>
@@ -569,7 +575,7 @@ export default function AdminRsvpPage() {
                         {event.isTrending ? <Badge variant="outline" className="rounded-full border bg-amber-100 text-amber-700 border-amber-200">Trending</Badge> : null}
                         {event.bannerStatus ? <Badge variant="outline" className="rounded-full border bg-sky-100 text-sky-700 border-sky-200">Banner</Badge> : null}
                         <Badge variant="outline" className={`rounded-full border ${event.isPublic === false ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-emerald-100 text-emerald-700 border-emerald-200"}`}>
-                          {event.isPublic === false ? "Hidden" : "Public"}
+                          {event.isPublic === false ? "Private" : "Public"}
                         </Badge>
                       </div>
                       <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-500">
