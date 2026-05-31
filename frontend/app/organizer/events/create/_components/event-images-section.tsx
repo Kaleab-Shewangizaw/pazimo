@@ -13,12 +13,14 @@ interface EventImagesSectionProps {
   coverImages: File[];
   onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveImage: (index: number) => void;
+  required?: boolean;
 }
 
 export function EventImagesSection({
   coverImages,
   onImageChange,
   onRemoveImage,
+  required,
 }: EventImagesSectionProps) {
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
 
@@ -45,7 +47,7 @@ export function EventImagesSection({
               accept="image/*"
               onChange={onImageChange}
               multiple
-              required={coverImages.length === 0}
+              required={required ?? coverImages.length === 0}
               className="rounded-xl border-slate-200 bg-white"
             />
             <FieldHint>

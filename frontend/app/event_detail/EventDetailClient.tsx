@@ -55,7 +55,6 @@ import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
 import {
   buildCanonicalEventUrl,
-  buildEventUrl,
   extractShortIdFromEventSlug,
 } from "@/lib/event-url";
 
@@ -145,7 +144,7 @@ export default function EventDetailClient() {
     ? params.eventSlug[0]
     : params?.eventSlug;
   const shortIdFromSlug = extractShortIdFromEventSlug(eventSlug);
-  const legacyEventId = searchParams.get("id");
+  const legacyEventId = searchParams.get("id") || searchParams.get("amp;id");
   const eventLookupId = shortIdFromSlug || legacyEventId;
   const eventId = eventLookupId;
   const currentEventPath = eventSlug
@@ -280,7 +279,10 @@ export default function EventDetailClient() {
       eventCache.set(eventLookupId, { data: data.data, timestamp: Date.now() });
       setEvent(data.data);
 
-      const canonicalUrl = buildEventUrl(data.data) || currentEventPath;
+      const canonicalUrl =
+        data.data?.slug && data.data?.shortId
+          ? buildCanonicalEventUrl(data.data.slug, data.data.shortId)
+          : currentEventPath;
       if (canonicalUrl !== currentEventPath) {
         router.replace(canonicalUrl);
       }
@@ -1282,7 +1284,7 @@ export default function EventDetailClient() {
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     About The Event
                   </h2>
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
                     {event.description}
                   </p>
                 </div>
@@ -1366,8 +1368,12 @@ export default function EventDetailClient() {
                 <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">About This Event</h2>
                 <div className="text-gray-600 dark:text-gray-400 leading-relaxed space-y-4">
                   {showFullDescription
-                    ? descriptionParagraphs.map((p, i) => <p key={i}>{p}</p>)
-                    : <p>{shortDescription}</p>
+                    ? descriptionParagraphs.map((p, i) => (
+                        <p key={i} className="whitespace-pre-line">
+                          {p}
+                        </p>
+                      ))
+                    : <p className="whitespace-pre-line">{shortDescription}</p>
                   }
                 </div>
                 {descriptionParagraphs.length > 1 && (

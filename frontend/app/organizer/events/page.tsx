@@ -541,6 +541,18 @@ export default function EventsPage() {
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
+                            router.push(`/organizer/events/edit/${event._id}`);
+                          }}
+                          className="text-green-600 hover:text-green-700"
+                          title="Edit Event"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             router.push(`/organizer/qr-scanner?mode=ticket&eventId=${event._id}`);
                           }}
                           className="text-blue-600 hover:text-blue-700"

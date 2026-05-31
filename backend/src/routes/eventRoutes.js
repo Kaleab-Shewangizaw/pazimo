@@ -25,7 +25,14 @@ router.post("/:id/buy", eventController.buyTicket); // Buy ticket
 router.get("/user/:userId/tickets", eventController.getUserTickets); // Get user's tickets
 
 router.get("/:id", eventController.getEvent);
-router.patch("/:id", upload.single("coverImage"), eventController.updateEvent);
+router.patch(
+  "/:id",
+  upload.fields([
+    { name: "coverImage", maxCount: 1 },
+    { name: "coverImages", maxCount: 5 },
+  ]),
+  eventController.updateEvent,
+);
 router.delete("/:id", eventController.deleteEvent);
 router.patch("/:id/publish", eventController.publishEvent);
 router.patch("/:id/cancel", eventController.cancelEvent);

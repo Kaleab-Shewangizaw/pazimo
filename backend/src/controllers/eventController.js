@@ -501,8 +501,28 @@ const updateEvent = async (req, res) => {
   }
 
 
+  const uploadedCoverFiles = [];
+
+  if (Array.isArray(req.files)) {
+    uploadedCoverFiles.push(...req.files);
+  } else if (req.files && typeof req.files === "object") {
+    if (Array.isArray(req.files.coverImages)) {
+      uploadedCoverFiles.push(...req.files.coverImages);
+    }
+
+    if (Array.isArray(req.files.coverImage)) {
+      uploadedCoverFiles.push(...req.files.coverImage);
+    }
+  }
+
   if (req.file) {
-    req.body.coverImages = [`/uploads/${req.file.filename}`];
+    uploadedCoverFiles.push(req.file);
+  }
+
+  if (uploadedCoverFiles.length > 0) {
+    req.body.coverImages = uploadedCoverFiles.map(
+      (file) => `/uploads/${file.filename}`,
+    );
   }
 
   try {
