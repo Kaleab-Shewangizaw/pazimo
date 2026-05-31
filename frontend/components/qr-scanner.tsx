@@ -47,8 +47,6 @@ type RsvpScanData = {
   status?: string;
   tag?: string;
   submittedAt?: string;
-  checkedIn?: boolean;
-  checkedInAt?: string;
   eligibleForEntry?: boolean;
   responseDetails?: ResponseDetail[];
 };
@@ -151,7 +149,6 @@ export default function QRScanner() {
   });
   const [rsvpScan, setRsvpScan] = useState<RsvpScanData | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [checkingIn, setCheckingIn] = useState(false);
 
   const scope = useMemo(() => {
     const mode = searchParams.get("mode");
@@ -259,8 +256,6 @@ export default function QRScanner() {
       status: scanData.status,
       tag: scanData.tag,
       submittedAt: scanData.submittedAt,
-      checkedIn: scanData.checkedIn,
-      checkedInAt: scanData.checkedInAt,
       eligibleForEntry: scanData.eligibleForEntry,
       responseDetails: scanData.responseDetails || [],
     };
@@ -268,74 +263,14 @@ export default function QRScanner() {
     setRsvpScan(normalized);
 
     if (!validateResponse.ok || !validateResult.success) {
-      showOverlay("error", "Not ready for entry", validateResult.message || "RSVP cannot be checked in yet");
+      showOverlay("error", "RSVP not valid", validateResult.message || "This RSVP is not approved yet");
       toast.error(validateResult.message || "RSVP is not approved yet");
-      busyRef.current = false;
-      return;
-    }
-
-    if (validateResult.alreadyCheckedIn || normalized.checkedIn) {
-      showOverlay("success", normalized.userName, `${normalized.eventTitle} · already checked in`);
-      toast.message("Already checked in");
       busyRef.current = false;
       return;
     }
 
     showOverlay("success", normalized.userName, normalized.eventTitle);
     busyRef.current = false;
-  };
-
-  const checkInRsvp = async () => {
-    if (!rsvpScan?.responseId) return;
-
-    const authToken = resolveAuthToken();
-    if (!authToken) {
-      toast.error("Authentication required");
-      return;
-    }
-
-    setCheckingIn(true);
-    try {
-      const checkInResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/rsvp/responses/${rsvpScan.responseId}/check-in`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(scopedBody),
-        }
-      );
-
-      const checkInResult = (await checkInResponse.json().catch(() => ({}))) as ValidateResult;
-
-      if (!checkInResponse.ok || !checkInResult.success) {
-        toast.error(checkInResult.message || "Check-in failed");
-        return;
-      }
-
-      const updated = checkInResult.data;
-      setRsvpScan((current) =>
-        current
-          ? {
-              ...current,
-              checkedIn: true,
-              checkedInAt: updated?.checkedInAt,
-              status: updated?.status || current.status,
-              responseDetails: updated?.responseDetails || current.responseDetails,
-            }
-          : current
-      );
-      showOverlay("success", rsvpScan.userName, `${rsvpScan.eventTitle} · checked in`);
-      toast.success(checkInResult.message || "RSVP checked in");
-    } catch (error) {
-      console.error("RSVP check-in error:", error);
-      toast.error("Failed to check in RSVP");
-    } finally {
-      setCheckingIn(false);
-      busyRef.current = false;
-    }
   };
 
   const validateAndCheckInTicket = async (qrData: string, authToken: string) => {
@@ -494,12 +429,6 @@ export default function QRScanner() {
         ? "border-red-400/60 bg-red-500/15 text-white"
         : "border-white/25 bg-black/50 text-white";
 
-  const canCheckInRsvp = Boolean(
-    rsvpScan &&
-      rsvpScan.eligibleForEntry &&
-      !rsvpScan.checkedIn
-  );
-
   return (
     <div className="relative h-full min-h-[calc(100vh-4rem)] w-full overflow-hidden bg-black">
       <div className="absolute inset-0 [&>div]:h-full [&>div]:w-full">
@@ -538,14 +467,12 @@ export default function QRScanner() {
               <Badge
                 variant="outline"
                 className={`rounded-full border capitalize ${
-                  rsvpScan.checkedIn
+                  rsvpScan.eligibleForEntry
                     ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
-                    : rsvpScan.eligibleForEntry
-                      ? "border-sky-400/50 bg-sky-500/15 text-sky-200"
-                      : "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                    : "border-amber-400/50 bg-amber-500/15 text-amber-200"
                 }`}
               >
-                {rsvpScan.checkedIn ? "Checked in" : rsvpScan.status || "pending"}
+                {rsvpScan.status || "pending"}
               </Badge>
             </div>
 
@@ -556,37 +483,20 @@ export default function QRScanner() {
               </div>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-5 flex gap-2">
               <Button
                 type="button"
                 variant="secondary"
-                className="rounded-full"
+                className="flex-1 rounded-full"
                 onClick={() => setDetailsOpen(true)}
               >
                 <Info className="mr-2 h-4 w-4" />
                 Details
               </Button>
-              {canCheckInRsvp ? (
-                <Button
-                  type="button"
-                  className="rounded-full"
-                  onClick={() => void checkInRsvp()}
-                  disabled={checkingIn}
-                >
-                  {checkingIn ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Checking in...
-                    </>
-                  ) : (
-                    "Check in"
-                  )}
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 variant="ghost"
-                className="rounded-full text-white/80 hover:text-white"
+                className="flex-1 rounded-full text-white/80 hover:text-white"
                 onClick={dismissRsvpCard}
               >
                 Scan next
