@@ -3,25 +3,67 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Scanner } from "@yudiel/react-qr-scanner";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Info,
+  Loader2,
+  UserRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { useAuthStore } from "@/store/authStore";
 import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type ScanTarget = "ticket" | "rsvp";
+
+type ResponseDetail = {
+  label: string;
+  value: string;
+  questionId?: string;
+  type?: string;
+};
+
+type RsvpScanData = {
+  responseId: string;
+  entryType: "rsvp";
+  eventTitle: string;
+  eventDate?: string;
+  eventTime?: string;
+  eventLocation?: string;
+  userName: string;
+  userEmail?: string;
+  userPhone?: string;
+  status?: string;
+  tag?: string;
+  submittedAt?: string;
+  checkedIn?: boolean;
+  checkedInAt?: string;
+  eligibleForEntry?: boolean;
+  responseDetails?: ResponseDetail[];
+};
 
 type ValidateResult = {
   success?: boolean;
   message?: string;
   alreadyCheckedIn?: boolean;
-  data?: {
+  data?: RsvpScanData & {
     entryType?: ScanTarget;
     ticketId?: string;
-    responseId?: string;
     userName?: string;
     eventTitle?: string;
     checkedIn?: boolean;
+    remainingUses?: number;
   };
 };
 
@@ -107,6 +149,9 @@ export default function QRScanner() {
     title: "",
     detail: "",
   });
+  const [rsvpScan, setRsvpScan] = useState<RsvpScanData | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
 
   const scope = useMemo(() => {
     const mode = searchParams.get("mode");
@@ -121,6 +166,8 @@ export default function QRScanner() {
     }
     return { type: null, id: "" };
   }, [searchParams]);
+
+  const scannerLabel = scope.type === "rsvp" ? "RSVP pass scanner" : scope.type === "ticket" ? "Ticket scanner" : "QR scanner";
 
   useEffect(() => {
     return () => {
@@ -163,6 +210,204 @@ export default function QRScanner() {
     queueReset();
   };
 
+  const scopedBody =
+    scope.type === "rsvp"
+      ? { scopeFormId: scope.id }
+      : scope.type === "ticket"
+        ? { scopeEventId: scope.id }
+        : {};
+
+  const validateRsvp = async (qrData: string, authToken: string) => {
+    showOverlay("processing", "Reading RSVP pass", "Hold steady...");
+
+    const validateResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/rsvp/responses/validate-qr`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          qrData,
+          ...scopedBody,
+        }),
+      }
+    );
+
+    const validateResult = (await validateResponse.json().catch(() => ({}))) as ValidateResult;
+    const scanData = validateResult.data;
+
+    if (!scanData?.responseId) {
+      const message = validateResult.message || "Failed to validate RSVP pass";
+      showOverlay("error", "Pass rejected", message);
+      toast.error(message);
+      setRsvpScan(null);
+      return;
+    }
+
+    const normalized: RsvpScanData = {
+      responseId: scanData.responseId,
+      entryType: "rsvp",
+      eventTitle: scanData.eventTitle || "RSVP event",
+      eventDate: scanData.eventDate,
+      eventTime: scanData.eventTime,
+      eventLocation: scanData.eventLocation,
+      userName: scanData.userName || "Attendee",
+      userEmail: scanData.userEmail,
+      userPhone: scanData.userPhone,
+      status: scanData.status,
+      tag: scanData.tag,
+      submittedAt: scanData.submittedAt,
+      checkedIn: scanData.checkedIn,
+      checkedInAt: scanData.checkedInAt,
+      eligibleForEntry: scanData.eligibleForEntry,
+      responseDetails: scanData.responseDetails || [],
+    };
+
+    setRsvpScan(normalized);
+
+    if (!validateResponse.ok || !validateResult.success) {
+      showOverlay("error", "Not ready for entry", validateResult.message || "RSVP cannot be checked in yet");
+      toast.error(validateResult.message || "RSVP is not approved yet");
+      busyRef.current = false;
+      return;
+    }
+
+    if (validateResult.alreadyCheckedIn || normalized.checkedIn) {
+      showOverlay("success", normalized.userName, `${normalized.eventTitle} · already checked in`);
+      toast.message("Already checked in");
+      busyRef.current = false;
+      return;
+    }
+
+    showOverlay("success", normalized.userName, normalized.eventTitle);
+    busyRef.current = false;
+  };
+
+  const checkInRsvp = async () => {
+    if (!rsvpScan?.responseId) return;
+
+    const authToken = resolveAuthToken();
+    if (!authToken) {
+      toast.error("Authentication required");
+      return;
+    }
+
+    setCheckingIn(true);
+    try {
+      const checkInResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/rsvp/responses/${rsvpScan.responseId}/check-in`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(scopedBody),
+        }
+      );
+
+      const checkInResult = (await checkInResponse.json().catch(() => ({}))) as ValidateResult;
+
+      if (!checkInResponse.ok || !checkInResult.success) {
+        toast.error(checkInResult.message || "Check-in failed");
+        return;
+      }
+
+      const updated = checkInResult.data;
+      setRsvpScan((current) =>
+        current
+          ? {
+              ...current,
+              checkedIn: true,
+              checkedInAt: updated?.checkedInAt,
+              status: updated?.status || current.status,
+              responseDetails: updated?.responseDetails || current.responseDetails,
+            }
+          : current
+      );
+      showOverlay("success", rsvpScan.userName, `${rsvpScan.eventTitle} · checked in`);
+      toast.success(checkInResult.message || "RSVP checked in");
+    } catch (error) {
+      console.error("RSVP check-in error:", error);
+      toast.error("Failed to check in RSVP");
+    } finally {
+      setCheckingIn(false);
+      busyRef.current = false;
+    }
+  };
+
+  const validateAndCheckInTicket = async (qrData: string, authToken: string) => {
+    showOverlay("processing", "Checking ticket", "Hold steady...");
+
+    const validateResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/validate-qr`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          qrData,
+          ...scopedBody,
+        }),
+      }
+    );
+
+    const validateResult = (await validateResponse.json().catch(() => ({}))) as ValidateResult;
+
+    if (!validateResponse.ok || !validateResult.success || !validateResult.data) {
+      const message = validateResult.message || "Failed to validate QR code";
+      showOverlay("error", "Ticket rejected", message);
+      toast.error(message);
+      return;
+    }
+
+    if (validateResult.alreadyCheckedIn || validateResult.data.checkedIn) {
+      const message = validateResult.message || "Ticket already checked in";
+      showOverlay("error", "Already checked in", message);
+      toast.error(message);
+      return;
+    }
+
+    const scanData = validateResult.data;
+    const checkInResponse = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/${scanData.ticketId}/check-in`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          count: 1,
+          ...scopedBody,
+        }),
+      }
+    );
+
+    const checkInResult = (await checkInResponse.json().catch(() => ({}))) as ValidateResult & {
+      data?: { remainingUses?: number };
+    };
+
+    if (!checkInResponse.ok || !checkInResult.success) {
+      const message = checkInResult.message || "Check-in failed";
+      showOverlay("error", "Check-in failed", message);
+      toast.error(message);
+      return;
+    }
+
+    const remainingUses =
+      typeof checkInResult.data?.remainingUses === "number"
+        ? `Remaining uses: ${checkInResult.data.remainingUses}`
+        : scanData.eventTitle || "";
+
+    showOverlay("success", scanData.userName || "Guest checked in", remainingUses);
+    toast.success(checkInResult.message || "Check-in successful");
+  };
+
   const validateAndCheckIn = async (qrData: string) => {
     const authToken = resolveAuthToken();
     if (!authToken) {
@@ -175,113 +420,24 @@ export default function QRScanner() {
     if (scope.type && scannedType !== scope.type) {
       showOverlay("error", "Wrong QR code", "This scanner is scoped to another pass type.");
       toast.error("Wrong QR code for this scanner");
+      busyRef.current = false;
       return;
     }
 
-    showOverlay("processing", "Checking pass", "Hold steady...");
-
-    const validateEndpoint =
-      scannedType === "rsvp"
-        ? "/api/rsvp/responses/validate-qr"
-        : "/api/tickets/validate-qr";
-
-    const scopedBody =
-      scannedType === "rsvp" && scope.type === "rsvp"
-        ? { scopeFormId: scope.id }
-        : scannedType === "ticket" && scope.type === "ticket"
-          ? { scopeEventId: scope.id }
-          : {};
+    setRsvpScan(null);
 
     try {
-      const validateResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}${validateEndpoint}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({
-            qrData,
-            ...scopedBody,
-          }),
-        }
-      );
-
-      const validateResult = (await validateResponse.json().catch(() => ({}))) as ValidateResult;
-
-      if (!validateResponse.ok || !validateResult.success || !validateResult.data) {
-        const message = validateResult.message || "Failed to validate QR code";
-        showOverlay("error", "Pass rejected", message);
-        toast.error(message);
+      if (scannedType === "rsvp") {
+        await validateRsvp(qrData, authToken);
         return;
       }
 
-      if (validateResult.alreadyCheckedIn || validateResult.data.checkedIn) {
-        const message = validateResult.message || "Pass already checked in";
-        showOverlay("error", "Already checked in", message);
-        toast.error(message);
-        return;
-      }
-
-      const scanData = validateResult.data;
-      const checkInEndpoint =
-        scannedType === "rsvp"
-          ? `/api/rsvp/responses/${scanData.responseId}/check-in`
-          : `/api/tickets/${scanData.ticketId}/check-in`;
-
-      const checkInResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}${checkInEndpoint}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(
-            scannedType === "rsvp"
-              ? scopedBody
-              : {
-                  count: 1,
-                  ...scopedBody,
-                }
-          ),
-        }
-      );
-
-      const checkInResult = (await checkInResponse.json().catch(() => ({}))) as ValidateResult & {
-        data?: { remainingUses?: number };
-      };
-
-      if (!checkInResponse.ok || !checkInResult.success) {
-        const message = checkInResult.message || "Check-in failed";
-        showOverlay("error", "Check-in failed", message);
-        toast.error(message);
-        return;
-      }
-
-      if (checkInResult.alreadyCheckedIn) {
-        const message = checkInResult.message || "Pass already checked in";
-        showOverlay("error", "Already checked in", message);
-        toast.error(message);
-        return;
-      }
-
-      const remainingUses =
-        scannedType === "ticket" && typeof checkInResult.data?.remainingUses === "number"
-          ? `Remaining uses: ${checkInResult.data.remainingUses}`
-          : scanData.eventTitle || "";
-
-      showOverlay(
-        "success",
-        scanData.userName || "Attendee checked in",
-        remainingUses
-      );
-      toast.success(checkInResult.message || "Check-in successful");
+      await validateAndCheckInTicket(qrData, authToken);
     } catch (error) {
       console.error("Scanner error:", error);
       showOverlay("error", "Scanner error", "Please try again.");
       toast.error("Failed to process scan");
+      busyRef.current = false;
     }
   };
 
@@ -324,12 +480,25 @@ export default function QRScanner() {
     toast.error("Scanner camera failed");
   };
 
+  const dismissRsvpCard = () => {
+    setRsvpScan(null);
+    setDetailsOpen(false);
+    busyRef.current = false;
+    setOverlay({ tone: "idle", title: "", detail: "" });
+  };
+
   const overlayClasses =
     overlay.tone === "success"
       ? "border-emerald-400/60 bg-emerald-500/15 text-white"
       : overlay.tone === "error"
         ? "border-red-400/60 bg-red-500/15 text-white"
         : "border-white/25 bg-black/50 text-white";
+
+  const canCheckInRsvp = Boolean(
+    rsvpScan &&
+      rsvpScan.eligibleForEntry &&
+      !rsvpScan.checkedIn
+  );
 
   return (
     <div className="relative h-full min-h-[calc(100vh-4rem)] w-full overflow-hidden bg-black">
@@ -346,27 +515,162 @@ export default function QRScanner() {
         />
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-5">
-        {overlay.tone !== "idle" ? (
-          <div
-            className={`flex min-w-[18rem] max-w-md items-center gap-3 rounded-3xl border px-4 py-3 shadow-2xl backdrop-blur ${overlayClasses}`}
-          >
-            {overlay.tone === "processing" ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : overlay.tone === "success" ? (
-              <CheckCircle2 className="h-5 w-5" />
-            ) : (
-              <AlertCircle className="h-5 w-5" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-center p-4">
+        <div className="rounded-full border border-white/20 bg-black/55 px-4 py-2 text-xs font-medium uppercase tracking-[0.24em] text-white/85 backdrop-blur">
+          {scannerLabel}
+        </div>
+      </div>
+
+      {rsvpScan ? (
+        <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 flex justify-center p-4 pb-6">
+          <div className="w-full max-w-md rounded-3xl border border-white/15 bg-slate-950/95 p-5 text-white shadow-2xl backdrop-blur">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-500/20 text-sky-300">
+                <UserRound className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-sky-300">
+                  RSVP response
+                </p>
+                <h2 className="mt-1 truncate text-lg font-semibold">{rsvpScan.userName}</h2>
+                <p className="truncate text-sm text-white/75">{rsvpScan.eventTitle}</p>
+              </div>
+              <Badge
+                variant="outline"
+                className={`rounded-full border capitalize ${
+                  rsvpScan.checkedIn
+                    ? "border-emerald-400/50 bg-emerald-500/15 text-emerald-200"
+                    : rsvpScan.eligibleForEntry
+                      ? "border-sky-400/50 bg-sky-500/15 text-sky-200"
+                      : "border-amber-400/50 bg-amber-500/15 text-amber-200"
+                }`}
+              >
+                {rsvpScan.checkedIn ? "Checked in" : rsvpScan.status || "pending"}
+              </Badge>
+            </div>
+
+            {(rsvpScan.userEmail || rsvpScan.userPhone) && (
+              <div className="mt-4 space-y-1 text-sm text-white/70">
+                {rsvpScan.userEmail ? <p>{rsvpScan.userEmail}</p> : null}
+                {rsvpScan.userPhone ? <p>{rsvpScan.userPhone}</p> : null}
+              </div>
             )}
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{overlay.title}</p>
-              {overlay.detail ? (
-                <p className="truncate text-xs text-white/80">{overlay.detail}</p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-full"
+                onClick={() => setDetailsOpen(true)}
+              >
+                <Info className="mr-2 h-4 w-4" />
+                Details
+              </Button>
+              {canCheckInRsvp ? (
+                <Button
+                  type="button"
+                  className="rounded-full"
+                  onClick={() => void checkInRsvp()}
+                  disabled={checkingIn}
+                >
+                  {checkingIn ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Checking in...
+                    </>
+                  ) : (
+                    "Check in"
+                  )}
+                </Button>
               ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                className="rounded-full text-white/80 hover:text-white"
+                onClick={dismissRsvpCard}
+              >
+                Scan next
+              </Button>
             </div>
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-5">
+          {overlay.tone !== "idle" ? (
+            <div
+              className={`flex min-w-[18rem] max-w-md items-center gap-3 rounded-3xl border px-4 py-3 shadow-2xl backdrop-blur ${overlayClasses}`}
+            >
+              {overlay.tone === "processing" ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : overlay.tone === "success" ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : (
+                <AlertCircle className="h-5 w-5" />
+              )}
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{overlay.title}</p>
+                {overlay.detail ? (
+                  <p className="truncate text-xs text-white/80">{overlay.detail}</p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Response details</DialogTitle>
+            <DialogDescription>
+              {rsvpScan
+                ? `${rsvpScan.userName} · ${rsvpScan.eventTitle}`
+                : "RSVP response"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {rsvpScan ? (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900">
+                <p className="font-medium text-slate-900 dark:text-white">{rsvpScan.eventTitle}</p>
+                {rsvpScan.eventDate ? (
+                  <p className="mt-1 text-slate-600 dark:text-slate-400">{rsvpScan.eventDate}</p>
+                ) : null}
+                {rsvpScan.eventTime ? (
+                  <p className="text-slate-600 dark:text-slate-400">{rsvpScan.eventTime}</p>
+                ) : null}
+                {rsvpScan.eventLocation ? (
+                  <p className="text-slate-600 dark:text-slate-400">{rsvpScan.eventLocation}</p>
+                ) : null}
+              </div>
+
+              {(rsvpScan.responseDetails || []).length > 0 ? (
+                rsvpScan.responseDetails?.map((item) => (
+                  <div
+                    key={`${item.questionId || item.label}-${item.label}`}
+                    className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950"
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      {item.label}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-900 dark:text-white">{item.value}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  No response details available.
+                </p>
+              )}
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => setDetailsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

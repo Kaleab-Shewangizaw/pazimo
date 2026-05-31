@@ -25,8 +25,85 @@ const RSVP_SCANNER_TYPES = new Set(["rsvp_response", "rsvp"]);
 
 const buildRsvpQrPayload = (_form, response) =>
   JSON.stringify({
+    type: "rsvp_response",
     rid: response.responseId,
   });
+
+const formatAnswerForDisplay = (value) => {
+  if (value === undefined || value === null || value === "") return "—";
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
+};
+
+const buildRsvpResponseDetails = (form, response) => {
+  const details = [];
+  const attendee = response.attendee || {};
+
+  if (attendee.fullName) {
+    details.push({ label: "Full name", value: attendee.fullName });
+  }
+  if (attendee.email) {
+    details.push({ label: "Email", value: attendee.email });
+  }
+  if (attendee.phone) {
+    details.push({ label: "Phone", value: attendee.phone });
+  }
+
+  const questions = Array.isArray(form?.questions) ? form.questions : [];
+  questions.forEach((question) => {
+    details.push({
+      questionId: question.id,
+      label: question.label,
+      type: question.type,
+      value: formatAnswerForDisplay(response.answers?.[question.id]),
+    });
+  });
+
+  return details;
+};
+
+const buildRsvpScanPayload = (response, form, extras = {}) => {
+  const status = String(response.status || "").toLowerCase();
+  const entryApproved = ["approved", "paid"].includes(status);
+
+  return {
+    responseId: response.responseId,
+    entryType: "rsvp",
+    formId: String(form._id),
+    eventTitle: form.title,
+    eventDate: form.date,
+    eventTime: [form.startTime, form.endTime].filter(Boolean).join(" - "),
+    eventLocation: form.location || form.venue || "",
+    userName: response.attendee?.fullName || "Attendee",
+    userEmail: response.attendee?.email || "",
+    userPhone: response.attendee?.phone || "",
+    status: response.status,
+    tag: response.tag,
+    submittedAt: response.submittedAt,
+    checkedIn: !!response.checkedIn,
+    checkedInAt: response.checkedInAt,
+    approvalMode: form.approvalMode,
+    requiresApproval: form.approvalMode === "manual",
+    eligibleForEntry: entryApproved,
+    responseDetails: buildRsvpResponseDetails(form, response),
+    ...extras,
+  };
+};
+
+const ensureRsvpQrCode = async (form, response) => {
+  if (form.type !== "rsvp" || response.qrCodeDataUrl) {
+    return response;
+  }
+
+  const qrCodePayload = buildRsvpQrPayload(form, response);
+  const qrCodeDataUrl = await buildBrandedQrDataUrl(qrCodePayload);
+  response.qrCodePayload = qrCodePayload;
+  response.qrCodeDataUrl = qrCodeDataUrl;
+  await response.save();
+  return response;
+};
+
+const getRequesterId = (user) => String(user?._id || user?.userId || "");
 
 const escapeHtml = (value = "") =>
   String(value)
@@ -1032,17 +1109,23 @@ const updateResponseStatus = async (req, res) => {
       });
     }
 
-    const response = await RsvpResponse.findOneAndUpdate(
-      { _id: req.params.responseId, formId: form._id },
-      { status },
-      { new: true }
-    );
+    let response = await RsvpResponse.findOne({
+      _id: req.params.responseId,
+      formId: form._id,
+    });
 
     if (!response) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: "Response not found",
       });
+    }
+
+    response.status = status;
+    if (["approved", "paid"].includes(status) && form.type === "rsvp") {
+      response = await ensureRsvpQrCode(form, response);
+    } else {
+      await response.save();
     }
 
     return res.json({
@@ -1234,7 +1317,10 @@ const validateRsvpQr = async (req, res) => {
     }
 
     const response = await RsvpResponse.findOne({ responseId })
-      .populate("formId", "title date startTime endTime location organizerId approvalMode")
+      .populate(
+        "formId",
+        "title date startTime endTime location venue organizerId approvalMode questions sections type",
+      )
       .lean();
 
     if (!response || !response.formId) {
@@ -1247,7 +1333,7 @@ const validateRsvpQr = async (req, res) => {
     const form = response.formId;
     if (
       !hasAdminAccess(req.user) &&
-      String(form.organizerId) !== String(req.user?._id)
+      String(form.organizerId) !== getRequesterId(req.user)
     ) {
       return res.status(StatusCodes.FORBIDDEN).json({
         success: false,
@@ -1263,62 +1349,31 @@ const validateRsvpQr = async (req, res) => {
       });
     }
 
-    const status = String(response.status || "").toLowerCase();
-    const entryApproved = ["approved", "paid"].includes(status);
+    const scanData = buildRsvpScanPayload(response, form);
 
     if (response.checkedIn) {
       return res.status(StatusCodes.OK).json({
         success: true,
         alreadyCheckedIn: true,
         message: "RSVP already checked in",
-        data: {
-          responseId: response.responseId,
-          entryType: "rsvp",
-          eventTitle: form.title,
-          eventDate: form.date,
-          eventTime: [form.startTime, form.endTime].filter(Boolean).join(" - "),
-          eventLocation: form.location,
-          userName: response.attendee?.fullName || "Attendee",
-          userEmail: response.attendee?.email || "",
-          userPhone: response.attendee?.phone || "",
-          checkedIn: true,
-          checkedInAt: response.checkedInAt,
-          status: response.status,
-          approvalMode: form.approvalMode,
-          requiresApproval: form.approvalMode === "manual",
-          eligibleForEntry: entryApproved,
-        },
+        data: scanData,
       });
     }
 
-    if (!entryApproved) {
+    if (!scanData.eligibleForEntry) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
         message:
           form.approvalMode === "manual"
             ? "RSVP is not approved yet"
             : "RSVP is not ready for entry",
+        data: scanData,
       });
     }
 
     return res.status(StatusCodes.OK).json({
       success: true,
-      data: {
-        responseId: response.responseId,
-        entryType: "rsvp",
-        eventTitle: form.title,
-        eventDate: form.date,
-        eventTime: [form.startTime, form.endTime].filter(Boolean).join(" - "),
-        eventLocation: form.location,
-        userName: response.attendee?.fullName || "Attendee",
-        userEmail: response.attendee?.email || "",
-        userPhone: response.attendee?.phone || "",
-        checkedIn: false,
-        status: response.status,
-        approvalMode: form.approvalMode,
-        requiresApproval: form.approvalMode === "manual",
-        eligibleForEntry: true,
-      },
+      data: scanData,
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -1347,7 +1402,7 @@ const checkInRsvpResponse = async (req, res) => {
 
     if (
       !hasAdminAccess(req.user) &&
-      String(response.formId.organizerId) !== String(req.user?._id)
+      String(response.formId.organizerId) !== getRequesterId(req.user)
     ) {
       return res.status(StatusCodes.FORBIDDEN).json({
         success: false,
@@ -1389,14 +1444,18 @@ const checkInRsvpResponse = async (req, res) => {
     response.checkedInAt = new Date();
     await response.save();
 
+    const populatedForm = await RsvpForm.findById(response.formId._id)
+      .select("title date startTime endTime location venue approvalMode questions sections type")
+      .lean();
+
     return res.status(StatusCodes.OK).json({
       success: true,
       message: "RSVP attendee checked in",
-      data: {
-        responseId: response.responseId,
-        checkedIn: true,
-        checkedInAt: response.checkedInAt,
-      },
+      data: buildRsvpScanPayload(
+        response.toObject(),
+        populatedForm || response.formId,
+        { checkedIn: true, checkedInAt: response.checkedInAt },
+      ),
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
