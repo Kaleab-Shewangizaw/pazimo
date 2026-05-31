@@ -30,6 +30,11 @@ export const buildEventUrl = (event: {
     return `/events/${event.slug}-${event.shortId}`;
   }
 
+  const legacyId = event._id || event.id;
+  if (legacyId) {
+    return `/event_detail?id=${legacyId}`;
+  }
+
   return "/event_explore";
 };
 
