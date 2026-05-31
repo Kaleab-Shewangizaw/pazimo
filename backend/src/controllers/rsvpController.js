@@ -6,6 +6,8 @@ const fs = require("fs");
 const path = require("path");
 const RsvpForm = require("../models/RsvpForm");
 const RsvpResponse = require("../models/RsvpResponse");
+const { sendInvitationEmail } = require("./invitationEmailController");
+const { sendSMS } = require("../utils/sms");
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "");
 
@@ -25,6 +27,106 @@ const buildRsvpQrPayload = (_form, response) =>
   JSON.stringify({
     rid: response.responseId,
   });
+
+const escapeHtml = (value = "") =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const formatDateTime = (form) => {
+  const parts = [];
+  if (form.date) {
+    parts.push(
+      new Date(form.date).toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }),
+    );
+  }
+
+  const timeRange = [form.startTime, form.endTime].filter(Boolean).join(" - ");
+  if (timeRange) {
+    parts.push(timeRange);
+  }
+
+  return parts.join(" | ");
+};
+
+const createRsvpMessageEmailTemplate = ({ form, attendeeName, body }) => {
+  const safeMessage = escapeHtml(body || "").replace(/\n/g, "<br />");
+  const safeName = escapeHtml(attendeeName || "Attendee");
+  const eventDateTime = escapeHtml(formatDateTime(form));
+  const location = escapeHtml(
+    typeof form.location === "string"
+      ? form.location
+      : form.location?.address || form.location?.city || "Venue TBD",
+  );
+
+  return `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${escapeHtml(form.title || "RSVP Message")}</title>
+      </head>
+      <body style="margin:0;padding:0;background:#f8fafc;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+        <div style="max-width:640px;margin:0 auto;padding:32px 16px;">
+          <div style="background:#ffffff;border-radius:20px;padding:32px;border:1px solid #e2e8f0;box-shadow:0 12px 24px rgba(15,23,42,0.06);">
+            <p style="margin:0 0 8px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#2563eb;font-weight:700;">Message from ${escapeHtml(form.title || "your RSVP organizer")}</p>
+            <h1 style="margin:0 0 16px;font-size:28px;line-height:1.2;">Hello ${safeName},</h1>
+            <div style="font-size:16px;line-height:1.7;color:#334155;white-space:normal;">
+              ${safeMessage || "You have a new message from the event organizer."}
+            </div>
+            <div style="margin-top:24px;padding:18px;border-radius:16px;background:#eff6ff;color:#1e293b;">
+              <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#2563eb;margin-bottom:8px;">Event details</div>
+              <div style="font-size:15px;line-height:1.6;"><strong>Event:</strong> ${escapeHtml(form.title || "RSVP Event")}</div>
+              ${eventDateTime ? `<div style="font-size:15px;line-height:1.6;"><strong>When:</strong> ${eventDateTime}</div>` : ""}
+              ${location ? `<div style="font-size:15px;line-height:1.6;"><strong>Where:</strong> ${location}</div>` : ""}
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+};
+
+const normalizePhoneForSms = (phone) => {
+  let formattedPhone = String(phone || "").replace(/\s+/g, "").replace(/-/g, "");
+  if (formattedPhone.startsWith("+")) {
+    formattedPhone = formattedPhone.slice(1);
+  }
+  if (formattedPhone.startsWith("0")) {
+    formattedPhone = `251${formattedPhone.slice(1)}`;
+  } else if (!formattedPhone.startsWith("251")) {
+    formattedPhone = `251${formattedPhone}`;
+  }
+  return formattedPhone;
+};
+
+const buildRsvpSmsMessage = (form, attendeeName, body) => {
+  const name = attendeeName || "Attendee";
+  const eventDateTime = formatDateTime(form);
+  const location =
+    typeof form.location === "string"
+      ? form.location
+      : form.location?.address || form.location?.city || "Venue TBD";
+
+  return [
+    `Hi ${name},`,
+    body ? body.trim() : "You have a new message from the event organizer.",
+    `Event: ${form.title || "RSVP Event"}`,
+    eventDateTime ? `When: ${eventDateTime}` : null,
+    location ? `Where: ${location}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
 
 const buildBrandedQrDataUrl = async (payload) => {
   let svg = await QRCode.toString(payload, {
@@ -955,6 +1057,141 @@ const updateResponseStatus = async (req, res) => {
   }
 };
 
+const sendResponseMessage = async (req, res) => {
+  try {
+    const form = await assertFormOwnership(req.params.id, req.user);
+    if (!form) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+    const {
+      channel = "email",
+      subject,
+      body,
+      responseIds = [],
+      status,
+    } = req.body || {};
+
+    const normalizedChannel = String(channel || "email").toLowerCase();
+    const allowedChannels = new Set(["email", "sms", "both"]);
+
+    if (!allowedChannels.has(normalizedChannel)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Invalid message channel",
+      });
+    }
+
+    if (!body || !String(body).trim()) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Message body is required",
+      });
+    }
+
+    const responseQuery = { formId: form._id };
+    if (Array.isArray(responseIds) && responseIds.length > 0) {
+      responseQuery._id = { $in: responseIds };
+    } else if (status && status !== "all") {
+      responseQuery.status = status;
+    }
+
+    const responses = await RsvpResponse.find(responseQuery).lean();
+
+    if (!responses.length) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "No matching RSVP responses found",
+      });
+    }
+
+    let emailCount = 0;
+    let smsCount = 0;
+    let skippedCount = 0;
+    const errors = [];
+
+    for (const response of responses) {
+      const attendeeName = String(response.attendee?.fullName || "Attendee").trim();
+      const attendeeEmail = String(response.attendee?.email || "").trim();
+      const attendeePhone = String(response.attendee?.phone || "").trim();
+
+      let sentForResponse = false;
+
+      if (normalizedChannel === "email" || normalizedChannel === "both") {
+        if (attendeeEmail) {
+          try {
+            await sendInvitationEmail({
+              to: attendeeEmail,
+              subject: subject || `Message about ${form.title}`,
+              body: createRsvpMessageEmailTemplate({
+                form,
+                attendeeName,
+                body,
+              }),
+            });
+            emailCount += 1;
+            sentForResponse = true;
+          } catch (error) {
+            errors.push({
+              responseId: response.responseId,
+              channel: "email",
+              message: error.message,
+            });
+          }
+        }
+      }
+
+      if (normalizedChannel === "sms" || normalizedChannel === "both") {
+        if (attendeePhone) {
+          try {
+            const smsResult = await sendSMS(
+              normalizePhoneForSms(attendeePhone),
+              buildRsvpSmsMessage(form, attendeeName, body),
+            );
+
+            if (smsResult.success) {
+              smsCount += 1;
+              sentForResponse = true;
+            } else {
+              throw new Error(smsResult.error || "Failed to send SMS");
+            }
+          } catch (error) {
+            errors.push({
+              responseId: response.responseId,
+              channel: "sms",
+              message: error.message,
+            });
+          }
+        }
+      }
+
+      if (!sentForResponse) {
+        skippedCount += 1;
+      }
+    }
+
+    return res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        channel: normalizedChannel,
+        totalResponses: responses.length,
+        emailCount,
+        smsCount,
+        skippedCount,
+        errors,
+      },
+    });
+  } catch (error) {
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message || "Failed to send RSVP messages",
+    });
+  }
+};
+
 const validateRsvpQr = async (req, res) => {
   try {
     const { qrData } = req.body || {};
@@ -1381,6 +1618,7 @@ module.exports = {
   listResponses,
   updateResponseTag,
   updateResponseStatus,
+  sendResponseMessage,
   getAnalytics,
   validateRsvpQr,
   checkInRsvpResponse,

@@ -352,6 +352,27 @@ export const rsvpApi = {
         body: JSON.stringify({ status }),
       })
     ),
+  sendBulkMessage: async (
+    id: string,
+    data: {
+      channel: "email" | "sms" | "both";
+      subject?: string;
+      body: string;
+      responseIds?: string[];
+      status?: string;
+    }
+  ) =>
+    request<{
+      channel: "email" | "sms" | "both";
+      totalResponses: number;
+      emailCount: number;
+      smsCount: number;
+      skippedCount: number;
+      errors: Array<{ responseId?: string; channel: string; message: string }>;
+    }>(`/rsvp/forms/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
   getAnalytics: async (id: string) => request(`/rsvp/forms/${id}/analytics`),
 };
 

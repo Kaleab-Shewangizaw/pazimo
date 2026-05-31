@@ -33,9 +33,16 @@ export default function ResponsesPage() {
   const loadEvent = useStore((s) => s.loadEvent);
   const loadResponses = useStore((s) => s.loadResponses);
   const updateResponseStatus = useStore((s) => s.updateResponseStatus);
+  const sendBulkMessage = useStore((s) => s.sendBulkMessage);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<Response | null>(null);
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const [messageScope, setMessageScope] = useState<"all" | "selected">("all");
+  const [messageChannel, setMessageChannel] = useState<"email" | "sms" | "both">("both");
+  const [messageSubject, setMessageSubject] = useState("");
+  const [messageBody, setMessageBody] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   const event = useMemo(() => events.find((item) => item.id === id), [events, id]);
   const responses = useMemo(
@@ -110,6 +117,62 @@ export default function ResponsesPage() {
     toast.success(status === "approved" ? "Response approved" : "Response declined");
   };
 
+  const openMessageComposer = (scope: "all" | "selected", response?: Response) => {
+    setMessageScope(scope);
+    setSelectedResponse(response || null);
+    setMessageChannel("both");
+    setMessageSubject(scope === "selected" ? `Message for ${response?.attendee?.fullName || "attendee"}` : `Message about ${event.name}`);
+    setMessageBody("");
+    setMessageDialogOpen(true);
+  };
+
+  const handleSendMessage = async () => {
+    const recipientIds =
+      messageScope === "selected" && selectedResponse
+        ? [selectedResponse.id]
+        : responses.map((response) => response.id);
+
+    if (!recipientIds.length) {
+      toast.error("No RSVP responses found to message.");
+      return;
+    }
+
+    if ((messageChannel === "email" || messageChannel === "both") && !messageSubject.trim()) {
+      toast.error("Email messages need a subject.");
+      return;
+    }
+
+    if (!messageBody.trim()) {
+      toast.error("Message body is required.");
+      return;
+    }
+
+    setSendingMessage(true);
+    try {
+      const result = await sendBulkMessage({
+        eventId: id,
+        channel: messageChannel,
+        subject: messageSubject.trim() || undefined,
+        body: messageBody,
+        segments: [],
+        responseIds: recipientIds,
+        recipientCount: recipientIds.length,
+      });
+
+      const deliveredCount = result.emailCount + result.smsCount;
+      toast.success(
+        deliveredCount > 0
+          ? `Message sent to ${deliveredCount} delivery destination${deliveredCount === 1 ? "" : "s"}.`
+          : "Message processed, but no deliveries were possible."
+      );
+      setMessageDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send RSVP message.");
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
@@ -141,6 +204,13 @@ export default function ResponsesPage() {
               </Link>
             </Button>
             <div className="ml-auto flex gap-2">
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => openMessageComposer("all")}
+              >
+                Message responders
+              </Button>
               <Button asChild variant="outline" className="rounded-full">
                 <Link href={`/organizer/qr-scanner?mode=rsvp&formId=${id}`}>
                   <ScanLine className="mr-1 h-4 w-4" />
@@ -279,6 +349,68 @@ export default function ResponsesPage() {
         </Card>
         </div>
 
+        <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
+          <DialogContent className="sm:max-w-[720px] p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle>Message responders</DialogTitle>
+              <DialogDescription>
+                Send a message by email, SMS, or both to {messageScope === "selected" && selectedResponse ? selectedResponse.attendee?.fullName || "the selected attendee" : "all matching RSVP responses"}.
+              </DialogDescription>
+            </DialogHeader>
+
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">
+              This RSVP message flow does not require payment.
+            </p>
+
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  Channel
+                  <select
+                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none transition-colors focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    value={messageChannel}
+                    onChange={(event) => setMessageChannel(event.target.value as "email" | "sms" | "both")}
+                  >
+                    <option value="both">Email and SMS</option>
+                    <option value="email">Email only</option>
+                    <option value="sms">SMS only</option>
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  Subject
+                  <input
+                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-slate-900 outline-none transition-colors focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                    value={messageSubject}
+                    onChange={(event) => setMessageSubject(event.target.value)}
+                    placeholder="Optional for SMS, required for email"
+                  />
+                </label>
+              </div>
+              <label className="grid gap-2 text-sm text-slate-700 dark:text-slate-300">
+                Message
+                <textarea
+                  className="min-h-[180px] rounded-2xl border border-slate-200 bg-white p-3 text-slate-900 outline-none transition-colors focus:border-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  value={messageBody}
+                  onChange={(event) => setMessageBody(event.target.value)}
+                  placeholder="Write the message you want to send to attendees."
+                />
+              </label>
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-400">
+                This will target {messageScope === "selected" && selectedResponse ? 1 : responses.length} response{(messageScope === "selected" && selectedResponse ? 1 : responses.length) === 1 ? "" : "s"}.
+              </div>
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="outline" className="rounded-full" onClick={() => setMessageDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="rounded-full" onClick={handleSendMessage} disabled={sendingMessage}>
+                {sendingMessage ? "Sending..." : "Send message"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Response detail dialog */}
         <Dialog open={dialogOpen} onOpenChange={(v) => { if (!v) setSelectedResponse(null); setDialogOpen(v); }}>
           <DialogContent className="sm:max-w-[640px] p-4 sm:p-6">
@@ -345,6 +477,13 @@ export default function ResponsesPage() {
             <DialogFooter className="mt-4">
               {selectedResponse && (
                 <div className="mr-auto flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => openMessageComposer("selected", selectedResponse)}
+                  >
+                    Message attendee
+                  </Button>
                   <Button
                     variant="outline"
                     className="rounded-full"

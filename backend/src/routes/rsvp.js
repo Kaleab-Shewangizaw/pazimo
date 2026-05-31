@@ -29,6 +29,7 @@ router.patch("/forms/:id/visibility", rsvpController.toggleVisibilityForm);
 router.patch("/forms/:id/archive", rsvpController.archiveForm);
 router.get("/forms/:id/responses", rsvpController.listResponses);
 router.get("/forms/:id/analytics", rsvpController.getAnalytics);
+router.post("/forms/:id/messages", rsvpController.sendResponseMessage);
 router.patch("/forms/:id/responses/:responseId/tag", rsvpController.updateResponseTag);
 router.patch("/forms/:id/responses/:responseId/status", rsvpController.updateResponseStatus);
 

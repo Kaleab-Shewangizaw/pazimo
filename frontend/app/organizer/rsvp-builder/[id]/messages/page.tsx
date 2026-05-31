@@ -22,7 +22,6 @@ import {
   Send,
   Mail,
   MessageSquare,
-  Bell,
   Crown,
   Users,
   Newspaper,
@@ -47,9 +46,9 @@ const CHANNELS: {
   label: string;
   icon: any;
 }[] = [
+  { id: "both", label: "Email + SMS", icon: Send },
   { id: "email", label: "Email", icon: Mail },
   { id: "sms", label: "SMS", icon: MessageSquare },
-  { id: "push", label: "Push", icon: Bell },
 ];
 
 export default function Messages() {
@@ -143,28 +142,37 @@ export default function Messages() {
     setSelected(next);
   };
 
-  const onSend = () => {
+  const onSend = async () => {
     if (selected.size === 0)
       return toast.error("Select at least one segment.");
     if (!body.trim()) return toast.error("Message body is required.");
-    if (channel === "email" && !subject.trim())
+    if ((channel === "email" || channel === "both") && !subject.trim())
       return toast.error("Subject is required for email.");
     if (recipientCount === 0)
       return toast.error(
         "No attendees match the selected segments."
       );
 
-    sendBulkMessage({
-      eventId: event.id,
-      channel,
-      subject: channel === "email" ? subject.trim() : undefined,
-      body: body.trim(),
-      segments: Array.from(selected),
-      recipientCount,
-    });
-    setSubject("");
-    setBody("");
-    toast.success(`Sent to ${recipientCount} attendee${recipientCount === 1 ? "" : "s"}`);
+    try {
+      const result = await sendBulkMessage({
+        eventId: event.id,
+        channel,
+        subject: channel === "sms" ? undefined : subject.trim(),
+        body: body.trim(),
+        segments: Array.from(selected),
+        recipientCount,
+      });
+      setSubject("");
+      setBody("");
+      const deliveries = result.emailCount + result.smsCount;
+      toast.success(
+        deliveries > 0
+          ? `Sent to ${deliveries} delivery destination${deliveries === 1 ? "" : "s"}`
+          : "Message processed, but no deliveries were possible."
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send message.");
+    }
   };
 
   return (
@@ -202,6 +210,9 @@ export default function Messages() {
           </h1>
           <p className="mt-2 text-slate-600 dark:text-slate-400">
             Send updates to attendees by segment.
+          </p>
+          <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
+            No payment is required for RSVP messages.
           </p>
         </motion.div>
 
@@ -277,7 +288,7 @@ export default function Messages() {
             </div>
 
             {/* Subject */}
-            {channel === "email" && (
+            {(channel === "email" || channel === "both") && (
               <div className="mt-5">
                 <Label className="text-xs uppercase tracking-wider text-slate-600 dark:text-slate-400">
                   Subject

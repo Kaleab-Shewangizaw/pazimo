@@ -107,7 +107,7 @@ export interface Response {
 }
 
 export type AttendeeTag = "VIP" | "Guest" | "Press";
-export type MessageChannel = "email" | "sms" | "push";
+export type MessageChannel = "email" | "sms" | "both";
 
 export interface BulkMessage {
   id: string;

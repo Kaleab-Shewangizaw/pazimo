@@ -91,12 +91,21 @@ interface RsvpStore {
   ) => Promise<void>;
   sendBulkMessage: (data: {
     eventId: string;
-    channel: "email" | "sms" | "push";
+    channel: "email" | "sms" | "both";
     subject?: string;
     body: string;
     segments: AttendeeTag[];
+    responseIds?: string[];
+    status?: string;
     recipientCount: number;
-  }) => void;
+  }) => Promise<{
+    channel: "email" | "sms" | "both";
+    totalResponses: number;
+    emailCount: number;
+    smsCount: number;
+    skippedCount: number;
+    errors: Array<{ responseId?: string; channel: string; message: string }>;
+  }>;
 }
 
 export const useStore = create<RsvpStore>((set, get) => ({
@@ -573,14 +582,37 @@ export const useStore = create<RsvpStore>((set, get) => ({
     }
   },
 
-  sendBulkMessage: (data: {
+  sendBulkMessage: async (data: {
     eventId: string;
-    channel: "email" | "sms" | "push";
+    channel: "email" | "sms" | "both";
     subject?: string;
     body: string;
     segments: AttendeeTag[];
+    responseIds?: string[];
+    status?: string;
     recipientCount: number;
   }) => {
+    const state = get();
+    const targetResponseIds =
+      data.responseIds ??
+      (data.segments.length
+        ? state.responses
+            .filter(
+              (response) =>
+                response.eventId === data.eventId &&
+                data.segments.includes((response.tag || "Guest") as AttendeeTag)
+            )
+            .map((response) => response.id)
+        : undefined);
+
+    const result = await rsvpApi.sendBulkMessage(data.eventId, {
+      channel: data.channel,
+      subject: data.subject,
+      body: data.body,
+      responseIds: targetResponseIds,
+      status: data.status,
+    });
+
     const newMessage: BulkMessage = {
       id: newId(),
       eventId: data.eventId,
@@ -588,10 +620,12 @@ export const useStore = create<RsvpStore>((set, get) => ({
       subject: data.subject,
       body: data.body,
       segments: data.segments,
-      recipientCount: data.recipientCount,
+      recipientCount: result.totalResponses || data.recipientCount,
       sentAt: new Date().toISOString(),
     };
 
     set((state) => ({ messages: [...state.messages, newMessage] }));
+
+    return result;
   },
 }));
