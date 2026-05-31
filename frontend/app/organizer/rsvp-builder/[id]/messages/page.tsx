@@ -211,9 +211,6 @@ export default function Messages() {
           <p className="mt-2 text-slate-600 dark:text-slate-400">
             Send updates to attendees by segment.
           </p>
-          <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-300">
-            No payment is required for RSVP messages.
-          </p>
         </motion.div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_1fr]">

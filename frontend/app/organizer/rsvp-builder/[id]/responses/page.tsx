@@ -358,10 +358,6 @@ export default function ResponsesPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <p className="text-sm text-emerald-700 dark:text-emerald-300">
-              This RSVP message flow does not require payment.
-            </p>
-
             <div className="mt-4 space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="grid gap-2 text-sm text-slate-700 dark:text-slate-300">
