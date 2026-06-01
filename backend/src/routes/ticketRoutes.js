@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const { authenticateUser, protect, restrictTo } = require("../middlewares/auth");
 
 const {
@@ -53,6 +54,23 @@ const resolveWebhookBaseUrl = (req) => {
   }
 
   return (configuredBackendUrl || "http://localhost:5000").replace(/\/$/, "");
+};
+
+const findEventForTicketPurchase = async (eventId) => {
+  if (!eventId) {
+    return null;
+  }
+
+  const normalizedEventId = String(eventId).trim();
+
+  if (mongoose.Types.ObjectId.isValid(normalizedEventId)) {
+    const eventById = await Event.findById(normalizedEventId);
+    if (eventById) {
+      return eventById;
+    }
+  }
+
+  return Event.findOne({ shortId: normalizedEventId.toLowerCase() });
 };
 
 // Public route - NO authentication middleware
@@ -159,10 +177,11 @@ router.post("/ticket/initiate", async (req, res) => {
     }
     // ------------------------------------
 
-    const selectedEvent = await Event.findById(ticketDetails.eventId);
+    const selectedEvent = await findEventForTicketPurchase(ticketDetails.eventId);
     if (!selectedEvent) {
       return res.status(404).json({ success: false, error: "Event not found" });
     }
+    const selectedEventId = selectedEvent._id;
 
     const reason =
       paymentReason ||
@@ -198,10 +217,11 @@ router.post("/ticket/initiate", async (req, res) => {
       paymentPhone: phoneNumber, // Store payment phone separately
       method: method,
       price: amount,
-      eventId: ticketDetails.eventId,
+      eventId: selectedEventId,
       userId: userId, // Use the found/created userId
       ticketDetails: {
         ...ticketDetails,
+        eventId: selectedEventId,
         ticketType: ticketDetails.ticketTypeId,
         ticketCount: ticketDetails.quantity,
         userId: userId, // ⚡ CRITICAL: Also save in ticketDetails for redundancy
@@ -335,10 +355,11 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       }
     }
 
-    const selectedEvent = await Event.findById(ticketDetails.eventId);
+    const selectedEvent = await findEventForTicketPurchase(ticketDetails.eventId);
     if (!selectedEvent) {
       return res.status(404).json({ success: false, error: "Event not found" });
     }
+    const selectedEventId = selectedEvent._id;
 
     const reason =
       paymentReason ||
@@ -559,10 +580,11 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       provider: "chapa",
       price: amount,
       currency: currency, // Store currency in payment record
-      eventId: ticketDetails.eventId,
+      eventId: selectedEventId,
       userId: userId,
       ticketDetails: {
         ...ticketDetails,
+        eventId: selectedEventId,
         ticketType: ticketDetails.ticketTypeId,
         ticketCount: ticketDetails.quantity,
         userId: userId,

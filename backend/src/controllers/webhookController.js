@@ -5,6 +5,17 @@ const User = require("../models/User");
 const Payment = require("../models/Payment");
 const { processSuccessfulPayment } = require("./ticketController");
 
+const CHAPA_PAYMENT_GRACE_MS = 2 * 60 * 1000;
+
+const getPaymentAgeMs = (payment) => {
+  const createdAt = payment?.createdAt ? new Date(payment.createdAt).getTime() : 0;
+  if (!createdAt) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Date.now() - createdAt;
+};
+
 const chapaWebhook = async (req, res) => {
   try {
     // Verify webhook signature only when secret is configured
@@ -81,6 +92,22 @@ const chapaWebhook = async (req, res) => {
       }
 
       if (isFailureEvent) {
+        const isWithinGracePeriod = getPaymentAgeMs(payment) < CHAPA_PAYMENT_GRACE_MS;
+
+        if (isWithinGracePeriod && payment.status === "PENDING") {
+          console.log(
+            `Chapa webhook reported ${normalizedStatus} for ${txRef}, but the payment is still within the ${Math.round(
+              CHAPA_PAYMENT_GRACE_MS / 1000
+            )}s grace period. Leaving it pending so the user can still complete the mobile confirmation.`
+          );
+
+          return res.status(200).json({
+            message: "Webhook received while payment is still in grace period",
+            transactionId: txRef,
+            paymentStatus: payment.status,
+          });
+        }
+
         payment.status =
           normalizedStatus === "cancelled" || normalizedStatus === "canceled"
             ? "CANCELLED"

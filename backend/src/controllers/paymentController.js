@@ -7,6 +7,19 @@ const { processSuccessfulPayment } = require("./ticketController");
 
 const ChapaService = require("../services/chapaService");
 
+const CHAPA_PAYMENT_GRACE_MS = 2 * 60 * 1000;
+const CHAPA_VERIFY_RETRY_COUNT = 5;
+const CHAPA_VERIFY_RETRY_BASE_DELAY_MS = 500;
+
+const getPaymentAgeMs = (payment) => {
+  const createdAt = payment?.createdAt ? new Date(payment.createdAt).getTime() : 0;
+  if (!createdAt) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  return Date.now() - createdAt;
+};
+
 class PaymentController {
   async checkPaymentStatus(req, res) {
     try {
@@ -47,7 +60,9 @@ class PaymentController {
             // ⚡ OPTIMIZED: Check Chapa Status with faster retry timing
             let verifyResponse;
             let attempts = 0;
-            const maxAttempts = 3;
+            const maxAttempts = CHAPA_VERIFY_RETRY_COUNT;
+            const paymentAgeMs = getPaymentAgeMs(payment);
+            const isWithinGracePeriod = paymentAgeMs < CHAPA_PAYMENT_GRACE_MS;
             
             while (attempts < maxAttempts) {
               try {
@@ -83,29 +98,36 @@ class PaymentController {
                     normalizedPaymentStatus === "failed" || 
                     normalizedPaymentStatus === "failure" ||
                     normalizedPaymentStatus.includes("failed") ||
-                    normalizedPaymentStatus.includes("failure")
-                  ) {
-                    console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} failed with status: ${paymentStatus}`);
-                    payment.status = "FAILED";
-                    await payment.save();
-                    console.log(`Payment ${txn} marked as FAILED (Chapa status: ${paymentStatus})`);
-                    break;
-                  } else if (
+                    normalizedPaymentStatus.includes("failure") ||
                     normalizedPaymentStatus === "cancelled" || 
                     normalizedPaymentStatus === "canceled" ||
                     normalizedPaymentStatus.includes("cancel")
                   ) {
-                    console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} cancelled with status: ${paymentStatus}`);
-                    payment.status = "CANCELLED";
+                    if (isWithinGracePeriod) {
+                      console.log(
+                        `[CHAPA-VERIFY] ⏳ Payment ${txn} returned terminal-looking status "${paymentStatus}" but is still within the ${Math.round(CHAPA_PAYMENT_GRACE_MS / 1000)}s grace period; keeping it pending for a later retry.`
+                      );
+                      attempts = maxAttempts;
+                      break;
+                    }
+
+                    const terminalStatus = normalizedPaymentStatus.includes("cancel")
+                      ? "CANCELLED"
+                      : "FAILED";
+                    console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} ${terminalStatus.toLowerCase()} with status: ${paymentStatus}`);
+                    payment.status = terminalStatus;
                     await payment.save();
-                    console.log(`Payment ${txn} marked as CANCELLED (Chapa status: ${paymentStatus})`);
+                    console.log(`Payment ${txn} marked as ${terminalStatus} (Chapa status: ${paymentStatus})`);
                     break;
                   } else {
                     // Status is still pending or unknown
                     console.log(`[CHAPA-VERIFY] ⏳ Payment ${txn} still pending or unknown status: "${paymentStatus}"`);
                     attempts++;
                     if (attempts < maxAttempts) {
-                      const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
+                      const backoff = Math.min(
+                        CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
+                        4000
+                      );
                       console.log(`[CHAPA-VERIFY] Retrying in ${backoff}ms...`);
                       await new Promise(resolve => setTimeout(resolve, backoff));
                     }
@@ -119,7 +141,10 @@ class PaymentController {
                   });
                   attempts++;
                   if (attempts < maxAttempts) {
-                    const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
+                    const backoff = Math.min(
+                      CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
+                      4000
+                    );
                     await new Promise(resolve => setTimeout(resolve, backoff));
                   }
                 }
@@ -127,7 +152,10 @@ class PaymentController {
                 console.error(`[CHAPA-VERIFY] Attempt ${attempts + 1} failed:`, verifyError.message);
                 attempts++;
                 if (attempts < maxAttempts) {
-                  const backoff = Math.min(200 * Math.pow(2, attempts - 1), 400);
+                  const backoff = Math.min(
+                    CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
+                    4000
+                  );
                   await new Promise(resolve => setTimeout(resolve, backoff));
                 }
               }
