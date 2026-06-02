@@ -118,6 +118,7 @@
 
 "use client";
 import FeaturedEventCard from "@/components/featured-event-card";
+import { buildEventUrl } from "@/lib/event-url";
 
 type Event = {
   _id: string;
