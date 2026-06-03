@@ -30,16 +30,13 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: {
-    default: "Pazimo",
-    template: "%s | Pazimo",
-  },
-  description: "Pazimo helps you discover events, sell tickets, RSVP, and manage unforgettable experiences.",
+  title: "Pazimo",
+  description: "Pazimo is your ultimate platform to discover, create, and manage events. Buy tickets, RSVP, and organize unforgettable experiences.",
   keywords: ["events", "tickets", "rsvp", "ethiopia events", "concerts", "festivals", "pazimo"],
   authors: [{ name: "Pazimo Team" }],
   openGraph: {
     title: "Pazimo",
-    description: "Pazimo helps you discover events, sell tickets, RSVP, and organize unforgettable experiences.",
+    description: "Your ultimate platform for events. Buy tickets, RSVP, and organize.",
     url: "https://pazimo.com",
     siteName: "Pazimo",
     images: [
@@ -55,7 +52,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Pazimo ",
-    description: "Pazimo helps you discover events, sell tickets, RSVP, and organize unforgettable experiences.",
+    description: "Your ultimate platform for events. Buy tickets, RSVP, and organize.",
     images: ["https://pazimo.com/og-image.jpg"],
   },
   robots: {

@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { Suspense } from "react";
 import CategoryIcons, { Category } from "@/components/category-icons";
 import FeaturedEventsSection, {
@@ -40,15 +39,6 @@ type PublicRsvpForm = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-
-export const metadata: Metadata = {
-  title: "Pazimo | Discover Events, Tickets and RSVPs",
-  description: "Browse events, buy tickets, RSVP, and discover what's happening on Pazimo.",
-  robots: {
-    index: false,
-    follow: true,
-  },
-};
 
 const withBase = (path: string) => (API_URL ? `${API_URL}${path}` : path);
 
