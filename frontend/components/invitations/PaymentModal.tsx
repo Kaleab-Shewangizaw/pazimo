@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { CreditCard, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,11 +34,19 @@ export default function PaymentModal({
   const [selectedMethod, setSelectedMethod] = useState(
     activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr"
   );
+  const [showScrollHint, setShowScrollHint] = useState(true);
 
   React.useEffect(() => {
     setSelectedMethod(
       activePaymentProvider === "CHAPA" ? "telebirr" : "Telebirr"
     );
+    setShowScrollHint(true);
+
+    const hideHintTimer = window.setTimeout(() => {
+      setShowScrollHint(false);
+    }, 2800);
+
+    return () => window.clearTimeout(hideHintTimer);
   }, [activePaymentProvider]);
 
   const amount = (
@@ -112,6 +122,27 @@ export default function PaymentModal({
             <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
               Payment Method
             </Label>
+            <AnimatePresence>
+              {showScrollHint && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.35 }}
+                  className="mb-2 flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-700"
+                >
+                  <motion.span
+                    animate={{ x: [-2, 2, -2] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                    className="flex items-center"
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                    <ChevronRight className="-ml-1 h-3 w-3" />
+                  </motion.span>
+                  Swipe sideways to see more banks
+                </motion.div>
+              )}
+            </AnimatePresence>
             <PaymentMethodSelector
               phoneNumber={phoneNumber}
               selectedMethod={selectedMethod}
