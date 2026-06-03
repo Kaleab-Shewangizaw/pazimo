@@ -129,31 +129,31 @@ export default function PaymentMethodSelector({
       onValueChange={onSelect}
       className="w-full"
     >
-      <div className="relative overflow-x-auto pb-2 pr-6 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]">
+      <div className="relative w-full overflow-x-auto pb-2 pr-6 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]">
         <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white via-white/85 to-transparent dark:from-[#0f1115] dark:via-[#0f1115]/85" />
-        <div className="flex w-max flex-nowrap gap-2.5 snap-x snap-mandatory">
+        <div className="flex w-full flex-nowrap gap-2.5 snap-x snap-mandatory">
           {methods.map((method) => {
             const disabled = isDisabled(method.id);
             return (
-              <div key={method.id} className="relative w-[6.4rem] flex-none snap-start">
+              <div key={method.id} className="relative w-[calc((100%-2.5rem)/4.25)] md:w-[6.4rem] flex-none snap-start">
                 <RadioGroupItem
                   value={method.id}
                   id={`payment-${method.id}`}
                   disabled={disabled}
-                  className="peer sr-only"
+                  className="peer sr-only appearance-none absolute pointer-events-none opacity-0"
                 />
                 <Label
                   htmlFor={`payment-${method.id}`}
                   className={cn(
-                    "flex h-full flex-col items-center justify-start gap-2 rounded-lg border border-gray-200 bg-white px-0.5 py-2 text-center hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-all duration-200",
+                    "flex h-full flex-col items-center justify-center gap-1.5 rounded-xl border border-gray-200 bg-white px-0.5 py-2 text-center hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-all duration-200",
                     "dark:bg-[#1A1D24] dark:border-white/10 dark:hover:bg-[#252932] dark:hover:border-white/20",
-                    "peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50",
+                    "peer-data-[state=checked]:border-blue-600 peer-data-[state=checked]:bg-blue-50/50 peer-data-[state=checked]:shadow-sm",
                     "dark:peer-data-[state=checked]:border-yellow-500 dark:peer-data-[state=checked]:bg-yellow-500/10",
                     disabled &&
-                    "opacity-50 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale dark:hover:bg-[#1A1D24] dark:hover:border-white/10"
+                    "opacity-40 cursor-not-allowed hover:bg-white hover:border-gray-200 grayscale dark:hover:bg-[#1A1D24] dark:hover:border-white/10"
                   )}
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center">
+                  <div className="flex h-7 w-7 md:h-8 md:w-8 shrink-0 items-center justify-center">
                     <Image
                       src={method.image}
                       alt={method.name}
@@ -162,7 +162,7 @@ export default function PaymentMethodSelector({
                       className="max-h-full max-w-full object-contain dark:brightness-110"
                     />
                   </div>
-                  <span className="text-[9px] leading-tight font-bold text-gray-700 dark:text-gray-300 peer-data-[state=checked]:text-blue-700 dark:peer-data-[state=checked]:text-blue-400">
+                  <span className="text-[8px] md:text-[9px] leading-tight font-bold text-gray-700 dark:text-gray-300 peer-data-[state=checked]:text-blue-700 dark:peer-data-[state=checked]:text-blue-400">
                     {method.name}
                   </span>
                 </Label>
