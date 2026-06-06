@@ -5,14 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 import { EventFormSection } from "./event-form-section";
 import { FieldGroup, FieldHint } from "./field-group";
 import type { TicketType, VisibleTicketEntry } from "../_lib/event-form-types";
 import {
-  TICKET_TYPES,
   formatDateWindow,
   formatWaveActivationSummary,
   formatTicketPrice,
@@ -205,35 +203,29 @@ export function TicketTypesSection({
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <FieldGroup>
                       <Label htmlFor={`ticket-name-${index}`}>Name</Label>
-                      {isWaveParent ? (
-                        <Input
-                          id={`ticket-name-${index}`}
-                          value={ticket.name}
-                          onChange={(e) =>
-                            onTicketTypeChange(index, "name", e.target.value)
-                          }
-                          placeholder="Wave name"
-                          className="h-11 rounded-xl border-slate-200 bg-white"
-                        />
-                      ) : (
-                        <Select
-                          value={ticket.name}
-                          onValueChange={(value) => onTicketTypeChange(index, "name", value)}
-                        >
-                          <SelectTrigger
-                            id={`ticket-name-${index}`}
-                            className="h-11 rounded-xl border-slate-200 bg-white"
-                          >
-                            <SelectValue placeholder="Select ticket type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {TICKET_TYPES.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      <Input
+                        id={`ticket-name-${index}`}
+                        value={ticket.name}
+                        onChange={(e) =>
+                          onTicketTypeChange(index, "name", e.target.value)
+                        }
+                        placeholder={isWaveParent ? "Wave name" : "e.g. Regular, VIP, VVIP, Gold…"}
+                        className="h-11 rounded-xl border-slate-200 bg-white"
+                        list={!isWaveParent ? `ticket-name-suggestions-${index}` : undefined}
+                      />
+                      {!isWaveParent && (
+                        <datalist id={`ticket-name-suggestions-${index}`}>
+                          <option value="Regular" />
+                          <option value="VIP" />
+                          <option value="VVIP" />
+                          <option value="Group" />
+                          <option value="Early Bird" />
+                          <option value="Student" />
+                          <option value="Gold" />
+                          <option value="Platinum" />
+                          <option value="Table" />
+                          <option value="Backstage" />
+                        </datalist>
                       )}
                     </FieldGroup>
 

@@ -88,11 +88,11 @@ const recalculateTicketAvailability = (ticketTypes: TicketType[]) => {
       const wave = orderedGroup[index];
       const previousWave = orderedGroup[index - 1];
       const startsByDate =
-        wave.waveSwitchMode === "date" &&
+        (wave.waveSwitchMode === "date" || wave.waveSwitchMode === "date_or_quantity") &&
         wave.saleStartDate &&
         new Date(wave.saleStartDate) <= new Date();
       const startsByQuantity =
-        wave.waveSwitchMode === "quantity" &&
+        (wave.waveSwitchMode === "quantity" || wave.waveSwitchMode === "date_or_quantity") &&
         Number(previousWave?.quantity || 0) <= 0;
 
       if (startsByDate || startsByQuantity) {

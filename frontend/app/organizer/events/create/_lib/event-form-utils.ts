@@ -11,6 +11,7 @@ export const TICKET_TYPES = ["Regular", "VIP", "VVIP", "Group"] as const;
 export const WAVE_SWITCH_MODES: { value: WaveSwitchMode; label: string }[] = [
   { value: "date", label: "Starts On Specific Date" },
   { value: "quantity", label: "When Previous Wave Sells Out" },
+  { value: "date_or_quantity", label: "Date or Sell Out (whichever comes first)" },
 ];
 
 const createId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -211,6 +212,13 @@ export const formatWaveActivationSummary = (
 
   if (ticket.waveSwitchMode === "quantity") {
     return "Starts when previous wave sells out";
+  }
+
+  if (ticket.waveSwitchMode === "date_or_quantity") {
+    if (ticket.saleStartDate) {
+      return `Starts ${new Date(ticket.saleStartDate).toLocaleDateString()} or when previous wave sells out`;
+    }
+    return "Starts on date or when previous wave sells out";
   }
 
   if (ticket.saleStartDate) {

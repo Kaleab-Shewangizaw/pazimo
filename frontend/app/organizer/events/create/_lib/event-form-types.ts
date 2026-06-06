@@ -5,7 +5,7 @@ export interface Category {
   isPublished: boolean;
 }
 
-export type WaveSwitchMode = "date" | "quantity";
+export type WaveSwitchMode = "date" | "quantity" | "date_or_quantity";
 
 export interface WaveDraft {
   id: string;

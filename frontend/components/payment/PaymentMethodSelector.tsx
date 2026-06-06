@@ -129,7 +129,7 @@ export default function PaymentMethodSelector({
       onValueChange={onSelect}
       className="w-full"
     >
-      <div className="relative w-full overflow-x-auto pb-2 pr-6 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]">
+      <div className="relative w-full overflow-x-auto overflow-y-hidden pb-2 pr-6 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]">
         <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white via-white/85 to-transparent dark:from-[#0f1115] dark:via-[#0f1115]/85" />
         <div className="flex w-full flex-nowrap gap-2.5 snap-x snap-mandatory">
           {methods.map((method) => {

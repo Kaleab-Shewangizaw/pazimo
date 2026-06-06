@@ -55,17 +55,70 @@ const isWaveTicket = (ticket) => {
   return detectWaveOrder(ticket) !== null;
 };
 
+/**
+ * Determine whether a wave should become active given the previous wave's state.
+ * Supports triggering modes: "date", "quantity", and "date_or_quantity".
+ */
 const shouldActivateWave = (wave, previousWave, now) => {
   if (!wave || !previousWave) return false;
   if (toSafeNumber(wave.quantity) <= 0) return false;
 
   const mode = normalizeWaveMode(wave.waveSwitchMode);
 
+  const soldOut = toSafeNumber(previousWave.quantity) <= 0;
+  const dateReached = hasStarted(wave, now);
+
   if (mode === "quantity") {
-    return toSafeNumber(previousWave.quantity) <= 0;
+    return soldOut;
   }
 
-  return hasStarted(wave, now);
+  if (mode === "date_or_quantity") {
+    return dateReached || soldOut;
+  }
+
+  // Default: "date"
+  return dateReached;
+};
+
+/**
+ * Process a single wave group (array of tickets sorted by waveOrder).
+ * Returns true if any availability changed.
+ */
+const applyWaveGroup = (waveTickets, now) => {
+  let changed = false;
+
+  if (waveTickets.length === 0) return changed;
+
+  // Find the furthest wave whose trigger condition is met
+  let activeWaveIndex = 0;
+
+  for (let index = 1; index < waveTickets.length; index += 1) {
+    const previousWave = waveTickets[index - 1].ticket;
+    const currentWave = waveTickets[index].ticket;
+
+    if (currentWave.manualDisabled === true) {
+      continue;
+    }
+
+    if (shouldActivateWave(currentWave, previousWave, now)) {
+      activeWaveIndex = index;
+    }
+  }
+
+  waveTickets.forEach(({ ticket }, index) => {
+    const hasQuantity = toSafeNumber(ticket.quantity) > 0;
+    const shouldBeAvailable =
+      ticket.manualDisabled === true
+        ? false
+        : index === activeWaveIndex && hasQuantity;
+
+    if (ticket.available !== shouldBeAvailable) {
+      ticket.available = shouldBeAvailable;
+      changed = true;
+    }
+  });
+
+  return changed;
 };
 
 const applyTicketAvailabilityRules = (event, now = new Date()) => {
@@ -96,67 +149,35 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     }
   });
 
-  const waveTickets = event.ticketTypes
+  // Group wave tickets by waveGroup so each chain is evaluated independently.
+  // Tickets that have a waveGroup are grouped by it; tickets without a waveGroup
+  // but detected as wave tickets (by name pattern) form a single legacy group.
+  const namedGroups = {};    // keyed by waveGroup string
+  const legacyWaves = [];    // tickets with no waveGroup but detected as wave tickets
+
+  event.ticketTypes
     .map((ticket) => ({ ticket, order: detectWaveOrder(ticket) }))
     .filter((item) => item.order !== null)
-    .sort((a, b) => a.order - b.order);
-
-  waveTickets.forEach(({ ticket }, index) => {
-    if (ticket.manualDisabled === true) {
-      if (ticket.available !== false) {
-        ticket.available = false;
-        changed = true;
+    .forEach((item) => {
+      const group = (item.ticket.waveGroup || "").trim();
+      if (group) {
+        if (!namedGroups[group]) namedGroups[group] = [];
+        namedGroups[group].push(item);
+      } else {
+        legacyWaves.push(item);
       }
-      return;
-    }
+    });
 
-    const hasQuantity = toSafeNumber(ticket.quantity) > 0;
-    const shouldBeAvailable =
-      index === 0 ? hasQuantity : false;
-
-    if (ticket.available !== shouldBeAvailable) {
-      ticket.available = shouldBeAvailable;
-      changed = true;
-    }
-  });
-
-  if (waveTickets.length < 2) {
-    return { changed };
+  // Process each named group independently
+  for (const groupItems of Object.values(namedGroups)) {
+    const sorted = [...groupItems].sort((a, b) => a.order - b.order);
+    if (applyWaveGroup(sorted, now)) changed = true;
   }
 
-  let activeWaveIndex = 0;
-
-  for (let index = 1; index < waveTickets.length; index += 1) {
-    const previousWave = waveTickets[index - 1].ticket;
-    const currentWave = waveTickets[index].ticket;
-
-    if (currentWave.manualDisabled === true) {
-      continue;
-    }
-
-    if (shouldActivateWave(currentWave, previousWave, now)) {
-      activeWaveIndex = index;
-    }
-  }
-
-  waveTickets.forEach(({ ticket }, index) => {
-    const hasQuantity = toSafeNumber(ticket.quantity) > 0;
-    const shouldBeAvailable =
-      ticket.manualDisabled === true ? false : index === activeWaveIndex && hasQuantity;
-
-    if (ticket.available !== shouldBeAvailable) {
-      ticket.available = shouldBeAvailable;
-      changed = true;
-    }
-  });
-
-  if (activeWaveIndex > 0) {
-    for (let index = 0; index < activeWaveIndex; index += 1) {
-      if (waveTickets[index].ticket.available !== false) {
-        waveTickets[index].ticket.available = false;
-        changed = true;
-      }
-    }
+  // Process legacy (unnamed) wave tickets as a single group
+  if (legacyWaves.length > 0) {
+    const sorted = [...legacyWaves].sort((a, b) => a.order - b.order);
+    if (applyWaveGroup(sorted, now)) changed = true;
   }
 
   return { changed };

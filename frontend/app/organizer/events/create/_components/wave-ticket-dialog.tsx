@@ -239,8 +239,7 @@ export function WaveTicketDialog({
                     <FieldHint>
                       This wave becomes active when the previous wave sells out.
                     </FieldHint>
-                  ) : null}
-                </div>
+                  ) : null}                </div>
               </div>
             ))}
           </div>

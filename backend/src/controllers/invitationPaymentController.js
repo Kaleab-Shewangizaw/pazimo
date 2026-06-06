@@ -184,41 +184,74 @@ const initiateChapaInvitationPayment = async (req, res) => {
         chapaType = "awashbirr";
       } else if (methodInput === "amole") {
         chapaType = "Amole";
-      } 
+      } else if (
+        methodInput === "boa_ussd" ||
+        methodInput.includes("boa") ||
+        methodInput.includes("abyssinia")
+      ) {
+        // BOA USSD is handled via Chapa web checkout (not direct charge)
+        chapaType = "boa_ussd";
+      }
       // Add other mappings if necessary, or let it fall through if strict match is expected elsewhere
     }
 
-    // Initiate Chapa Direct Charge
+    // BOA USSD requires web checkout; all other methods use direct charge
+    const useWebCheckout = chapaType === "boa_ussd";
+
+    // Initiate Chapa payment
     let response;
     try {
-      // Ensure mobile number format for Chapa (09... or 07...)
-      let chapaMobile = phoneNumber.replace(/^\+/, "");
-      if (chapaMobile.startsWith("251")) {
-        chapaMobile = "0" + chapaMobile.substring(3);
-      }
+      if (useWebCheckout) {
+        // Web checkout for BOA USSD
+        response = await ChapaService.initialize({
+          amount: String(amount),
+          currency: "ETB",
+          email:
+            invitationData.contactType === "email"
+              ? invitationData.contact
+              : "guest@example.com",
+          first_name: (invitationData.customerName || "Guest").split(" ")[0],
+          last_name:
+            (invitationData.customerName || "User").split(" ")[1] || "User",
+          tx_ref: transactionId,
+          callback_url: chapaCallbackUrl,
+          return_url: returnUrl,
+          customization: {
+            title: paymentReason,
+            description: "Invitation Fee",
+          },
+        });
+      } else {
+        // Direct charge for mobile money
+        // Ensure mobile number format for Chapa (09... or 07...)
+        let chapaMobile = phoneNumber.replace(/^\+/, "");
+        if (chapaMobile.startsWith("251")) {
+          chapaMobile = "0" + chapaMobile.substring(3);
+        }
 
-      response = await ChapaService.directCharge({
-        amount: String(amount),
-        currency: "ETB",
-        mobile: chapaMobile,
-        type: chapaType,
-        email:
-          invitationData.contactType === "email"
-            ? invitationData.contact
-            : "guest@example.com",
-        first_name: (invitationData.customerName || "Guest").split(" ")[0],
-        last_name:
-          (invitationData.customerName || "User").split(" ")[1] || "User",
-        tx_ref: transactionId,
-        callback_url: chapaCallbackUrl,
-        return_url: returnUrl,
-        customization: {
-          title: paymentReason,
-          description: "Invitation Fee",
-        },
-      });
+        response = await ChapaService.directCharge({
+          amount: String(amount),
+          currency: "ETB",
+          mobile: chapaMobile,
+          type: chapaType,
+          email:
+            invitationData.contactType === "email"
+              ? invitationData.contact
+              : "guest@example.com",
+          first_name: (invitationData.customerName || "Guest").split(" ")[0],
+          last_name:
+            (invitationData.customerName || "User").split(" ")[1] || "User",
+          tx_ref: transactionId,
+          callback_url: chapaCallbackUrl,
+          return_url: returnUrl,
+          customization: {
+            title: paymentReason,
+            description: "Invitation Fee",
+          },
+        });
+      }
     } catch (error) {
-      console.error("Chapa Direct Charge Error:", error);
+      console.error("Chapa Payment Error:", error);
       return res.status(400).json({
         success: false,
         message: error.message || "Payment initiation failed",
@@ -226,7 +259,18 @@ const initiateChapaInvitationPayment = async (req, res) => {
     }
 
     let checkoutUrl = null;
-    if (
+    if (useWebCheckout) {
+      // Web checkout returns checkout_url directly
+      if (response.status === "success" && response.data?.checkout_url) {
+        checkoutUrl = response.data.checkout_url;
+      } else {
+        console.error("Chapa Web Checkout Failed:", response);
+        return res.status(400).json({
+          success: false,
+          message: response.message || "Payment initiation failed",
+        });
+      }
+    } else if (
       response.status === "success" &&
       response.data &&
       response.data.checkout_url

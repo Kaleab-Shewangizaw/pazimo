@@ -420,6 +420,14 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         chapaType = "awashbirr";
       } else if (methodInput === "amole") {
         chapaType = "Amole";
+      } else if (
+        methodInput === "boa_ussd" ||
+        methodInput.includes("boa") ||
+        methodInput.includes("abyssinia")
+      ) {
+        // BOA USSD is handled via Chapa web checkout (not direct charge)
+        useWebCheckout = true;
+        chapaType = null;
       }
     }
 
