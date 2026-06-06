@@ -9,6 +9,7 @@ const SUPPORTED_CHAPA_METHODS = [
   "awashbirr",
   "yaya",
   "Amole",
+  "boa_ussd",
 ];
 
 class ChapaService {

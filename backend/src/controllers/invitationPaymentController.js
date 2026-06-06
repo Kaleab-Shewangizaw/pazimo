@@ -189,20 +189,20 @@ const initiateChapaInvitationPayment = async (req, res) => {
         methodInput.includes("boa") ||
         methodInput.includes("abyssinia")
       ) {
-        // BOA USSD is handled via Chapa web checkout (not direct charge)
+        // BOA USSD direct charge — Chapa handles this via /v1/charges?type=boa_ussd
         chapaType = "boa_ussd";
       }
       // Add other mappings if necessary, or let it fall through if strict match is expected elsewhere
     }
 
-    // BOA USSD requires web checkout; all other methods use direct charge
-    const useWebCheckout = chapaType === "boa_ussd";
+    // BOA USSD uses direct charge just like other mobile methods
+    const useWebCheckout = false;
 
     // Initiate Chapa payment
     let response;
     try {
       if (useWebCheckout) {
-        // Web checkout for BOA USSD
+        // (reserved for future card-based methods)
         response = await ChapaService.initialize({
           amount: String(amount),
           currency: "ETB",
@@ -222,7 +222,7 @@ const initiateChapaInvitationPayment = async (req, res) => {
           },
         });
       } else {
-        // Direct charge for mobile money
+        // Direct charge for all mobile money methods including BOA USSD
         // Ensure mobile number format for Chapa (09... or 07...)
         let chapaMobile = phoneNumber.replace(/^\+/, "");
         if (chapaMobile.startsWith("251")) {
@@ -259,18 +259,7 @@ const initiateChapaInvitationPayment = async (req, res) => {
     }
 
     let checkoutUrl = null;
-    if (useWebCheckout) {
-      // Web checkout returns checkout_url directly
-      if (response.status === "success" && response.data?.checkout_url) {
-        checkoutUrl = response.data.checkout_url;
-      } else {
-        console.error("Chapa Web Checkout Failed:", response);
-        return res.status(400).json({
-          success: false,
-          message: response.message || "Payment initiation failed",
-        });
-      }
-    } else if (
+    if (
       response.status === "success" &&
       response.data &&
       response.data.checkout_url

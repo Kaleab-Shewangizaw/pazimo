@@ -425,9 +425,8 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         methodInput.includes("boa") ||
         methodInput.includes("abyssinia")
       ) {
-        // BOA USSD is handled via Chapa web checkout (not direct charge)
-        useWebCheckout = true;
-        chapaType = null;
+        // BOA USSD direct charge — Chapa handles this via /v1/charges?type=boa_ussd
+        chapaType = "boa_ussd";
       }
     }
 
