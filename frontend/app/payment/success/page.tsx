@@ -109,31 +109,47 @@ function PaymentSuccessContent() {
         } else if (data.status === "CANCELLED" || data.status === "CANCELED") {
           console.log(`[Payment] Payment cancelled`);
           setStatus("failed");
-          toast.error("Payment was cancelled");
+          toast.error("Payment was cancelled.");
         } else if (data.status === "FAILED") {
           console.log(`[Payment] Payment failed`);
           setStatus("failed");
           toast.error("Payment failed. Please try again.");
         } else {
-          // ⚡ OPTIMIZED: Adaptive polling - fast at first, then slow down
-          // Polls: 0.5s, 0.5s, 1s, 1s, 1.5s, 1.5s, 2s, 2s, then 2s intervals
-          if (pollCount < 20) { // Increased from 25
-            const delays = [500, 500, 1000, 1000, 1500, 1500, 2000, 2000]; // Faster initial polls
-            const delay = delays[pollCount] || 2000; // Default to 2s after initial fast polls
-            console.log(`[Payment] Still pending, retrying in ${delay}ms...`);
+          // Direct-charge payments (BOA USSD, Telebirr, etc.) need the user to
+          // act on their phone. Poll for up to 3 minutes, then cancel.
+          // First 8 polls are fast, then settle at 2s intervals.
+          // 8 fast polls + ~82 × 2s ≈ 3 min total window.
+          if (pollCount < 90) {
+            const delays = [500, 500, 1000, 1000, 1500, 1500, 2000, 2000];
+            const delay = delays[pollCount] ?? 2000;
+            console.log(`[Payment] Still pending (poll ${pollCount + 1}/90), retrying in ${delay}ms...`);
             setTimeout(() => setPollCount((prev) => prev + 1), delay);
           } else {
-            console.log(`[Payment] Giving up after ${pollCount} attempts`);
-            setStatus("pending"); // Give up polling, show pending message
+            // 3 minutes elapsed — cancel the payment server-side and show failure
+            console.log(`[Payment] 3-minute timeout reached, cancelling payment`);
+            try {
+              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/cancel`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ transactionId: txnId }),
+              });
+            } catch (cancelErr) {
+              console.error("[Payment] Failed to cancel payment:", cancelErr);
+            }
+            setStatus("failed");
+            toast.error("Payment timed out. Please try again.");
           }
         }
       } catch (error) {
         console.error("[Payment] Status check failed:", error);
-        // Retry on error with adaptive delay
-        if (pollCount < 30) {
+        // Retry on error up to the same 3-minute window
+        if (pollCount < 90) {
           const delays = [500, 500, 1000, 1000, 2000, 2000, 3000, 3000];
-          const delay = delays[pollCount] || 3000;
+          const delay = delays[pollCount] ?? 3000;
           setTimeout(() => setPollCount((prev) => prev + 1), delay);
+        } else {
+          setStatus("failed");
+          toast.error("Payment timed out. Please try again.");
         }
       }
     };

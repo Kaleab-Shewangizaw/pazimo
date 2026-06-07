@@ -57,6 +57,27 @@ const processSuccessfulPayment = async (payment) => {
     return null;
   }
 
+  // ── Atomic gate: only ONE caller (poll vs webhook race) proceeds ──────────
+  // We flip `smsSent` from false → true atomically. Whoever wins this update
+  // is the sole executor of ticket creation + SMS. The loser gets null back
+  // and finds the existing ticket when it checks.
+  const claimed = await Payment.findOneAndUpdate(
+    { _id: payment._id, smsSent: { $ne: true } },
+    { $set: { smsSent: true } },
+    { new: false }              // return the doc BEFORE the update
+  );
+
+  if (!claimed) {
+    // Another concurrent call already claimed this payment — wait briefly for
+    // the ticket to be written, then return it.
+    console.log(`[TICKET-CREATE] ⚠️ Payment ${payment.transactionId} already claimed by another process. Waiting for ticket...`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const existingTicket = await Ticket.findOne({ paymentReference: payment.transactionId });
+    console.log(`[TICKET-CREATE] ============================================\n`);
+    return existingTicket || null;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   const { eventId, ticketType, seatNumber, userId, ticketCount, ticketId } =
     payment.ticketDetails;
 
@@ -67,7 +88,7 @@ const processSuccessfulPayment = async (payment) => {
     ticketCount: ticketCount || 1,
   });
 
-  // Check if ticket already exists (idempotency)
+  // Secondary idempotency guard (in case ticket was created before smsSent was added)
   const existingTicket = await Ticket.findOne({ ticketId });
   if (existingTicket) {
     console.log(`[TICKET-CREATE] ⚠️ Ticket ${ticketId} already exists. Returning existing ticket.`);

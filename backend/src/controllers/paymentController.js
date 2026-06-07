@@ -7,16 +7,38 @@ const { processSuccessfulPayment } = require("./ticketController");
 
 const ChapaService = require("../services/chapaService");
 
-const CHAPA_PAYMENT_GRACE_MS = 2 * 60 * 1000;
-const CHAPA_VERIFY_RETRY_COUNT = 5;
-const CHAPA_VERIFY_RETRY_BASE_DELAY_MS = 500;
+// For web-checkout (card/redirect) payments: allow a short grace period before
+// treating a "failed" status as terminal, since the user may still be in-flight.
+const CHAPA_PAYMENT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
+
+// Direct-charge methods (mobile money / USSD) are async — Chapa only updates
+// status after the user completes the action on their phone. We do a single
+// verify per poll cycle and let the frontend's natural interval handle retries.
+// If the payment has been sitting in PENDING for longer than this, we expire it.
+const DIRECT_CHARGE_EXPIRY_MS = 3 * 60 * 1000; // 3 minutes
+
+// Methods that use Chapa's direct-charge API (async, user acts on their phone).
+// For these, retrying within a single HTTP request wastes API calls because
+// Chapa won't change the status in a matter of seconds.
+const DIRECT_CHARGE_METHODS = new Set([
+  "telebirr", "mpesa", "cbebirr", "awashbirr", "boa_ussd",
+  "Coopay-Ebirr", "yaya", "Amole",
+]);
+
+const isDirectChargePayment = (payment) => {
+  // Check the top-level method field first (most reliable)
+  const method = (payment.method || payment.ticketDetails?.paymentMethod || "").toLowerCase();
+  if (method) {
+    // Visa/Mastercard are web-checkout — everything else is direct charge
+    return !["visa", "mastercard"].includes(method);
+  }
+  // If method unknown, default to treating it as direct charge (safer for server load)
+  return true;
+};
 
 const getPaymentAgeMs = (payment) => {
   const createdAt = payment?.createdAt ? new Date(payment.createdAt).getTime() : 0;
-  if (!createdAt) {
-    return Number.POSITIVE_INFINITY;
-  }
-
+  if (!createdAt) return Number.POSITIVE_INFINITY;
   return Date.now() - createdAt;
 };
 
@@ -47,134 +69,123 @@ class PaymentController {
 
       console.log(`[PAYMENT-STATUS] Found payment - Current status: ${payment.status}, Provider: ${payment.provider}`);
 
-      // If pending, check with Provider directly - WITH RETRY LOGIC
+      // If pending, check with provider
       if (payment.status === "PENDING") {
         try {
           console.log(
-            `Checking payment status for ${txn}. Provider: ${
-              payment.provider || "undefined (defaulting to SantimPay)"
-            }`
+            `Checking payment status for ${txn}. Provider: ${payment.provider || "undefined (defaulting to SantimPay)"}`
           );
 
           if (payment.provider === "chapa") {
-            // ⚡ OPTIMIZED: Check Chapa Status with faster retry timing
-            let verifyResponse;
-            let attempts = 0;
-            const maxAttempts = CHAPA_VERIFY_RETRY_COUNT;
             const paymentAgeMs = getPaymentAgeMs(payment);
-            const isWithinGracePeriod = paymentAgeMs < CHAPA_PAYMENT_GRACE_MS;
-            
-            while (attempts < maxAttempts) {
-              try {
-                console.log(`[CHAPA-VERIFY] Attempting to verify transaction ${txn} (attempt ${attempts + 1}/${maxAttempts})`);
-                verifyResponse = await ChapaService.verify(txn);
-                console.log(`[CHAPA-VERIFY] Raw Chapa Verify Response for ${txn}:`, JSON.stringify(verifyResponse, null, 2));
-                
-                // Check different possible response structures
-                let apiStatus = null;
-                let paymentStatus = null;
-                
-                if (verifyResponse) {
-                  apiStatus = verifyResponse.status;
-                  paymentStatus = verifyResponse.data?.status || verifyResponse.status;
-                }
+            const isDirect = isDirectChargePayment(payment);
 
-                const normalizedApiStatus = String(apiStatus || "").toLowerCase();
-                const normalizedPaymentStatus = String(paymentStatus || "").toLowerCase();
-                
-                console.log(`[CHAPA-VERIFY] Extracted apiStatus: "${apiStatus}", paymentStatus: "${paymentStatus}"`);
-                
-                if (normalizedApiStatus === "success" && normalizedPaymentStatus) {
-                  console.log(`[CHAPA-VERIFY] Processing payment status: "${paymentStatus}"`);
-                  
-                  if (normalizedPaymentStatus === "success" || normalizedPaymentStatus === "completed" || normalizedPaymentStatus === "paid") {
-                    console.log(`[CHAPA-VERIFY] ✅ Payment ${txn} is successful, marking as PAID`);
-                    payment.status = "PAID";
-                    await payment.save();
-                    console.log(`[CHAPA-VERIFY] Payment ${txn} marked as PAID, creating tickets...`);
-                    await processSuccessfulPayment(payment);
-                    break; // Exit retry loop
-                  } else if (
-                    normalizedPaymentStatus === "failed" || 
-                    normalizedPaymentStatus === "failure" ||
-                    normalizedPaymentStatus.includes("failed") ||
-                    normalizedPaymentStatus.includes("failure") ||
-                    normalizedPaymentStatus === "cancelled" || 
-                    normalizedPaymentStatus === "canceled" ||
-                    normalizedPaymentStatus.includes("cancel")
-                  ) {
-                    if (isWithinGracePeriod) {
-                      console.log(
-                        `[CHAPA-VERIFY] ⏳ Payment ${txn} returned terminal-looking status "${paymentStatus}" but is still within the ${Math.round(CHAPA_PAYMENT_GRACE_MS / 1000)}s grace period; keeping it pending for a later retry.`
-                      );
-                      attempts = maxAttempts;
+            // ── Auto-expire stale direct-charge payments ──────────────────
+            // If the user abandoned their USSD/mobile prompt and Chapa never
+            // updated the status, we stop waiting after DIRECT_CHARGE_EXPIRY_MS.
+            if (isDirect && paymentAgeMs > DIRECT_CHARGE_EXPIRY_MS) {
+              console.log(
+                `[CHAPA-VERIFY] ⏰ Direct-charge payment ${txn} has been PENDING for ` +
+                `${Math.round(paymentAgeMs / 60000)} min — marking as EXPIRED`
+              );
+              payment.status = "CANCELLED";
+              await payment.save();
+            } else {
+              // ── Single verify call ─────────────────────────────────────
+              // For direct-charge: do ONE call and return immediately.
+              // Retrying within the same request is pointless — Chapa won't
+              // resolve a USSD session in under a second.
+              //
+              // For web-checkout (Visa/Mastercard): keep the retry loop since
+              // those can resolve quickly after a redirect.
+              const maxAttempts = isDirect ? 1 : 5;
+              const CHAPA_VERIFY_RETRY_BASE_DELAY_MS = 500;
+              const isWithinGracePeriod = paymentAgeMs < CHAPA_PAYMENT_GRACE_MS;
+
+              let attempts = 0;
+
+              while (attempts < maxAttempts) {
+                try {
+                  console.log(`[CHAPA-VERIFY] Attempting to verify transaction ${txn} (attempt ${attempts + 1}/${maxAttempts})`);
+                  const verifyResponse = await ChapaService.verify(txn);
+                  console.log(`[CHAPA-VERIFY] Raw Chapa Verify Response for ${txn}:`, JSON.stringify(verifyResponse));
+
+                  const apiStatus = verifyResponse?.status;
+                  const paymentStatus = verifyResponse?.data?.status || verifyResponse?.status;
+                  const normalizedApiStatus = String(apiStatus || "").toLowerCase();
+                  const normalizedPaymentStatus = String(paymentStatus || "").toLowerCase();
+
+                  console.log(`[CHAPA-VERIFY] Extracted apiStatus: "${apiStatus}", paymentStatus: "${paymentStatus}"`);
+
+                  if (normalizedApiStatus === "success" && normalizedPaymentStatus) {
+                    console.log(`[CHAPA-VERIFY] Processing payment status: "${paymentStatus}"`);
+
+                    if (["success", "completed", "paid"].includes(normalizedPaymentStatus)) {
+                      console.log(`[CHAPA-VERIFY] ✅ Payment ${txn} is successful, marking as PAID`);
+                      payment.status = "PAID";
+                      await payment.save();
+                      await processSuccessfulPayment(payment);
                       break;
+                    } else if (
+                      normalizedPaymentStatus.includes("fail") ||
+                      normalizedPaymentStatus.includes("cancel")
+                    ) {
+                      if (!isDirect && isWithinGracePeriod) {
+                        // Web-checkout only: give it a grace period
+                        console.log(`[CHAPA-VERIFY] ⏳ Within grace period, keeping pending`);
+                        attempts = maxAttempts;
+                        break;
+                      }
+                      const terminalStatus = normalizedPaymentStatus.includes("cancel") ? "CANCELLED" : "FAILED";
+                      console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} → ${terminalStatus}`);
+                      payment.status = terminalStatus;
+                      await payment.save();
+                      break;
+                    } else {
+                      // Still pending — for direct charge this is completely normal
+                      console.log(
+                        isDirect
+                          ? `[CHAPA-VERIFY] ⏳ Direct charge ${txn} awaiting user action (status: "${paymentStatus}") — returning PENDING`
+                          : `[CHAPA-VERIFY] ⏳ Payment ${txn} still pending: "${paymentStatus}"`
+                      );
+                      attempts++;
+                      if (!isDirect && attempts < maxAttempts) {
+                        const backoff = Math.min(
+                          CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
+                          4000
+                        );
+                        console.log(`[CHAPA-VERIFY] Retrying in ${backoff}ms...`);
+                        await new Promise((resolve) => setTimeout(resolve, backoff));
+                      }
                     }
-
-                    const terminalStatus = normalizedPaymentStatus.includes("cancel")
-                      ? "CANCELLED"
-                      : "FAILED";
-                    console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} ${terminalStatus.toLowerCase()} with status: ${paymentStatus}`);
-                    payment.status = terminalStatus;
-                    await payment.save();
-                    console.log(`Payment ${txn} marked as ${terminalStatus} (Chapa status: ${paymentStatus})`);
-                    break;
                   } else {
-                    // Status is still pending or unknown
-                    console.log(`[CHAPA-VERIFY] ⏳ Payment ${txn} still pending or unknown status: "${paymentStatus}"`);
                     attempts++;
-                    if (attempts < maxAttempts) {
+                    if (!isDirect && attempts < maxAttempts) {
                       const backoff = Math.min(
                         CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
                         4000
                       );
-                      console.log(`[CHAPA-VERIFY] Retrying in ${backoff}ms...`);
-                      await new Promise(resolve => setTimeout(resolve, backoff));
+                      await new Promise((resolve) => setTimeout(resolve, backoff));
                     }
                   }
-                } else {
-                  console.log(`[CHAPA-VERIFY] ⚠️ Chapa response missing success status or data:`, {
-                    hasResponse: !!verifyResponse,
-                    apiStatus,
-                    hasData: !!verifyResponse?.data,
-                    dataKeys: verifyResponse?.data ? Object.keys(verifyResponse.data) : []
-                  });
+                } catch (verifyError) {
+                  console.error(`[CHAPA-VERIFY] Attempt ${attempts + 1} failed:`, verifyError.message);
                   attempts++;
-                  if (attempts < maxAttempts) {
+                  if (!isDirect && attempts < maxAttempts) {
                     const backoff = Math.min(
                       CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
                       4000
                     );
-                    await new Promise(resolve => setTimeout(resolve, backoff));
+                    await new Promise((resolve) => setTimeout(resolve, backoff));
                   }
-                }
-              } catch (verifyError) {
-                console.error(`[CHAPA-VERIFY] Attempt ${attempts + 1} failed:`, verifyError.message);
-                attempts++;
-                if (attempts < maxAttempts) {
-                  const backoff = Math.min(
-                    CHAPA_VERIFY_RETRY_BASE_DELAY_MS * Math.pow(2, attempts - 1),
-                    4000
-                  );
-                  await new Promise(resolve => setTimeout(resolve, backoff));
                 }
               }
             }
-            
-            if (attempts >= maxAttempts) {
-              console.log(`[CHAPA-VERIFY] ❌ All ${maxAttempts} attempts failed for ${txn}`);
-            }
           } else {
-            // Default to SantimPay
-            const statusData = await SantimPayService.checkTransactionStatus(
-              txn
-            );
-            console.log(
-              `SantimPay Status Response for ${txn}:`,
-              JSON.stringify(statusData, null, 2)
-            );
+            // SantimPay
+            const statusData = await SantimPayService.checkTransactionStatus(txn);
+            console.log(`SantimPay Status Response for ${txn}:`, JSON.stringify(statusData, null, 2));
 
-            // Check status from SantimPay response
             let remoteStatus = statusData.status || statusData.paymentStatus;
             if (remoteStatus) remoteStatus = remoteStatus.toUpperCase();
 
@@ -188,12 +199,7 @@ class PaymentController {
               remoteStatus === "CANCELED" ||
               remoteStatus === "EXPIRED"
             ) {
-              // Map all failure statuses properly
-              if (remoteStatus === "CANCELLED" || remoteStatus === "CANCELED") {
-                payment.status = "CANCELLED";
-              } else {
-                payment.status = "FAILED";
-              }
+              payment.status = (remoteStatus === "CANCELLED" || remoteStatus === "CANCELED") ? "CANCELLED" : "FAILED";
               await payment.save();
               console.log(`Payment ${txn} marked as ${payment.status}`);
             }
@@ -203,7 +209,6 @@ class PaymentController {
             `Error checking ${payment.provider || "SantimPay"} status:`,
             err.message || err
           );
-          // Ignore error and return current DB status
         }
       }
 

@@ -51,6 +51,13 @@ const Payment = new mongoose.Schema({
   newUserPassword: {
     type: String,
   },
+  // Guards against duplicate SMS when poll + webhook race each other.
+  // Set to true atomically by processSuccessfulPayment — only one caller proceeds.
+  smsSent: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
