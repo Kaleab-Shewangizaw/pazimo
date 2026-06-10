@@ -8,6 +8,7 @@ import "@/lib/disableInspect"
 import "@/lib/errorLogger" // Initialize error logging
 import type { Metadata, Viewport } from "next"
 import { Space_Grotesk, Inter } from "next/font/google"
+import ChunkLoadErrorHandler from "@/components/chunk-load-error-handler"
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -79,6 +80,7 @@ export default function RootLayout({
       <body className="flex flex-col min-h-screen">
         <ThemeProvider attribute="class" defaultTheme="system">
           <AuthProvider>
+            <ChunkLoadErrorHandler />
             <LayoutWrapper>{children}</LayoutWrapper>
             <Toaster position="top-center" />
           </AuthProvider>
