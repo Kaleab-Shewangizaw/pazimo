@@ -128,6 +128,11 @@ const TicketSchema = new mongoose.Schema(
       index: true, 
     },
 
+    invitationId: {
+      type: String,
+      sparse: true,
+    },
+
     checkedIn: {
       type: Boolean,
       default: false,
@@ -158,10 +163,14 @@ TicketSchema.index({ event: 1, status: 1, createdAt: -1 }); // Event tickets wit
 TicketSchema.index({ event: 1, checkedIn: 1, status: 1 }); // QR scanning - checked in filter
 TicketSchema.index({ event: 1, paymentStatus: 1, price: 1 }); // Revenue/stats calculations
 TicketSchema.index({ event: 1, currency: 1, createdAt: -1 }); // Currency-specific analytics
+TicketSchema.index({ event: 1, isInvitation: 1, createdAt: -1 }); // Invitation/event ticket listing
 TicketSchema.index({ user: 1, createdAt: -1 }); // User ticket queries
 TicketSchema.index({ user: 1, status: 1 }); // User active tickets
 TicketSchema.index({ isInvitation: 1, paymentStatus: 1, status: 1 }); // Invitation stats
 TicketSchema.index({ event: 1, isOnDoor: 1, createdAt: -1 }); // On-door vs online filter
+TicketSchema.index({ invitationId: 1 }, { sparse: true }); // Direct invitation-to-ticket lookup
+TicketSchema.index({ event: 1, isInvitation: 1, guestEmail: 1 }, { sparse: true }); // Legacy invitation matching
+TicketSchema.index({ event: 1, isInvitation: 1, guestPhone: 1 }, { sparse: true }); // Legacy invitation matching
 TicketSchema.index({ guestPhone: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status

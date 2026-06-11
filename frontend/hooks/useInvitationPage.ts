@@ -101,10 +101,12 @@ export function useInvitationPage() {
 
   const stats = {
     totalInvitations: sentInvitations.length,
-    emailInvitations: sentInvitations.filter((i) => i.contactType === "email")
-      .length,
-    smsInvitations: sentInvitations.filter((i) => i.contactType === "phone")
-      .length,
+    emailInvitations: sentInvitations.filter((i) =>
+      ["email", "both"].includes(i.contactType)
+    ).length,
+    smsInvitations: sentInvitations.filter((i) =>
+      ["phone", "both"].includes(i.contactType)
+    ).length,
     deliveredInvitations: sentInvitations.filter(
       (i) => i.status === "delivered"
     ).length,
@@ -131,7 +133,6 @@ export function useInvitationPage() {
     const userId = localStorage.getItem("userId");
     if (userId) {
       loadEvents(userId);
-      fetchOrganizerTickets();
     }
     fetchSentInvitations();
     // fetchPricing(); // This requires eventType, removing for now or should be called when event is selected
@@ -298,32 +299,24 @@ export function useInvitationPage() {
 
         console.log("Fetched invitations:", invitations);
         setRawInvitations(invitations);
+        setTickets(
+          invitations
+            .map((inv: any) =>
+              inv.ticket
+                ? {
+                    ...inv.ticket,
+                    isInvitation: true,
+                    event: inv.eventId?._id || inv.eventId,
+                    guestEmail: inv.guestEmail,
+                    guestPhone: inv.guestPhone,
+                  }
+                : null
+            )
+            .filter(Boolean)
+        );
       }
     } catch (error) {
       console.error("Error fetching sent invitations:", error);
-    }
-  };
-
-  const fetchOrganizerTickets = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/organizer/all`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        setTickets(data.tickets || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch organizer tickets:", error);
     }
   };
 
@@ -358,7 +351,7 @@ export function useInvitationPage() {
           : inv.type || inv.contactType || "email"
         ).toLowerCase(),
         originalType: inv.type,
-        guestType: inv.paymentStatus === "paid" ? "paid" : "guest",
+        guestType: inv.guestType || "guest",
         paymentStatus: inv.paymentStatus || "free",
         qrCodeCount: inv.amount || inv.qrCodeCount || 1,
         message: inv.message || "",
@@ -371,6 +364,8 @@ export function useInvitationPage() {
         qrCode: inv.qrCodeData || inv.qrCode || "",
         rsvpLink: inv.rsvpLink || "",
         eventId: eventId,
+        ticketId: inv.ticketId || inv.ticket?.ticketId || null,
+        ticket: inv.ticket || null,
         estimatedCost:
           inv.estimatedCost ||
           (inv.type === "email"
@@ -383,7 +378,7 @@ export function useInvitationPage() {
       };
     });
     setSentInvitations(formattedInvitations);
-  }, [rawInvitations, events]);
+  }, [rawInvitations, events, pricing]);
 
   const generateQRCode = async (
     eventId: number | string,

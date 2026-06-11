@@ -8,7 +8,6 @@ import {
   Search,
   Mail,
   Phone,
-  User,
   DollarSign,
   ArrowLeft,
   Trash2,
@@ -23,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useRouter, useParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +36,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+interface TicketData {
+  _id?: string;
+  ticketId?: string | null;
+  invitationId?: string | null;
+  purchaseQuantity?: number;
+  ticketCount?: number;
+  ticketType?: string;
+  status?: string;
+  paymentStatus?: string;
+  checkedIn?: boolean;
+}
 
 interface InvitationData {
   _id: string;
@@ -62,102 +73,47 @@ interface InvitationData {
   estimatedCost: number;
   createdAt: string;
   rsvpStatus?: string;
+  ticket?: TicketData | null;
 }
 
 export default function EventInvitationsPage() {
   const { token } = useAdminAuthStore();
   const params = useParams();
-  const router = useRouter();
   const eventId = params.eventId as string;
 
   const [invitations, setInvitations] = useState<InvitationData[]>([]);
-  const [filteredInvitations, setFilteredInvitations] = useState<
-    InvitationData[]
-  >([]);
-  interface TicketData {
-    _id?: string;
-    guestEmail?: string;
-    guestPhone?: string;
-    purchaseQuantity?: number;
-    ticketCount?: number;
-    ticketType?: string;
-    isInvitation?: boolean;
-    user?: {
-      email?: string;
-      phoneNumber?: string;
-    };
-  }
-  const [eventTickets, setEventTickets] = useState<TicketData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
   const [totalExpense, setTotalExpense] = useState(0);
   const [eventName, setEventName] = useState("");
 
   useEffect(() => {
-    if (eventId) {
+    if (eventId && token) {
       fetchInvitations();
-      fetchTickets();
     }
-    // eslint-disable-next-line
-  }, [eventId]);
-
-  const fetchTickets = async () => {
-    try {
-      let allTickets: any[] = [];
-      let page = 1;
-      let hasMore = true;
-
-      while (hasMore) {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}?page=${page}&limit=500`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        if (response.ok) {
-          const data = await response.json();
-          allTickets = [...allTickets, ...(data.tickets || [])];
-          hasMore = data.hasMore || false;
-          page++;
-        } else {
-          hasMore = false;
-        }
-      }
-
-      setEventTickets(allTickets);
-    } catch {
-      setEventTickets([]);
-    }
-  };
+  }, [eventId, token, currentPage, searchQuery]);
 
   useEffect(() => {
-    // Filter and paginate locally
-    let result = invitations;
-
-    if (searchQuery) {
-      const lowerQuery = searchQuery.toLowerCase();
-      result = result.filter(
-        (inv) =>
-          inv.guestName.toLowerCase().includes(lowerQuery) ||
-          (inv.guestEmail &&
-            inv.guestEmail.toLowerCase().includes(lowerQuery)) ||
-          (inv.guestPhone && inv.guestPhone.includes(lowerQuery))
-      );
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
-    // const router = useRouter();
-    setFilteredInvitations(result);
-    setCurrentPage(1); // Reset to first page on search
-  }, [searchQuery, invitations]);
+  }, [currentPage, totalPages]);
 
-  // Duplicate TicketData interface and eventTickets state removed.
   const fetchInvitations = async () => {
     try {
       setLoading(true);
       const queryParams = new URLSearchParams({
         eventId: eventId,
+        page: currentPage.toString(),
+        limit: itemsPerPage.toString(),
       });
+
+      if (searchQuery.trim()) {
+        queryParams.set("search", searchQuery.trim());
+      }
 
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/admin/all?${queryParams}`,
@@ -173,11 +129,11 @@ export default function EventInvitationsPage() {
       }
 
       const data = await response.json();
-      setInvitations(data.data);
-      setFilteredInvitations(data.data);
+      setInvitations(data.data || []);
       setTotalExpense(data.totalExpense || 0);
+      setTotalPages(data.pagination?.pages || 1);
 
-      if (data.data.length > 0 && data.data[0].eventId) {
+      if (data.data?.length > 0 && data.data[0].eventId) {
         setEventName(data.data[0].eventId.title);
       }
     } catch (error) {
@@ -188,14 +144,7 @@ export default function EventInvitationsPage() {
     }
   };
 
-  // Get current page items
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredInvitations.slice(
-    indexOfFirstItem,
-    indexOfLastItem
-  );
-  const totalPages = Math.ceil(filteredInvitations.length / itemsPerPage);
+  const currentItems = invitations;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ET", {
@@ -226,41 +175,11 @@ export default function EventInvitationsPage() {
     }
   };
 
-  // Helper to get ticket for invitation
-  const getTicketForInvitation = (
-    inv: InvitationData,
-    claimedIds: Set<string>
-  ) => {
-    // Match by guestEmail or guestPhone
-    return eventTickets.find((t) => {
-      // Only match invitation tickets that belong to this invitation
-      if (!t.isInvitation) return false;
-
-      // Skip if already claimed by another invitation in this view
-      if (t._id && claimedIds.has(t._id)) return false;
-
-      // 1. Normalize invitation contacts
-      const invEmail = (inv.guestEmail || "").toLowerCase().trim();
-      const invPhone = (inv.guestPhone || "").trim();
-
-      // 2. Normalize ticket contacts (check both guest fields and user fields)
-      const tEmail = (t.guestEmail || t.user?.email || "").toLowerCase().trim();
-      const tPhone = (t.guestPhone || t.user?.phoneNumber || "").trim();
-
-      // 3. Compare
-      const emailMatch = invEmail && tEmail && invEmail === tEmail;
-      const phoneMatch = invPhone && tPhone && invPhone === tPhone;
-
-      return emailMatch || phoneMatch;
-    });
-  };
-
   // Organizer name for header
   const organizerName = invitations[0]?.organizerId
     ? `${invitations[0].organizerId.firstName} ${invitations[0].organizerId.lastName}`
     : "";
 
-  // const totalPages = Math.ceil(filteredInvitations.length / itemsPerPage);
   return (
     <div className="space-y-6 px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center gap-4">
@@ -288,7 +207,10 @@ export default function EventInvitationsPage() {
           <Input
             placeholder="Search guest..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setCurrentPage(1);
+              setSearchQuery(e.target.value);
+            }}
             className="pl-8"
           />
         </div>
@@ -339,15 +261,8 @@ export default function EventInvitationsPage() {
                   </TableRow>
                 ) : (
                   (() => {
-                    const claimedTicketIds = new Set<string>();
                     return currentItems.map((inv) => {
-                      const ticket = getTicketForInvitation(
-                        inv,
-                        claimedTicketIds
-                      );
-                      if (ticket && ticket._id)
-                        claimedTicketIds.add(ticket._id);
-
+                      const ticket = inv.ticket || null;
                       // Calculate estimated cost if not provided by backend
                       let cost = inv.estimatedCost;
                       if (cost === undefined || cost === null) {
@@ -569,22 +484,12 @@ export default function EventInvitationsPage() {
           Previous
         </button>
         <span className="text-sm text-gray-600">
-          Page {currentPage} of{" "}
-          {Math.max(1, Math.ceil(filteredInvitations.length / itemsPerPage))}
+          Page {currentPage} of {Math.max(1, totalPages)}
         </span>
         <button
           className="px-3 py-1 rounded bg-gray-300 text-gray-700 disabled:opacity-50"
-          onClick={() =>
-            setCurrentPage((p) =>
-              Math.min(
-                Math.ceil(filteredInvitations.length / itemsPerPage),
-                p + 1
-              )
-            )
-          }
-          disabled={
-            currentPage >= Math.ceil(filteredInvitations.length / itemsPerPage)
-          }
+          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+          disabled={currentPage >= totalPages}
         >
           Next
         </button>

@@ -45,7 +45,9 @@ export default function SentInvitationsTable({
   const filteredInvitations = safeInvitations.filter((inv) => {
     const matchesStatus = statusFilter === "all" || inv.status === statusFilter;
     const matchesContactType =
-      contactTypeFilter === "all" || inv.contactType === contactTypeFilter;
+      contactTypeFilter === "all" ||
+      inv.contactType === contactTypeFilter ||
+      inv.contactType === "both";
     return matchesStatus && matchesContactType;
   });
 
@@ -244,57 +246,53 @@ export default function SentInvitationsTable({
                 (() => {
                   const claimedTicketIds = new Set<string>();
                   return paginatedInvitations.map((invitation) => {
-                    const ticket = tickets.find((t) => {
-                      // Only match invitation tickets
-                      if (!t.isInvitation) return false;
+                    const directTicket = invitation.ticket || null;
+                    const ticket =
+                      directTicket ||
+                      tickets.find((t) => {
+                        if (!t?.isInvitation) return false;
+                        if (t._id && claimedTicketIds.has(t._id)) return false;
 
-                      // Skip if already claimed by another invitation in this view
-                      if (t._id && claimedTicketIds.has(t._id)) return false;
+                        const invEventId = invitation.eventId?.toString();
+                        const tEventId = (t.event?._id || t.event)?.toString();
+                        if (invEventId && tEventId && invEventId !== tEventId) {
+                          return false;
+                        }
 
-                      // 1. Match by eventId first
-                      const invEventId = invitation.eventId?.toString();
-                      const tEventId = (t.event?._id || t.event)?.toString();
-                      if (invEventId && tEventId && invEventId !== tEventId)
-                        return false;
+                        const invEmail = (
+                          invitation.guestEmail ||
+                          (invitation.contactType === "email"
+                            ? invitation.contact
+                            : "") ||
+                          ""
+                        )
+                          .toLowerCase()
+                          .trim();
+                        const invPhone = (
+                          invitation.guestPhone ||
+                          (invitation.contactType === "phone"
+                            ? invitation.contact
+                            : "") ||
+                          ""
+                        ).trim();
+                        const tEmail = (t.guestEmail || t.user?.email || "")
+                          .toLowerCase()
+                          .trim();
+                        const tPhone = (
+                          t.guestPhone ||
+                          t.user?.phoneNumber ||
+                          ""
+                        ).trim();
 
-                      // 2. Normalize invitation contacts
-                      const invEmail = (
-                        invitation.guestEmail ||
-                        (invitation.contactType === "email"
-                          ? invitation.contact
-                          : "") ||
-                        ""
-                      )
-                        .toLowerCase()
-                        .trim();
-                      const invPhone = (
-                        invitation.guestPhone ||
-                        (invitation.contactType === "phone"
-                          ? invitation.contact
-                          : "") ||
-                        ""
-                      ).trim();
+                        return (
+                          (invEmail && tEmail && invEmail === tEmail) ||
+                          (invPhone && tPhone && invPhone === tPhone)
+                        );
+                      });
 
-                      // 3. Normalize ticket contacts (check both guest fields and user fields)
-                      const tEmail = (t.guestEmail || t.user?.email || "")
-                        .toLowerCase()
-                        .trim();
-                      const tPhone = (
-                        t.guestPhone ||
-                        t.user?.phoneNumber ||
-                        ""
-                      ).trim();
-
-                      // 4. Compare
-                      if (invEmail && tEmail && invEmail === tEmail)
-                        return true;
-                      if (invPhone && tPhone && invPhone === tPhone)
-                        return true;
-
-                      return false;
-                    });
-
-                    if (ticket && ticket._id) claimedTicketIds.add(ticket._id);
+                    if (ticket && ticket._id) {
+                      claimedTicketIds.add(ticket._id);
+                    }
 
                     let usage = "0/1";
                     if (ticket) {

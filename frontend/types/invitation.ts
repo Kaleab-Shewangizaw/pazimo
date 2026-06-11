@@ -30,7 +30,7 @@ export interface Invitation {
   contact: string;
   guestEmail?: string;
   guestPhone?: string;
-  contactType: "email" | "phone";
+  contactType: "email" | "phone" | "both";
   guestType: "guest" | "paid";
   ticketType?: string;
   paymentStatus?: "paid" | "free";
@@ -48,8 +48,20 @@ export interface Invitation {
     | "sent";
   qrCode: string;
   eventId?: number | string;
+  ticketId?: string | null;
   rsvpLink?: string;
   estimatedCost?: number;
+  ticket?: {
+    _id?: string;
+    ticketId?: string | null;
+    invitationId?: string | null;
+    ticketType?: string;
+    purchaseQuantity?: number;
+    ticketCount?: number;
+    status?: string;
+    paymentStatus?: string;
+    checkedIn?: boolean;
+  } | null;
 }
 
 export interface Attendee {

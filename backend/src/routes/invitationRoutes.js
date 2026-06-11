@@ -9,6 +9,7 @@ const {
   getInvitationById,
   updateInvitationStatus,
   createPendingInvitation,
+  getOrganizerInvitations,
   getInvitationsByEvent,
   getAllInvitations,
   deleteInvitation,
@@ -57,12 +58,6 @@ router.post(
 // Verify invitation scan
 router.post("/verify", verifyInvitation);
 
-// Get Invitation by ID (Public)
-router.get("/:id", getInvitationById);
-
-// Update Invitation Status (Public - for guest confirmation)
-router.patch("/:id/status", updateInvitationStatus);
-
 // Create invitation (Legacy/Single) - Updated to match new schema if possible, or keep as is but might need frontend update
 router.post("/", protect, async (req, res) => {
   try {
@@ -96,19 +91,7 @@ router.post("/", protect, async (req, res) => {
 });
 
 // Get invitations by organizer
-router.get("/organizer/:organizerId", protect, async (req, res) => {
-  try {
-    const invitations = await Invitation.find({
-      organizerId: req.params.organizerId,
-    })
-      .sort({ createdAt: -1 })
-      .populate("eventId", "title");
-
-    res.json({ success: true, data: invitations });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+router.get("/organizer/:organizerId", protect, getOrganizerInvitations);
 
 // Get invitations by event ID
 router.get("/event/:eventId", protect, getInvitationsByEvent);
@@ -131,6 +114,12 @@ router.get("/", protect, async (req, res) => {
 
 // Get all invitations (Admin)
 router.get("/admin/all", protect, getAllInvitations);
+
+// Get Invitation by ID (Public)
+router.get("/:id", getInvitationById);
+
+// Update Invitation Status (Public - for guest confirmation)
+router.patch("/:id/status", updateInvitationStatus);
 
 // Delete invitation (Admin/Organizer)
 router.delete("/:id", protect, deleteInvitation);

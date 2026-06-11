@@ -68,6 +68,10 @@ const invitationSchema = new mongoose.Schema(
     paymentReference: {
       type: String,
     },
+    ticketId: {
+      type: String,
+      sparse: true,
+    },
     qrCodeData: {
       type: String,
     },
@@ -90,5 +94,17 @@ const invitationSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+invitationSchema.index({ organizerId: 1, createdAt: -1 });
+invitationSchema.index({ eventId: 1, createdAt: -1 });
+invitationSchema.index({ organizerId: 1, eventId: 1, createdAt: -1 });
+invitationSchema.index({ organizerId: 1, status: 1, createdAt: -1 });
+invitationSchema.index({ eventId: 1, status: 1, createdAt: -1 });
+invitationSchema.index({ paymentStatus: 1, createdAt: -1 });
+invitationSchema.index({ organizerId: 1, paymentStatus: 1, createdAt: -1 });
+invitationSchema.index({ rsvpStatus: 1, createdAt: -1 });
+invitationSchema.index({ ticketId: 1 }, { sparse: true });
+invitationSchema.index({ guestEmail: 1 }, { sparse: true });
+invitationSchema.index({ guestPhone: 1 }, { sparse: true });
 
 module.exports = mongoose.model("Invitation", invitationSchema);

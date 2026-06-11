@@ -2,6 +2,7 @@ const Invitation = require("../models/Invitation");
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const InvitationPricing = require("../models/InvitationPricing");
+const User = require("../models/User");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { StatusCodes } = require("http-status-codes");
@@ -61,6 +62,218 @@ const validateBulkRows = (rows, eventId) => {
   });
 
   return { correctedRows, errors };
+};
+
+const normalizeId = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value._id) return value._id.toString();
+  if (typeof value.toString === "function") return value.toString();
+  return "";
+};
+
+const normalizeEmail = (value = "") => value.toLowerCase().trim();
+
+const normalizePhone = (value = "") =>
+  value.replace(/\s+/g, "").replace(/^\+/, "").trim();
+
+const buildInvitationExpense = (invitation, emailPrice, smsPrice) => {
+  if (invitation.paymentStatus !== "paid") {
+    return 0;
+  }
+
+  let baseCost = 0;
+  if (invitation.type === "email") baseCost = emailPrice;
+  else if (invitation.type === "sms") baseCost = smsPrice;
+  else if (invitation.type === "both") baseCost = emailPrice + smsPrice;
+
+  return baseCost * (invitation.amount || 1) * 1.03;
+};
+
+const hydrateInvitations = async (invitations, { includeOrganizer = false } = {}) => {
+  if (!Array.isArray(invitations) || invitations.length === 0) {
+    return [];
+  }
+
+  const plainInvitations = invitations.map((invitation) =>
+    typeof invitation.toJSON === "function" ? invitation.toJSON() : invitation
+  );
+
+  const eventIds = [
+    ...new Set(plainInvitations.map((invitation) => normalizeId(invitation.eventId)).filter(Boolean)),
+  ];
+  const organizerIds = includeOrganizer
+    ? [
+        ...new Set(
+          plainInvitations
+            .map((invitation) => normalizeId(invitation.organizerId))
+            .filter(Boolean)
+        ),
+      ]
+    : [];
+  const invitationIds = [
+    ...new Set(plainInvitations.map((invitation) => invitation.invitationId).filter(Boolean)),
+  ];
+  const ticketIds = [
+    ...new Set(plainInvitations.map((invitation) => invitation.ticketId).filter(Boolean)),
+  ];
+  const emails = [
+    ...new Set(
+      plainInvitations
+        .map((invitation) => normalizeEmail(invitation.guestEmail || ""))
+        .filter(Boolean)
+    ),
+  ];
+  const phones = [
+    ...new Set(
+      plainInvitations
+        .map((invitation) => normalizePhone(invitation.guestPhone || ""))
+        .filter(Boolean)
+    ),
+  ];
+
+  const ticketFilters = [];
+  if (invitationIds.length > 0) {
+    ticketFilters.push({ invitationId: { $in: invitationIds } });
+  }
+  if (ticketIds.length > 0) {
+    ticketFilters.push({ ticketId: { $in: ticketIds } });
+  }
+  if (eventIds.length > 0 && (emails.length > 0 || phones.length > 0)) {
+    const contactFilters = [];
+    if (emails.length > 0) {
+      contactFilters.push({ guestEmail: { $in: emails } });
+    }
+    if (phones.length > 0) {
+      contactFilters.push({ guestPhone: { $in: phones } });
+    }
+
+    ticketFilters.push({
+      event: { $in: eventIds },
+      isInvitation: true,
+      $or: contactFilters,
+    });
+  }
+
+  const [events, organizers, tickets] = await Promise.all([
+    Event.find({ _id: { $in: eventIds } })
+      .select("_id title startDate startTime location organizer")
+      .lean(),
+    includeOrganizer && organizerIds.length > 0
+      ? User.find({ _id: { $in: organizerIds } })
+          .select("_id firstName lastName email")
+          .lean()
+      : Promise.resolve([]),
+    ticketFilters.length > 0
+      ? Ticket.find({ $or: ticketFilters })
+          .select(
+            "_id ticketId invitationId event guestEmail guestPhone ticketType purchaseQuantity ticketCount status paymentStatus checkedIn createdAt isInvitation"
+          )
+          .lean()
+      : Promise.resolve([]),
+  ]);
+
+  const eventMap = new Map(events.map((event) => [event._id.toString(), event]));
+  const organizerMap = new Map(
+    organizers.map((organizer) => [organizer._id.toString(), organizer])
+  );
+
+  const ticketByInvitationId = new Map();
+  const ticketByTicketId = new Map();
+  const ticketByEventAndEmail = new Map();
+  const ticketByEventAndPhone = new Map();
+
+  const appendToMapArray = (map, key, value) => {
+    if (!key) return;
+    if (!map.has(key)) {
+      map.set(key, []);
+    }
+    map.get(key).push(value);
+  };
+
+  for (const ticket of tickets) {
+    if (ticket.invitationId) {
+      ticketByInvitationId.set(ticket.invitationId, ticket);
+    }
+    if (ticket.ticketId) {
+      ticketByTicketId.set(ticket.ticketId, ticket);
+    }
+
+    const ticketEventId = normalizeId(ticket.event);
+    const ticketEmail = normalizeEmail(ticket.guestEmail || "");
+    const ticketPhone = normalizePhone(ticket.guestPhone || "");
+
+    appendToMapArray(ticketByEventAndEmail, `${ticketEventId}:${ticketEmail}`, ticket);
+    appendToMapArray(ticketByEventAndPhone, `${ticketEventId}:${ticketPhone}`, ticket);
+  }
+
+  const claimedTicketKeys = new Set();
+
+  const claimTicket = (ticket) => {
+    if (!ticket) return false;
+    const key = ticket.ticketId || ticket._id?.toString();
+    if (!key || claimedTicketKeys.has(key)) {
+      return false;
+    }
+
+    claimedTicketKeys.add(key);
+    return true;
+  };
+
+  const takeFirstUnclaimed = (candidates = []) => {
+    for (const candidate of candidates) {
+      if (claimTicket(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
+  return plainInvitations.map((invitation) => {
+    const eventId = normalizeId(invitation.eventId);
+    const organizerId = normalizeId(invitation.organizerId);
+
+    let linkedTicket =
+      ticketByInvitationId.get(invitation.invitationId) ||
+      ticketByTicketId.get(invitation.ticketId) ||
+      null;
+
+    if (linkedTicket && !claimTicket(linkedTicket)) {
+      linkedTicket = null;
+    }
+
+    if (!linkedTicket) {
+      const invitationEmail = normalizeEmail(invitation.guestEmail || "");
+      const invitationPhone = normalizePhone(invitation.guestPhone || "");
+
+      linkedTicket =
+        takeFirstUnclaimed(ticketByEventAndEmail.get(`${eventId}:${invitationEmail}`)) ||
+        takeFirstUnclaimed(ticketByEventAndPhone.get(`${eventId}:${invitationPhone}`));
+    }
+
+    return {
+      ...invitation,
+      eventId: eventMap.get(eventId) || invitation.eventId,
+      organizerId: includeOrganizer
+        ? organizerMap.get(organizerId) || invitation.organizerId
+        : invitation.organizerId,
+      ticket: linkedTicket
+        ? {
+            _id: linkedTicket._id,
+            ticketId: linkedTicket.ticketId,
+            invitationId: linkedTicket.invitationId,
+            ticketType: linkedTicket.ticketType,
+            purchaseQuantity: linkedTicket.purchaseQuantity,
+            ticketCount: linkedTicket.ticketCount,
+            status: linkedTicket.status,
+            paymentStatus: linkedTicket.paymentStatus,
+            checkedIn: linkedTicket.checkedIn,
+          }
+        : null,
+      ticketId: invitation.ticketId || linkedTicket?.ticketId || null,
+    };
+  });
 };
 
 // Create bulk invitations (Pending Payment)
@@ -180,7 +393,9 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       if (invitation.status === "sent" || invitation.paymentStatus === "paid")
         continue;
 
-      const event = await Event.findById(invitation.eventId);
+      const event = await Event.findById(invitation.eventId).select(
+        "title startDate startTime location coverImages"
+      );
       if (!event) throw new Error("Event not found");
 
       let ticket = null;
@@ -190,6 +405,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       // Only create a ticket if it's a GUEST invitation (free)
       if (invitation.guestType !== "paid") {
         ticket = await Ticket.create({
+          invitationId: invitation.invitationId,
           event: invitation.eventId,
           isInvitation: true,
           guestName: invitation.guestName,
@@ -237,6 +453,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
       // Update Invitation
       if (ticket) {
         invitation.qrCodeData = ticket.qrCode; // Sync QR code
+        invitation.ticketId = ticket.ticketId;
       }
       invitation.rsvpLink = rsvpLink;
       invitation.paymentStatus = "paid";
@@ -356,7 +573,7 @@ const processPaidInvitations = async (invitationIds, paymentReference) => {
 
       results.success.push({
         invitationId: invitation.invitationId,
-        ticketId: ticket.ticketId,
+        ticketId: ticket ? ticket.ticketId : invitation.ticketId || null,
         status: "sent",
       });
     } catch (error) {
@@ -541,8 +758,12 @@ const updateInvitationStatus = async (req, res) => {
 
     // If declined, delete the associated ticket
     if (status === "declined") {
-      // Try to find ticket by paymentReference (transactionId)
-      if (invitation.paymentReference) {
+      if (invitation.ticketId) {
+        await Ticket.findOneAndDelete({ ticketId: invitation.ticketId });
+      } else if (invitation.invitationId) {
+        await Ticket.findOneAndDelete({ invitationId: invitation.invitationId });
+      } else if (invitation.paymentReference) {
+        // Fallback for legacy data
         await Ticket.findOneAndDelete({
           paymentReference: invitation.paymentReference,
         });
@@ -551,7 +772,7 @@ const updateInvitationStatus = async (req, res) => {
       else if (invitation.rsvpLink && invitation.rsvpLink.includes("inv=")) {
         const ticketId = invitation.rsvpLink.split("inv=")[1].split("&")[0];
         if (ticketId) {
-          await Ticket.findOneAndDelete({ ticketId: ticketId });
+          await Ticket.findOneAndDelete({ ticketId });
         }
       }
     }
@@ -601,6 +822,7 @@ const createAndSendProfessionalInvitation = async (data) => {
     if (guestType !== "paid") {
       // Create Ticket
       ticket = await Ticket.create({
+        invitationId,
         event: eventId,
         isInvitation: true,
         guestName,
@@ -661,6 +883,7 @@ const createAndSendProfessionalInvitation = async (data) => {
       amount: parseInt(amount) || 1,
       status: "sent",
       paymentStatus: "paid",
+      ticketId: ticket ? ticket.ticketId : undefined,
       qrCodeData: qrCodeBase64,
       rsvpLink,
     });
@@ -841,18 +1064,128 @@ const createPendingInvitation = async (req, res) => {
   }
 };
 
+const getPagination = (req) => {
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+  const skip = (page - 1) * limit;
+
+  return { page, limit, skip };
+};
+
+const buildInvitationQuery = (req, { enforceCurrentOrganizer = false } = {}) => {
+  const { search, eventId, organizerId, type, status, paymentStatus } = req.query;
+  const query = {};
+  const isPrivileged = ["admin", "partner"].includes(req.user?.role);
+
+  if (search) {
+    query.$or = [
+      { guestName: { $regex: search, $options: "i" } },
+      { guestEmail: { $regex: search, $options: "i" } },
+      { guestPhone: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  if (eventId) {
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return { invalidEventId: true, query: null };
+    }
+
+    query.eventId = new mongoose.Types.ObjectId(eventId);
+  }
+
+  if (enforceCurrentOrganizer || !isPrivileged) {
+    query.organizerId = req.user._id;
+  } else if (organizerId) {
+    query.organizerId = organizerId;
+  }
+
+  if (type) query.type = type;
+  if (status) query.status = status;
+  if (paymentStatus) query.paymentStatus = paymentStatus;
+
+  return { query, invalidEventId: false };
+};
+
+const enrichInvitationsWithCost = (invitations, emailPrice, smsPrice) =>
+  invitations.map((invitation) => ({
+    ...invitation,
+    estimatedCost: buildInvitationExpense(invitation, emailPrice, smsPrice),
+  }));
+
+const getOrganizerInvitations = async (req, res) => {
+  try {
+    const { organizerId } = req.params;
+    const requesterId = req.user?._id?.toString();
+    const isPrivileged = ["admin", "partner"].includes(req.user?.role);
+
+    if (!isPrivileged && requesterId !== organizerId) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        message: "Not authorized to view these invitations",
+      });
+    }
+
+    const invitations = await Invitation.find({ organizerId })
+      .select(
+        "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
+      )
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const pricing = await InvitationPricing.findOne({ eventType: "public" })
+      .select("emailPrice smsPrice")
+      .lean();
+    const emailPrice = pricing ? pricing.emailPrice : 2.5;
+    const smsPrice = pricing ? pricing.smsPrice : 7.5;
+
+    const hydratedInvitations = await hydrateInvitations(invitations);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: enrichInvitationsWithCost(hydratedInvitations, emailPrice, smsPrice),
+    });
+  } catch (error) {
+    console.error("Get organizer invitations error:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to fetch invitations",
+      error: error.message,
+    });
+  }
+};
+
 // Get invitations by event ID
 const getInvitationsByEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
+    const isPrivileged = ["admin", "partner"].includes(req.user?.role);
+    const query = { eventId };
 
-    const invitations = await Invitation.find({
-      eventId: eventId,
-    })
+    if (!isPrivileged) {
+      query.organizerId = req.user._id;
+    }
+
+    const invitations = await Invitation.find(query)
+      .select(
+        "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
+      )
       .sort({ createdAt: -1 })
-      .populate("eventId", "title startDate startTime location");
+      .lean();
 
-    res.status(StatusCodes.OK).json({ success: true, data: invitations });
+    const pricing = await InvitationPricing.findOne({ eventType: "public" })
+      .select("emailPrice smsPrice")
+      .lean();
+    const emailPrice = pricing ? pricing.emailPrice : 2.5;
+    const smsPrice = pricing ? pricing.smsPrice : 7.5;
+
+    const hydratedInvitations = await hydrateInvitations(invitations, {
+      includeOrganizer: isPrivileged,
+    });
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: enrichInvitationsWithCost(hydratedInvitations, emailPrice, smsPrice),
+    });
   } catch (error) {
     console.error("Get invitations by event error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -865,112 +1198,84 @@ const getInvitationsByEvent = async (req, res) => {
 // Get all invitations (Admin)
 const getAllInvitations = async (req, res) => {
   try {
-    const { search, eventId, organizerId, type } = req.query;
+    const { query, invalidEventId } = buildInvitationQuery(req);
+    const { page, limit, skip } = getPagination(req);
 
-    const query = {};
-
-    // Search logic
-    if (search) {
-      query.$or = [
-        { guestName: { $regex: search, $options: "i" } },
-        { guestEmail: { $regex: search, $options: "i" } },
-        { guestPhone: { $regex: search, $options: "i" } },
-      ];
+    if (invalidEventId) {
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        data: [],
+        totalExpense: 0,
+        pagination: { total: 0, page, pages: 1, limit },
+      });
     }
 
-    // Event ID logic
-    if (eventId) {
-      if (mongoose.Types.ObjectId.isValid(eventId)) {
-        query.eventId = new mongoose.Types.ObjectId(eventId);
-      } else {
-        // Invalid ID provided, return empty result
-        return res.status(StatusCodes.OK).json({
-          success: true,
-          data: [],
-          totalExpense: 0,
-          pagination: { total: 0, page: 1, pages: 1 },
-        });
-      }
-    }
-
-    if (organizerId) query.organizerId = organizerId;
-    if (type) query.type = type;
-
-    console.log("getAllInvitations Query:", JSON.stringify(query));
-
-    const invitations = await Invitation.find(query)
-      .populate("eventId", "title startDate startTime location")
-      .populate("organizerId", "firstName lastName email")
-      .sort({ createdAt: -1 });
-
-    const total = await Invitation.countDocuments(query);
-
-    // Calculate estimated expense
-    const pricing = await InvitationPricing.findOne({ eventType: "public" });
+    const pricing = await InvitationPricing.findOne({ eventType: "public" })
+      .select("emailPrice smsPrice")
+      .lean();
     const emailPrice = pricing ? pricing.emailPrice : 2.5;
     const smsPrice = pricing ? pricing.smsPrice : 7.5;
 
-    // Calculate total expense
-    const totalExpenseResult = await Invitation.aggregate([
-      { $match: { ...query, paymentStatus: "paid" } },
-      {
-        $project: {
-          amount: 1,
-          type: 1,
-          costPerUnit: {
-            $switch: {
-              branches: [
-                { case: { $eq: ["$type", "email"] }, then: emailPrice },
-                { case: { $eq: ["$type", "sms"] }, then: smsPrice },
-                {
-                  case: { $eq: ["$type", "both"] },
-                  then: emailPrice + smsPrice,
-                },
-              ],
-              default: 0,
+    const [total, invitations, totalExpenseResult] = await Promise.all([
+      Invitation.countDocuments(query),
+      Invitation.find(query)
+        .select(
+          "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
+        )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Invitation.aggregate([
+        { $match: { ...query, paymentStatus: "paid" } },
+        {
+          $project: {
+            amount: 1,
+            type: 1,
+            costPerUnit: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ["$type", "email"] }, then: emailPrice },
+                  { case: { $eq: ["$type", "sms"] }, then: smsPrice },
+                  {
+                    case: { $eq: ["$type", "both"] },
+                    then: emailPrice + smsPrice,
+                  },
+                ],
+                default: 0,
+              },
             },
           },
         },
-      },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: { $multiply: ["$costPerUnit", "$amount"] } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $multiply: ["$costPerUnit", "$amount"] } },
+          },
         },
-      },
-      {
-        $project: {
-          total: { $multiply: ["$total", 1.03] }, // Add 3% service fee
+        {
+          $project: {
+            total: { $multiply: ["$total", 1.03] },
+          },
         },
-      },
+      ]),
     ]);
+
     const totalExpense =
       totalExpenseResult.length > 0 ? totalExpenseResult[0].total : 0;
-
-    const invitationsWithCost = invitations.map((inv) => {
-      let cost = 0;
-      if (inv.paymentStatus === "paid") {
-        if (inv.type === "email") cost = emailPrice;
-        else if (inv.type === "sms") cost = smsPrice;
-        else if (inv.type === "both") cost = emailPrice + smsPrice;
-
-        cost = cost * inv.amount * 1.03; // Add 3% service fee
-      }
-
-      return {
-        ...inv.toJSON(),
-        estimatedCost: cost,
-      };
+    const hydratedInvitations = await hydrateInvitations(invitations, {
+      includeOrganizer: true,
     });
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: invitationsWithCost,
+      data: enrichInvitationsWithCost(hydratedInvitations, emailPrice, smsPrice),
       totalExpense,
       pagination: {
         total,
-        page: 1,
-        pages: 1,
+        page,
+        pages: Math.max(Math.ceil(total / limit), 1),
+        limit,
       },
     });
   } catch (error) {
@@ -994,8 +1299,11 @@ const deleteInvitation = async (req, res) => {
       });
     }
 
-    // If it has a QR code, try to find and delete the associated ticket
-    if (invitation.qrCodeData) {
+    if (invitation.ticketId) {
+      await Ticket.findOneAndDelete({ ticketId: invitation.ticketId });
+    } else if (invitation.invitationId) {
+      await Ticket.findOneAndDelete({ invitationId: invitation.invitationId });
+    } else if (invitation.qrCodeData) {
       await Ticket.findOneAndDelete({ qrCode: invitation.qrCodeData });
     }
 
@@ -1024,6 +1332,7 @@ module.exports = {
   updateInvitationStatus,
   createAndSendProfessionalInvitation,
   createPendingInvitation,
+  getOrganizerInvitations,
   getInvitationsByEvent,
   getAllInvitations,
   deleteInvitation,
