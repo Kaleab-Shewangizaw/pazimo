@@ -16,6 +16,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -62,6 +63,8 @@ type ValidateResult = {
     eventTitle?: string;
     checkedIn?: boolean;
     remainingUses?: number;
+    purchaseQuantity?: number;
+    ticketCount?: number;
   };
 };
 
@@ -149,6 +152,9 @@ export default function QRScanner() {
   });
   const [rsvpScan, setRsvpScan] = useState<RsvpScanData | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [ticketCheckInOpen, setTicketCheckInOpen] = useState(false);
+  const [ticketData, setTicketData] = useState<ValidateResult['data'] | null>(null);
+  const [checkInCount, setCheckInCount] = useState(1);
 
   const scope = useMemo(() => {
     const mode = searchParams.get("mode");
@@ -300,16 +306,36 @@ export default function QRScanner() {
       return;
     }
 
-    if (validateResult.alreadyCheckedIn || validateResult.data.checkedIn) {
+    const scanData = validateResult.data;
+
+    if (validateResult.alreadyCheckedIn || scanData.checkedIn) {
       const message = validateResult.message || "Ticket already checked in";
       showOverlay("error", "Already checked in", message);
       toast.error(message);
       return;
     }
 
-    const scanData = validateResult.data;
+    // Show confirmation dialog instead of auto-checking in
+    setTicketData(scanData);
+    setCheckInCount(scanData.purchaseQuantity || scanData.ticketCount || 1);
+    setTicketCheckInOpen(true);
+    busyRef.current = false;
+    setOverlay({ tone: "idle", title: "", detail: "" });
+  };
+
+  const performCheckIn = async () => {
+    if (!ticketData?.ticketId) return;
+
+    const authToken = resolveAuthToken();
+    if (!authToken) {
+      toast.error("Authentication required");
+      return;
+    }
+
+    showOverlay("processing", "Checking in...", "Processing...");
+
     const checkInResponse = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/${scanData.ticketId}/check-in`,
+      `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/${ticketData.ticketId}/check-in`,
       {
         method: "PATCH",
         headers: {
@@ -317,7 +343,7 @@ export default function QRScanner() {
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          count: 1,
+          count: checkInCount,
           ...scopedBody,
         }),
       }
@@ -326,6 +352,9 @@ export default function QRScanner() {
     const checkInResult = (await checkInResponse.json().catch(() => ({}))) as ValidateResult & {
       data?: { remainingUses?: number };
     };
+
+    setTicketCheckInOpen(false);
+    setTicketData(null);
 
     if (!checkInResponse.ok || !checkInResult.success) {
       const message = checkInResult.message || "Check-in failed";
@@ -337,9 +366,9 @@ export default function QRScanner() {
     const remainingUses =
       typeof checkInResult.data?.remainingUses === "number"
         ? `Remaining uses: ${checkInResult.data.remainingUses}`
-        : scanData.eventTitle || "";
+        : ticketData.eventTitle || "";
 
-    showOverlay("success", scanData.userName || "Guest checked in", remainingUses);
+    showOverlay("success", ticketData.userName || "Guest checked in", remainingUses);
     toast.success(checkInResult.message || "Check-in successful");
   };
 
@@ -422,6 +451,13 @@ export default function QRScanner() {
     setOverlay({ tone: "idle", title: "", detail: "" });
   };
 
+  const dismissTicketCheckIn = () => {
+    setTicketCheckInOpen(false);
+    setTicketData(null);
+    setCheckInCount(1);
+    busyRef.current = false;
+  };
+
   const overlayClasses =
     overlay.tone === "success"
       ? "border-emerald-400/60 bg-emerald-500/15 text-white"
@@ -437,7 +473,6 @@ export default function QRScanner() {
           onError={handleError}
           allowMultiple={false}
           components={{
-            audio: false,
             finder: true,
             zoom: true,
           }}
@@ -577,6 +612,62 @@ export default function QRScanner() {
           <DialogFooter>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => setDetailsOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={ticketCheckInOpen} onOpenChange={setTicketCheckInOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Check-in</DialogTitle>
+            <DialogDescription>
+              {ticketData ? `${ticketData.userName} · ${ticketData.eventTitle}` : "Ticket details"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {ticketData && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
+                <p className="font-medium text-slate-900 dark:text-white">{ticketData.eventTitle}</p>
+                
+                <p className="text-slate-600 dark:text-slate-400">
+                  Total tickets: {ticketData.purchaseQuantity || ticketData.ticketCount || 1}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="checkInCount" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Number of tickets to check in
+                </label>
+                <Input
+                  id="checkInCount"
+                  type="number"
+                  min="1"
+                  max={ticketData.purchaseQuantity || ticketData.ticketCount || 1}
+                  value={checkInCount}
+                  onChange={(e) => setCheckInCount(Math.max(1, Math.min(parseInt(e.target.value) || 1, ticketData.purchaseQuantity || ticketData.ticketCount || 1)))}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={dismissTicketCheckIn}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="rounded-full bg-[#1a2d5a] hover:bg-[#2a4d7a]"
+              onClick={performCheckIn}
+            >
+              Check in
             </Button>
           </DialogFooter>
         </DialogContent>
