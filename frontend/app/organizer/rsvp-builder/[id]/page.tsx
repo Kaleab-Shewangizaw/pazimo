@@ -5,6 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
 import { resolveRsvpImageUrl } from "@/lib/rsvp-api";
+import { useAuthStore } from "@/store/authStore";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -91,6 +94,12 @@ export default function Builder() {
   const [activeSection, setActiveSection] = useState<string>("");
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [loading, setLoading] = useState(!event);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  // Auth stores
+  const { user: authUser } = useAuthStore();
+  const { admin: adminUser } = useAdminAuthStore();
+  const { organizer: organizerUser } = useOrganizerAuthStore();
 
   useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
@@ -111,6 +120,44 @@ export default function Builder() {
         .finally(() => setLoading(false));
     }
   }, [event, id, loadEvent]);
+
+  // Check access permissions when event is loaded
+  useEffect(() => {
+    if (event) {
+      // Check each auth store separately due to different user structures
+      const isAdmin = adminUser?.role === "admin";
+      const isAuthAdmin = authUser?.role === "admin";
+      
+      // Get user ID from whichever auth store has a user
+      const userId = adminUser?.id || authUser?.id || authUser?._id || organizerUser?._id;
+      
+      // Check if user is admin or the owner of the RSVP
+      const isOwner = event.organizerId && userId === event.organizerId;
+
+      if (!isAdmin && !isAuthAdmin && !isOwner) {
+        setAccessDenied(true);
+      }
+    }
+  }, [event, adminUser, organizerUser, authUser]);
+
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+        <div className="container py-20 text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+            Access Denied
+          </h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            You don't have permission to access this RSVP form.
+          </p>
+          <Button asChild className="rounded-full">
+            <Link href="/">Back to Home</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

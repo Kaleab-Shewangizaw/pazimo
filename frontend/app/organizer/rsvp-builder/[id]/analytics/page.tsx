@@ -4,6 +4,9 @@ import { useParams, usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "@/lib/rsvp-store";
+import { useAuthStore } from "@/store/authStore";
+import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { useOrganizerAuthStore } from "@/store/organizerAuthStore";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +46,12 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedResponse, setSelectedResponse] = useState<any | null>(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+
+  // Auth stores
+  const { user: authUser } = useAuthStore();
+  const { admin: adminUser } = useAdminAuthStore();
+  const { organizer: organizerUser } = useOrganizerAuthStore();
 
   const event = useMemo(() => events.find((e) => e.id === id), [events, id]);
   const responses = useMemo(
@@ -159,6 +168,44 @@ export default function Analytics() {
       .finally(() => setLoading(false));
   }, [event, id, loadEvent, loadResponses]);
 
+  // Check access permissions when event is loaded
+  useEffect(() => {
+    if (event) {
+      // Check each auth store separately due to different user structures
+      const isAdmin = adminUser?.role === "admin";
+      const isAuthAdmin = authUser?.role === "admin";
+      
+      // Get user ID from whichever auth store has a user
+      const userId = adminUser?.id || authUser?.id || authUser?._id || organizerUser?._id;
+      
+      // Check if user is admin or the owner of the RSVP
+      const isOwner = event.organizerId && userId === event.organizerId;
+
+      if (!isAdmin && !isAuthAdmin && !isOwner) {
+        setAccessDenied(true);
+      }
+    }
+  }, [event, adminUser, organizerUser, authUser]);
+
+  if (accessDenied) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+        <div className="container py-20 text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+            Access Denied
+          </h2>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">
+            You don't have permission to access this RSVP form analytics.
+          </p>
+          <Button asChild className="rounded-full">
+            <Link href="/">Back to Home</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
@@ -214,7 +261,7 @@ export default function Analytics() {
     status: "approved" | "rejected"
   ) => {
     await updateResponseStatus(responseId, status);
-    setSelectedResponse((current) =>
+    setSelectedResponse((current: any) =>
       current && current.id === responseId ? { ...current, status } : current
     );
     toast.success(status === "approved" ? "Response approved" : "Response declined");
@@ -365,7 +412,7 @@ export default function Analytics() {
                       {event.questions.slice(0, 3).map((q) => (
                         <td key={q.id} className="py-3 pr-4 max-w-[200px] truncate text-slate-900 dark:text-white hidden md:table-cell">
                           {Array.isArray(r.answers[q.id])
-                            ? r.answers[q.id].join(", ")
+                            ? (r.answers[q.id] as string[]).join(", ")
                             : String(r.answers[q.id] ?? "—")}
                         </td>
                       ))}
@@ -399,7 +446,11 @@ export default function Analytics() {
               {selectedResponse && event.questions.slice(0, 10).map((q) => (
                 <div key={q.id} className="rounded-md bg-slate-50 dark:bg-slate-900 p-3">
                   <div className="text-sm text-slate-600 dark:text-slate-400">{q.label}</div>
-                  <div className="mt-1 text-slate-900 dark:text-white">{Array.isArray(selectedResponse.answers[q.id]) ? selectedResponse.answers[q.id].join(", ") : String(selectedResponse.answers[q.id] ?? "—")}</div>
+                  <div className="mt-1 text-slate-900 dark:text-white">
+                    {Array.isArray(selectedResponse.answers[q.id]) 
+                      ? (selectedResponse.answers[q.id] as string[]).join(", ") 
+                      : String(selectedResponse.answers[q.id] ?? "—")}
+                  </div>
                 </div>
               ))}
             </div>

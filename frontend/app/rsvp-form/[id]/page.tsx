@@ -165,11 +165,39 @@ function RsvpContent() {
   if (!event)
     return (
       <div className="min-h-screen bg-white dark:bg-[#0A0A0A] flex items-center justify-center transition-colors">
-        <Button asChild className="rounded-full">
-          <Link href="/organizer/rsvp-builder">Back</Link>
-        </Button>
+        <div className="text-center space-y-4">
+          <div className="text-6xl mb-4">📋</div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            RSVP Not Found
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            This RSVP form may not exist, has been deleted, or is not yet published.
+          </p>
+          <Button asChild className="rounded-full">
+            <Link href="/">Back to Home</Link>
+          </Button>
+        </div>
       </div>
     );
+
+  if (event.status === "draft" || event.status === "hidden" || !event.isPublic) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-[#0A0A0A] flex items-center justify-center transition-colors">
+        <div className="text-center space-y-4">
+          <div className="text-6xl mb-4">🔒</div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            RSVP Not Published
+          </h2>
+          <p className="text-gray-600 dark:text-gray-400 max-w-md">
+            This RSVP form has not been published yet. Please check back later or contact the organizer.
+          </p>
+          <Button asChild className="rounded-full">
+            <Link href="/">Back to Home</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (event.type !== "rsvp") {
     return (
