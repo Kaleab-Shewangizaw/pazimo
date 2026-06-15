@@ -92,7 +92,7 @@ export default function WithdrawalsPage() {
 
       const data = await response.json()
       setWithdrawals(data.data || [])
-      setTotalPages(data.pagination.totalPages)
+      setTotalPages(data.pagination.pages)
     } catch (error) {
       console.error("Error fetching withdrawals:", error)
       toast.error("Failed to fetch withdrawals")
