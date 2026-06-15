@@ -143,7 +143,7 @@ export function TicketTypesSection({
 
             return (
               <div
-                key={`${index}-${ticket.waveGroup || ticket.name}`}
+                key={`ticket-${index}`}
                 className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5"
               >
                 <div className="flex flex-col gap-4 border-b border-slate-200/80 pb-4 sm:flex-row sm:items-start sm:justify-between">
@@ -211,22 +211,7 @@ export function TicketTypesSection({
                         }
                         placeholder={isWaveParent ? "Wave name" : "e.g. Regular, VIP, VVIP, Gold…"}
                         className="h-11 rounded-xl border-slate-200 bg-white"
-                        list={!isWaveParent ? `ticket-name-suggestions-${index}` : undefined}
                       />
-                      {!isWaveParent && (
-                        <datalist id={`ticket-name-suggestions-${index}`}>
-                          <option value="Regular" />
-                          <option value="VIP" />
-                          <option value="VVIP" />
-                          <option value="Group" />
-                          <option value="Early Bird" />
-                          <option value="Student" />
-                          <option value="Gold" />
-                          <option value="Platinum" />
-                          <option value="Table" />
-                          <option value="Backstage" />
-                        </datalist>
-                      )}
                     </FieldGroup>
 
                     <FieldGroup>
