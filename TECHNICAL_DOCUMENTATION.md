@@ -1020,7 +1020,7 @@ npm install --production
 ### Technical Support
 - For technical issues: support@pazimo.com
 - Documentation: https://docs.pazimo.com
-- Status page: https://status.pazimo.com
+- Status page: https://pazimo.com
 
 ### Development Team
 - Backend Development: Express.js, MongoDB, Socket.IO
