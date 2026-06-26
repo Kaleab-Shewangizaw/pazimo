@@ -103,6 +103,7 @@ import { useState, useEffect } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import ThemeToggle from "@/components/theme-toggle";
 
 export default function AdminHeader({
   onMenuClick,
@@ -179,7 +180,7 @@ export default function AdminHeader({
   return (
     <>
       {/* Fixed header for mobile, normal for desktop */}
-      <header className="md:relative fixed top-0 left-0 right-0 z-50 bg-white/95 md:bg-white backdrop-blur-sm border-b border-gray-200 px-4 sm:px-6 py-4 transition-all duration-300 ease-out">
+      <header className="md:relative dark:bg-black dark:text-white fixed top-0 left-0 right-0 z-50 bg-white/95 md:bg-white backdrop-blur-sm border-b border-gray-200 dark:border-gray-600 px-4 sm:px-6 py-4 transition-all duration-300 ease-out">
         <div className="flex items-center justify-between">
           {/* Desktop Search Bar */}
           <div className="hidden md:flex items-center gap-3">
@@ -188,7 +189,7 @@ export default function AdminHeader({
               <form onSubmit={handleSearch}>
                 <Input
                   placeholder="Search..."
-                  className="pl-10 h-10 border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-lg transition-all duration-200"
+                  className="pl-10 h-10 border-gray-300 dark:border-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-lg transition-all duration-200"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -197,15 +198,15 @@ export default function AdminHeader({
           </div>
 
           {/* Mobile: Logo/Title */}
-          <div className="flex md:hidden items-center">
-            <h1 className="text-lg font-semibold text-gray-900">Admin Panel</h1>
+          <div className="flex md:hidden dark:text-white items-center">
+            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Admin Panel</h1>
           </div>
 
           {/* Mobile Hamburger Menu */}
           <div className="flex md:hidden items-center gap-2">
             {/* Mobile Payment Switch */}
             <div className="flex items-center gap-1 mr-1">
-              <span className="text-xs font-medium text-gray-700">
+              <span className="text-xs font-medium text-gray-700 dark:text-white">
                 {activeProvider === "CHAPA" ? "Chapa" : "Santim"}
               </span>
               <Switch
@@ -215,9 +216,10 @@ export default function AdminHeader({
                 className="data-[state=checked]:bg-green-600 scale-75 origin-right"
               />
             </div>
+            <ThemeToggle />
 
             <button
-              className="p-2 rounded-md text-gray-700 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              className="p-2 rounded-md text-gray-700 dark:text-white hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
               aria-label="Open menu"
               onClick={onMenuClick} // This will now trigger the parent's toggle function
             >
@@ -228,11 +230,12 @@ export default function AdminHeader({
           {/* Desktop: Admin Info */}
           <div className="hidden md:flex items-center gap-4">
             {/* Payment Provider Switch */}
-            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+            
+            <div className="flex items-center gap-2 bg-gray-50 px-3 dark:bg-black py-2 rounded-lg /">
               <CreditCard className="h-4 w-4 text-gray-500" />
               <Label
                 htmlFor="provider-switch"
-                className="text-sm font-medium text-gray-700"
+                className="text-sm font-medium text-gray-700 dark:text-white"
               >
                 {activeProvider === "CHAPA" ? "Chapa" : "SantimPay"}
               </Label>
@@ -245,17 +248,21 @@ export default function AdminHeader({
               />
             </div>
 
-            <div className="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-2 hover:bg-gray-100 transition-colors">
+            <div>
+              <ThemeToggle />
+            </div>
+
+            <div className="flex items-center dark:text-white dark:bg-black gap-3 bg-gray-50 rounded-lg px-4 py-2 hover:bg-gray-100 transition-colors">
               <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                 <Shield className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
                   {admin
                     ? `${admin.firstName} ${admin.lastName}`
                     : "Admin User"}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   {admin?.email || "admin@example.com"}
                 </p>
               </div>

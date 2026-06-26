@@ -80,7 +80,7 @@ export default function CampaignPricingPage() {
       ) : (
         <>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Campaign Pricing</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Campaign Pricing</h1>
             {/* <p className="text-gray-600 mt-1">
               Manage one SMS campaign price for all event types
             </p> */}
@@ -105,14 +105,14 @@ export default function CampaignPricingPage() {
                 placeholder="0.00"
                
               />
-              <p className="text-sm text-gray-600 mt-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-3">
                 SMS: {smsPrice || "0"} birr per recipient
               </p>
             </CardContent>
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={isSubmitting} className="flex items-center gap-2">
+            <Button onClick={handleSave} disabled={isSubmitting} className="flex items-center gap-2 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700">
               <Save className="h-4 w-4" />
               {isSubmitting ? "Saving..." : "Save Changes"}
             </Button>

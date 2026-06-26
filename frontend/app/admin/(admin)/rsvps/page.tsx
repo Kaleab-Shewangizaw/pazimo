@@ -226,7 +226,7 @@ export default function AdminRsvpPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(14,116,144,0.10),_transparent_35%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] dark:bg-[radial-gradient(circle_at_top,_rgba(14,116,144,0.16),_transparent_35%),linear-gradient(180deg,_#020617_0%,_#0f172a_100%)]">
+    <div className="min-h-screen bg-white dark:bg-black">
       <main className="container mx-auto max-w-[1600px] px-4 py-8 md:px-6 md:py-10">
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }}>
           <div className="flex flex-col gap-5 border-b border-slate-200/70 pb-6 dark:border-slate-800 md:flex-row md:items-end md:justify-between">
@@ -238,7 +238,7 @@ export default function AdminRsvpPage() {
               <Button variant="outline" className="rounded-full" onClick={() => void loadEvents()}>
                 Refresh
               </Button>
-              <Button onClick={openCreateDialog} className="rounded-full shadow-lg shadow-sky-500/15">
+              <Button onClick={openCreateDialog} className="rounded-full dark:hover:shadow-sky-400/30 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-900 border dark:border-gray-800">
                 <Plus className="mr-2 h-4 w-4" /> New form
               </Button>
             </div>

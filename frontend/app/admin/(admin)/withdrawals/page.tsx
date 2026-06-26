@@ -157,7 +157,7 @@ export default function WithdrawalsPage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-black flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-200 border-t-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 font-medium">Loading withdrawals...</p>
@@ -167,13 +167,13 @@ export default function WithdrawalsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-black p-6">
       <div className="container mx-auto py-10 p-10 max-w-7xl">
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Withdrawal Requests</h1>
-            <p className="text-gray-600 mt-1">Manage organizer withdrawal requests and payments</p>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Withdrawal Requests</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Manage organizer withdrawal requests and payments</p>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
             <div className="relative">

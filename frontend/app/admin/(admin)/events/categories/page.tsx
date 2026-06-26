@@ -140,8 +140,8 @@ export default function CategoriesPage() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Event Categories</h1>
-        <p className="text-gray-600 mt-1">Manage event categories and their details</p>
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Event Categories</h1>
+        <p className="text-gray-600 mt-1 dark:text-gray-400">Manage event categories and their details</p>
       </div>
 
       <div className="mb-6 flex flex-col sm:flex-row gap-4">

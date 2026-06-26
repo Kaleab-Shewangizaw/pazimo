@@ -477,23 +477,23 @@ export default function TicketsPage() {
       <div className="p-6 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
               Tickets Management
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-gray-600 dark:text-gray-400 mt-1">
               Select an event to manage tickets
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-5 dark:bg-gray-800 dark:border-gray-600 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">Total Tickets Sold</p>
-              <h3 className="text-2xl font-bold text-gray-900">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Tickets Sold</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {totalTicketsSoldAcrossEvents.toLocaleString()}
               </h3>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Based on currently listed events
               </p>
             </div>
@@ -502,13 +502,13 @@ export default function TicketsPage() {
             </div>
           </div>
 
-          <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-5 dark:bg-gray-800 dark:border-gray-600 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">Events Listed</p>
-              <h3 className="text-2xl font-bold text-gray-900">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Events Listed</p>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
                 {filteredEvents.length.toLocaleString()}
               </h3>
-              <p className="text-xs text-gray-500 mt-1">Filtered by search</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Filtered by search</p>
             </div>
             <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
               <Calendar className="h-6 w-6 text-blue-600" />
@@ -523,7 +523,7 @@ export default function TicketsPage() {
           <CardContent>
             <div className="flex items-center mb-6">
               <div className="relative flex-1 md:max-w-sm">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
                 <Input
                   placeholder="Search events..."
                   value={searchQuery}
@@ -658,10 +658,10 @@ export default function TicketsPage() {
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               {selectedEvent?.title}
             </h1>
-            <p className="text-gray-500">Manage tickets for this event</p>
+            <p className="text-gray-500 dark:text-gray-400">Manage tickets for this event</p>
           </div>
           <Select
             value={currencyFilter}
@@ -681,16 +681,16 @@ export default function TicketsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-6 rounded-xl border dark:bg-gray-800 dark:border-gray-600 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">Total Tickets Sold</p>
-            <h3 className="text-2xl font-bold text-gray-900">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Tickets Sold</p>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
               {(
                 summaryTotalsByCurrency.totalTickets.ETB +
                 summaryTotalsByCurrency.totalTickets.USD
               ).toLocaleString()}
             </h3>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               ETB: {summaryTotalsByCurrency.totalTickets.ETB} • USD: {summaryTotalsByCurrency.totalTickets.USD}
             </p>
           </div>
@@ -699,16 +699,16 @@ export default function TicketsPage() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-6 rounded-xl border dark:bg-gray-800 dark:border-gray-600 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-            <h3 className="text-lg font-bold text-gray-900">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Revenue</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               {formatCompactMoney(summaryTotalsByCurrency.totalRevenue.ETB, "ETB")}
             </h3>
-            <h3 className="text-lg font-bold text-gray-900">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               {formatCompactMoney(summaryTotalsByCurrency.totalRevenue.USD, "USD")}
             </h3>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               ETB tickets: {summaryTotalsByCurrency.totalTickets.ETB} • USD tickets: {summaryTotalsByCurrency.totalTickets.USD}
             </p>
           </div>
@@ -717,16 +717,16 @@ export default function TicketsPage() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white p-6 rounded-xl border dark:bg-gray-800 dark:border-gray-600 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
-            <h3 className="text-lg font-bold text-gray-900">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">On-Door Sales</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               {formatCompactMoney(summaryTotalsByCurrency.onDoorRevenue.ETB, "ETB")}
             </h3>
-            <h3 className="text-lg font-bold text-gray-900">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               {formatCompactMoney(summaryTotalsByCurrency.onDoorRevenue.USD, "USD")}
             </h3>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               ETB tickets: {summaryTotalsByCurrency.onDoorTickets.ETB} • USD tickets: {summaryTotalsByCurrency.onDoorTickets.USD}
             </p>
           </div>
@@ -753,7 +753,7 @@ export default function TicketsPage() {
             </div>
           </div>
 
-          <div className="rounded-md border">
+          <div className="rounded-md border dark:border-gray-600">
             <Table>
               <TableHeader>
                 <TableRow>

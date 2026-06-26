@@ -220,7 +220,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               {/* Header */}
               <AdminHeader onMenuClick={toggleSidebar} />
               {/* Main Content Area */}
-              <main className="flex-1 overflow-y-auto">{children}</main>
+              <main className="flex-1 dark:bg-black dark:text-white overflow-y-auto">{children}</main>
             </div>
           </div>
         </div>

@@ -494,48 +494,48 @@ export default function EventsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading events...</p>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">Loading events...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6">
+    <div className="p-6 bg-white dark:bg-black min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">All Events</h1>
-        <p className="text-gray-600 mt-1">
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">All Events</h1>
+        <p className="text-gray-600 dark:text-gray-400 mt-1">
           Manage and view all events in the system
         </p>
       </div>
 
       {/* Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 mb-6">
-        <Card>
+        <Card className="dark:bg-black dark:border-gray-800">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-green-100 p-3 rounded-full">
-              <Signal className="h-6 w-6 text-green-600" />
+            <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-full">
+              <Signal className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Live Events</p>
-              <p className="text-2xl font-bold text-gray-800">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Live Events</p>
+              <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                 {overviewStats.liveEvents}
               </p>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="dark:bg-black dark:border-gray-800">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="bg-yellow-100 p-3 rounded-full">
-              <Star className="h-6 w-6 text-yellow-600" />
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-full">
+              <Star className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Banner Events</p>
-              <p className="text-2xl font-bold text-gray-800">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Banner Events</p>
+              <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                 {overviewStats.bannerEvents}
               </p>
             </div>
@@ -544,70 +544,70 @@ export default function EventsPage() {
       </div>
 
       {/* Filters and Search */}
-      <Card className="border-none shadow-sm mb-6">
+      <Card className="border-none shadow-sm dark:bg-black dark:border dark:border-gray-800 mb-6">
         <div className="p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1 md:flex-none">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
             <Input
               placeholder="Search events..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 w-full md:w-[300px] border-gray-200"
+              className="pl-9 w-full md:w-[300px] border-gray-200 dark:border-gray-700 dark:bg-black dark:text-gray-200 dark:placeholder-gray-500"
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px] border-gray-200">
+            <SelectTrigger className="w-[180px] border-gray-200 dark:border-gray-700 dark:bg-black dark:text-gray-200">
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Status</SelectItem>
-              <SelectItem value="draft">Draft</SelectItem>
-              <SelectItem value="published">Published</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
+            <SelectContent className="dark:bg-black dark:border-gray-700">
+              <SelectItem value="All" className="dark:text-gray-200">All Status</SelectItem>
+              <SelectItem value="draft" className="dark:text-gray-200">Draft</SelectItem>
+              <SelectItem value="published" className="dark:text-gray-200">Published</SelectItem>
+              <SelectItem value="cancelled" className="dark:text-gray-200">Cancelled</SelectItem>
+              <SelectItem value="completed" className="dark:text-gray-200">Completed</SelectItem>
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[180px] border-gray-200">
+            <SelectTrigger className="w-[180px] border-gray-200 dark:border-gray-700 dark:bg-black dark:text-gray-200">
               <SelectValue placeholder="Filter by category" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Categories</SelectItem>
-              <SelectItem value="conference">Conference</SelectItem>
-              <SelectItem value="seminar">Seminar</SelectItem>
-              <SelectItem value="workshop">Workshop</SelectItem>
-              <SelectItem value="concert">Concert</SelectItem>
-              <SelectItem value="exhibition">Exhibition</SelectItem>
-              <SelectItem value="sports">Sports</SelectItem>
-              <SelectItem value="other">Other</SelectItem>
+            <SelectContent className="dark:bg-black dark:border-gray-700">
+              <SelectItem value="All" className="dark:text-gray-200">All Categories</SelectItem>
+              <SelectItem value="conference" className="dark:text-gray-200">Conference</SelectItem>
+              <SelectItem value="seminar" className="dark:text-gray-200">Seminar</SelectItem>
+              <SelectItem value="workshop" className="dark:text-gray-200">Workshop</SelectItem>
+              <SelectItem value="concert" className="dark:text-gray-200">Concert</SelectItem>
+              <SelectItem value="exhibition" className="dark:text-gray-200">Exhibition</SelectItem>
+              <SelectItem value="sports" className="dark:text-gray-200">Sports</SelectItem>
+              <SelectItem value="other" className="dark:text-gray-200">Other</SelectItem>
             </SelectContent>
           </Select>
           <Select value={publishFilter} onValueChange={setPublishFilter}>
-            <SelectTrigger className="w-[180px] border-gray-200">
+            <SelectTrigger className="w-[180px] border-gray-200 dark:border-gray-700 dark:bg-black dark:text-gray-200">
               <SelectValue placeholder="Filter by visibility" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All Visibility</SelectItem>
-              <SelectItem value="Published">Published</SelectItem>
-              <SelectItem value="Unpublished">Unpublished</SelectItem>
+            <SelectContent className="dark:bg-black dark:border-gray-700">
+              <SelectItem value="All" className="dark:text-gray-200">All Visibility</SelectItem>
+              <SelectItem value="Published" className="dark:text-gray-200">Published</SelectItem>
+              <SelectItem value="Unpublished" className="dark:text-gray-200">Unpublished</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </Card>
 
       {/* Events Table */}
-      <Card className="border-none shadow-sm">
+      <Card className="border-none shadow-sm dark:bg-black dark:border dark:border-gray-800">
         <CardContent className="p-4">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50/80">
-                <TableHead className="font-semibold">Event Title</TableHead>
-                <TableHead className="font-semibold">Date</TableHead>
-                <TableHead className="font-semibold">Location</TableHead>
-                <TableHead className="font-semibold">Category</TableHead>
-                <TableHead className="font-semibold">Capacity</TableHead>
-                <TableHead className="font-semibold">Status</TableHead>
-                <TableHead className="font-semibold text-right">
+              <TableRow className="bg-gray-50/80 dark:bg-gray-900/50">
+                <TableHead className="font-semibold dark:text-gray-300">Event Title</TableHead>
+                <TableHead className="font-semibold dark:text-gray-300">Date</TableHead>
+                <TableHead className="font-semibold dark:text-gray-300">Location</TableHead>
+                <TableHead className="font-semibold dark:text-gray-300">Category</TableHead>
+                <TableHead className="font-semibold dark:text-gray-300">Capacity</TableHead>
+                <TableHead className="font-semibold dark:text-gray-300">Status</TableHead>
+                <TableHead className="font-semibold dark:text-gray-300 text-right">
                   Actions
                 </TableHead>
               </TableRow>
@@ -616,15 +616,15 @@ export default function EventsPage() {
               {paginatedEvents.map((event) => (
                 <TableRow
                   key={event._id}
-                  className="hover:bg-gray-50/50 transition-colors"
+                  className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors border-gray-100 dark:border-gray-800"
                 >
                   <TableCell>
-                    <span className="font-medium text-gray-900">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
                       {event.title}
                     </span>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 text-gray-600">
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <Calendar className="h-4 w-4" />
                       <span>
                         {new Date(event.startDate).toLocaleDateString()}
@@ -632,7 +632,7 @@ export default function EventsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 text-gray-600">
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <MapPin className="h-4 w-4" />
                       {event.location.address}, {event.location.city}
                     </div>
@@ -640,13 +640,13 @@ export default function EventsPage() {
                   <TableCell>
                     <Badge
                       variant="outline"
-                      className="bg-gray-50 text-gray-700 border-gray-200"
+                      className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
                     >
                       {event.category?.name}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 text-gray-600">
+                    <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                       <Users className="h-4 w-4" />
                       {event.capacity}
                     </div>
@@ -656,12 +656,12 @@ export default function EventsPage() {
                       variant="outline"
                       className={`${
                         event.status === "published"
-                          ? "bg-green-50 text-green-700 border-green-200"
+                          ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
                           : event.status === "draft"
-                          ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                          ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
                           : event.status === "cancelled"
-                          ? "bg-red-50 text-red-700 border-red-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
+                          ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                          : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
                       }`}
                     >
                       {event.status}
@@ -672,7 +672,7 @@ export default function EventsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-blue-600 hover:text-blue-700"
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                         onClick={() => handleViewEvent(event)}
                       >
                         <Info className="h-4 w-4" />
@@ -680,7 +680,7 @@ export default function EventsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-purple-600 hover:text-purple-700"
+                        className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
                         onClick={() => handleOpenGenerateTicket(event)}
                         title="Generate On-Door Ticket"
                       >
@@ -691,7 +691,7 @@ export default function EventsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-green-600 hover:text-green-700"
+                            className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300"
                             onClick={() =>
                               router.push(`/admin/events/edit/${event._id}`)
                             }
@@ -701,7 +701,7 @@ export default function EventsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-yellow-500 hover:text-yellow-600"
+                            className="text-yellow-500 dark:text-yellow-400 hover:text-yellow-600 dark:hover:text-yellow-300"
                             onClick={() =>
                               handleToggleBanner(event._id, event.bannerStatus)
                             }
@@ -715,7 +715,7 @@ export default function EventsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-purple-600 hover:text-purple-700"
+                            className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300"
                             onClick={() =>
                               handleToggleFeatured(event._id, event.isFeatured)
                             }
@@ -729,7 +729,7 @@ export default function EventsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-orange-600 hover:text-orange-700"
+                            className="text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300"
                             onClick={() =>
                               handleToggleTrending(event._id, event.isTrending)
                             }
@@ -745,8 +745,8 @@ export default function EventsPage() {
                             size="sm"
                             className={
                               event.status === "published"
-                                ? "text-gray-600 hover:text-gray-700"
-                                : "text-blue-600 hover:text-blue-700"
+                                ? "text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300"
+                                : "text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                             }
                             onClick={() =>
                               handleTogglePublish(
@@ -764,7 +764,7 @@ export default function EventsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-red-600 hover:text-red-700"
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                             onClick={() => handleCancelEvent(event._id, event.status)}
                           >
                             {event.status !== "cancelled" ? (
@@ -776,7 +776,7 @@ export default function EventsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="text-red-600 hover:text-red-700"
+                            className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                             onClick={() => handleDelete(event._id)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -796,7 +796,7 @@ export default function EventsPage() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-6">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-600 dark:text-gray-400">
               Showing {startIndex + 1} to {Math.min(endIndex, totalEvents)} of{" "}
               {totalEvents} events
             </span>
@@ -807,17 +807,17 @@ export default function EventsPage() {
                 setCurrentPage(1);
               }}
             >
-              <SelectTrigger className="w-[100px] border-gray-200">
+              <SelectTrigger className="w-[100px] border-gray-200 dark:border-gray-700 dark:bg-black dark:text-gray-200">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="5">5</SelectItem>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="20">20</SelectItem>
-                <SelectItem value="50">50</SelectItem>
+              <SelectContent className="dark:bg-black dark:border-gray-700">
+                <SelectItem value="5" className="dark:text-gray-200">5</SelectItem>
+                <SelectItem value="10" className="dark:text-gray-200">10</SelectItem>
+                <SelectItem value="20" className="dark:text-gray-200">20</SelectItem>
+                <SelectItem value="50" className="dark:text-gray-200">50</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-sm text-gray-600">per page</span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">per page</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -826,7 +826,7 @@ export default function EventsPage() {
               size="sm"
               onClick={() => setCurrentPage(1)}
               disabled={currentPage === 1}
-              className="border-gray-200"
+              className="border-gray-200 dark:border-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               First
             </Button>
@@ -835,7 +835,7 @@ export default function EventsPage() {
               size="sm"
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
-              className="border-gray-200"
+              className="border-gray-200 dark:border-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Previous
             </Button>
@@ -860,7 +860,9 @@ export default function EventsPage() {
                     size="sm"
                     onClick={() => setCurrentPage(pageNumber)}
                     className={
-                      currentPage === pageNumber ? "" : "border-gray-200"
+                      currentPage === pageNumber 
+                        ? "" 
+                        : "border-gray-200 dark:border-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
                     }
                   >
                     {pageNumber}
@@ -874,7 +876,7 @@ export default function EventsPage() {
               size="sm"
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
-              className="border-gray-200"
+              className="border-gray-200 dark:border-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Next
             </Button>
@@ -883,7 +885,7 @@ export default function EventsPage() {
               size="sm"
               onClick={() => setCurrentPage(totalPages)}
               disabled={currentPage === totalPages}
-              className="border-gray-200"
+              className="border-gray-200 dark:border-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Last
             </Button>
@@ -893,9 +895,9 @@ export default function EventsPage() {
 
       {/* Event Details Dialog */}
       <Dialog open={isEventDialogOpen} onOpenChange={setIsEventDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto dark:bg-black dark:border-gray-800">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-900">
+            <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               Event Details
             </DialogTitle>
           </DialogHeader>
@@ -904,13 +906,13 @@ export default function EventsPage() {
               <div className="space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-bold text-gray-900">
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                       {selectedEvent.title}
                     </h3>
                     <div className="flex items-center gap-2">
                       <Badge
                         variant="outline"
-                        className="bg-gray-50 text-gray-700 border-gray-200"
+                        className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
                       >
                         {selectedEvent.category?.name}
                       </Badge>
@@ -918,12 +920,12 @@ export default function EventsPage() {
                         variant="outline"
                         className={`${
                           selectedEvent.status === "published"
-                            ? "bg-green-50 text-green-700 border-green-200"
+                            ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
                             : selectedEvent.status === "draft"
-                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                            ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
                             : selectedEvent.status === "cancelled"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-blue-50 text-blue-700 border-blue-200"
+                            ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                            : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
                         }`}
                       >
                         {selectedEvent.status}
@@ -932,26 +934,26 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-gray-900 mb-2">
+                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg">
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
                     Description
                   </h4>
-                  <p className="text-gray-600">{selectedEvent.description}</p>
+                  <p className="text-gray-600 dark:text-gray-400">{selectedEvent.description}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
-                <div className="bg-white p-4 rounded-lg border border-gray-200">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="bg-blue-50 p-2 rounded-lg">
-                        <Calendar className="h-5 w-5 text-blue-600" />
+                      <div className="bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg">
+                        <Calendar className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                           Date
                         </p>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-gray-900 dark:text-gray-100">
                           {new Date(
                             selectedEvent.startDate
                           ).toLocaleDateString()}
@@ -959,14 +961,14 @@ export default function EventsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      <div className="bg-blue-50 p-2 rounded-lg">
-                        <Clock className="h-5 w-5 text-blue-600" />
+                      <div className="bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg">
+                        <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                           Time
                         </p>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-gray-900 dark:text-gray-100">
                           {new Date(
                             selectedEvent.startDate
                           ).toLocaleTimeString()}
@@ -976,19 +978,19 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-lg border border-gray-200">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="flex items-start gap-3">
-                    <div className="bg-blue-50 p-2 rounded-lg">
-                      <MapPin className="h-5 w-5 text-blue-600" />
+                    <div className="bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg">
+                      <MapPin className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-600">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                         Location
                       </p>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
                         {selectedEvent.location.address}
                       </p>
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 dark:text-gray-400">
                         {selectedEvent.location.city},{" "}
                         {selectedEvent.location.country}
                       </p>
@@ -996,33 +998,33 @@ export default function EventsPage() {
                   </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-lg border border-gray-200">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="flex items-center gap-3">
-                    <div className="bg-blue-50 p-2 rounded-lg">
-                      <Users className="h-5 w-5 text-blue-600" />
+                    <div className="bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg">
+                      <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-600">
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                         Capacity
                       </p>
-                      <p className="font-medium text-gray-900">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
                         {selectedEvent.capacity} attendees
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-white p-4 rounded-lg border border-gray-200">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800">
                   <div className="space-y-3">
                     <div className="flex items-center gap-3">
-                      <div className="bg-blue-50 p-2 rounded-lg">
-                        <Users className="h-5 w-5 text-blue-600" />
+                      <div className="bg-blue-50 dark:bg-blue-900/30 p-2 rounded-lg">
+                        <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
                           Organizer
                         </p>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-gray-900 dark:text-gray-100">
                           {selectedEvent.organizer?.firstName &&
                           selectedEvent.organizer?.lastName
                             ? `${selectedEvent.organizer.firstName} ${selectedEvent.organizer.lastName}`
@@ -1032,14 +1034,14 @@ export default function EventsPage() {
                     </div>
                     {selectedEvent.organizer?.email && (
                       <div className="ml-10">
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
                           {selectedEvent.organizer.email}
                         </p>
                       </div>
                     )}
                     {selectedEvent.organizer?.phone && (
                       <div className="ml-10">
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
                           {selectedEvent.organizer.phone}
                         </p>
                       </div>
@@ -1050,7 +1052,7 @@ export default function EventsPage() {
 
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h4 className="font-medium text-gray-900">
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100">
                     Available Ticket Types
                   </h4>
                 </div>
@@ -1058,22 +1060,22 @@ export default function EventsPage() {
                   {selectedEvent.ticketTypes.map((type, index) => (
                     <div
                       key={index}
-                      className="bg-white p-4 rounded-lg border border-gray-200"
+                      className="bg-white dark:bg-gray-900 p-4 rounded-lg border border-gray-200 dark:border-gray-800"
                     >
                       <div className="flex justify-between items-center">
                         <div>
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
                             {type.name}
                           </p>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-gray-600 dark:text-gray-400">
                             Available: {type.quantity} tickets
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium text-gray-900">
+                          <p className="font-medium text-gray-900 dark:text-gray-100">
                             {type.price.toFixed(2)} birr
                           </p>
-                          <p className="text-sm text-gray-600">per ticket</p>
+                          <p className="text-sm text-gray-600 dark:text-gray-400">per ticket</p>
                         </div>
                       </div>
                     </div>
@@ -1090,15 +1092,15 @@ export default function EventsPage() {
         open={isGenerateTicketDialogOpen}
         onOpenChange={setIsGenerateTicketDialogOpen}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md dark:bg-black dark:border-gray-800">
           <DialogHeader>
-            <DialogTitle>Generate On-Door Ticket</DialogTitle>
+            <DialogTitle className="dark:text-gray-100">Generate On-Door Ticket</DialogTitle>
           </DialogHeader>
 
           {!generatedTicket ? (
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Ticket Type</label>
+                <label className="text-sm font-medium dark:text-gray-200">Ticket Type</label>
                 <Select
                   value={ticketFormData.ticketTypeId}
                   onValueChange={(value) =>
@@ -1108,12 +1110,12 @@ export default function EventsPage() {
                     })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="dark:bg-black dark:border-gray-700 dark:text-gray-200">
                     <SelectValue placeholder="Select ticket type" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="dark:bg-black dark:border-gray-700">
                     {selectedEventForTicket?.ticketTypes.map((type) => (
-                      <SelectItem key={type.name} value={type.name}>
+                      <SelectItem key={type.name} value={type.name} className="dark:text-gray-200">
                         {type.name} ({type.quantity} available) - {type.price}{" "}
                         ETB
                       </SelectItem>
@@ -1123,7 +1125,7 @@ export default function EventsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Quantity</label>
+                <label className="text-sm font-medium dark:text-gray-200">Quantity</label>
                 <Input
                   type="number"
                   min={1}
@@ -1139,8 +1141,9 @@ export default function EventsPage() {
                       quantity: parseInt(e.target.value) || 1,
                     })
                   }
+                  className="dark:bg-black dark:border-gray-700 dark:text-gray-200"
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   Max available:{" "}
                   {selectedEventForTicket?.ticketTypes.find(
                     (t) => t.name === ticketFormData.ticketTypeId
@@ -1165,19 +1168,19 @@ export default function EventsPage() {
             </div>
           ) : (
             <div className="space-y-6 py-4 flex flex-col items-center text-center">
-              <div className="bg-green-50 p-3 rounded-full">
-                <Check className="h-8 w-8 text-green-600" />
+              <div className="bg-green-50 dark:bg-green-900/30 p-3 rounded-full">
+                <Check className="h-8 w-8 text-green-600 dark:text-green-400" />
               </div>
 
               <div className="space-y-2">
-                <h3 className="font-semibold text-lg">Ticket Generated!</h3>
-                <p className="text-sm text-muted-foreground">
+                <h3 className="font-semibold text-lg dark:text-gray-100">Ticket Generated!</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Share this QR code with the customer
                 </p>
               </div>
 
               {generatedTicket.qrCode && (
-                <div className="border p-4 rounded-lg bg-white">
+                <div className="border p-4 rounded-lg bg-white dark:bg-gray-900 dark:border-gray-700">
                   <img
                     src={generatedTicket.qrCode}
                     alt="Ticket QR Code"
@@ -1189,7 +1192,7 @@ export default function EventsPage() {
               <div className="w-full space-y-2">
                 <Button
                   variant="outline"
-                  className="w-full"
+                  className="w-full dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
                   onClick={() => {
                     setGeneratedTicket(null);
                     setTicketFormData({ ticketTypeId: "", quantity: 1 });
@@ -1200,7 +1203,7 @@ export default function EventsPage() {
 
                 <div className="flex gap-2 items-end">
                   <div className="flex-1 space-y-1">
-                    <label className="text-xs font-medium text-muted-foreground">
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400">
                       Check-in Count
                     </label>
                     <Input
@@ -1211,6 +1214,7 @@ export default function EventsPage() {
                       onChange={(e) =>
                         setCheckInCount(parseInt(e.target.value) || 1)
                       }
+                      className="dark:bg-black dark:border-gray-700 dark:text-gray-200"
                     />
                   </div>
                   <Button
@@ -1232,19 +1236,21 @@ export default function EventsPage() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="dark:bg-black dark:border-gray-800">
           <AlertDialogHeader>
-            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle className="dark:text-gray-100">Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription className="dark:text-gray-400">
               This action cannot be undone. This will permanently delete the
               event and remove all associated data from our servers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel className="dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700"
             >
               Delete
             </AlertDialogAction>

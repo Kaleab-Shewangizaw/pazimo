@@ -448,7 +448,7 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-black dark:text-white flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-200 border-t-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 font-medium">Loading dashboard...</p>
@@ -458,13 +458,13 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-black dark:text-white">
       <main className="p-6 max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600 mt-1">Admin analytics overview</p>
+            <h1 className="text-3xl font-bold dark:text-white text-gray-900">Dashboard</h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">Admin analytics overview</p>
           </div>
           <div className="flex items-center gap-3">
             <Select
@@ -493,14 +493,14 @@ export default function AdminDashboardPage() {
           {statsCards.map((stat, index) => (
             <Card
               key={index}
-              className={`border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 border-l-4 ${stat.borderColor}`}
+              className={`border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 dark:border-gray-600 dark:border-l-4 ${stat.borderColor}`}
             >
               <CardContent className="p-2">
                 <div className="flex flex-col">
-                  <p className="text-xs font-medium text-gray-600 mb-1">
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     {stat.title}
                   </p>
-                  <p className="text-lg font-bold text-gray-900 mb-2">
+                  <p className="text-lg font-bold text-gray-900 dark:text-white mb-2">
                     {stat.value}
                   </p>
                   <div className="flex items-center gap-1">
@@ -518,7 +518,7 @@ export default function AdminDashboardPage() {
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
+          <Card className="border border-gray-200 dark:border-gray-600 shadow-lg hover:shadow-xl">
             <CardHeader>
               <CardTitle>Revenue Over Time</CardTitle>
               <CardDescription>
@@ -545,7 +545,7 @@ export default function AdminDashboardPage() {
               </ChartContainer>
             </CardContent>
           </Card>
-          <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
+          <Card className="border border-gray-200 dark:border-gray-600 shadow-lg hover:shadow-xl">
             <CardHeader>
               <CardTitle>Ticket Sales Trend</CardTitle>
               <CardDescription>
@@ -572,7 +572,7 @@ export default function AdminDashboardPage() {
               </ChartContainer>
             </CardContent>
           </Card>
-          <Card className="border border-gray-200 shadow-lg hover:shadow-xl">
+          <Card className="border border-gray-200 dark:border-gray-600 shadow-lg hover:shadow-xl">
             <CardHeader>
               <CardTitle>Event Registrations</CardTitle>
               <CardDescription>Monthly new event creations.</CardDescription>
@@ -597,7 +597,7 @@ export default function AdminDashboardPage() {
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           {/* Active Events */}
-          <Card className="border border-gray-200 shadow-lg hover:shadow-xl lg:col-span-2 border-t-4 border-t-blue-600">
+          <Card className="border border-gray-200 dark:border-gray-600 shadow-lg hover:shadow-xl lg:col-span-2 border-t-4 border-t-blue-600">
             <CardContent className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <div className="flex items-center gap-3">
@@ -605,10 +605,10 @@ export default function AdminDashboardPage() {
                     <Calendar className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
+                    <h3 className="text-lg dark:text-white font-semibold text-gray-900">
                       Active Events
                     </h3>
-                    <p className="text-gray-600 text-sm">
+                    <p className="text-gray-600 dark:text-gray-400 text-sm">
                       Currently published events
                     </p>
                   </div>
@@ -617,7 +617,7 @@ export default function AdminDashboardPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => router.push("/admin/events")}
-                  className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                  className="border-blue-300 text-blue-600 dark:text-blue-400 dark:hover:bg-black"
                 >
                   <Eye className="mr-2 h-4 w-4" />
                   View All
@@ -626,20 +626,20 @@ export default function AdminDashboardPage() {
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-gray-200">
-                      <TableHead className="font-semibold text-gray-700">
+                    <TableRow className="border-gray-200 dark:border-gray-600">
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-400">
                         Event
                       </TableHead>
-                      <TableHead className="font-semibold text-gray-700">
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-400">
                         Organizer
                       </TableHead>
-                      <TableHead className="font-semibold text-gray-700">
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-400">
                         Date
                       </TableHead>
-                      <TableHead className="font-semibold text-gray-700">
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-400">
                         Category
                       </TableHead>
-                      <TableHead className="font-semibold text-gray-700">
+                      <TableHead className="font-semibold text-gray-700 dark:text-gray-400">
                         Status
                       </TableHead>
                     </TableRow>
@@ -649,7 +649,7 @@ export default function AdminDashboardPage() {
                       <TableRow>
                         <TableCell
                           colSpan={5}
-                          className="text-center text-gray-500 py-12"
+                          className="text-center text-gray-500 dark:text-gray-400 py-12"
                         >
                           <Calendar className="h-8 w-8 text-blue-400 mx-auto mb-3" />
                           <p className="font-medium">No active events</p>
@@ -662,19 +662,19 @@ export default function AdminDashboardPage() {
                       activeEvents.map((event) => (
                         <TableRow
                           key={event._id}
-                          className="cursor-pointer hover:bg-blue-50 transition-colors border-gray-100"
+                          className="cursor-pointer hover:bg-blue-50 dark:hover:bg-gray-900 transition-colors border-gray-100 dark:border-gray-600"
                           onClick={() =>
                             router.push(`/admin/events/${event._id}`)
                           }
                         >
-                          <TableCell className="font-medium text-gray-900">
+                          <TableCell className="font-medium text-gray-900 dark:text-white">
                             {event.title}
                           </TableCell>
-                          <TableCell className="text-gray-600">
+                          <TableCell className="text-gray-600 dark:text-gray-400">
                             {event.organizer?.firstName}{" "}
                             {event.organizer?.lastName}
                           </TableCell>
-                          <TableCell className="text-gray-600">
+                          <TableCell className="text-gray-600 dark:text-gray-400">
                             {new Date(event.startDate).toLocaleDateString()}
                           </TableCell>
                           <TableCell>
@@ -713,13 +713,13 @@ export default function AdminDashboardPage() {
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Quick Actions */}
-            <Card className="border border-gray-200 shadow-lg hover:shadow-xl border-t-4 border-t-green-600">
+            <Card className="border border-gray-200 shadow-lg hover:shadow-xl border-t-4 border-t-green-600 dark:border-gray-600">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-green-100 rounded-lg">
                     <Plus className="h-5 w-5 text-green-600" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                     Quick Actions
                   </h3>
                 </div>
@@ -787,13 +787,13 @@ export default function AdminDashboardPage() {
             </Card>
 
             {/* System Status */}
-            <Card className="border border-gray-200 shadow-lg hover:shadow-xl border-t-4 border-t-orange-600">
+            <Card className="border border-gray-200 shadow-lg hover:shadow-xl border-t-4 border-t-orange-600 dark:border-gray-600">
               <CardContent className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="p-2 bg-orange-100 rounded-lg">
                     <AlertCircle className="h-5 w-5 text-orange-600" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                     System Status
                   </h3>
                 </div>
@@ -820,12 +820,12 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
                   )}
-                  <div className="flex items-start gap-3 p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-start gap-3 p-4 bg-green-50 rounded-lg border border-green-200 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                     <div className="p-1 bg-green-100 rounded">
                       <TrendingUp className="h-4 w-4 text-green-600" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-green-800">
+                      <p className="text-sm font-medium  text-green-800">
                         Active Events
                       </p>
                       <p className="text-xs text-green-600 mt-1">

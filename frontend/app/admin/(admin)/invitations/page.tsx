@@ -138,8 +138,8 @@ export default function InvitationsEventListPage() {
     <div className="space-y-6 px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Events</h1>
-          <p className="text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Events</h1>
+          <p className="text-gray-500 dark:text-gray-400">
             Select an event to view its invitations
           </p>
         </div>

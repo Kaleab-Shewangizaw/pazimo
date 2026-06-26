@@ -94,8 +94,8 @@ export default function InvitationPricingPage() {
       ) : (
         <>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Invitation Pricing</h1>
-            <p className="text-gray-600 mt-1">Manage pricing for event invitations by type and method</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Invitation Pricing</h1>
+            <p className="text-gray-600 mt-1 dark:text-gray-400">Manage pricing for event invitations by type and method</p>
           </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -197,14 +197,14 @@ export default function InvitationPricingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <h4 className="font-medium text-green-600">Public Events</h4>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 <div>Email: {pricing.public.emailPrice} birr per invitation</div>
                 <div>SMS: {pricing.public.smsPrice} birr per invitation</div>
               </div>
             </div>
             <div className="space-y-2">
               <h4 className="font-medium text-orange-600">Private Events</h4>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 <div>Email: {pricing.private.emailPrice} birr per invitation</div>
                 <div>SMS: {pricing.private.smsPrice} birr per invitation</div>
               </div>
@@ -218,7 +218,7 @@ export default function InvitationPricingPage() {
         <Button 
           onClick={handleSave}
           disabled={isSubmitting}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700"
         >
           <Save className="h-4 w-4" />
           {isSubmitting ? "Saving..." : "Save Changes"}
