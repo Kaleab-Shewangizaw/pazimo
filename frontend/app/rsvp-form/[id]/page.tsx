@@ -42,9 +42,11 @@ import Link from "next/link";
 
 export default function RsvpFlow() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <RsvpContent />
-    </Suspense>
+    <div className="brand-scope">
+      <Suspense fallback={<div>Loading...</div>}>
+        <RsvpContent />
+      </Suspense>
+    </div>
   );
 }
 

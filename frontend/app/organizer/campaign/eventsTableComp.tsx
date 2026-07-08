@@ -301,8 +301,8 @@ export default function TableComp({ event }: { event: Event }) {
         <DialogTrigger asChild>
           <button
             className="flex items-center justify-center p-3 rounded-xl
-             bg-blue-600 text-white shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30
-             hover:bg-blue-700 hover:scale-105 active:scale-95
+             bg-[#0D47A1] text-white shadow-lg shadow-blue-200/50 dark:bg-yellow-400 dark:text-black dark:shadow-yellow-900/20
+             hover:bg-[#0D47A1]/90 dark:hover:bg-yellow-400/90 hover:scale-105 active:scale-95
              transition-all duration-200 cursor-pointer group"
             aria-label="Promote event"
           >
@@ -491,7 +491,7 @@ export default function TableComp({ event }: { event: Event }) {
             </DialogClose>
             <Button
               onClick={handleLaunchCampaign}
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 min-w-[150px]"
+              className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 min-w-[150px]"
               disabled={isSubmitting || users.length === 0}
             >
               {isSubmitting ? (

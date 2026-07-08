@@ -261,7 +261,7 @@ export default function Builder() {
             <Button
               onClick={handleSave}
               variant="default"
-              className="rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all active:scale-95"
+              className="rounded-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 text-white shadow-md transition-all active:scale-95"
             >
               <Save className="mr-1.5 h-4 w-4" /> Save
             </Button>
@@ -662,7 +662,7 @@ export default function Builder() {
             <Button variant="ghost" className="rounded-full" onClick={handleLeaveWithoutSaving}>
               Leave without saving
             </Button>
-            <Button className="rounded-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveAndLeave}>
+            <Button className="rounded-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 text-white" onClick={handleSaveAndLeave}>
               Save and leave
             </Button>
           </DialogFooter>

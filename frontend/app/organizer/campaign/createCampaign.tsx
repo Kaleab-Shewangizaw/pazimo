@@ -297,7 +297,7 @@ export default function CreateCampaignPage() {
         <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-900/20">
           <Button
             size="lg"
-            className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white shadow-md transition-all h-12 text-base"
+            className="w-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 text-white shadow-md transition-all h-12 text-base"
             onClick={() => {
               const users = topCustomers.map((c) => ({
                 name: c.name || "Customer",

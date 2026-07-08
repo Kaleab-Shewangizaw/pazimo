@@ -112,6 +112,16 @@
   --sidebar-ring: oklch(0.65 0.15 260 / 50%);
 }
 
+/* Shared button color scheme (matches event detail page): blue in light mode, gold in dark mode */
+.brand-scope {
+  --primary: #0d47a1;
+  --primary-foreground: #ffffff;
+}
+.dark .brand-scope {
+  --primary: #facc15;
+  --primary-foreground: #000000;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

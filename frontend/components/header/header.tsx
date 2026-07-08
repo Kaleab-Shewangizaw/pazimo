@@ -534,7 +534,7 @@ const Header = () => {
             ) : (
               <div className="hidden md:flex items-center gap-3">
                 <Button
-                  className="bg-[#06283D] rounded-sm hover:bg-[#06283D]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white border-0 transition-all duration-200  font-medium shadow-lg hover:shadow-xl"
+                  className="bg-[#0D47A1] rounded-sm hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white border-0 transition-all duration-200  font-medium shadow-lg hover:shadow-xl"
                   onClick={() => router.push("/sign-in")}
                 >
                   Sign In
@@ -603,7 +603,7 @@ const Header = () => {
                   </>
                 ) : (
                   <Button
-                    className="w-full bg-[#06283D] hover:bg-[#06283D]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white font-bold h-12 rounded-xl shadow-lg"
+                    className="w-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white font-bold h-12 rounded-xl shadow-lg"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       router.push("/sign-in");

@@ -751,7 +751,7 @@ export default function CustomCampaignModal({
                     !message ||
                     !campaignTitle
                   }
-                  className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 min-w-[180px] shadow-lg shadow-blue-200 dark:shadow-blue-900/30 h-11 text-base"
+                  className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 min-w-[180px] shadow-lg shadow-blue-200 dark:shadow-yellow-900/20 h-11 text-base"
                 >
                   {isSubmitting ? (
                     <>
@@ -843,7 +843,7 @@ export default function CustomCampaignModal({
               <Button
                 onClick={processPayment}
                 disabled={isSubmitting || isPooling}
-                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white min-w-[140px]"
+                className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 text-white min-w-[140px]"
               >
                 {isPooling ? (
                   <>
