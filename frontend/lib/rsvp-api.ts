@@ -45,6 +45,7 @@ type ApiEnvelope<T> = {
 type BackendForm = {
   _id: string;
   publicId: string;
+  organizerId?: string;
   title: string;
   description?: string;
   type: "rsvp" | "review";
@@ -142,6 +143,7 @@ const request = async <T>(endpoint: string, options: RequestInit = {}, auth = tr
 const mapForm = (form: BackendForm): RsvpEvent => ({
   id: form._id,
   publicId: form.publicId,
+  organizerId: form.organizerId,
   name: form.title,
   description: form.description || "",
   type: form.type,

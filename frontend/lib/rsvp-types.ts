@@ -44,6 +44,7 @@ export interface PaymentConfig {
 export interface RsvpEvent {
   id: string;
   publicId?: string;
+  organizerId?: string;
   name: string;
   description?: string;
   type: "rsvp" | "review";

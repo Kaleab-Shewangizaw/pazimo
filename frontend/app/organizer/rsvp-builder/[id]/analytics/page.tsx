@@ -176,10 +176,15 @@ export default function Analytics() {
       const isAuthAdmin = authUser?.role === "admin";
       
       // Get user ID from whichever auth store has a user
-      const userId = adminUser?.id || authUser?.id || authUser?._id || organizerUser?._id;
-      
+      const userId =
+        adminUser?.id ||
+        authUser?.id ||
+        authUser?._id ||
+        organizerUser?._id;
+
       // Check if user is admin or the owner of the RSVP
-      const isOwner = event.organizerId && userId === event.organizerId;
+      const isOwner =
+        !!event.organizerId && !!userId && String(userId) === String(event.organizerId);
 
       if (!isAdmin && !isAuthAdmin && !isOwner) {
         setAccessDenied(true);
