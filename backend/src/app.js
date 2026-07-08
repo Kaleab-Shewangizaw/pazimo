@@ -32,6 +32,12 @@ const { sendSMS } = require("./utils/sms");
 
 const app = express();
 
+// Trust the first hop (reverse proxy / load balancer) so req.ip reflects the
+// real client address instead of the proxy's — required for per-IP rate
+// limiting to work correctly in production. Adjust the hop count if your
+// deployment adds more than one proxy layer in front of Node (e.g. CDN + LB).
+app.set("trust proxy", 1);
+
 // ------------------- CORS ------------------- //
 const normalizeOrigin = (value) => {
   if (!value || typeof value !== "string") return null;

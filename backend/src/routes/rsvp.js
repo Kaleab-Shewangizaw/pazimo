@@ -2,11 +2,12 @@ const express = require("express");
 const router = express.Router();
 const { protect, restrictTo } = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
+const { rsvpSubmissionLimiter, rsvpPublicReadLimiter } = require("../middlewares/rateLimiters");
 const rsvpController = require("../controllers/rsvpController");
 
-router.get("/public/forms", rsvpController.listPublishedForms);
-router.get("/public/:publicId", rsvpController.getFormByPublicId);
-router.post("/public/:publicId/responses", rsvpController.submitResponse);
+router.get("/public/forms", rsvpPublicReadLimiter, rsvpController.listPublishedForms);
+router.get("/public/:publicId", rsvpPublicReadLimiter, rsvpController.getFormByPublicId);
+router.post("/public/:publicId/responses", rsvpSubmissionLimiter, rsvpController.submitResponse);
 router.post("/responses/validate-qr", protect, restrictTo("admin", "organizer", "partner"), rsvpController.validateRsvpQr);
 router.patch("/responses/:responseId/check-in", protect, restrictTo("admin", "organizer", "partner"), rsvpController.checkInRsvpResponse);
 

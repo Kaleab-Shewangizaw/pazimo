@@ -82,6 +82,12 @@ const rsvpResponseSchema = new mongoose.Schema(
 
 rsvpResponseSchema.index({ formId: 1, createdAt: -1 });
 rsvpResponseSchema.index({ organizerId: 1, createdAt: -1 });
-rsvpResponseSchema.index({ responseId: 1, checkedIn: 1 });
+// Accelerates status-filtered targeting (bulk messaging by status) and any
+// dashboard filter on a form's responses by status.
+rsvpResponseSchema.index({ formId: 1, status: 1 });
+// Replaces the old { responseId: 1, checkedIn: 1 } index: responseId is
+// already unique and indexed alone, so that compound never accelerated any
+// query. This one does — it's the per-event "how many have checked in" count.
+rsvpResponseSchema.index({ formId: 1, checkedIn: 1 });
 
 module.exports = mongoose.model("RsvpResponse", rsvpResponseSchema);

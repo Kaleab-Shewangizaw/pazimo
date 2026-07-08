@@ -205,6 +205,16 @@ const buildRsvpSmsMessage = (form, attendeeName, body) => {
     .join("\n\n");
 };
 
+// Read once at module load. The logo never changes at runtime, so there is
+// no reason to hit the filesystem synchronously on every QR render — doing
+// so blocked the event loop for every in-flight request during submission bursts.
+const RSVP_QR_LOGO_BASE64 = (() => {
+  const primaryPath = path.join(__dirname, "../../uploads/logo/miniLogo.png");
+  const fallbackPath = path.join(__dirname, "../../../frontend/public/logo.png");
+  const logoPath = fs.existsSync(primaryPath) ? primaryPath : fallbackPath;
+  return fs.existsSync(logoPath) ? fs.readFileSync(logoPath, "base64") : null;
+})();
+
 const buildBrandedQrDataUrl = async (payload) => {
   let svg = await QRCode.toString(payload, {
     errorCorrectionLevel: "H",
@@ -221,14 +231,9 @@ const buildBrandedQrDataUrl = async (payload) => {
     '<circle$1 r="0.5" cx="0.5" cy="0.5"',
   );
 
-  let logoPath = path.join(__dirname, "../../uploads/logo/miniLogo.png");
-  if (!fs.existsSync(logoPath)) {
-    logoPath = path.join(__dirname, "../../../frontend/public/logo.png");
-  }
-
   let logoSvg = "";
-  if (fs.existsSync(logoPath)) {
-    const logoBase64 = fs.readFileSync(logoPath, "base64");
+  if (RSVP_QR_LOGO_BASE64) {
+    const logoBase64 = RSVP_QR_LOGO_BASE64;
     const viewBox = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
     const size = viewBox ? parseInt(viewBox[1], 10) : 41;
     const logoSize = size * 0.2;
@@ -646,8 +651,12 @@ const getForm = async (req, res) => {
       });
     }
 
-    form.viewCount = (form.viewCount || 0) + 1;
-    await form.save();
+    // Atomic increment, fired without blocking the response. Avoids the
+    // read-modify-write race and the full-document rewrite that came from
+    // saving the whole form (sections/questions included) on every view.
+    RsvpForm.updateOne({ _id: form._id }, { $inc: { viewCount: 1 } }).catch((error) => {
+      console.error("Failed to increment RSVP form view count:", error.message);
+    });
 
     const responseCount = form.responseCount ?? (await RsvpResponse.countDocuments({ formId: form._id }));
 
@@ -655,6 +664,7 @@ const getForm = async (req, res) => {
       success: true,
       data: {
         ...normalizeFormVisibility(form.toObject()),
+        viewCount: (form.viewCount || 0) + 1,
         shareUrl: buildShareUrl(form),
         responseCount,
       },
@@ -877,6 +887,42 @@ const getFormByPublicId = async (req, res) => {
   }
 };
 
+const isAnswerEmpty = (value) => {
+  if (value === undefined || value === null) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (Array.isArray(value)) return value.length === 0;
+  return false; // numbers (including 0/NPS scores) and booleans (e.g. false) count as answered
+};
+
+// A required question that is conditionally hidden from the guest (per the
+// form's own conditional-display rule) was never shown to them, so it must
+// not be enforced as required — otherwise a correctly-blank conditional
+// question would incorrectly fail submission.
+const isQuestionApplicable = (question, answers) => {
+  const conditional = question.conditional;
+  if (!conditional) return true;
+
+  const controllingValue = Number(answers?.[conditional.questionId]);
+  if (!Number.isFinite(controllingValue)) return false;
+
+  switch (conditional.operator) {
+    case "lt":
+      return controllingValue < conditional.value;
+    case "gt":
+      return controllingValue > conditional.value;
+    case "eq":
+      return controllingValue === conditional.value;
+    default:
+      return true;
+  }
+};
+
+const findMissingRequiredAnswers = (form, answers) =>
+  (form.questions || [])
+    .filter((question) => question.required && isQuestionApplicable(question, answers))
+    .filter((question) => isAnswerEmpty(answers?.[question.id]))
+    .map((question) => question.label || "Untitled question");
+
 const submitResponse = async (req, res) => {
   try {
     const form =
@@ -915,6 +961,17 @@ const submitResponse = async (req, res) => {
         message: "Answers are required",
       });
     }
+
+    if (!previewBypass) {
+      const missingRequired = findMissingRequiredAnswers(form, answers);
+      if (missingRequired.length > 0) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: `Please answer the required question${missingRequired.length > 1 ? "s" : ""}: ${missingRequired.join(", ")}`,
+        });
+      }
+    }
+
     const submittedAttendee = buildSubmittedAttendee(form, attendee, answers);
 
     if (form.type === "rsvp" && !previewBypass) {
@@ -1033,12 +1090,35 @@ const listResponses = async (req, res) => {
       });
     }
 
-    const responses = await RsvpResponse.find({ formId: form._id })
-      .sort({ createdAt: -1 })
-      .lean();
+    // Bounded pagination so a single request can never pull an unbounded
+    // result set into memory. Default page size is generous enough that
+    // typical events (dozens to low hundreds of responses) still get
+    // everything back in one call, matching prior behavior exactly; the
+    // frontend transparently walks additional pages for larger events
+    // (see rsvpApi.getResponses), so no caller needs to change.
+    const requestedLimit = Number(req.query.limit);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 300) : 300;
+    const requestedPage = Number(req.query.page);
+    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1;
+
+    const [responses, total] = await Promise.all([
+      RsvpResponse.find({ formId: form._id })
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      RsvpResponse.countDocuments({ formId: form._id }),
+    ]);
+
     return res.json({
       success: true,
       data: responses.map(toResponseDto),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.max(Math.ceil(total / limit), 1),
+      },
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -1475,60 +1555,96 @@ const getAnalytics = async (req, res) => {
       });
     }
 
-    const responses = await RsvpResponse.find({ formId: form._id }).lean();
-    const total = responses.length;
-    const approved = responses.filter((response) => ["approved", "paid"].includes(response.status)).length;
-    const pending = responses.filter((response) => response.status === "pending").length;
-    const paid = responses.filter((response) => response.status === "paid").length;
-    const unpaid = responses.filter((response) => response.status === "unpaid").length;
+    // Counts and averages are computed in MongoDB via $facet instead of
+    // pulling every response document (including embedded QR images) into
+    // Node and filtering in memory — this endpoint's cost no longer scales
+    // with how many thousands of submissions a form has received.
+    const ratingQuestion = form.type === "review" ? form.questions.find((question) => question.type === "rating") : null;
+    const npsQuestion = form.type === "review" ? form.questions.find((question) => question.type === "nps") : null;
 
-    let avgRating = null;
+    const facetStages = {
+      total: [{ $count: "n" }],
+      approved: [{ $match: { status: { $in: ["approved", "paid"] } } }, { $count: "n" }],
+      pending: [{ $match: { status: "pending" } }, { $count: "n" }],
+      paid: [{ $match: { status: "paid" } }, { $count: "n" }],
+      unpaid: [{ $match: { status: "unpaid" } }, { $count: "n" }],
+    };
+
+    if (ratingQuestion) {
+      facetStages.ratingStats = [
+        { $project: { value: `$answers.${ratingQuestion.id}` } },
+        { $match: { value: { $type: "number" } } },
+        { $group: { _id: null, avg: { $avg: "$value" } } },
+      ];
+    }
+    if (npsQuestion) {
+      facetStages.npsStats = [
+        { $project: { value: `$answers.${npsQuestion.id}` } },
+        { $match: { value: { $type: "number" } } },
+        {
+          $group: {
+            _id: null,
+            n: { $sum: 1 },
+            promoters: { $sum: { $cond: [{ $gte: ["$value", 9] }, 1, 0] } },
+            detractors: { $sum: { $cond: [{ $lte: ["$value", 6] }, 1, 0] } },
+          },
+        },
+      ];
+    }
+
+    const [facets] = await RsvpResponse.aggregate([{ $match: { formId: form._id } }, { $facet: facetStages }]);
+    const pick = (key) => facets[key]?.[0]?.n || 0;
+    const total = pick("total");
+    const unpaid = pick("unpaid");
+
+    const avgRating =
+      facets.ratingStats?.[0]?.avg != null ? Number(facets.ratingStats[0].avg.toFixed(1)) : null;
+
     let nps = null;
+    if (facets.npsStats?.[0]?.n) {
+      const { n, promoters, detractors } = facets.npsStats[0];
+      nps = Math.round(((promoters - detractors) / n) * 100);
+    }
+
     let topKeywords = [];
-
     if (form.type === "review") {
-      const ratingQuestion = form.questions.find((question) => question.type === "rating");
-      const npsQuestion = form.questions.find((question) => question.type === "nps");
-      const ratings = ratingQuestion
-        ? responses.map((response) => response.answers?.[ratingQuestion.id]).filter((value) => typeof value === "number")
-        : [];
-      if (ratings.length > 0) {
-        avgRating = Number((ratings.reduce((sum, value) => sum + value, 0) / ratings.length).toFixed(1));
-      }
-
-      const npsValues = npsQuestion
-        ? responses.map((response) => response.answers?.[npsQuestion.id]).filter((value) => typeof value === "number")
-        : [];
-      if (npsValues.length > 0) {
-        const promoters = npsValues.filter((value) => value >= 9).length;
-        const detractors = npsValues.filter((value) => value <= 6).length;
-        nps = Math.round(((promoters - detractors) / npsValues.length) * 100);
-      }
-
       const longTextIds = form.questions.filter((question) => question.type === "long_text").map((question) => question.id);
-      const allWords = [];
-      responses.forEach((response) => {
-        longTextIds.forEach((questionId) => {
-          const value = response.answers?.[questionId];
-          if (typeof value === "string") {
-            allWords.push(...value.toLowerCase().split(/\W+/).filter((word) => word.length > 3));
-          }
+      if (longTextIds.length > 0) {
+        // Keyword frequency is a lightweight UI widget, not a precise metric —
+        // sampling a bounded set of the most recent responses keeps this
+        // query's cost flat regardless of total submission volume.
+        const sample = await RsvpResponse.find({ formId: form._id })
+          .select("answers")
+          .sort({ createdAt: -1 })
+          .limit(1000)
+          .lean();
+
+        const counts = {};
+        sample.forEach((response) => {
+          longTextIds.forEach((questionId) => {
+            const value = response.answers?.[questionId];
+            if (typeof value === "string") {
+              value
+                .toLowerCase()
+                .split(/\W+/)
+                .filter((word) => word.length > 3)
+                .forEach((word) => {
+                  counts[word] = (counts[word] || 0) + 1;
+                });
+            }
+          });
         });
-      });
-      const counts = {};
-      allWords.forEach((word) => {
-        counts[word] = (counts[word] || 0) + 1;
-      });
-      topKeywords = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        topKeywords = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      }
     }
 
     return res.json({
       success: true,
       data: {
         total,
-        approved,
-        pending,
-        paid,
+        approved: pick("approved"),
+        pending: pick("pending"),
+        paid: pick("paid"),
         unpaid,
         dropOff: total === 0 ? 0 : Math.round((unpaid / total) * 100),
         avgRating,

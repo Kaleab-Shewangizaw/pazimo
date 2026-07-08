@@ -100,7 +100,16 @@ type BackendResponse = {
   checkedInAt?: string;
 };
 
-const request = async <T>(endpoint: string, options: RequestInit = {}, auth = true) => {
+type ResponsesPagination = { page: number; limit: number; total: number; pages: number };
+
+// Same request/auth handling as `request`, but returns the full envelope
+// instead of just `data` — needed so callers (like paginated responses)
+// can read metadata fields such as `pagination`.
+const requestEnvelope = async <T>(
+  endpoint: string,
+  options: RequestInit = {},
+  auth = true
+): Promise<ApiEnvelope<T> & { pagination?: ResponsesPagination }> => {
   const token = auth ? getRsvpAuthToken() : null;
   const headers = new Headers(options.headers || {});
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
@@ -118,11 +127,16 @@ const request = async <T>(endpoint: string, options: RequestInit = {}, auth = tr
     headers,
   });
 
-  const data = (await response.json().catch(() => ({}))) as ApiEnvelope<T>;
+  const data = (await response.json().catch(() => ({}))) as ApiEnvelope<T> & { pagination?: ResponsesPagination };
   if (!response.ok || data.success === false) {
     throw new Error(data.message || `Request failed (${response.status})`);
   }
-  return data.data as T;
+  return data;
+};
+
+const request = async <T>(endpoint: string, options: RequestInit = {}, auth = true) => {
+  const envelope = await requestEnvelope<T>(endpoint, options, auth);
+  return envelope.data as T;
 };
 
 const mapForm = (form: BackendForm): RsvpEvent => ({
@@ -331,8 +345,23 @@ export const rsvpApi = {
       })
     ),
   getResponses: async (id: string) => {
-    const responses = await request<BackendResponse[]>(`/rsvp/forms/${id}/responses`);
-    return responses.map(mapResponse);
+    // The backend now paginates this endpoint internally so a single request
+    // can never pull an unbounded result set into memory. We walk every page
+    // here so this function keeps returning the full list exactly as before —
+    // no caller of getResponses needs to change.
+    const collected: BackendResponse[] = [];
+    let page = 1;
+    for (;;) {
+      const envelope = await requestEnvelope<BackendResponse[]>(
+        `/rsvp/forms/${id}/responses?page=${page}&limit=300`
+      );
+      const pageData = envelope.data || [];
+      collected.push(...pageData);
+      const pagination = envelope.pagination;
+      if (!pagination || page >= pagination.pages || pageData.length === 0) break;
+      page += 1;
+    }
+    return collected.map(mapResponse);
   },
   updateResponseTag: async (id: string, responseId: string, tag: AttendeeTag) =>
     mapResponse(
