@@ -24,9 +24,6 @@ export default function LayoutWrapper({
   const isOrganizerRoute = pathname?.startsWith("/organizer");
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isRsvpForm = pathname?.startsWith("/rsvp-form/");
-  const isSignatureInvitation = pathname?.includes(
-    "/guest-invitation/signature"
-  );
 
   // Hide Header and Footer for admin and organizer routes, as they have their own layouts/headers/footers
   const hideGlobalHeaderFooter = isAdminRoute || isOrganizerRoute;
@@ -38,12 +35,10 @@ export default function LayoutWrapper({
 
   return (
     <>
-      {!hideGlobalHeaderFooter && !isSignIn && (
-        <Header variant={isSignatureInvitation ? "signature" : "default"} />
-      )}
+      {!hideGlobalHeaderFooter && !isSignIn && <Header />}
       <main className="flex-1">{children}</main>
       {!hideGlobalHeaderFooter && !isSignIn && !isEventDetail && !isRsvpForm && (
-        <Footer variant={isSignatureInvitation ? "signature" : "default"} />
+        <Footer />
       )}
     </>
   );
