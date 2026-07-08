@@ -11,20 +11,37 @@ interface TicketDetails {
   event: {
     title: string;
     startDate: string;
-    endDate: string;
+    endDate?: string;
+    startTime?: string;
+    endTime?: string;
     location: string | { address?: string; city?: string; country?: string };
     coverImages: string[];
   };
   user: {
-    fullName: string;
+    firstName?: string;
+    lastName?: string;
     email: string;
-  };
+  } | null;
+  guestName?: string;
   ticketType: string;
   price: number;
   status: string;
   qrCode: string;
   ticketCount: number;
 }
+
+const formatEventDate = (isoDate: string) => {
+  const date = new Date(isoDate);
+  const weekday = date
+    .toLocaleDateString("en-US", { weekday: "short" })
+    .toUpperCase();
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = date
+    .toLocaleDateString("en-US", { month: "short" })
+    .toUpperCase();
+  const year = date.getFullYear();
+  return `${weekday}, ${day} ${month} ${year}`;
+};
 
 export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
   const [ticket, setTicket] = useState<TicketDetails | null>(null);
@@ -77,122 +94,115 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
     );
   }
 
-  const getCoverImageUrl = () => {
-    if (!ticket.event.coverImages?.[0]) return "/events/eventimg.png";
-    const img = ticket.event.coverImages[0];
-    return img.startsWith("http")
-      ? img
-      : `${process.env.NEXT_PUBLIC_API_URL}${
-          img.startsWith("/") ? img : `/${img}`
-        }`;
-  };
-
   const handleDownload = () => {
     if (!ticket?.qrCode) return;
     downloadHighQualityQR(ticket.qrCode, `ticket-${ticket.ticketId}.png`);
   };
 
+  const dateLine = `${formatEventDate(ticket.event.startDate)}${
+    ticket.event.startTime ? `, ${ticket.event.startTime}` : ""
+  }`;
+
+  const venue = (
+    typeof ticket.event.location === "string"
+      ? ticket.event.location
+      : ticket.event.location?.address ||
+        ticket.event.location?.city ||
+        "See map"
+  ).toUpperCase();
+
+  const attendee = (
+    ticket.user
+      ? `${ticket.user.firstName || ""} ${ticket.user.lastName || ""}`.trim()
+      : ticket.guestName || "Guest"
+  ).toUpperCase();
+
+  const orderId = ticket.ticketId.slice(-6).toUpperCase();
+  const watermark = ticket.event.title.split(" ")[0]?.toUpperCase() || "";
+  const isActive = ticket.status === "active" && ticket.ticketCount > 0;
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background py-12 px-4 sm:px-6 lg:px-8 flex justify-center">
-      <div className="max-w-md w-full bg-white dark:bg-card rounded-2xl shadow-xl dark:shadow-none border dark:border-border overflow-hidden">
-        {/* Event Image Header */}
-        <div className="relative w-full bg-gray-200 dark:bg-muted">
-          <Image
-            src={getCoverImageUrl()}
-            alt={ticket.event.title}
-            width={0}
-            height={0}
-            sizes="100vw"
-            className="w-full h-auto"
-            priority
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-4 left-4 text-white">
-            <h1 className="text-xl font-bold leading-tight">
+    <div className=" bg-gray-50  dark:bg-background py-20 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
+      <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl shadow-xl dark:shadow-none  overflow-hidden">
+        {/* Blue header block */}
+        <div className="relative overflow-hidden bg-gradient-to-br  from-[#06283D] to-[#1A5D8C] px-7 py-10">
+          <span className="pointer-events-none absolute -bottom-4 right-5 select-none text-6xl font-black tracking-tight text-white/10 whitespace-nowrap">
+            {watermark}
+          </span>
+
+          <div className="relative flex items-start justify-between gap-3">
+            <h1 className="text-xl font-extrabold leading-tight text-white">
               {ticket.event.title}
             </h1>
+            <span className="shrink-0 whitespace-nowrap rounded-full border border-white/50 px-3 py-1 text-[10px] font-bold tracking-wider text-white">
+              OFFICIAL PASS
+            </span>
+          </div>
+
+          <div className="relative mt-5 grid grid-cols-2 gap-y-4 gap-x-3">
+            <div>
+              <p className="text-[10px] tracking-wider text-white/65">DATE &amp; TIME</p>
+              <p className="text-sm font-bold text-white">{dateLine}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] tracking-wider text-white/65">VENUE</p>
+              <p className="text-sm font-bold text-white">{venue}</p>
+            </div>
+            <div>
+              <p className="text-[10px] tracking-wider text-white/65">TICKET TYPE</p>
+              <p className="text-sm font-bold text-white">{ticket.ticketType}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] tracking-wider text-white/65">QUANTITY</p>
+              <p className="text-sm font-bold text-white">
+                {ticket.ticketCount.toString().padStart(2, "0")}{" "}
+                {ticket.ticketCount > 1 ? "PASSES" : "PASS"}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] tracking-wider text-white/65">ORDER ID</p>
+              <p className="text-sm font-bold text-white">{orderId}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] tracking-wider text-white/65">ATTENDEE</p>
+              <p className="text-sm font-bold text-white">{attendee}</p>
+            </div>
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* QR Code Section */}
-          <div className="flex flex-col items-center justify-center space-y-2 bg-gray-50 dark:bg-muted/50 p-6 rounded-xl border border-dashed border-gray-300 dark:border-border">
-            <div className="bg-white p-2 rounded-xl">
-              <Image
-                width={256}
-                height={256}
-                priority
-                src={ticket.qrCode}
-                alt="Ticket QR Code"
-                className="w-48 h-48"
-              />
-            </div>
+        {/* Perforation with die-cut notches */}
+        <div className="relative">
+          <div className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background" />
+          <div className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background" />
+          <div className="mx-5 border-t-2 border-dashed border-gray-300 dark:border-border" />
+        </div>
 
+        {/* QR Code Section */}
+        <div className="flex flex-col  items-center justify-center gap-3 px-7 pt-15 pb-0">
+          <Image
+            width={256}
+            height={256}
+            priority
+            src={ticket.qrCode}
+            alt="Ticket QR Code"
+            className="w-34 h-34"
+          />
+          <p className="text-[11px] font-bold tracking-[0.2em] text-gray-400 dark:text-gray-500">
+            &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
+          </p>
+
+          <div className="flex items-center gap-3 pt-1">
             <button
               onClick={handleDownload}
-              className="flex items-center gap-2 px-4 py-2 mt-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-500 rounded-full hover:bg-blue-700 dark:hover:bg-blue-600 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#06283D] rounded-full hover:bg-[#0a3a57] transition-colors"
             >
               <Download className="w-4 h-4" />
               Download QR
             </button>
-
-            <span
-              className={`px-3 py-1 mt-1 rounded-full text-xs font-medium ${
-                ticket.status === "active" && ticket.ticketCount > 0
-                  ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-400"
-                  : "bg-gray-100 text-gray-800 dark:bg-white/10 dark:text-gray-300"
-              }`}
-            >
-              {ticket.status === "active" && ticket.ticketCount > 0
-                ? "ACTIVE"
-                : "USED"}
-            </span>
-          </div>
-
-          {/* Ticket Details */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center border-b dark:border-border pb-3">
-              <span className="text-gray-500 dark:text-gray-400 text-sm">Attendee</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {ticket.user?.fullName || "Guest"}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center border-b dark:border-border pb-3">
-              <span className="text-gray-500 dark:text-gray-400 text-sm">Ticket Type</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {ticket.ticketType}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center border-b dark:border-border pb-3">
-              <span className="text-gray-500 dark:text-gray-400 text-sm">Admit Count</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {ticket.ticketCount} Person(s)
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center border-b dark:border-border pb-3">
-              <span className="text-gray-500 dark:text-gray-400 text-sm">Date</span>
-              <span className="font-medium text-gray-900 dark:text-white">
-                {new Date(ticket.event.startDate).toLocaleDateString()}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500 dark:text-gray-400 text-sm">Location</span>
-              <span className="font-medium text-gray-900 dark:text-white text-right max-w-[60%]">
-                {typeof ticket.event.location === "string"
-                  ? ticket.event.location
-                  : ticket.event.location?.address || "See map"}
-              </span>
-            </div>
           </div>
         </div>
 
-        <div className="bg-gray-50 dark:bg-muted/50 px-6 py-4 text-center text-xs text-gray-500 dark:text-gray-400">
-          Powered by Pazimo
-        </div>
+      
       </div>
     </div>
   );
