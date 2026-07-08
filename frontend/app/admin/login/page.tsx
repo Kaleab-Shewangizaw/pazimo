@@ -53,17 +53,18 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
-      <div className="w-full max-w-md space-y-8 bg-white p-8 rounded-lg shadow-md">
+    <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50 dark:bg-black">
+      <div className="w-full max-w-md space-y-8 bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md">
         {/* Logo */}
         <div className="flex justify-center">
-          <img src="/logo.png" alt="Pazimo" className="w-32 md:w-40 h-auto" />
+          <img src="/logo.png" alt="Pazimo" className="w-32 dark:hidden md:w-40 h-auto" />
+          <img src="/logo2.png" alt="Pazimo" className="w-32 hidden dark:block md:w-40 h-auto" />
         </div>
 
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-blue-100 rounded-full">
-              <Shield className="h-8 w-8 text-blue-600" />
+            <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-full">
+              <Shield className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         
@@ -72,7 +73,7 @@ export default function AdminLoginPage() {
         {/* Admin Login Form */}
         <form onSubmit={handleSubmit} className="space-y-6 mt-8" noValidate>
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email" className="block dark:text-gray-300 text-sm font-medium text-gray-700 mb-1">
               Email
             </label>
             <div className="relative">
@@ -94,7 +95,7 @@ export default function AdminLoginPage() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block dark:text-gray-300 text-sm font-medium text-gray-700 mb-1">
               Password
             </label>
             <div className="relative">
@@ -125,9 +126,9 @@ export default function AdminLoginPage() {
         </form>
 
         <div className="text-center mt-4">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             Return to{" "}
-            <Link href="/sign-in" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link href="/sign-in" className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500">
               User Login
             </Link>
           </p>

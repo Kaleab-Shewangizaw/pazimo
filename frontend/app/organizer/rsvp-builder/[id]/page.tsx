@@ -244,7 +244,7 @@ export default function Builder() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br px-4 from-slate-50 to-slate-100 dark:from-slate-950 dark:to-black">
       <main className="container mx-auto px-4 py-8 flex flex-col items-center">
         <div className="w-full max-w-6xl">
         {/* Header */}

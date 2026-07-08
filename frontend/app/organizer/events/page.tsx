@@ -76,27 +76,25 @@ export default function EventsPage() {
     null
   );
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [showEventDetailsModal, setShowEventDetailsModal] = useState(false);
+  const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [qrEvent, setQrEvent] = useState<any>(null);
-
-  // Backend now filters out invitation events automatically
-  const regularEvents = events;
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
-  const totalPages = Math.ceil(regularEvents.length / itemsPerPage);
+  const totalPages = Math.ceil(events.length / itemsPerPage);
 
   // Get current page items
   const getCurrentPageItems = () => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    return regularEvents.slice(startIndex, endIndex);
+    return events.slice(startIndex, endIndex);
   };
 
   useEffect(() => {
     const checkAuth = () => {
-      // Get auth state from localStorage
       const authState = localStorage.getItem("auth-storage");
       if (!authState) {
         router.push("/organizer/sign-in");
@@ -108,12 +106,10 @@ export default function EventsPage() {
         const { user, token, isAuthenticated } = state;
 
         if (!isAuthenticated || !token || user.role !== "organizer") {
-          // console.log('Invalid auth state:', { isAuthenticated, role: user?.role });
           router.push("/organizer/sign-in");
           return false;
         }
 
-        // Store necessary info in localStorage for easy access
         localStorage.setItem("userId", user._id);
         localStorage.setItem("userRole", user.role);
         localStorage.setItem("token", token);
@@ -194,7 +190,6 @@ export default function EventsPage() {
     }
   };
 
-  // Pagination controls
   const handlePreviousPage = () => {
     setCurrentPage((prev) => Math.max(prev - 1, 1));
   };
@@ -219,17 +214,18 @@ export default function EventsPage() {
 
   const handleCloseModal = () => {
     setSelectedEvent(null);
+    setShowEventDetailsModal(false);
+    setSelectedEventDetails(null);
   };
 
   const handleViewEventDetails = async (event: any) => {
     try {
-      // Show modal with basic event info immediately
+      setSelectedEvent(event);
       setSelectedEventDetails({
         title: event.title,
         description: event.description,
         startDate: event.startDate,
-        startTime: event.startTime,
-        endTime: event.endTime,
+        endDate: event.endDate,
         location: {
           address: event.location?.address,
           city: event.location?.city,
@@ -241,10 +237,10 @@ export default function EventsPage() {
         ticketTypes: event.ticketTypes || [],
         tags: event.tags || [],
         ageRestriction: event.ageRestriction,
+        category: event.category,
       });
       setShowEventDetailsModal(true);
 
-      // Try to fetch detailed info from API if available
       if (typeof window !== "undefined") {
         const token = localStorage.getItem("token");
 
@@ -267,7 +263,6 @@ export default function EventsPage() {
       }
     } catch (error) {
       console.error("Error fetching event details:", error);
-      // Still show the modal with basic info even if API fails
     }
   };
 
@@ -315,11 +310,11 @@ export default function EventsPage() {
   const authState = localStorage.getItem("auth-storage");
   if (!authState) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[350px]">
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+        <Card className="w-[350px] dark:bg-black dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Authentication Required</CardTitle>
-            <CardDescription>
+            <CardTitle className="dark:text-gray-100">Authentication Required</CardTitle>
+            <CardDescription className="dark:text-gray-400">
               Please sign in to view your events
             </CardDescription>
           </CardHeader>
@@ -342,11 +337,11 @@ export default function EventsPage() {
 
     if (!isAuthenticated || !token || user.role !== "organizer") {
       return (
-        <div className="flex items-center justify-center min-h-screen">
-          <Card className="w-[350px]">
+        <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+          <Card className="w-[350px] dark:bg-black dark:border-gray-800">
             <CardHeader>
-              <CardTitle>Authentication Required</CardTitle>
-              <CardDescription>
+              <CardTitle className="dark:text-gray-100">Authentication Required</CardTitle>
+              <CardDescription className="dark:text-gray-400">
                 Please sign in as an organizer to view your events
               </CardDescription>
             </CardHeader>
@@ -365,11 +360,11 @@ export default function EventsPage() {
   } catch (error) {
     console.error("Error parsing auth state:", error);
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[350px]">
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+        <Card className="w-[350px] dark:bg-black dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>
+            <CardTitle className="dark:text-gray-100">Error</CardTitle>
+            <CardDescription className="dark:text-gray-400">
               There was an error loading your authentication state
             </CardDescription>
           </CardHeader>
@@ -388,10 +383,10 @@ export default function EventsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
         <div className="text-center flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="text-gray-500">Loading events...</p>
+          <Loader2 className="h-12 w-12 animate-spin text-primary dark:text-blue-400" />
+          <p className="text-gray-500 dark:text-gray-400">Loading events...</p>
         </div>
       </div>
     );
@@ -399,11 +394,11 @@ export default function EventsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[350px]">
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
+        <Card className="w-[350px] dark:bg-black dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Error</CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardTitle className="dark:text-gray-100">Error</CardTitle>
+            <CardDescription className="dark:text-gray-400">{error}</CardDescription>
           </CardHeader>
           <CardFooter>
             <Button
@@ -424,9 +419,9 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 p-5">
+    <div className="container mx-auto py-8 p-5 bg-white dark:bg-black min-h-screen">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">My Events</h1>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">My Events</h1>
         <Button
           onClick={() => router.push("/organizer/events/create")}
           className="flex items-center gap-2"
@@ -436,11 +431,11 @@ export default function EventsPage() {
         </Button>
       </div>
 
-      {regularEvents.length === 0 ? (
-        <Card>
+      {events.length === 0 ? (
+        <Card className="dark:bg-black dark:border-gray-800">
           <CardHeader>
-            <CardTitle>No Events Found</CardTitle>
-            <CardDescription>
+            <CardTitle className="dark:text-gray-100">No Events Found</CardTitle>
+            <CardDescription className="dark:text-gray-400">
               You haven't created any events yet
             </CardDescription>
           </CardHeader>
@@ -455,40 +450,40 @@ export default function EventsPage() {
           </CardFooter>
         </Card>
       ) : (
-        <Card>
+        <Card className="dark:bg-black dark:border-gray-800">
           <CardContent className="p-4">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50/80">
-                  <TableHead className="font-semibold">Event Title</TableHead>
-                  <TableHead className="font-semibold">Date</TableHead>
-                  <TableHead className="font-semibold">Location</TableHead>
-                  <TableHead className="font-semibold">Category</TableHead>
-                  <TableHead className="font-semibold">Capacity</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold">Actions</TableHead>
+                <TableRow className="bg-gray-50/80 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800">
+                  <TableHead className="font-semibold dark:text-gray-300">Event Title</TableHead>
+                  <TableHead className="font-semibold dark:text-gray-300">Date</TableHead>
+                  <TableHead className="font-semibold dark:text-gray-300">Location</TableHead>
+                  <TableHead className="font-semibold dark:text-gray-300">Category</TableHead>
+                  <TableHead className="font-semibold dark:text-gray-300">Capacity</TableHead>
+                  <TableHead className="font-semibold dark:text-gray-300">Status</TableHead>
+                  <TableHead className="font-semibold dark:text-gray-300">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {getCurrentPageItems().map((event) => (
                   <TableRow
                     key={event._id}
-                    className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                    className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer border-gray-100 dark:border-gray-800"
                     onClick={() => handleRowClick(event)}
                   >
                     <TableCell>
-                      <span className="font-medium text-gray-900">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
                         {event.title}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                         <Calendar className="h-4 w-4" />
                         <span>{formatDate(event.startDate)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                         <MapPin className="h-4 w-4" />
                         {event.location?.address || "No address"},{" "}
                         {event.location?.city || "No city"}
@@ -497,13 +492,13 @@ export default function EventsPage() {
                     <TableCell>
                       <Badge
                         variant="outline"
-                        className="bg-gray-50 text-gray-700 border-gray-200"
+                        className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
                       >
                         {event.category?.name || "Uncategorized"}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                         <Users className="h-4 w-4" />
                         {event.capacity || "N/A"}
                       </div>
@@ -514,12 +509,12 @@ export default function EventsPage() {
                           variant="outline"
                           className={`${
                             event.status === "published"
-                              ? "bg-green-50 text-green-700 border-green-200"
+                              ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
                               : event.status === "draft"
-                              ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                              ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
                               : event.status === "cancelled"
-                              ? "bg-red-50 text-red-700 border-red-200"
-                              : "bg-blue-50 text-blue-700 border-blue-200"
+                              ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                              : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
                           }`}
                         >
                           {event.status}
@@ -527,7 +522,7 @@ export default function EventsPage() {
                         {event.isSoldOut && (
                           <Badge
                             variant="outline"
-                            className="bg-red-50 text-red-700 border-red-200"
+                            className="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
                           >
                             Sold Out
                           </Badge>
@@ -543,7 +538,7 @@ export default function EventsPage() {
                             e.stopPropagation();
                             router.push(`/organizer/events/edit/${event._id}`);
                           }}
-                          className="text-green-600 hover:text-green-700"
+                          className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 dark:border-gray-700"
                           title="Edit Event"
                         >
                           <Pencil className="h-4 w-4" />
@@ -555,7 +550,7 @@ export default function EventsPage() {
                             e.stopPropagation();
                             router.push(`/organizer/qr-scanner?mode=ticket&eventId=${event._id}`);
                           }}
-                          className="text-blue-600 hover:text-blue-700"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 dark:border-gray-700"
                           title="Open scoped scanner"
                         >
                           <ScanLine className="h-4 w-4" />
@@ -567,7 +562,7 @@ export default function EventsPage() {
                             e.stopPropagation();
                             generateQRCode(event);
                           }}
-                          className="text-green-600 hover:text-green-700"
+                          className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 dark:border-gray-700"
                         >
                           <QrCode className="h-4 w-4" />
                         </Button>
@@ -583,8 +578,8 @@ export default function EventsPage() {
                           disabled={isTogglingSoldOut === event._id}
                           className={`${
                             event.isSoldOut
-                              ? "text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
-                              : "text-gray-600 hover:text-gray-700"
+                              ? "text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30"
+                              : "text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 dark:border-gray-700"
                           }`}
                           title={
                             event.isSoldOut
@@ -610,10 +605,10 @@ export default function EventsPage() {
             {/* Pagination Controls */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-4 px-2">
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
                   Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                  {Math.min(currentPage * itemsPerPage, regularEvents.length)}{" "}
-                  of {regularEvents.length} events
+                  {Math.min(currentPage * itemsPerPage, events.length)}{" "}
+                  of {events.length} events
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -621,10 +616,11 @@ export default function EventsPage() {
                     size="sm"
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1}
+                    className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
                     Page {currentPage} of {totalPages}
                   </div>
                   <Button
@@ -632,6 +628,7 @@ export default function EventsPage() {
                     size="sm"
                     onClick={handleNextPage}
                     disabled={currentPage === totalPages}
+                    className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -643,102 +640,102 @@ export default function EventsPage() {
       )}
 
       {/* Event Details Modal */}
-      <Dialog open={!!selectedEvent} onOpenChange={handleCloseModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={showEventDetailsModal} onOpenChange={handleCloseModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-black dark:border-gray-800">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold flex items-center justify-between">
+            <DialogTitle className="text-2xl font-bold flex items-center justify-between dark:text-gray-100">
               <span>Event Details</span>
             </DialogTitle>
           </DialogHeader>
-          {selectedEvent && (
+          {selectedEventDetails && (
             <div className="space-y-8">
               {/* Basic Information */}
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold">Basic Information</h3>
+                <h3 className="text-xl font-semibold dark:text-gray-100">Basic Information</h3>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Event Title
                       </p>
-                      <p className="text-gray-900">{selectedEvent.title}</p>
+                      <p className="text-gray-900 dark:text-gray-100">{selectedEventDetails.title}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Description
                       </p>
-                      <p className="text-gray-600">
-                        {selectedEvent.description ||
+                      <p className="text-gray-600 dark:text-gray-400">
+                        {selectedEventDetails.description ||
                           "No description available"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Category
                       </p>
                       <Badge
                         variant="outline"
-                        className="bg-gray-50 text-gray-700 border-gray-200"
+                        className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
                       >
-                        {selectedEvent.category?.name || "Uncategorized"}
+                        {selectedEventDetails.category?.name || "Uncategorized"}
                       </Badge>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Status
                       </p>
                       <Badge
                         variant="outline"
-                        className={`
-                          selectedEvent.status === "published"
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : selectedEvent.status === "draft"
-                            ? "bg-yellow-50 text-yellow-700 border-yellow-200"
-                            : selectedEvent.status === "cancelled"
-                            ? "bg-red-50 text-red-700 border-red-200"
-                            : "bg-blue-50 text-blue-700 border-blue-200"
+                        className={`${
+                          selectedEventDetails.status === "published"
+                            ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
+                            : selectedEventDetails.status === "draft"
+                            ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
+                            : selectedEventDetails.status === "cancelled"
+                            ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
+                            : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
                         }`}
                       >
-                        {selectedEvent.status}
+                        {selectedEventDetails.status}
                       </Badge>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Date & Time
                       </p>
-                      <div className="flex items-center gap-2 text-gray-600">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                         <Calendar className="h-4 w-4" />
                         <span>
-                          Start: {formatDate(selectedEvent.startDate)}
+                          Start: {formatDate(selectedEventDetails.startDate)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-gray-600 mt-1">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mt-1">
                         <Calendar className="h-4 w-4" />
-                        <span>End: {formatDate(selectedEvent.endDate)}</span>
+                        <span>End: {formatDate(selectedEventDetails.endDate)}</span>
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Location
                       </p>
-                      <div className="flex items-center gap-2 text-gray-600">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                         <MapPin className="h-4 w-4" />
                         <span>
-                          {selectedEvent.location?.address || "No address"},{" "}
-                          {selectedEvent.location?.city || "No city"},{" "}
-                          {selectedEvent.location?.country || "No country"}
+                          {selectedEventDetails.location?.address || "No address"},{" "}
+                          {selectedEventDetails.location?.city || "No city"},{" "}
+                          {selectedEventDetails.location?.country || "No country"}
                         </span>
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500">
+                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                         Capacity
                       </p>
-                      <div className="flex items-center gap-2 text-gray-600">
+                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                         <Users className="h-4 w-4" />
-                        <span>{selectedEvent.capacity || "N/A"}</span>
+                        <span>{selectedEventDetails.capacity || "N/A"}</span>
                       </div>
                     </div>
                   </div>
@@ -746,15 +743,15 @@ export default function EventsPage() {
               </div>
 
               {/* Tags */}
-              {selectedEvent.tags && selectedEvent.tags.length > 0 && (
+              {selectedEventDetails.tags && selectedEventDetails.tags.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-500">Tags</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tags</p>
                   <div className="flex flex-wrap gap-2">
-                    {selectedEvent.tags.map((tag: string, index: number) => (
+                    {selectedEventDetails.tags.map((tag: string, index: number) => (
                       <Badge
                         key={index}
                         variant="secondary"
-                        className="flex items-center gap-1"
+                        className="flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                       >
                         <Tag className="h-3 w-3" />
                         {tag}
@@ -765,41 +762,41 @@ export default function EventsPage() {
               )}
 
               {/* Ticket Types */}
-              {selectedEvent.ticketTypes &&
-                selectedEvent.ticketTypes.length > 0 && (
+              {selectedEventDetails.ticketTypes &&
+                selectedEventDetails.ticketTypes.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-xl font-semibold">Ticket Types</h3>
+                    <h3 className="text-xl font-semibold dark:text-gray-100">Ticket Types</h3>
                     <div className="grid gap-4">
-                      {selectedEvent.ticketTypes.map(
+                      {selectedEventDetails.ticketTypes.map(
                         (ticket: any, index: number) => (
-                          <Card key={index}>
+                          <Card key={index} className="dark:bg-gray-900 dark:border-gray-800">
                             <CardContent className="p-4">
                               <div className="flex justify-between items-start">
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2">
-                                    <Ticket className="h-4 w-4 text-gray-500" />
-                                    <span className="font-medium">
+                                    <Ticket className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                                    <span className="font-medium dark:text-gray-100">
                                       {ticket.name}
                                     </span>
                                   </div>
-                                  <p className="text-sm text-gray-500">
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
                                     {ticket.description}
                                   </p>
                                   {ticket.startDate && ticket.endDate && (
-                                    <p className="text-xs text-gray-400">
+                                    <p className="text-xs text-gray-400 dark:text-gray-500">
                                       Available: {formatDate(ticket.startDate)}{" "}
                                       - {formatDate(ticket.endDate)}
                                     </p>
                                   )}
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-medium">
+                                  <p className="font-medium dark:text-gray-100">
                                     {ticket.price} Birr
                                   </p>
-                                  <p className="text-sm text-gray-500">
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
                                     Quantity: {ticket.quantity}
                                   </p>
-                                  <p className="text-sm text-gray-500">
+                                  <p className="text-sm text-gray-500 dark:text-gray-400">
                                     Available: {ticket.available ? "Yes" : "No"}
                                   </p>
                                 </div>
@@ -818,14 +815,14 @@ export default function EventsPage() {
 
       {/* QR Code Section */}
       {shareQrDataUrl && qrEvent && (
-        <Card className="mt-6">
+        <Card className="mt-6 dark:bg-black dark:border-gray-800">
           <CardHeader>
-            <CardTitle>Event QR Code - {qrEvent.title}</CardTitle>
+            <CardTitle className="dark:text-gray-100">Event QR Code - {qrEvent.title}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row items-center gap-6">
               <div className="flex-shrink-0">
-                <div className="bg-white p-4 rounded-lg border-2 border-gray-200">
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700">
                   <img
                     src={shareQrDataUrl}
                     alt="Event QR Code"
@@ -834,22 +831,26 @@ export default function EventsPage() {
                 </div>
               </div>
               <div className="flex-1 text-center md:text-left">
-                <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+                <h3 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
                   Scan to Buy Tickets
                 </h3>
-                <p className="text-gray-600 mb-4">
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
                   Open your camera or QR app to start checkout instantly for
                   this event.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-3">
                   <Button
                     onClick={downloadQRCode}
-                    className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white"
+                    className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-[#0D47A1] dark:hover:bg-[#0D47A1]/80 text-white"
                   >
                     <Download className="h-4 w-4 mr-2" />
                     Download QR
                   </Button>
-                  <Button variant="outline" onClick={copyBuyLink}>
+                  <Button 
+                    variant="outline" 
+                    onClick={copyBuyLink}
+                    className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                  >
                     <Copy className="h-4 w-4 mr-2" />
                     Copy Buy Link
                   </Button>

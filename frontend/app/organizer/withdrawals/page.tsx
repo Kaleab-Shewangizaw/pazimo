@@ -104,7 +104,6 @@ export default function WithdrawalsPage() {
     fetchWithdrawals();
     fetchBalance();
 
-    // Socket.IO notification for withdrawal status updates
     const storedAuth = localStorage.getItem("auth-storage");
     let token = "";
     let userId = "";
@@ -134,14 +133,11 @@ export default function WithdrawalsPage() {
     }
 
     socketRef.current.emit("joinOrganizerRoom", userId);
-    // console.log("Emitted joinOrganizerRoom (withdrawals page):", userId)
 
     socketRef.current.on("withdrawalStatusUpdated", (data) => {
-      // console.log("Received withdrawalStatusUpdated (withdrawals page):", data)
       toast.success(
         `Your withdrawal of ${data.amount} ${data.currency || selectedCurrency} has been ${data.status}.`
       );
-      // Optionally refresh the withdrawal list
       fetchWithdrawals();
     });
 
@@ -373,7 +369,7 @@ export default function WithdrawalsPage() {
   };
 
   const SkeletonCard = () => (
-    <Card className="overflow-hidden border-none shadow-md bg-white relative">
+    <Card className="overflow-hidden border-none shadow-md bg-white dark:bg-black relative">
       <style jsx global>{`
         @keyframes shimmer {
           0% {
@@ -389,24 +385,23 @@ export default function WithdrawalsPage() {
       `}</style>
       <CardContent className="p-6 relative overflow-hidden">
         <div className="flex items-center gap-4">
-          <div className="h-12 w-12 bg-gray-200 rounded-full" />
+          <div className="h-12 w-12 bg-gray-200 dark:bg-gray-700 rounded-full" />
           <div className="space-y-2 flex-1">
-            <div className="h-4 w-32 bg-gray-200 rounded" />
-            <div className="h-8 w-40 bg-gray-200 rounded" />
+            <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div className="h-8 w-40 bg-gray-200 dark:bg-gray-700 rounded" />
           </div>
         </div>
-        {/* Shimmer overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-shimmer" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 dark:via-white/10 to-transparent animate-shimmer" />
       </CardContent>
     </Card>
   );
 
   return (
-    <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-white dark:bg-black min-h-screen">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold">Withdrawals</h1>
-        <p className="text-muted-foreground text-sm sm:text-base mt-1">
+        <h1 className="text-2xl sm:text-3xl font-bold dark:text-gray-100">Withdrawals</h1>
+        <p className="text-muted-foreground dark:text-gray-400 text-sm sm:text-base mt-1">
           Manage your earnings and withdrawal requests
         </p>
         <div className="mt-3 w-full sm:w-[180px]">
@@ -417,12 +412,12 @@ export default function WithdrawalsPage() {
               setCurrentPage(1);
             }}
           >
-            <SelectTrigger className="h-9 text-sm">
+            <SelectTrigger className="h-9 text-sm dark:bg-black dark:border-gray-700 dark:text-gray-200">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ETB">ETB</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
+            <SelectContent className="dark:bg-black dark:border-gray-700">
+              <SelectItem value="ETB" className="dark:text-gray-200">ETB</SelectItem>
+              <SelectItem value="USD" className="dark:text-gray-200">USD</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -438,58 +433,58 @@ export default function WithdrawalsPage() {
           </>
         ) : (
           <>
-            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-emerald-100 hover:from-emerald-100 hover:to-white">
+            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-emerald-100 hover:from-emerald-100 hover:to-white dark:from-black dark:to-emerald-950/30 dark:hover:from-emerald-950/40 dark:hover:to-black">
               <CardContent className="p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                    <div className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                       Available Balance
                     </div>
-                    <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {balance?.availableBalance.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">
+                    <div className="text-xs text-muted-foreground dark:text-gray-500 mt-1">
                       After 3% commission
                     </div>
                   </div>
-                  <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 shadow-sm">
-                    <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
+                  <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 shadow-sm">
+                    <Wallet className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-orange-100 hover:from-orange-100 hover:to-white">
+            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-orange-100 hover:from-orange-100 hover:to-white dark:from-black dark:to-orange-950/30 dark:hover:from-orange-950/40 dark:hover:to-black">
               <CardContent className="p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                    <div className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                       Pending Withdrawals
                     </div>
-                    <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {balance?.pendingWithdrawals.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
                   </div>
-                  <div className="p-2 sm:p-3 rounded-lg bg-orange-100 shadow-sm">
-                    <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+                  <div className="p-2 sm:p-3 rounded-lg bg-orange-100 dark:bg-orange-900/30 shadow-sm">
+                    <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 dark:text-orange-400" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-green-100 hover:from-green-100 hover:to-white">
+            <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-green-100 hover:from-green-100 hover:to-white dark:from-black dark:to-green-950/30 dark:hover:from-green-950/40 dark:hover:to-black">
               <CardContent className="p-4 sm:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-xs sm:text-sm font-medium text-gray-500 mb-1">
+                    <div className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
                       Approved Withdrawals
                     </div>
-                    <div className="text-xl sm:text-2xl font-bold text-gray-800">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {balance?.approvedWithdrawals.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
                   </div>
-                  <div className="p-2 sm:p-3 rounded-lg bg-green-100 shadow-sm">
-                    <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
+                  <div className="p-2 sm:p-3 rounded-lg bg-green-100 dark:bg-green-900/30 shadow-sm">
+                    <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
                   </div>
                 </div>
               </CardContent>
@@ -503,7 +498,7 @@ export default function WithdrawalsPage() {
         <Button
           onClick={() => setWithdrawDialogOpen(true)}
           disabled={!balance || balance.availableBalance <= 0}
-          className="w-full sm:w-auto bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-sm sm:text-base py-2 sm:py-2.5 px-4 sm:px-5"
+          className="w-full sm:w-auto bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 dark:bg-[#1a2d5a] dark:hover:bg-[#1a2d5a]/80 text-sm sm:text-base py-2 sm:py-2.5 px-4 sm:px-5 text-white"
         >
           <DollarSign className="h-4 w-4 mr-2" />
           Request Withdrawal
@@ -511,36 +506,36 @@ export default function WithdrawalsPage() {
       </div>
 
       {/* Withdrawals Table */}
-      <Card>
+      <Card className="dark:bg-black dark:border-gray-800">
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3 sm:gap-0">
-            <h2 className="text-lg sm:text-xl font-semibold">
+            <h2 className="text-lg sm:text-xl font-semibold dark:text-gray-100">
               Withdrawal History
             </h2>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm sm:text-base">
+              <SelectTrigger className="w-full sm:w-[180px] h-9 text-sm sm:text-base dark:bg-black dark:border-gray-700 dark:text-gray-200">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectContent className="dark:bg-black dark:border-gray-700">
+                <SelectItem value="all" className="dark:text-gray-200">All Status</SelectItem>
+                <SelectItem value="pending" className="dark:text-gray-200">Pending</SelectItem>
+                <SelectItem value="completed" className="dark:text-gray-200">Completed</SelectItem>
+                <SelectItem value="rejected" className="dark:text-gray-200">Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs sm:text-sm">Date</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Amount</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Status</TableHead>
-                  <TableHead className="text-xs sm:text-sm">
+                <TableRow className="border-gray-200 dark:border-gray-800">
+                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">Date</TableHead>
+                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">Amount</TableHead>
+                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">Status</TableHead>
+                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">
                     Transaction ID
                   </TableHead>
-                  <TableHead className="text-xs sm:text-sm">Notes</TableHead>
-                  <TableHead className="text-xs sm:text-sm">
+                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">Notes</TableHead>
+                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">
                     Processed By
                   </TableHead>
                 </TableRow>
@@ -550,43 +545,41 @@ export default function WithdrawalsPage() {
                   <TableRow>
                     <TableCell
                       colSpan={5}
-                      className="text-center text-muted-foreground text-sm py-8"
+                      className="text-center text-muted-foreground dark:text-gray-400 text-sm py-8"
                     >
                       No withdrawal requests found
                     </TableCell>
                   </TableRow>
                 ) : (
                   withdrawals.map((withdrawal) => (
-                    <TableRow key={withdrawal._id}>
-                      <TableCell className="text-xs sm:text-sm">
+                    <TableRow key={withdrawal._id} className="border-gray-100 dark:border-gray-800">
+                      <TableCell className="text-xs sm:text-sm dark:text-gray-300">
                         {new Date(withdrawal.createdAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="font-medium text-xs sm:text-sm">
+                      <TableCell className="font-medium text-xs sm:text-sm dark:text-gray-100">
                         {withdrawal.amount.toFixed(2)} {withdrawal.currency || selectedCurrency}
                       </TableCell>
                       <TableCell className="text-xs sm:text-sm">
                         <Badge
                           variant="outline"
                           className={`px-2 py-0.5 sm:px-3 sm:py-1 text-xs ${
-                            withdrawal.status === "completed"
-                              ? "bg-green-500 text-white"
-                              : withdrawal.status === "approved"
-                              ? "bg-green-500 text-white"
+                            withdrawal.status === "completed" || withdrawal.status === "approved"
+                              ? "bg-green-500 text-white dark:bg-green-600"
                               : withdrawal.status === "pending"
-                              ? "bg-yellow-500 text-white"
-                              : "bg-red-500 text-white"
+                              ? "bg-yellow-500 text-white dark:bg-yellow-600"
+                              : "bg-red-500 text-white dark:bg-red-600"
                           }`}
                         >
                           {withdrawal.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
+                      <TableCell className="text-xs sm:text-sm dark:text-gray-300">
                         {withdrawal.transactionId || "-"}
                       </TableCell>
-                      <TableCell className="max-w-[150px] sm:max-w-[200px] truncate text-xs sm:text-sm">
+                      <TableCell className="max-w-[150px] sm:max-w-[200px] truncate text-xs sm:text-sm dark:text-gray-300">
                         {withdrawal.notes}
                       </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
+                      <TableCell className="text-xs sm:text-sm dark:text-gray-300">
                         {withdrawal.processedBy?.firstName || "-"}
                       </TableCell>
                     </TableRow>
@@ -598,9 +591,9 @@ export default function WithdrawalsPage() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-800">
               <div className="flex items-center gap-2">
-                <span className="text-xs sm:text-sm text-gray-600">
+                <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                   Rows per page:
                 </span>
                 <Select
@@ -610,24 +603,24 @@ export default function WithdrawalsPage() {
                     setCurrentPage(1);
                   }}
                 >
-                  <SelectTrigger className="w-[70px] h-8 sm:w-20 sm:h-9 border-gray-200 text-xs sm:text-sm">
+                  <SelectTrigger className="w-[70px] h-8 sm:w-20 sm:h-9 border-gray-200 dark:border-gray-700 dark:bg-black dark:text-gray-200 text-xs sm:text-sm">
                     <SelectValue placeholder="5" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5</SelectItem>
-                    <SelectItem value="10">10</SelectItem>
-                    <SelectItem value="20">20</SelectItem>
+                  <SelectContent className="dark:bg-black dark:border-gray-700">
+                    <SelectItem value="5" className="dark:text-gray-200">5</SelectItem>
+                    <SelectItem value="10" className="dark:text-gray-200">10</SelectItem>
+                    <SelectItem value="20" className="dark:text-gray-200">20</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs sm:text-sm font-medium text-gray-700">
+                <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">
                   Page {currentPage} of {totalPages}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
-                    className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm border-gray-300 hover:bg-gray-100 bg-white"
+                    className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 bg-white dark:bg-black dark:text-gray-300"
                     onClick={() =>
                       setCurrentPage((prev) => Math.max(prev - 1, 1))
                     }
@@ -636,7 +629,7 @@ export default function WithdrawalsPage() {
                     Previous
                   </Button>
                   <Button
-                    className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white"
+                    className="h-8 sm:h-9 px-3 sm:px-4 text-xs sm:text-sm bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 dark:bg-[#1a2d5a] dark:hover:bg-[#1a2d5a]/80 text-white"
                     onClick={() =>
                       setCurrentPage((prev) => Math.min(prev + 1, totalPages))
                     }
@@ -653,18 +646,18 @@ export default function WithdrawalsPage() {
 
       {/* Withdrawal Request Dialog */}
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] p-4 sm:p-6">
+        <DialogContent className="sm:max-w-[425px] p-4 sm:p-6 dark:bg-black dark:border-gray-800">
           <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
+            <DialogTitle className="text-lg sm:text-xl dark:text-gray-100">
               Request Withdrawal
             </DialogTitle>
-            <DialogDescription className="text-sm sm:text-base">
+            <DialogDescription className="text-sm sm:text-base dark:text-gray-400">
               Enter the amount you wish to withdraw from your available balance.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="withdraw-amount" className="text-sm">
+              <Label htmlFor="withdraw-amount" className="text-sm dark:text-gray-300">
                 Amount ({selectedCurrency})
               </Label>
               <Input
@@ -675,11 +668,11 @@ export default function WithdrawalsPage() {
                 placeholder="Enter amount"
                 min="0"
                 step="0.01"
-                className="text-sm"
+                className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="payment-method" className="text-sm">
+              <Label htmlFor="payment-method" className="text-sm dark:text-gray-300">
                 Payment Method
               </Label>
               <Select
@@ -693,19 +686,19 @@ export default function WithdrawalsPage() {
                   }))
                 }
               >
-                <SelectTrigger id="payment-method" className="text-sm">
+                <SelectTrigger id="payment-method" className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-200">
                   <SelectValue placeholder="Select payment method" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="telebirr">Telebirr</SelectItem>
-                  <SelectItem value="mpesa">M-Pesa</SelectItem>
-                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                <SelectContent className="dark:bg-black dark:border-gray-700">
+                  <SelectItem value="telebirr" className="dark:text-gray-200">Telebirr</SelectItem>
+                  <SelectItem value="mpesa" className="dark:text-gray-200">M-Pesa</SelectItem>
+                  <SelectItem value="bank" className="dark:text-gray-200">Bank Transfer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             {bankDetails.bankName === "telebirr" && (
               <div className="space-y-2">
-                <Label htmlFor="telebirr-phone" className="text-sm">
+                <Label htmlFor="telebirr-phone" className="text-sm dark:text-gray-300">
                   Telebirr Phone Number
                 </Label>
                 <Input
@@ -718,13 +711,13 @@ export default function WithdrawalsPage() {
                     }))
                   }
                   placeholder="Enter Telebirr phone number"
-                  className="text-sm"
+                  className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100"
                 />
               </div>
             )}
             {bankDetails.bankName === "mpesa" && (
               <div className="space-y-2">
-                <Label htmlFor="mpesa-phone" className="text-sm">
+                <Label htmlFor="mpesa-phone" className="text-sm dark:text-gray-300">
                   M-Pesa Phone Number
                 </Label>
                 <Input
@@ -737,7 +730,7 @@ export default function WithdrawalsPage() {
                     }))
                   }
                   placeholder="Enter M-Pesa phone number"
-                  className="text-sm"
+                  className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100"
                 />
               </div>
             )}
@@ -745,7 +738,7 @@ export default function WithdrawalsPage() {
             {bankDetails.bankName === "bank" && (
               <>
                 <div className="space-y-2">
-                  <Label className="text-gray-700">Bank Name</Label>
+                  <Label className="text-gray-700 dark:text-gray-300">Bank Name</Label>
                   <Select
                     value={bankDetails.accountName}
                     onValueChange={(value) =>
@@ -755,69 +748,65 @@ export default function WithdrawalsPage() {
                       }))
                     }
                   >
-                    <SelectTrigger className="border-gray-300">
+                    <SelectTrigger className="border-gray-300 dark:border-gray-700 dark:bg-black dark:text-gray-200">
                       <SelectValue placeholder="Select bank" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Commercial Bank of Ethiopia">
+                    <SelectContent className="dark:bg-black dark:border-gray-700">
+                      <SelectItem value="Commercial Bank of Ethiopia" className="dark:text-gray-200">
                         Commercial Bank of Ethiopia
                       </SelectItem>
-                      <SelectItem value="Awash International Bank">
+                      <SelectItem value="Awash International Bank" className="dark:text-gray-200">
                         Awash International Bank
                       </SelectItem>
-                      <SelectItem value="Bank of Abyssinia">
+                      <SelectItem value="Bank of Abyssinia" className="dark:text-gray-200">
                         Bank of Abyssinia
                       </SelectItem>
-                      <SelectItem value="Dashen Bank">Dashen Bank</SelectItem>
-                      <SelectItem value="Hibret Bank">Hibret Bank</SelectItem>
-                      <SelectItem value="Nib International Bank">
+                      <SelectItem value="Dashen Bank" className="dark:text-gray-200">Dashen Bank</SelectItem>
+                      <SelectItem value="Hibret Bank" className="dark:text-gray-200">Hibret Bank</SelectItem>
+                      <SelectItem value="Nib International Bank" className="dark:text-gray-200">
                         Nib International Bank
                       </SelectItem>
-                      <SelectItem value="Cooperative Bank of Oromia">
+                      <SelectItem value="Cooperative Bank of Oromia" className="dark:text-gray-200">
                         Cooperative Bank of Oromia
                       </SelectItem>
-                      <SelectItem value="Lion International Bank">
+                      <SelectItem value="Lion International Bank" className="dark:text-gray-200">
                         Lion International Bank
                       </SelectItem>
-                      <SelectItem value="Wegagen Bank">Wegagen Bank</SelectItem>
-                      <SelectItem value="Zemen Bank">Zemen Bank</SelectItem>
-                      <SelectItem value="Oromia International Bank">
+                      <SelectItem value="Wegagen Bank" className="dark:text-gray-200">Wegagen Bank</SelectItem>
+                      <SelectItem value="Zemen Bank" className="dark:text-gray-200">Zemen Bank</SelectItem>
+                      <SelectItem value="Oromia International Bank" className="dark:text-gray-200">
                         Oromia International Bank
                       </SelectItem>
-                      <SelectItem value="Global Bank Ethiopia">
+                      <SelectItem value="Global Bank Ethiopia" className="dark:text-gray-200">
                         Global Bank Ethiopia
                       </SelectItem>
-                      <SelectItem value="Enat Bank">Enat Bank</SelectItem>
-                      <SelectItem value="Addis International Bank">
+                      <SelectItem value="Enat Bank" className="dark:text-gray-200">Enat Bank</SelectItem>
+                      <SelectItem value="Addis International Bank" className="dark:text-gray-200">
                         Addis International Bank
                       </SelectItem>
-                      <SelectItem value="Abay Bank">Abay Bank</SelectItem>
-                      <SelectItem value="Berhan International Bank">
+                      <SelectItem value="Abay Bank" className="dark:text-gray-200">Abay Bank</SelectItem>
+                      <SelectItem value="Berhan International Bank" className="dark:text-gray-200">
                         Berhan International Bank
                       </SelectItem>
-                      <SelectItem value="Bunna International Bank">
+                      <SelectItem value="Bunna International Bank" className="dark:text-gray-200">
                         Bunna International Bank
                       </SelectItem>
-                      <SelectItem value="ZamZam Bank">ZamZam Bank</SelectItem>
-                      <SelectItem value="Shabelle Bank">
-                        Shabelle Bank
-                      </SelectItem>
-                      <SelectItem value="Hijra Bank">Hijra Bank</SelectItem>
-                      <SelectItem value="Siinqee Bank">Siinqee Bank</SelectItem>
-                      <SelectItem value="Ahadu Bank">Ahadu Bank</SelectItem>
-                      <SelectItem value="Goh Betoch Bank">
-                        Goh Betoch Bank
-                      </SelectItem>
-                      <SelectItem value="Tsedey Bank">Tsedey Bank</SelectItem>
-                      <SelectItem value="Tsehay Bank">Tsehay Bank</SelectItem>
-                      <SelectItem value="Gadaa Bank">Gadaa Bank</SelectItem>
-                      <SelectItem value="Amhara Bank">Amhara Bank</SelectItem>
-                      <SelectItem value="Rammis Bank">Rammis Bank</SelectItem>
+                      <SelectItem value="ZamZam Bank" className="dark:text-gray-200">ZamZam Bank</SelectItem>
+                      <SelectItem value="Shabelle Bank" className="dark:text-gray-200">Shabelle Bank</SelectItem>
+                      <SelectItem value="Hijra Bank" className="dark:text-gray-200">Hijra Bank</SelectItem>
+                      <SelectItem value="Siinqee Bank" className="dark:text-gray-200">Siinqee Bank</SelectItem>
+                      <SelectItem value="Ahadu Bank" className="dark:text-gray-200">Ahadu Bank</SelectItem>
+                      <SelectItem value="Goh Betoch Bank" className="dark:text-gray-200">Goh Betoch Bank</SelectItem>
+                      <SelectItem value="Tsedey Bank" className="dark:text-gray-200">Tsedey Bank</SelectItem>
+                      <SelectItem value="Tsehay Bank" className="dark:text-gray-200">Tsehay Bank</SelectItem>
+                      <SelectItem value="Gadaa Bank" className="dark:text-gray-200">Gadaa Bank</SelectItem>
+                      <SelectItem value="Amhara Bank" className="dark:text-gray-200">Amhara Bank</SelectItem>
+                      <SelectItem value="Rammis Bank" className="dark:text-gray-200">Rammis Bank</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-gray-700">Bank Account Number</Label>
+                  <Label className="text-gray-700 dark:text-gray-300">Bank Account Number</Label>
                   <Input
                     value={bankDetails.accountNumber}
                     onChange={(e) =>
@@ -827,14 +816,14 @@ export default function WithdrawalsPage() {
                       }))
                     }
                     placeholder="Enter account number"
-                    className="border-gray-300"
+                    className="border-gray-300 dark:border-gray-700 dark:bg-black dark:text-gray-100"
                   />
                 </div>
               </>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="notes" className="text-sm">
+              <Label htmlFor="notes" className="text-sm dark:text-gray-300">
                 Notes (optional)
               </Label>
               <Textarea
@@ -843,11 +832,11 @@ export default function WithdrawalsPage() {
                 onChange={(e) => setWithdrawNotes(e.target.value)}
                 placeholder="Add any notes about this withdrawal request"
                 rows={3}
-                className="text-sm"
+                className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500"
               />
             </div>
-            <div className="p-3 bg-muted/50 rounded-lg space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="p-3 bg-muted/50 dark:bg-gray-900/50 rounded-lg space-y-2">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground dark:text-gray-400">
                 <AlertCircle className="h-4 w-4" />
                 <span>
                   Available Balance (After 3% Commission):{" "}
@@ -860,7 +849,7 @@ export default function WithdrawalsPage() {
             <Button
               variant="outline"
               onClick={() => setWithdrawDialogOpen(false)}
-              className="w-full sm:w-auto text-sm"
+              className="w-full sm:w-auto text-sm dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Cancel
             </Button>
@@ -879,7 +868,7 @@ export default function WithdrawalsPage() {
                 (bankDetails.bankName === "bank" &&
                   (!bankDetails.accountName || !bankDetails.accountNumber))
               }
-              className="w-full sm:w-auto bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white text-sm"
+              className="w-full sm:w-auto bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 dark:bg-[#1a2d5a] dark:hover:bg-[#1a2d5a]/80 text-white text-sm"
             >
               {isSubmittingWithdraw ? "Processing..." : "Request Withdrawal"}
             </Button>

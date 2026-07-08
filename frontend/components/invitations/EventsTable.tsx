@@ -31,19 +31,19 @@ export default function EventsTable({
   const paginatedEvents = events.slice(startIndex, startIndex + itemsPerPage);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-8">
-      <div className="p-6 border-b border-gray-200">
+    <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm mb-8">
+      <div className="p-6 border-b border-gray-200 dark:border-gray-800">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-xl font-semibold text-gray-900">Events</h2>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Events</h2>
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
               <input
                 type="text"
                 placeholder="Search events..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-black text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -52,47 +52,47 @@ export default function EventsTable({
 
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50">
+          <thead className="bg-gray-50 dark:bg-gray-900/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Event
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden sm:table-cell">
                 Date & Time
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden md:table-cell">
                 Location
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
                 Type
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden xl:table-cell">
                 Organizer
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider hidden lg:table-cell">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-black divide-y divide-gray-200 dark:divide-gray-800">
             {isLoading ? (
               <tr>
                 <td
                   colSpan={7}
-                  className="px-6 py-12 text-center text-gray-500"
+                  className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
                 >
                   <div className="flex flex-col items-center justify-center gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
                     <p>Loading events...</p>
                   </div>
                 </td>
               </tr>
             ) : paginatedEvents.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
                   No events found.
                 </td>
               </tr>
@@ -100,16 +100,16 @@ export default function EventsTable({
               paginatedEvents.map((event) => (
                 <tr
                   key={event.id}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
                   onClick={() => onViewDetails(event)}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         {event.title}
                       </div>
                       <div
-                        className="text-sm text-gray-500 max-w-[150px] truncate"
+                        className="text-sm text-gray-500 dark:text-gray-400 max-w-[150px] truncate"
                         title={event.description}
                       >
                         {event.description || "No description"}
@@ -117,12 +117,12 @@ export default function EventsTable({
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap hidden sm:table-cell">
-                    <div className="text-sm text-gray-900">{event.date}</div>
-                    <div className="text-sm text-gray-500">{event.time}</div>
+                    <div className="text-sm text-gray-900 dark:text-gray-100">{event.date}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">{event.time}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap hidden md:table-cell">
                     <div
-                      className="text-sm text-gray-900 max-w-[150px] truncate"
+                      className="text-sm text-gray-900 dark:text-gray-100 max-w-[150px] truncate"
                       title={event.location}
                     >
                       {event.location}
@@ -132,15 +132,15 @@ export default function EventsTable({
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         event.isPublic === false
-                          ? "bg-red-100 text-red-800"
-                          : "bg-green-100 text-green-800"
+                          ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
+                          : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
                       }`}
                     >
                       {event.isPublic === false ? "private" : "public"}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap hidden xl:table-cell">
-                    <div className="text-sm text-gray-900">
+                    <div className="text-sm text-gray-900 dark:text-gray-100">
                       {event.organizer}
                     </div>
                   </td>
@@ -148,10 +148,10 @@ export default function EventsTable({
                     <span
                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         event.status === "active"
-                          ? "bg-green-100 text-green-800"
+                          ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
                           : event.status === "upcoming"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-gray-100 text-gray-800"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400"
+                          : "bg-gray-100 dark:bg-gray-800/50 text-gray-800 dark:text-gray-400"
                       }`}
                     >
                       {event.status || "upcoming"}
@@ -166,8 +166,8 @@ export default function EventsTable({
                       disabled={event.status !== "published"}
                       className={`mr-3 ${
                         event.status === "published"
-                          ? "text-blue-600 hover:text-blue-900"
-                          : "text-gray-400 cursor-not-allowed"
+                          ? "text-blue-600 dark:text-blue-400 hover:text-blue-900 dark:hover:text-blue-300"
+                          : "text-gray-400 dark:text-gray-600 cursor-not-allowed"
                       }`}
                       title={
                         event.status !== "published"
@@ -185,8 +185,8 @@ export default function EventsTable({
                       disabled={event.status !== "published"}
                       className={`mr-3 ${
                         event.status === "published"
-                          ? "text-purple-600 hover:text-purple-900"
-                          : "text-gray-400 cursor-not-allowed"
+                          ? "text-purple-600 dark:text-purple-400 hover:text-purple-900 dark:hover:text-purple-300"
+                          : "text-gray-400 dark:text-gray-600 cursor-not-allowed"
                       }`}
                       title={
                         event.status !== "published"
@@ -201,7 +201,7 @@ export default function EventsTable({
                         e.stopPropagation();
                         onViewAttendees(event);
                       }}
-                      className="text-green-600 hover:text-green-900 ml-3"
+                      className="text-green-600 dark:text-green-400 hover:text-green-900 dark:hover:text-green-300 ml-3"
                     >
                       View Attendees
                     </button>

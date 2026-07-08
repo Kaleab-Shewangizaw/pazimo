@@ -42,8 +42,6 @@ export default function CampaignHistoryPage() {
   const [showModal, setShowModal] = useState(false);
   const [viewCampaign, setViewCampaign] = useState<Campaign | null>(null);
 
-  // We need events for the modal to map event IDs back to names if needed,
-  // or just to populate the selector.
   const [events, setEvents] = useState<Event[]>([]);
 
   const fetchCampaigns = async () => {
@@ -68,7 +66,6 @@ export default function CampaignHistoryPage() {
   };
 
   const fetchEvents = async () => {
-    // Re-fetching events here so modal works correctly
     try {
       const userId = localStorage.getItem("userId");
       const res = await fetch(
@@ -112,7 +109,6 @@ export default function CampaignHistoryPage() {
   };
 
   const handleEdit = (campaign: Campaign) => {
-    // Direct edit mostly for drafts
     if (campaign.status === "draft") {
       setEditingCampaign(campaign);
       setShowModal(true);
@@ -129,22 +125,22 @@ export default function CampaignHistoryPage() {
 
   if (loading)
     return (
-      <div className="p-8 flex justify-center">
-        <Loader2 className="animate-spin" />
+      <div className="p-8 flex justify-center bg-white dark:bg-black">
+        <Loader2 className="animate-spin text-blue-600 dark:text-blue-400" />
       </div>
     );
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-lg border shadow-sm">
+    <div className="space-y-4 bg-white dark:bg-black">
+      <div className="bg-white dark:bg-black rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm">
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Title</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Recipients</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+            <TableRow className="border-gray-200 dark:border-gray-800">
+              <TableHead className="dark:text-gray-300">Title</TableHead>
+              <TableHead className="dark:text-gray-300">Status</TableHead>
+              <TableHead className="dark:text-gray-300">Recipients</TableHead>
+              <TableHead className="dark:text-gray-300">Created</TableHead>
+              <TableHead className="text-right dark:text-gray-300">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -152,7 +148,7 @@ export default function CampaignHistoryPage() {
               <TableRow>
                 <TableCell
                   colSpan={5}
-                  className="text-center h-24 text-gray-500"
+                  className="text-center h-24 text-gray-500 dark:text-gray-400"
                 >
                   No campaigns found.
                 </TableCell>
@@ -161,12 +157,12 @@ export default function CampaignHistoryPage() {
               campaigns.map((camp) => (
                 <TableRow
                   key={camp._id}
-                  className="cursor-pointer hover:bg-gray-50 from-gray-50"
+                  className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 border-gray-100 dark:border-gray-800"
                   onClick={() => handleRowClick(camp)}
                 >
-                  <TableCell className="font-medium">
+                  <TableCell className="font-medium dark:text-gray-100">
                     {camp.title}
-                    <div className="text-xs text-gray-500 truncate max-w-[200px]">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">
                       {camp.message}
                     </div>
                   </TableCell>
@@ -181,11 +177,11 @@ export default function CampaignHistoryPage() {
                       }
                       className={
                         camp.status === "active"
-                          ? "bg-blue-100 text-blue-800 hover:bg-blue-100"
+                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30"
                           : camp.status === "completed"
-                            ? "bg-green-100 text-green-800 hover:bg-green-100"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30"
                             : camp.status === "draft"
-                              ? "bg-gray-100 text-gray-800 hover:bg-gray-100"
+                              ? "bg-gray-100 dark:bg-gray-800/50 text-gray-800 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800/50"
                               : ""
                       }
                     >
@@ -195,10 +191,10 @@ export default function CampaignHistoryPage() {
                           camp.status.slice(1)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="dark:text-gray-300">
                     {camp.totalRecipients || camp.recipients?.length}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="dark:text-gray-300">
                     {new Date(camp.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right">
@@ -211,23 +207,25 @@ export default function CampaignHistoryPage() {
                             e.stopPropagation();
                             handleEdit(camp);
                           }}
+                          className="dark:hover:bg-gray-800"
                         >
-                          <Edit className="h-4 w-4 text-blue-600" />
+                          <Edit className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                         </Button>
                         <Button
                           size="icon"
                           variant="ghost"
                           onClick={(e) => handleDelete(camp._id, e)}
+                          className="dark:hover:bg-gray-800"
                         >
-                          <Trash className="h-4 w-4 text-red-600" />
+                          <Trash className="h-4 w-4 text-red-600 dark:text-red-400" />
                         </Button>
                       </div>
                     )}
                     {camp.status === "active" && (
-                      <Clock className="h-4 w-4 ml-auto text-blue-500" />
+                      <Clock className="h-4 w-4 ml-auto text-blue-500 dark:text-blue-400" />
                     )}
                     {camp.status === "completed" && (
-                      <CheckCircle className="h-4 w-4 ml-auto text-green-500" />
+                      <CheckCircle className="h-4 w-4 ml-auto text-green-500 dark:text-green-400" />
                     )}
                   </TableCell>
                 </TableRow>
@@ -243,7 +241,7 @@ export default function CampaignHistoryPage() {
           onClose={() => {
             setShowModal(false);
             setEditingCampaign(null);
-            fetchCampaigns(); // Refresh list after edit/send
+            fetchCampaigns();
           }}
           events={events}
           initialData={editingCampaign}
@@ -254,37 +252,37 @@ export default function CampaignHistoryPage() {
         open={!!viewCampaign}
         onOpenChange={(o) => !o && setViewCampaign(null)}
       >
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl dark:bg-black dark:border-gray-800">
           <DialogHeader>
-            <DialogTitle>Campaign Details</DialogTitle>
+            <DialogTitle className="dark:text-gray-100">Campaign Details</DialogTitle>
           </DialogHeader>
           {viewCampaign && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <h4 className="text-sm font-medium text-gray-500">
+                  <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                     Campaign Title
                   </h4>
-                  <p className="font-semibold">{viewCampaign.title}</p>
+                  <p className="font-semibold dark:text-gray-100">{viewCampaign.title}</p>
                 </div>
                 <div className="space-y-1">
-                  <h4 className="text-sm font-medium text-gray-500">
+                  <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                     Sent Date
                   </h4>
-                  <p>{new Date(viewCampaign.createdAt).toLocaleString()}</p>
+                  <p className="dark:text-gray-300">{new Date(viewCampaign.createdAt).toLocaleString()}</p>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-500">Message</h4>
-                <div className="bg-gray-50 p-4 rounded-lg text-sm border">
+                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Message</h4>
+                <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg text-sm border border-gray-200 dark:border-gray-700 dark:text-gray-300">
                   {viewCampaign.message}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <h4 className="text-sm font-medium text-gray-500">
+                  <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">
                     Recipients (
                     {viewCampaign.totalRecipients ||
                       viewCampaign.recipients?.length ||
@@ -292,24 +290,24 @@ export default function CampaignHistoryPage() {
                     )
                   </h4>
                 </div>
-                <div className="border rounded-md">
+                <div className="border border-gray-200 dark:border-gray-700 rounded-md">
                   <ScrollArea className="h-[300px]">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[50px]">#</TableHead>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Phone Number</TableHead>
+                        <TableRow className="border-gray-200 dark:border-gray-700">
+                          <TableHead className="w-[50px] dark:text-gray-300">#</TableHead>
+                          <TableHead className="dark:text-gray-300">Name</TableHead>
+                          <TableHead className="dark:text-gray-300">Phone Number</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {viewCampaign.recipients?.map((r, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="text-gray-500">
+                          <TableRow key={i} className="border-gray-100 dark:border-gray-800">
+                            <TableCell className="text-gray-500 dark:text-gray-400">
                               {i + 1}
                             </TableCell>
-                            <TableCell>{r.name || "N/A"}</TableCell>
-                            <TableCell className="font-mono text-xs">
+                            <TableCell className="dark:text-gray-300">{r.name || "N/A"}</TableCell>
+                            <TableCell className="font-mono text-xs dark:text-gray-300">
                               {r.phone}
                             </TableCell>
                           </TableRow>
@@ -319,7 +317,7 @@ export default function CampaignHistoryPage() {
                           <TableRow>
                             <TableCell
                               colSpan={3}
-                              className="text-center text-gray-500 py-4"
+                              className="text-center text-gray-500 dark:text-gray-400 py-4"
                             >
                               No recipient details available.
                             </TableCell>

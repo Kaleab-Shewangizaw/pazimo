@@ -66,37 +66,37 @@ export default function SentInvitationsTable({
     switch (status) {
       case "confirmed":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-500">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border border-green-500 dark:border-green-700">
             <CheckCircle className="w-3 h-3" /> Delivered
           </span>
         );
       case "delivered":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800">
             <CheckIcon className="w-3 h-3" /> Delivered
           </span>
         );
       case "sent":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
             <Mail className="w-3 h-3" /> Sent
           </span>
         );
       case "failed":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800">
             <AlertCircle className="w-3 h-3" /> Failed
           </span>
         );
       case "declined":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800">
             <XCircle className="w-3 h-3" /> Declined
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800/50 text-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700">
             {status}
           </span>
         );
@@ -107,19 +107,19 @@ export default function SentInvitationsTable({
     switch (status) {
       case "confirmed":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-500">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border border-green-500 dark:border-green-700">
             <CheckCircle className="w-3 h-3" /> Confirmed
           </span>
         );
       case "declined":
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 border border-red-200 dark:border-red-800">
             <XCircle className="w-3 h-3" /> Declined
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800">
             <Clock className="w-3 h-3" /> Pending
           </span>
         );
@@ -129,19 +129,19 @@ export default function SentInvitationsTable({
   return (
     <div className="mt-8 md:mt-12">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h2 className="text-2xl md:text-md font-bold text-gray-900">
+        <h2 className="text-2xl md:text-md font-bold text-gray-900 dark:text-gray-100">
           Sent Invitations
         </h2>
         <div className="flex items-center gap-4 text-sm flex-wrap">
-          <div className="flex items-center gap-2 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <span className="text-gray-900 font-medium">
+          <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded-lg border border-green-200 dark:border-green-800">
+            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <span className="text-gray-900 dark:text-gray-100 font-medium">
               {deliveredInvitations} Delivered
             </span>
           </div>
-          <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-            <XCircle className="h-4 w-4 text-gray-600" />
-            <span className="text-gray-900 font-medium">
+          <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900/20 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800">
+            <XCircle className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            <span className="text-gray-900 dark:text-gray-100 font-medium">
               {totalInvitations - deliveredInvitations} Pending
             </span>
           </div>
@@ -155,7 +155,7 @@ export default function SentInvitationsTable({
           placeholder="Search by event, customer, or contact..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-black text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
         />
         <select
           value={statusFilter}
@@ -164,7 +164,7 @@ export default function SentInvitationsTable({
               e.target.value as "all" | "sent" | "delivered" | "failed"
             )
           }
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-black text-gray-900 dark:text-gray-100"
         >
           <option value="all">All Status</option>
           <option value="sent">Sent</option>
@@ -176,7 +176,7 @@ export default function SentInvitationsTable({
           onChange={(e) =>
             setContactTypeFilter(e.target.value as "all" | "email" | "phone")
           }
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-black text-gray-900 dark:text-gray-100"
         >
           <option value="all">All Methods</option>
           <option value="email">Email</option>
@@ -184,36 +184,36 @@ export default function SentInvitationsTable({
         </select>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-800">
               <tr>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
                   Event
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden sm:table-cell">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100 hidden sm:table-cell">
                   Customer
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
                   Contact
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden md:table-cell">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100 hidden md:table-cell">
                   Method
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100 hidden lg:table-cell">
                   Guests / Tickets
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100 hidden lg:table-cell">
                   Usage
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100 hidden lg:table-cell">
                   Ticket Type
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 hidden lg:table-cell">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100 hidden lg:table-cell">
                   Sent At
                 </th>
-                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900">
+                <th className="px-4 md:px-6 py-4 text-left text-xs md:text-sm font-semibold text-gray-900 dark:text-gray-100">
                   Status
                 </th>
               </tr>
@@ -223,10 +223,10 @@ export default function SentInvitationsTable({
                 <tr>
                   <td
                     colSpan={9}
-                    className="px-4 md:px-6 py-12 text-center text-gray-500"
+                    className="px-4 md:px-6 py-12 text-center text-gray-500 dark:text-gray-400"
                   >
                     <div className="flex flex-col items-center justify-center gap-2">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
                       <p>Loading invitations...</p>
                     </div>
                   </td>
@@ -235,7 +235,7 @@ export default function SentInvitationsTable({
                 <tr>
                   <td
                     colSpan={9}
-                    className="px-4 md:px-6 py-8 text-center text-gray-500"
+                    className="px-4 md:px-6 py-8 text-center text-gray-500 dark:text-gray-400"
                   >
                     {safeInvitations.length === 0
                       ? "No invitations sent yet"
@@ -296,7 +296,6 @@ export default function SentInvitationsTable({
 
                     let usage = "0/1";
                     if (ticket) {
-                      // For invitations created before Jan 2, 2026, derive purchaseQuantity from cost
                       const isOldInvitation =
                         new Date(invitation.createdAt || invitation.sentAt) <
                         new Date("2026-01-02");
@@ -309,7 +308,6 @@ export default function SentInvitationsTable({
                         invitation.estimatedCost &&
                         invitation.estimatedCost > 0
                       ) {
-                        // Derive original quantity: cost / 1.03 (since each invitation unit is 1.03 ETB)
                         const derivedQty = Math.round(
                           invitation.estimatedCost / 1.03
                         );
@@ -325,7 +323,6 @@ export default function SentInvitationsTable({
                       usage = `0/${invitation.qrCodeCount || 1}`;
                     }
 
-                    // Unified Status Logic
                     let unifiedStatus = "pending";
                     if (
                       ticket &&
@@ -341,12 +338,9 @@ export default function SentInvitationsTable({
                       unifiedStatus = "pending";
                     }
 
-                    // If no ticket exists yet, it's a pending invitation without a ticket
                     const isGuestPending = !ticket;
-
                     const guestQuantity = invitation.qrCodeCount || 1;
                     
-                    // Ticket count for display (use guest quantity when no ticket exists)
                     const displayTicketCount = ticket
                       ? ticket.purchaseQuantity || ticket.ticketCount || 1
                       : guestQuantity;
@@ -363,32 +357,32 @@ export default function SentInvitationsTable({
                       <tr
                         key={invitation.id}
                         onClick={() => onViewDetails(invitation)}
-                        className="border-t border-gray-200 hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
+                        className="border-t border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors duration-200 cursor-pointer"
                       >
                         <td className="px-4 md:px-6 py-4">
-                          <div className="font-medium text-gray-900 text-sm md:text-base">
+                          <div className="font-medium text-gray-900 dark:text-gray-100 text-sm md:text-base">
                             {invitation.eventTitle}
                           </div>
                         </td>
-                        <td className="px-4 md:px-6 py-4 text-sm text-gray-900 hidden sm:table-cell">
+                        <td className="px-4 md:px-6 py-4 text-sm text-gray-900 dark:text-gray-100 hidden sm:table-cell">
                           {invitation.customerName}
                         </td>
                         <td className="px-4 md:px-6 py-4">
-                          <div className="text-sm text-gray-900">
+                          <div className="text-sm text-gray-900 dark:text-gray-100">
                             {invitation.contact}
                           </div>
                           {invitation.message && (
-                            <div className="text-xs text-gray-600 mt-1 truncate max-w-[150px]">
+                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 truncate max-w-[150px]">
                               &quot;{invitation.message}&quot;
                             </div>
                           )}
                         </td>
                         <td className="px-4 md:px-6 py-4 hidden md:table-cell">
-                          <div className="flex items-center gap-1 text-sm text-gray-900">
+                          <div className="flex items-center gap-1 text-sm text-gray-900 dark:text-gray-100">
                             {invitation.contactType === "email" ? (
-                              <Mail className="h-4 w-4 text-blue-600" />
+                              <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                             ) : (
-                              <Phone className="h-4 w-4 text-green-600" />
+                              <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
                             )}
                             <span className="capitalize">
                               {invitation.contactType}
@@ -399,8 +393,8 @@ export default function SentInvitationsTable({
                           <span
                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${
                               ticket
-                                ? "bg-green-100 text-green-800 border border-green-200"
-                                : "bg-blue-100 text-blue-800 border border-blue-200"
+                                ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 border border-green-200 dark:border-green-800"
+                                : "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 border border-blue-200 dark:border-blue-800"
                             }`}
                           >
                             <Ticket className="w-3 h-3" />
@@ -414,13 +408,13 @@ export default function SentInvitationsTable({
                         </td>
                         <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
                           {displayUsage === "-" ? (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
                           ) : (
                             <span
                               className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                 displayUsage.startsWith("0/")
-                                  ? "bg-gray-100 text-gray-800"
-                                  : "bg-green-100 text-green-800"
+                                  ? "bg-gray-100 dark:bg-gray-800/50 text-gray-800 dark:text-gray-400"
+                                  : "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
                               }`}
                             >
                               {displayUsage}
@@ -429,28 +423,28 @@ export default function SentInvitationsTable({
                         </td>
                         <td className="px-4 md:px-6 py-4 hidden lg:table-cell">
                           {displayTicketType === "-" ? (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
                               {displayTicketType}
                             </span>
                           )}
                         </td>
-                        <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 hidden lg:table-cell">
+                        <td className="px-4 md:px-6 py-4 text-xs md:text-sm text-gray-600 dark:text-gray-400 hidden lg:table-cell">
                           {invitation.sentAt}
                         </td>
                         <td className="px-4 md:px-6 py-4">
                           {displayStatus === "-" ? (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 dark:text-gray-500">-</span>
                           ) : (
                             <span
                               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
                                 displayStatus === "confirmed" ||
                                 displayStatus === "used"
-                                  ? "bg-green-100 text-green-800"
+                                  ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
                                   : displayStatus === "declined"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-yellow-100 text-yellow-800"
+                                  ? "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
+                                  : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400"
                               }`}
                             >
                               {displayStatus}

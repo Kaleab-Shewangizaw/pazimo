@@ -100,13 +100,13 @@ export default function ClientLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-black">
       {/* Organizer Sidebar */}
       <Sidebar open={isSidebarOpen} onClose={closeSidebar} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Organizer Header */}
         <OrganizerHeader onMenuClick={toggleSidebar} />
-        <main className="flex-1 overflow-y-auto bg-gray-50">
+        <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-black">
           {children}
         </main>
       </div>

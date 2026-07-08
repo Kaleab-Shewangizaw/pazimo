@@ -63,14 +63,13 @@ export default function BulkInvite({
     const file = event.target.files ? event.target.files[0] : null;
     if (!file) return;
 
-    // Check file size (5MB limit)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File size exceeds 5MB limit. Please upload a smaller file.");
       return;
     }
 
     setSelectedFile(file);
-    setMissingColumns([]); // Reset missing columns on new file
+    setMissingColumns([]);
 
     const reader = new FileReader();
 
@@ -81,8 +80,8 @@ export default function BulkInvite({
       if (fileType.includes("csv")) {
         parseCsv(arrayBuffer as ArrayBuffer);
       } else if (
-        fileType.includes("spreadsheetml") || // For .xlsx
-        fileType.includes("excel") // For .xls
+        fileType.includes("spreadsheetml") ||
+        fileType.includes("excel")
       ) {
         parseExcel(arrayBuffer as ArrayBuffer);
       } else {
@@ -90,7 +89,6 @@ export default function BulkInvite({
       }
     };
 
-    // Read the file as an ArrayBuffer, which works for both parsers
     reader.readAsArrayBuffer(file);
   };
 
@@ -136,7 +134,7 @@ export default function BulkInvite({
       return "TicketType";
     if (h === "amount" || h === "quantity" || h === "count") return "Amount";
     if (h === "message" || h === "note") return "Message";
-    return header.trim(); // Return original if no match
+    return header.trim();
   };
 
   const parseCsv = (arrayBuffer: ArrayBuffer) => {
@@ -160,7 +158,6 @@ export default function BulkInvite({
     const originalHeaders = (jsonData[0] || []) as unknown[];
     const headers = originalHeaders.map((h) => normalizeHeader(String(h ?? "")));
 
-    // Check for missing required columns
     const hasName = headers.includes("Name");
     const hasContact = headers.includes("Email") || headers.includes("Phone");
 
@@ -227,7 +224,6 @@ export default function BulkInvite({
 
     setSelectedFile(file);
 
-    // Parse the file content to update the table
     const reader = new FileReader();
     reader.onload = (e) => {
       if (e.target?.result) {
@@ -246,22 +242,22 @@ export default function BulkInvite({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 max-h-screen">
-      <div className="bg-white border border-gray-200 rounded-xl max-w-8xl w-full p-6 md:p-8 shadow-xl relative">
-        <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
-          <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 max-h-screen">
+      <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl max-w-8xl w-full p-6 md:p-8 shadow-xl relative">
+        <h3 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+          <FileSpreadsheet className="h-5 w-5 text-blue-600 dark:text-blue-400" />
           Bulk Invitation Upload
         </h3>
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
           Upload CSV/Excel file for:{" "}
-          <strong className="text-gray-900">{event?.title}</strong>
+          <strong className="text-gray-900 dark:text-gray-100">{event?.title}</strong>
         </p>
 
         {missingColumns.length > 0 && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-            <div className="p-1 bg-red-100 rounded-full">
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-3">
+            <div className="p-1 bg-red-100 dark:bg-red-900/30 rounded-full">
               <svg
-                className="w-4 h-4 text-red-600"
+                className="w-4 h-4 text-red-600 dark:text-red-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -275,10 +271,10 @@ export default function BulkInvite({
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-red-800">
+              <h4 className="text-sm font-semibold text-red-800 dark:text-red-300">
                 Missing Required Columns
               </h4>
-              <p className="text-sm text-red-700 mt-1">
+              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
                 The uploaded file is missing the following required columns:{" "}
                 <strong>{missingColumns.join(", ")}</strong>. Please ensure your
                 file has these headers in the first row.
@@ -286,7 +282,7 @@ export default function BulkInvite({
             </div>
             <button
               onClick={() => setMissingColumns([])}
-              className="text-red-400 hover:text-red-600 transition-colors"
+              className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-300 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -297,45 +293,45 @@ export default function BulkInvite({
           {!selectedFile && (
             <div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">
                   Default Ticket Type
                 </label>
                 <select
                   value={ticketType}
                   onChange={(e) => setTicketType(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                 >
                   <option value="Regular">Regular</option>
                   <option value="VIP">VIP</option>
                   <option value="VVIP">VVIP</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   This will be applied if not specified in the file.
                 </p>
               </div>
 
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-900">
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-200">
                   Upload File
                 </label>
                 <div className="flex gap-1">
                   <button
                     onClick={() => downloadTemplate("email")}
-                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                    className="text-xs bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-800/50 text-blue-700 dark:text-blue-400 px-2 py-1 rounded flex items-center gap-1 transition-colors"
                   >
                     <Mail className="h-3 w-3" />
                     Email
                   </button>
                   <button
                     onClick={() => downloadTemplate("phone")}
-                    className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                    className="text-xs bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-800/50 text-green-700 dark:text-green-400 px-2 py-1 rounded flex items-center gap-1 transition-colors"
                   >
                     <Phone className="h-3 w-3" />
                     SMS
                   </button>
                   <button
                     onClick={() => downloadTemplate("mixed")}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                    className="text-xs bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300 px-2 py-1 rounded flex items-center gap-1 transition-colors"
                   >
                     <Download className="h-3 w-3" />
                     Mixed
@@ -346,24 +342,24 @@ export default function BulkInvite({
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 onChange={handleFileChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-400 dark:hover:file:bg-blue-800/50"
               />
-              <p className="text-xs text-gray-600 mt-2">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">
                 Supported formats: CSV, Excel (.xlsx, .xls)
               </p>
             </div>
           )}
 
           {selectedFile && (
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-gray-900">
+                  <FileSpreadsheet className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                     {selectedFile.name}
                   </span>
                 </div>
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   File size: {(selectedFile.size / 1024).toFixed(1)} KB
                 </p>
               </div>
@@ -392,14 +388,14 @@ export default function BulkInvite({
 
           {!selectedFile && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 mb-3 flex items-center gap-2">
-                  <FileSpreadsheet className="h-4 w-4 text-blue-600" />
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                   File Format Requirements
                 </h4>
-                <ul className="text-xs text-gray-600 space-y-2">
+                <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-2">
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column A:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Column A:</span>
                     <span>
                       Customer Name (Required)
                       <br />
@@ -407,7 +403,7 @@ export default function BulkInvite({
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column B:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Column B:</span>
                     <span>
                       Email or Phone (Required)
                       <br />
@@ -416,7 +412,7 @@ export default function BulkInvite({
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column C:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Column C:</span>
                     <span>
                       Contact Type (Required)
                       <br />
@@ -424,7 +420,7 @@ export default function BulkInvite({
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column D:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Column D:</span>
                     <span>
                       Ticket Type (Optional)
                       <br />
@@ -432,7 +428,7 @@ export default function BulkInvite({
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column E:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Column E:</span>
                     <span>
                       Amount (Optional)
                       <br />
@@ -440,7 +436,7 @@ export default function BulkInvite({
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="font-medium text-blue-600">Column F:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">Column F:</span>
                     <span>
                       Message (Optional)
                       <br />
@@ -451,37 +447,37 @@ export default function BulkInvite({
               </div>
 
               <div className="space-y-4">
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-green-600" />
+                <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
                     Pricing Information
                   </h4>
-                  <div className="text-xs text-gray-600 space-y-1">
+                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                     <div className="flex justify-between">
                       <span>Email invitations:</span>
-                      <span className="font-medium">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
                         {pricing.email} ETB each
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span>SMS invitations:</span>
-                      <span className="font-medium">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">
                         {pricing.sms} ETB each
                       </span>
                     </div>
-                    <div className="border-t border-green-300 pt-2 mt-2">
-                      <div className="font-medium text-gray-900">
+                    <div className="border-t border-green-300 dark:border-green-700 pt-2 mt-2">
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
                         Cost calculated after file upload
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-900 mb-2">
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                     Important Notes:
                   </h4>
-                  <ul className="text-xs text-gray-600 space-y-1">
+                  <ul className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                     <li>• Maximum 1000 contacts per upload</li>
                     <li>• Invalid rows will be skipped</li>
                     <li>• Duplicate contacts will be ignored</li>
@@ -498,7 +494,7 @@ export default function BulkInvite({
               if (setShowBulkModal) setShowBulkModal(false);
               setSelectedFile(null);
             }}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 hover:bg-gray-50 transition-all duration-200 font-medium"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200 font-medium"
           >
             Cancel
           </button>

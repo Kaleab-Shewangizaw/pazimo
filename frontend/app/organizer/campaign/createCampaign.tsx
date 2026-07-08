@@ -24,11 +24,9 @@ interface CampaignUser {
 export default function CreateCampaignPage() {
   const [events, setEvents] = useState();
 
-  // Top Customer States
   const [topCustomers, setTopCustomers] = useState<TopCustomer[]>([]);
   const [limit, setLimit] = useState("10");
 
-  // Custom Campaign States
   const [showCustomCampaign, setShowCustomCampaign] = useState(false);
   const [customUsers, setCustomUsers] = useState<CampaignUser[]>([]);
 
@@ -85,9 +83,8 @@ export default function CreateCampaignPage() {
 
         if (response.ok) {
           const data = await response.json();
-          // Filter out customers without a valid phone number
           const validCustomers = (data.data || []).filter((c: TopCustomer) => {
-            return c.phone && c.phone.length >= 9; // Basic length check, modal will strict validate
+            return c.phone && c.phone.length >= 9;
           });
           setTopCustomers(validCustomers);
         }
@@ -102,7 +99,7 @@ export default function CreateCampaignPage() {
   }, [limit]);
 
   return (
-    <div className="w-full h-full flex bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+    <div className="w-full h-full flex bg-white dark:bg-black rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
       <CustomCampaignModal
         isOpen={showCustomCampaign}
         onClose={() => setShowCustomCampaign(false)}
@@ -110,7 +107,7 @@ export default function CreateCampaignPage() {
         events={events || []}
       />
 
-      {/* Left Panel - Hero Section (Covers full height) */}
+      {/* Left Panel - Hero Section */}
       <div className="w-1/2 relative overflow-hidden flex flex-col justify-center p-12 text-white bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-500">
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -126,11 +123,9 @@ export default function CreateCampaignPage() {
           </svg>
         </div>
 
-        {/* Abstract Background Shapes */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-400/30 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/2 pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-indigo-500/30 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none" />
 
-        {/* Floating Chat Bubbles - Decorative */}
         <div className="absolute top-24 right-12 animate-in slide-in-from-right-10 duration-1000 hidden xl:block pointer-events-none">
           <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl rounded-tr-sm shadow-2xl max-w-[260px] rotate-6 transition-transform cursor-default">
             <div className="flex gap-3 mb-3 items-center">
@@ -198,29 +193,29 @@ export default function CreateCampaignPage() {
         </div>
       </div>
 
-      {/* Right Panel - Top Customers (2/5) */}
-      <div className="w-1/2 flex flex-col h-full bg-white">
+      {/* Right Panel - Top Customers */}
+      <div className="w-1/2 flex flex-col h-full bg-white dark:bg-black">
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-white shrink-0">
+        <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-black shrink-0">
           <div>
-            <h3 className="font-bold text-gray-900 text-xl flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 dark:text-gray-100 text-xl flex items-center gap-2">
               <Crown className="text-yellow-500 fill-yellow-500" size={24} />
               Top Customers
             </h3>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Your most loyal attendees based on ticket sales.
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500 font-medium">Top:</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">Top:</span>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
                 min="1"
                 max="1000"
                 placeholder="10"
-                className="w-[80px] h-9 text-center bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+                className="w-[80px] h-9 text-center bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-black text-gray-900 dark:text-gray-100 transition-colors"
                 value={limit}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -239,26 +234,26 @@ export default function CreateCampaignPage() {
         {/* Scrollable List */}
         <div className="flex-1 overflow-y-auto p-0">
           {topCustomers.length > 0 ? (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-50 dark:divide-gray-800/50">
               {topCustomers.map((customer, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group px-6"
+                  className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group px-6"
                 >
                   <div className="flex items-center gap-4">
                     <div
                       className={`
                         w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
-                        ${i < 3 ? "bg-yellow-100 text-yellow-700 ring-2 ring-yellow-500/20" : "bg-gray-100 text-gray-600"}
+                        ${i < 3 ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 ring-2 ring-yellow-500/20" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"}
                     `}
                     >
                       {i + 1}
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-900">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100">
                         {customer.name || "Customer"}
                       </p>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
                         {customer.phone}
                       </p>
                     </div>
@@ -266,31 +261,31 @@ export default function CreateCampaignPage() {
 
                   <div className="flex items-center gap-6 text-sm">
                     <div className="text-right">
-                      <span className="block font-bold text-gray-900">
+                      <span className="block font-bold text-gray-900 dark:text-gray-100">
                         {customer.eventsCount}
                       </span>
-                      <span className="text-xs text-gray-500">Events</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Events</span>
                     </div>
                     <div className="text-right w-16">
-                      <span className="block font-bold text-blue-600">
+                      <span className="block font-bold text-blue-600 dark:text-blue-400">
                         {customer.totalTickets}
                       </span>
-                      <span className="text-xs text-gray-500">Tickets</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">Tickets</span>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-400 space-y-4">
-              <div className="bg-gray-50 p-4 rounded-full">
-                <TrendingUp size={32} className="opacity-20 text-gray-500" />
+            <div className="flex flex-col items-center justify-center h-full text-center p-8 text-gray-400 dark:text-gray-500 space-y-4">
+              <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-full">
+                <TrendingUp size={32} className="opacity-20 text-gray-500 dark:text-gray-400" />
               </div>
               <div>
-                <p className="font-medium text-gray-600">
+                <p className="font-medium text-gray-600 dark:text-gray-400">
                   No customer data yet
                 </p>
-                <p className="text-sm">
+                <p className="text-sm text-gray-400 dark:text-gray-500">
                   Once you sell tickets, your top fans will appear here.
                 </p>
               </div>
@@ -299,10 +294,10 @@ export default function CreateCampaignPage() {
         </div>
 
         {/* Footer Action */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50/30">
+        <div className="p-6 border-t border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-900/20">
           <Button
             size="lg"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-all h-12 text-base"
+            className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white shadow-md transition-all h-12 text-base"
             onClick={() => {
               const users = topCustomers.map((c) => ({
                 name: c.name || "Customer",

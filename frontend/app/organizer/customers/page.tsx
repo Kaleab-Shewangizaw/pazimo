@@ -63,7 +63,6 @@ export default function CustomersPage() {
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   
-  // Statistics State
   const [statistics, setStatistics] = useState({
     totalRevenue: 0,
     totalTickets: 0,
@@ -88,12 +87,10 @@ export default function CustomersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   
-  // Server-side pagination state
   const [serverPage, setServerPage] = useState(1);
   const [hasMoreTickets, setHasMoreTickets] = useState(false);
   const [totalTicketCount, setTotalTicketCount] = useState(0);
 
-  // Fetch Events
   useEffect(() => {
     const fetchEvents = async () => {
       try {
@@ -136,7 +133,6 @@ export default function CustomersPage() {
     fetchEvents();
   }, []);
 
-  // Fetch Tickets when Event Changes
   useEffect(() => {
     const fetchTickets = async () => {
       if (!selectedEventId) {
@@ -149,7 +145,6 @@ export default function CustomersPage() {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // Reset pagination and fetch first page
         setServerPage(1);
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${selectedEventId}?page=1&limit=100`,
@@ -201,7 +196,6 @@ export default function CustomersPage() {
     fetchTickets();
   }, [selectedEventId]);
 
-  // Reset pagination on filter change
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedEventId, searchQuery, currencyFilter]);
@@ -245,7 +239,6 @@ export default function CustomersPage() {
   const getTicketCurrency = (ticket: Ticket): "ETB" | "USD" =>
     ticket.currency === "USD" ? "USD" : "ETB";
 
-  // Calculate correct ticket quantity (handles old price changes before Dec 14, 2025)
   const getTicketQuantity = (ticket: Ticket): number => {
     let quantity = ticket.purchaseQuantity || ticket.ticketCount || 1;
 
@@ -273,16 +266,13 @@ export default function CustomersPage() {
     return quantity;
   };
 
-  // Special handling for event 69850bb726e5a027f6b03279
   const SPECIAL_EVENT_ID = "69850bb726e5a027f6b03279";
   const CUSTOM_ONDOOR_AMOUNT = 793000;
   const isSpecialEvent = selectedEventId === SPECIAL_EVENT_ID;
 
-  // Filter paid tickets only (exclude free/invitation)
   const filteredTickets = tickets.filter((ticket) => {
     if (!ticket.price || ticket.price <= 0) return false;
 
-    // For special event, hide the manual ondoor sales entry from the table
     if (isSpecialEvent && ticket.isOnDoor && ticket.price === CUSTOM_ONDOOR_AMOUNT) {
       return false;
     }
@@ -306,7 +296,6 @@ export default function CustomersPage() {
     return getTicketCurrency(ticket) === currencyFilter;
   });
 
-  // Group tickets by type, currency, ondoor/online, and single ticket price
   type TicketTypeBreakdown = {
     ticketType: string;
     currency: "ETB" | "USD";
@@ -411,7 +400,6 @@ export default function CustomersPage() {
 
   const totalPages = Math.ceil(currencyFilteredTickets.length / itemsPerPage);
   
-  // Only use client-side pagination when searching
   const isSearching = searchQuery.trim().length > 0;
   const paginatedTickets = isSearching
     ? currencyFilteredTickets.slice(
@@ -420,7 +408,6 @@ export default function CustomersPage() {
       )
     : currencyFilteredTickets;
 
-  // Export to Excel logic
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExportExcel = async () => {
@@ -441,7 +428,6 @@ export default function CustomersPage() {
           ? `${ticket.user.firstName} ${ticket.user.lastName}`
           : ticket.guestName || "Guest";
 
-        // Email logic: blank if contains 'pazimo' or starts with 'customerpazimo'
         let email = ticket.user?.email || ticket.guestEmail || "";
         if (
           !email ||
@@ -451,7 +437,6 @@ export default function CustomersPage() {
           email = "";
         }
 
-        // Phone logic: only use real phone, else blank
         let buyerPhone = ticket.user?.phoneNumber || ticket.user?.phone || ticket.guestPhone || ticket.guestPhoneNumber || ticket.phone || "";
         if (!buyerPhone) {
           buyerPhone = "";
@@ -491,18 +476,22 @@ export default function CustomersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 space-y-6">
+    <div className="min-h-screen bg-gray-50/50 dark:bg-black p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-          <p className="text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Customers</h1>
+          <p className="text-gray-500 dark:text-gray-400">
             Manage your event attendees and ticket sales
           </p>
         </div>
-        {/* Export to Excel Button */}
         <div>
-          <Button onClick={handleExportExcel} variant="outline" disabled={isExporting}>
+          <Button 
+            onClick={handleExportExcel} 
+            variant="outline" 
+            disabled={isExporting}
+            className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
             {isExporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -517,28 +506,28 @@ export default function CustomersPage() {
 
       {/* Filters & Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="bg-white dark:bg-black p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Currency
           </label>
           <Select
             value={currencyFilter}
             onValueChange={(value: CurrencyFilter) => setCurrencyFilter(value)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full dark:bg-black dark:border-gray-700 dark:text-gray-200">
               <SelectValue placeholder="All currencies" />
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All</SelectItem>
-              <SelectItem value="ETB">ETB</SelectItem>
-              <SelectItem value="USD">USD</SelectItem>
+            <SelectContent className="dark:bg-black dark:border-gray-700">
+              <SelectItem value="ALL" className="dark:text-gray-200">All</SelectItem>
+              <SelectItem value="ETB" className="dark:text-gray-200">ETB</SelectItem>
+              <SelectItem value="USD" className="dark:text-gray-200">USD</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {/* Event Selector */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="bg-white dark:bg-black p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Select Event
           </label>
           <Select
@@ -546,21 +535,21 @@ export default function CustomersPage() {
             onValueChange={setSelectedEventId}
             disabled={isLoadingEvents}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full dark:bg-black dark:border-gray-700 dark:text-gray-200">
               <SelectValue placeholder="Select an event" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="dark:bg-black dark:border-gray-700">
               {isLoadingEvents ? (
-                <SelectItem value="loading" disabled>
+                <SelectItem value="loading" disabled className="dark:text-gray-400">
                   Loading events...
                 </SelectItem>
               ) : events.length === 0 ? (
-                <SelectItem value="no-events" disabled>
+                <SelectItem value="no-events" disabled className="dark:text-gray-400">
                   No events found
                 </SelectItem>
               ) : (
                 events.map((event) => (
-                  <SelectItem key={event._id} value={event._id}>
+                  <SelectItem key={event._id} value={event._id} className="dark:text-gray-200">
                     {event.title}
                   </SelectItem>
                 ))
@@ -570,17 +559,17 @@ export default function CustomersPage() {
         </div>
 
         {/* Total Revenue */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+        <div className="bg-white dark:bg-black p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">Total Revenue</p>
-            <h3 className="text-lg font-bold text-gray-900">ETB {formatCompactMoney(totalRevenueByCurrency.ETB, "ETB")}</h3>
-            <h3 className="text-lg font-bold text-gray-900">USD {formatCompactMoney(totalRevenueByCurrency.USD, "USD")}</h3>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Revenue</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">ETB {formatCompactMoney(totalRevenueByCurrency.ETB, "ETB")}</h3>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">USD {formatCompactMoney(totalRevenueByCurrency.USD, "USD")}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               ETB tickets: {totalTicketsByCurrency.ETB} • USD tickets: {totalTicketsByCurrency.USD}
             </p>
           </div>
-          <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-            <DollarSign className="h-6 w-6 text-green-600" />
+          <div className="h-12 w-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+            <DollarSign className="h-6 w-6 text-green-600 dark:text-green-400" />
           </div>
         </div>
 
@@ -588,14 +577,14 @@ export default function CustomersPage() {
         {ticketGroups.map((group, idx) => (
           <div
             key={group.ticketType + group.isOnDoor + group.pricePerTicket + idx}
-            className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between"
+            className="bg-white dark:bg-black p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center justify-between"
           >
             <div>
-              <p className="text-sm font-medium text-gray-700">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {group.ticketType} {group.isOnDoor ? "On-Door" : "Online"} @ {group.currency}{" "}
                 {group.pricePerTicket.toLocaleString()}
               </p>
-              <p className="text-xl font-bold text-gray-900 mt-1">
+              <p className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                 {group.totalSold} tickets
               </p>
             </div>
@@ -604,57 +593,57 @@ export default function CustomersPage() {
 
         {/* On-Door Sales */}
         {isSpecialEvent ? (
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <p className="text-sm font-medium text-gray-500 mb-2">Ondoor Sales</p>
-            <h3 className="text-2xl font-bold text-gray-900">
+          <div className="bg-white dark:bg-black p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm">
+            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Ondoor Sales</p>
+            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               ETB {CUSTOM_ONDOOR_AMOUNT.toLocaleString()}
             </h3>
           </div>
         ) : statistics.onDoorTickets > 0 ? (
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div className="bg-white dark:bg-black p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">On-Door Sales</p>
-              <h3 className="text-lg font-bold text-gray-900">ETB {formatCompactMoney(onDoorByCurrency.revenue.ETB, "ETB")}</h3>
-              <h3 className="text-lg font-bold text-gray-900">USD {formatCompactMoney(onDoorByCurrency.revenue.USD, "USD")}</h3>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">On-Door Sales</p>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">ETB {formatCompactMoney(onDoorByCurrency.revenue.ETB, "ETB")}</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">USD {formatCompactMoney(onDoorByCurrency.revenue.USD, "USD")}</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 ETB tickets: {onDoorByCurrency.tickets.ETB} • USD tickets: {onDoorByCurrency.tickets.USD}
               </p>
             </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-blue-600" />
+            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+              <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         ) : null}
       </div>
 
       {/* Tickets Summary */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="text-lg font-semibold text-gray-900">Summary</div>
+      <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm mb-4 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">Summary</div>
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-700 dark:text-gray-300">
             <span className="font-medium">Total Tickets Sold:</span> {filteredTickets.reduce((sum, t) => sum + getTicketQuantity(t), 0)}
           </div>
-          <div className="text-sm text-gray-700">
+          <div className="text-sm text-gray-700 dark:text-gray-300">
             <span className="font-medium">Total Revenue:</span> {filteredTickets.reduce((sum, t) => sum + (t.price || 0), 0).toLocaleString()}
           </div>
         </div>
       </div>
 
       {/* Customers Table */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-800">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Ticket Sales ({currencyFilteredTickets.length})
             </h2>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
               <input
                 type="text"
                 placeholder="Search by name, email, or ticket ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-80"
+                className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full sm:w-80 bg-white dark:bg-black text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -662,35 +651,35 @@ export default function CustomersPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 dark:bg-gray-900/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Buyer & Ticket ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Usage
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Price
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white dark:bg-black divide-y divide-gray-200 dark:divide-gray-800">
               {isLoadingTickets ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-                      <p className="text-gray-500">Loading tickets...</p>
+                      <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+                      <p className="text-gray-500 dark:text-gray-400">Loading tickets...</p>
                     </div>
                   </td>
                 </tr>
@@ -698,7 +687,7 @@ export default function CustomersPage() {
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-6 py-12 text-center text-gray-500"
+                    className="px-6 py-12 text-center text-gray-500 dark:text-gray-400"
                   >
                     {selectedEventId
                       ? "No paid tickets found for this event."
@@ -714,11 +703,11 @@ export default function CustomersPage() {
                   return (
                     <tr
                       key={ticket._id}
-                      className="hover:bg-gray-50 transition-colors"
+                      className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                          <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
                             {(
                               ticket.user?.firstName?.[0] ||
                               ticket.guestName?.[0] ||
@@ -726,43 +715,41 @@ export default function CustomersPage() {
                             ).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-gray-900">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                               {ticket.isOnDoor
                                 ? "On-Door Purchase"
                                 : ticket.user
                                 ? `${ticket.user.firstName} ${ticket.user.lastName}`
                                 : ticket.guestName || "Guest"}
                             </p>
-                            <p className="text-xs text-gray-500 font-mono">
-                              ID: {ticket.ticketId}
-                            </p>
+                           
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {ticket.ticketType}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className="text-sm font-medium">
-                          {used} <span className="text-gray-400">/</span>{" "}
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {used} <span className="text-gray-400 dark:text-gray-500">/</span>{" "}
                           {total}
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-sm font-bold text-gray-900">
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
                           {getTicketCurrency(ticket)} {ticket.price.toLocaleString()}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                           {ticket.paymentStatus}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
+                      <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                         <div>
                           {new Date(ticket.createdAt).toLocaleDateString()}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {new Date(ticket.createdAt).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -774,10 +761,10 @@ export default function CustomersPage() {
                           className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
                             ticket.status === "active" ||
                             ticket.status === "confirmed"
-                              ? "bg-green-100 text-green-800"
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
                               : ticket.status === "used"
-                              ? "bg-gray-100 text-gray-800"
-                              : "bg-red-100 text-red-800"
+                              ? "bg-gray-100 dark:bg-gray-800/50 text-gray-800 dark:text-gray-400"
+                              : "bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400"
                           }`}
                         >
                           {ticket.status.charAt(0).toUpperCase() +
@@ -792,11 +779,10 @@ export default function CustomersPage() {
           </table>
         </div>
 
-        {/* Pagination */}
         {/* Pagination or Load More */}
         {isSearching && totalPages > 1 ? (
-          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
-            <p className="text-sm text-gray-600">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
               {Math.min(currentPage * itemsPerPage, currencyFilteredTickets.length)} of{" "}
               {currencyFilteredTickets.length} tickets
@@ -807,6 +793,7 @@ export default function CustomersPage() {
                 size="sm"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
+                className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
@@ -818,6 +805,7 @@ export default function CustomersPage() {
                   setCurrentPage((p) => Math.min(totalPages, p + 1))
                 }
                 disabled={currentPage === totalPages}
+                className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
@@ -825,8 +813,8 @@ export default function CustomersPage() {
             </div>
           </div>
         ) : !isSearching && hasMoreTickets ? (
-          <div className="px-6 py-6 border-t border-gray-200 flex flex-col items-center gap-3 bg-gray-50">
-            <p className="text-sm text-gray-600">
+          <div className="px-6 py-6 border-t border-gray-200 dark:border-gray-800 flex flex-col items-center gap-3 bg-gray-50 dark:bg-gray-900/50">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Showing {tickets.length} of {totalTicketCount} rows
             </p>
             <Button
@@ -845,8 +833,8 @@ export default function CustomersPage() {
             </Button>
           </div>
         ) : !isSearching && tickets.length > 0 ? (
-          <div className="px-6 py-4 border-t border-gray-200 text-center bg-gray-50">
-            <p className="text-sm text-gray-600">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 text-center bg-gray-50 dark:bg-gray-900/50">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               All {tickets.length} tickets loaded
             </p>
           </div>

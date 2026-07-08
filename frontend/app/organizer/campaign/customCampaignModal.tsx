@@ -74,7 +74,6 @@ export default function CustomCampaignModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isFinalizingRef = useRef(false);
 
-  // Load Initial Data (Draft)
   useEffect(() => {
     if (isOpen) {
       isFinalizingRef.current = false;
@@ -89,7 +88,6 @@ export default function CustomCampaignModal({
         setSelectedEventIds(ids);
       }
       if (initialData.recipients) {
-        // Load non-event users. Event users will load via targetedEvents trigger
         setManualUsers(
           initialData.recipients
             .filter((r: any) => r.source !== "event")
@@ -100,7 +98,6 @@ export default function CustomCampaignModal({
         );
       }
     } else if (isOpen && !initialData) {
-      // Reset
       setCampaignTitle("My Campaign");
       setMessage("");
       setSelectedEventIds([]);
@@ -112,14 +109,13 @@ export default function CustomCampaignModal({
 
   useEffect(() => {
     if (isOpen && !initialData) {
-      // Create Mode: Load initialUsers
       if (initialUsers) {
         const normalizedInit = initialUsers
-          .filter((u) => normalizeEthiopianPhone(u.phone)) // Strict Filter: Only valid phones
+          .filter((u) => normalizeEthiopianPhone(u.phone))
           .map((u) => ({
             ...u,
             phone: normalizeEthiopianPhone(u.phone) as string,
-            source: u.source || "manual", // Default them to manual/top-customer
+            source: u.source || "manual",
           }));
         setManualUsers(normalizedInit);
 
@@ -131,7 +127,6 @@ export default function CustomCampaignModal({
       }
     }
 
-    // Always fetch pricing on open
     if (isOpen) {
       const fetchPricing = async () => {
         try {
@@ -155,12 +150,13 @@ export default function CustomCampaignModal({
       fetchPricing();
     }
   }, [isOpen, initialUsers, initialData]);
+  
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isPooling && transactionId) {
       interval = setInterval(async () => {
         try {
-          if (isFinalizingRef.current) return; // Prevent overlapping finalization calls
+          if (isFinalizingRef.current) return;
 
           const res = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL}/api/campaigns/payment/status/${transactionId}`,
@@ -177,7 +173,6 @@ export default function CustomCampaignModal({
               setIsPooling(false);
               if (!isFinalizingRef.current) {
                 isFinalizingRef.current = true;
-                // Finalize
                 finalizeCampaign(transactionId);
               }
             } else if (
@@ -217,7 +212,7 @@ export default function CustomCampaignModal({
               eventId: id,
               eventName: events.find((e) => e._id === id)?.title,
             })),
-            recipients: allUsers, // Careful, big payload
+            recipients: allUsers,
             price: cost,
             paymentId,
           }),
@@ -225,7 +220,7 @@ export default function CustomCampaignModal({
       );
 
       if (res.ok) {
-        toast.success("Campaign Lauched Successfully!");
+        toast.success("Campaign Launched Successfully!");
         onClose();
       } else {
         toast.error("Campaign Creation Failed (Payment was successful though)");
@@ -259,7 +254,7 @@ export default function CustomCampaignModal({
       );
       if (res.ok) {
         toast.success("Draft Saved");
-        onClose(); // Optional
+        onClose();
       } else {
         toast.error("Failed to save draft");
       }
@@ -268,7 +263,6 @@ export default function CustomCampaignModal({
     }
   };
 
-  // Fetch attendees when selected events change
   useEffect(() => {
     const fetchAttendees = async () => {
       if (selectedEventIds.length === 0) {
@@ -280,7 +274,6 @@ export default function CustomCampaignModal({
       const uniqueMap = new Map<string, CampaignUser>();
 
       try {
-        // Helper function to fetch all tickets for one event
         const fetchAllTicketsForEvent = async (id: string) => {
           let allTickets: any[] = [];
           let page = 1;
@@ -307,7 +300,6 @@ export default function CustomCampaignModal({
           return { tickets: allTickets };
         };
 
-        // Fetch in parallel for each event
         const promises = selectedEventIds.map((id) => fetchAllTicketsForEvent(id));
 
         const results = await Promise.all(promises);
@@ -316,7 +308,6 @@ export default function CustomCampaignModal({
           const tickets = data.tickets || [];
           tickets.forEach((t: any) => {
             if (t.user && t.user.phoneNumber) {
-              // Filter invalid or unwanted
               if (t.isOnDoor || t.isInvitation) return;
 
               const normalized = normalizeEthiopianPhone(t.user.phoneNumber);
@@ -357,7 +348,6 @@ export default function CustomCampaignModal({
     if (!normalized)
       return toast.error("Invalid Ethiopian phone number. Use 09/07 or +251");
 
-    // Check against ALL users
     if (
       manualUsers.some((u) => u.phone === normalized) ||
       eventUsers.some((u) => u.phone === normalized)
@@ -428,10 +418,8 @@ export default function CustomCampaignModal({
     if (!paymentPhone) return toast.error("Payment phone is required");
     if (paymentPhone.length < 9) return toast.error("Invalid phone length");
 
-    // Phone construction same as bulk invite
     let finalPhone = paymentPhone;
 
-    // Remove leading 0 if present to ensure clean 251 prefix addition
     if (finalPhone.startsWith("0")) {
       finalPhone = finalPhone.substring(1);
     }
@@ -444,7 +432,7 @@ export default function CustomCampaignModal({
 
       let finalMethod = paymentMethod;
       if (paymentMethod.toLowerCase() === "telebirr") finalMethod = "telebirr";
-      if (paymentMethod.toLowerCase() === "cbe birr") finalMethod = "cbebirr"; // Common chapa key
+      if (paymentMethod.toLowerCase() === "cbe birr") finalMethod = "cbebirr";
       if (paymentMethod.toLowerCase() === "mpesa") finalMethod = "mpesa";
       if (paymentMethod.toLowerCase().includes("amole")) finalMethod = "amole";
 
@@ -485,7 +473,6 @@ export default function CustomCampaignModal({
     }
   };
 
-  // Merge lists for display and sending
   const allUsers = useMemo(() => {
     const map = new Map();
     [...manualUsers, ...eventUsers].forEach((u) => map.set(u.phone, u));
@@ -509,15 +496,15 @@ export default function CustomCampaignModal({
         if (!isSubmitting) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[950px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden outline-none bg-white">
+      <DialogContent className="sm:max-w-[950px] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden outline-none bg-white dark:bg-black">
         {/* Header */}
-        <div className="p-6 bg-white border-b border-gray-100 flex items-center justify-between">
+        <div className="p-6 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
           <div>
-            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-              <Megaphone className="text-blue-600" />
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2 dark:text-gray-100">
+              <Megaphone className="text-blue-600 dark:text-blue-400" />
               Create Campaign
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="dark:text-gray-400">
               Select events to retarget attendees or upload a custom list.
             </DialogDescription>
           </div>
@@ -533,6 +520,7 @@ export default function CustomCampaignModal({
               variant="secondary"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
+              className="dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               <Upload size={16} className="mr-2" />
               Import EXCl/CSV
@@ -542,28 +530,28 @@ export default function CustomCampaignModal({
 
         <div className="flex flex-1 overflow-hidden">
           {/* Left Panel - Selection & Message */}
-          <div className="w-1/2 flex flex-col bg-gray-50/50 border-r border-gray-100">
+          <div className="w-1/2 flex flex-col bg-gray-50/50 dark:bg-gray-900/30 border-r border-gray-100 dark:border-gray-800">
             {/* Event Selector */}
             <div className="p-6 pb-2">
-              <Label className="text-sm font-bold text-gray-700 block mb-2">
+              <Label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-2">
                 Campaign Title <span className="text-red-500">*</span>
               </Label>
               <Input
                 value={campaignTitle}
                 onChange={(e) => setCampaignTitle(e.target.value)}
                 placeholder="e.g. Summer Concert Promo"
-                className="mb-4"
+                className="mb-4 dark:bg-black dark:border-gray-700 dark:text-gray-100"
               />
 
-              <Label className="text-sm font-bold text-gray-700 block mb-3">
+              <Label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-3">
                 Select Target Events
               </Label>
-              <ScrollArea className="h-[200px] bg-white rounded-xl border border-gray-200">
+              <ScrollArea className="h-[200px] bg-white dark:bg-black rounded-xl border border-gray-200 dark:border-gray-700">
                 <div className="p-3 space-y-2">
                   {events.map((event) => (
                     <div
                       key={event._id}
-                      className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="flex items-center space-x-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors"
                     >
                       <Checkbox
                         id={event._id}
@@ -571,31 +559,32 @@ export default function CustomCampaignModal({
                         onCheckedChange={(c) =>
                           toggleEvent(event._id, c as boolean)
                         }
+                        className="dark:border-gray-600"
                       />
                       <label
                         htmlFor={event._id}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1 dark:text-gray-200"
                       >
                         {event.title}
                       </label>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
                         {new Date(event.startDate || "").toLocaleDateString()}
                       </span>
                     </div>
                   ))}
                   {events.length === 0 && (
-                    <p className="text-xs text-center text-gray-400 py-4">
+                    <p className="text-xs text-center text-gray-400 dark:text-gray-500 py-4">
                       No events found.
                     </p>
                   )}
                 </div>
               </ScrollArea>
               <div className="flex justify-between items-center mt-2 px-1">
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
                   {selectedEventIds.length} event(s) selected
                 </span>
                 {loadingEvents && (
-                  <span className="text-xs text-blue-600 animate-pulse">
+                  <span className="text-xs text-blue-600 dark:text-blue-400 animate-pulse">
                     Fetching attendees...
                   </span>
                 )}
@@ -603,25 +592,25 @@ export default function CustomCampaignModal({
             </div>
 
             <div className="flex-1 px-6 pb-6 pt-2 h-full flex flex-col">
-              <Label className="text-sm font-bold text-gray-700  mb-2 flex items-center gap-2">
+              <Label className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
                 Campaign Message
-                <span className="text-red-500 text-xs font-normal bg-red-50 px-2 py-0.5 rounded-full">
+                <span className="text-red-500 text-xs font-normal bg-red-50 dark:bg-red-900/30 px-2 py-0.5 rounded-full">
                   * Required
                 </span>
               </Label>
-              <div className="flex-1 bg-white rounded-xl border-2 border-dashed border-gray-200 p-1 focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-50 transition-all">
+              <div className="flex-1 bg-white dark:bg-black rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-1 focus-within:border-blue-400 dark:focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-50 dark:focus-within:ring-blue-900/30 transition-all">
                 <Textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Type your message here... (e.g., 'Don't miss out on our biggest event of the year! Get your tickets now.')"
-                  className="w-full h-full min-h-[150px] border-0 focus-visible:ring-0 resize-none text-base p-4 placeholder:text-gray-300"
+                  className="w-full h-full min-h-[150px] border-0 focus-visible:ring-0 resize-none text-base p-4 placeholder:text-gray-300 dark:placeholder:text-gray-600 dark:text-gray-100"
                 />
               </div>
               <div className="flex justify-between items-center mt-2 px-1">
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-gray-400 dark:text-gray-500">
                   Avoid special characters for better delivery.
                 </span>
-                <div className="text-right text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded-md">
+                <div className="text-right text-xs text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md">
                   {message.length} characters
                 </div>
               </div>
@@ -629,30 +618,30 @@ export default function CustomCampaignModal({
           </div>
 
           {/* Right Panel - Stats & List */}
-          <div className="w-1/2 flex flex-col bg-white">
-            <div className="bg-blue-50/30 p-4 border-b border-gray-100 space-y-3">
+          <div className="w-1/2 flex flex-col bg-white dark:bg-black">
+            <div className="bg-blue-50/30 dark:bg-blue-900/10 p-4 border-b border-gray-100 dark:border-gray-800 space-y-3">
               <div className="flex justify-between items-center mb-1">
-                <span className="font-bold text-gray-800">
+                <span className="font-bold text-gray-800 dark:text-gray-200">
                   Total Recipients
                 </span>
-                <span className="text-2xl font-bold text-blue-600">
+                <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
                   {allUsers.length}
                 </span>
               </div>
-              <div className="flex justify-between items-center text-sm text-gray-500">
+              <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
                 <span>Estimated Cost ({pricing.sms} ETB/SMS)</span>
                 <span>{cost.toFixed(2)} ETB</span>
               </div>
             </div>
 
-            <div className="p-3 border-b border-gray-100 bg-white flex justify-between items-center sticky top-0 z-10">
-              <span className="text-sm font-semibold text-gray-600 pl-2">
+            <div className="p-3 border-b border-gray-100 dark:border-gray-800 bg-white dark:bg-black flex justify-between items-center sticky top-0 z-10">
+              <span className="text-sm font-semibold text-gray-600 dark:text-gray-400 pl-2">
                 Included Contacts
               </span>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-blue-600 hover:text-blue-700 h-8"
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 h-8"
                 onClick={() => setShowPhoneInput(!showPhoneInput)}
               >
                 <Plus size={16} className="mr-1" /> Add Manual
@@ -660,19 +649,19 @@ export default function CustomCampaignModal({
             </div>
 
             {showPhoneInput && (
-              <div className="p-4 bg-gray-50 border-b border-gray-100 flex flex-col gap-2 animate-in slide-in-from-top-2">
+              <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-2 animate-in slide-in-from-top-2">
                 <Input
                   placeholder="Name (Optional)"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="bg-white h-9"
+                  className="bg-white dark:bg-black h-9 dark:border-gray-700 dark:text-gray-100"
                 />
                 <div className="flex gap-2">
                   <Input
                     placeholder="Phone (09...)"
                     value={newPhone}
                     onChange={(e) => setNewPhone(e.target.value)}
-                    className="bg-white h-9"
+                    className="bg-white dark:bg-black h-9 dark:border-gray-700 dark:text-gray-100"
                   />
                   <Button size="sm" onClick={handleManualAdd}>
                     Add
@@ -681,6 +670,7 @@ export default function CustomCampaignModal({
                     size="sm"
                     variant="ghost"
                     onClick={() => setShowPhoneInput(false)}
+                    className="dark:text-gray-400 dark:hover:text-gray-200"
                   >
                     Cancel
                   </Button>
@@ -688,28 +678,28 @@ export default function CustomCampaignModal({
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+            <div className="flex-1 overflow-y-auto min-h-0 bg-white dark:bg-black">
               <div className="p-2 space-y-1">
                 {allUsers.map((u, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg group border border-transparent hover:border-gray-100 transition-all"
+                    className="flex items-center justify-between p-2 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg group border border-transparent hover:border-gray-100 dark:hover:border-gray-700 transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs ring-2 ring-transparent group-hover:ring-indigo-100 transition-all">
+                      <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs ring-2 ring-transparent group-hover:ring-indigo-100 dark:group-hover:ring-indigo-800/50 transition-all">
                         {u.name[0]}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {u.name}
                         </p>
-                        <p className="text-xs text-gray-500">{u.phone}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{u.phone}</p>
                       </div>
                     </div>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="h-7 w-7 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => {
                         if (manualUsers.includes(u)) {
                           setManualUsers(manualUsers.filter((m) => m !== u));
@@ -727,7 +717,7 @@ export default function CustomCampaignModal({
                   </div>
                 ))}
                 {allUsers.length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-48 text-gray-300">
+                  <div className="flex flex-col items-center justify-center h-48 text-gray-300 dark:text-gray-600">
                     <Users size={48} className="mb-3 opacity-20" />
                     <p className="text-sm">Select an event or add contacts</p>
                   </div>
@@ -736,12 +726,12 @@ export default function CustomCampaignModal({
             </div>
 
             {/* Footer / Payment Section */}
-            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-between gap-3 shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.1)] z-20">
+            <div className="p-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/30 flex justify-between gap-3 shadow-[0_-4px_10px_-5px_rgba(0,0,0,0.1)] z-20">
               <Button
                 variant="ghost"
                 onClick={saveDraft}
                 disabled={isSubmitting || !campaignTitle}
-                className="text-gray-500 hover:text-gray-900"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
               >
                 Save as Draft
               </Button>
@@ -749,7 +739,7 @@ export default function CustomCampaignModal({
                 <Button
                   variant="outline"
                   onClick={onClose}
-                  className="border-gray-300"
+                  className="border-gray-300 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
                 >
                   Cancel
                 </Button>
@@ -761,7 +751,7 @@ export default function CustomCampaignModal({
                     !message ||
                     !campaignTitle
                   }
-                  className="bg-blue-600 hover:bg-blue-700 min-w-[180px] shadow-lg shadow-blue-200 h-11 text-base"
+                  className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 min-w-[180px] shadow-lg shadow-blue-200 dark:shadow-blue-900/30 h-11 text-base"
                 >
                   {isSubmitting ? (
                     <>
@@ -787,47 +777,47 @@ export default function CustomCampaignModal({
             !isSubmitting && !isPooling && setShowPaymentDialog(open)
           }
         >
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[425px] dark:bg-black dark:border-gray-800">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <CreditCard className="text-blue-600" />
+              <DialogTitle className="flex items-center gap-2 dark:text-gray-100">
+                <CreditCard className="text-blue-600 dark:text-blue-400" />
                 Complete Payment
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="dark:text-gray-400">
                 Review the total cost and choose your payment method.
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-4 py-4">
-              <div className="bg-blue-50 p-4 rounded-lg flex justify-between items-center">
-                <span className="text-sm font-medium text-blue-900">
+              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg flex justify-between items-center">
+                <span className="text-sm font-medium text-blue-900 dark:text-blue-300">
                   Total Campaign Cost
                 </span>
-                <span className="text-xl font-bold text-blue-700">
+                <span className="text-xl font-bold text-blue-700 dark:text-blue-400">
                   {cost.toFixed(2)} ETB
                 </span>
               </div>
 
               <div className="space-y-2">
-                <Label>Payment Phone Number</Label>
+                <Label className="dark:text-gray-300">Payment Phone Number</Label>
                 <div className="flex gap-2">
-                  <div className="bg-gray-100 border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-500 font-medium flex items-center">
+                  <div className="bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-3 py-2 text-sm text-gray-500 dark:text-gray-400 font-medium flex items-center">
                     +251
                   </div>
                   <Input
                     value={paymentPhone}
                     onChange={(e) => {
-                      // Only allow numbers
                       const val = e.target.value.replace(/[^0-9]/g, "");
                       setPaymentPhone(val);
                     }}
                     placeholder="911223344"
+                    className="dark:bg-black dark:border-gray-700 dark:text-gray-100"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Select Provider</Label>
+                <Label className="dark:text-gray-300">Select Provider</Label>
                 <PaymentMethodSelector
                   selectedMethod={paymentMethod}
                   onSelect={setPaymentMethod}
@@ -842,17 +832,18 @@ export default function CustomCampaignModal({
                 variant="outline"
                 onClick={() => {
                   setShowPaymentDialog(false);
-                  setIsSubmitting(false); // Reset loading state
-                  setIsPooling(false); // Stop polling
-                  setTransactionId(null); // Clear transaction
+                  setIsSubmitting(false);
+                  setIsPooling(false);
+                  setTransactionId(null);
                 }}
+                className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
               >
                 Back
               </Button>
               <Button
                 onClick={processPayment}
                 disabled={isSubmitting || isPooling}
-                className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]"
+                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white min-w-[140px]"
               >
                 {isPooling ? (
                   <>

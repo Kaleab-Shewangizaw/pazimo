@@ -60,7 +60,6 @@ export default function TableComp({ event }: { event: Event }) {
         const token = localStorage.getItem("token");
         if (!token) return;
 
-        // Fetch Tickets
         let allTickets: any[] = [];
         let page = 1;
         let hasMore = true;
@@ -90,7 +89,6 @@ export default function TableComp({ event }: { event: Event }) {
 
         setTickets(allTickets);
 
-        // Fetch campaign pricing (fallback to invitation pricing for backward compatibility)
         let pricingResponse = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/campaign-pricing/public`,
         );
@@ -146,7 +144,6 @@ export default function TableComp({ event }: { event: Event }) {
       toast.error("Phone number is required");
       return;
     }
-    // Basic phone validation
     const phoneRegex = /^(\+251|0)(9|7)\d{8}$/;
     if (!phoneRegex.test(newPhone)) {
       toast.error("Invalid Ethiopian phone number format");
@@ -158,7 +155,6 @@ export default function TableComp({ event }: { event: Event }) {
       phone: newPhone,
     };
 
-    // Check for duplicates
     const exists = getTargetUsers().some((u) => u.phone === newPhone);
     if (exists) {
       toast.error("User already in list");
@@ -186,16 +182,14 @@ export default function TableComp({ event }: { event: Event }) {
 
     try {
       const token = localStorage.getItem("token");
-      // Prepare bulk rows explicitly for SMS
       const rows = users.map((u) => ({
         guestName: u.username,
         guestPhone: u.phone,
         type: "sms",
-        amount: 1, // 1 message
-        message: message, // Attach the campaign message
+        amount: 1,
+        message: message,
       }));
 
-      // 1. Create Bulk Invitations (Campaign)
       const createResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/bulk-create`,
         {
@@ -219,68 +213,23 @@ export default function TableComp({ event }: { event: Event }) {
 
       const { invitationIds, totalCost } = createData.data;
 
-      // 2. Initiate Payment (SantimPay)
-      // Since fetch is client-side, we redirect to payment page or handle it via modal.
-      // But typically we initiate payment API -> get redirect URL or handle direct.
-      // For simplicity/UX, we'll assume we can use the same flow as Bulk Invite.
-      // Or we can just redirect to a payment handler.
-
-      // Let's use the direct payment initiation logic used in BulkTableView
-      // We need a transaction ID.
-      // For now, let's just use the invitation payment endpoint.
-
       const billingData = {
         amount: totalCost,
         paymentReason: `Campaign for ${event.title}`,
-        phoneNumber: "", // Organizer's phone, maybe ask? Or use telebirr default
-        paymentMethod: "Telebirr", // Default
+        phoneNumber: "",
+        paymentMethod: "Telebirr",
         invitationData: {
           customerName: "Campaign Manager",
-          contact: "campaign@pazimo.com", // Organizer email?
+          contact: "campaign@pazimo.com",
           contactType: "email",
-          type: "bulk_invitation_fee", // Special type
+          type: "bulk_invitation_fee",
           qrCodeCount: users.length,
           eventId: event._id,
-          // IMPORTANT: Pass the IDs we just created so we know what to send later
           pendingInvitationIds: invitationIds,
           message: message,
         },
       };
 
-      // Since we don't have a full payment modal here yet, let's create a pending payment
-      // and redirect the user or show a toast that payment is needed.
-      // Ideally we should pop open the payment modal.
-
-      // For this MVP, let's try to simulate the payment requirement by
-      // initiating it. But we need the organizer's phone number for Telebirr push.
-      // If we don't have it, we can't trigger push.
-
-      // Let's fallback to "Please use the bulk invite tool for payment now" or better
-      // Just initiate and hope we have a stored phone or ask for it.
-      // Wait, the requirement says "make sure payment is also working".
-      // Let's prompt for phone number if we don't have one, or just use a generic input in the dialog before "Launch".
-
-      // Actually, let's just trigger the payment initiation.
-      // Use a hardcoded phone or one from profile?
-      // I'll add a phone input next to the Launch button if needed.
-      // For now, let's just assume we need to redirect to a checkout page?
-      // No, Pazimo uses direct USSD push usually.
-
-      toast.info("Preparing payment...");
-
-      // THIS IS A PLACEHOLDER FOR FULL PAYMENT FLOW
-      // We need to implement the full payment modal here or redirect.
-      // I will implement a basic prompt for phone number if I can.
-      // But for now let's just log it and say "Implementation Pending" for the actual transaction part
-      // unless I duplicate the entire PaymentModal here.
-
-      // Actually, since I can't easily duplicate the complex PaymentModal in one go,
-      // I'll implement the logic to Create the Invitations (Done above)
-      // and then alert the user. "Campaign created! Please complete payment to send."
-      // But the user wants it to "work".
-
-      // Let's assume the user has a stored phone or we ask for it in a simple prompt.
-      // I'll just use a simple prompt for now.
       const phone = prompt("Enter Telebirr number for payment:");
       if (!phone) {
         setIsSubmitting(false);
@@ -308,8 +257,6 @@ export default function TableComp({ event }: { event: Event }) {
         toast.success(
           "Payment initiated! Please check your phone to confirm transaction.",
         );
-        // Start polling?
-        // simple polling...
         const txId = paymentResult.transactionId;
         const interval = setInterval(async () => {
           const check = await fetch(
@@ -319,7 +266,6 @@ export default function TableComp({ event }: { event: Event }) {
           if (checkData.status === "PAID") {
             clearInterval(interval);
             toast.success("Payment successful! Campaign sending...");
-            // Close dialog?
           }
         }, 3000);
       } else {
@@ -334,19 +280,19 @@ export default function TableComp({ event }: { event: Event }) {
   };
 
   const users = getTargetUsers();
-  const totalCost = users.length * pricing.sms * 1.03; // +3% fee estimate
+  const totalCost = users.length * pricing.sms * 1.03;
 
   return (
     <div
       className="group flex items-center justify-between p-5 mb-4 
-             bg-white border border-gray-200 rounded-xl shadow-sm 
-             hover:shadow-md hover:border-blue-300 transition-all duration-200"
+             bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl shadow-sm 
+             hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 transition-all duration-200"
     >
       <div className="flex flex-col gap-1">
-        <h3 className="font-bold text-xl text-gray-800 tracking-tight">
+        <h3 className="font-bold text-xl text-gray-800 dark:text-gray-100 tracking-tight">
           {event.title}
         </h3>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           {filterTickets().length} potential recipients
         </p>
       </div>
@@ -355,7 +301,7 @@ export default function TableComp({ event }: { event: Event }) {
         <DialogTrigger asChild>
           <button
             className="flex items-center justify-center p-3 rounded-xl
-             bg-blue-600 text-white shadow-lg shadow-blue-200/50
+             bg-blue-600 text-white shadow-lg shadow-blue-200/50 dark:shadow-blue-900/30
              hover:bg-blue-700 hover:scale-105 active:scale-95
              transition-all duration-200 cursor-pointer group"
             aria-label="Promote event"
@@ -368,22 +314,21 @@ export default function TableComp({ event }: { event: Event }) {
           </button>
         </DialogTrigger>
 
-        {/* Updated Dialog Content - Wider for 2 Columns */}
-        <DialogContent className="sm:max-w-[900px] h-[80vh] flex flex-col p-0 overflow-hidden bg-white border-none shadow-2xl">
+        <DialogContent className="sm:max-w-[900px] h-[80vh] flex flex-col p-0 overflow-hidden bg-white dark:bg-black border-gray-200 dark:border-gray-800 shadow-2xl">
           {/* Header Section */}
-          <div className="p-6 pb-4 bg-gray-50/50 border-b border-gray-100">
+          <div className="p-6 pb-4 bg-gray-50/50 dark:bg-gray-900/30 border-b border-gray-100 dark:border-gray-800">
             <DialogHeader>
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center">
-                  <Megaphone className="text-blue-600" size={24} />
+                <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                  <Megaphone className="text-blue-600 dark:text-blue-400" size={24} />
                 </div>
                 <div>
-                  <DialogTitle className="text-2xl font-bold">
+                  <DialogTitle className="text-2xl font-bold dark:text-gray-100">
                     Create Campaign
                   </DialogTitle>
-                  <DialogDescription className="text-gray-500 mt-1 text-base">
+                  <DialogDescription className="text-gray-500 dark:text-gray-400 mt-1 text-base">
                     Engage with attendees of{" "}
-                    <span className="font-semibold text-blue-600">
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">
                       {event.title}
                     </span>
                   </DialogDescription>
@@ -394,41 +339,41 @@ export default function TableComp({ event }: { event: Event }) {
 
           <div className="flex flex-1 overflow-hidden">
             {/* LEFT COLUMN: Message & Stats */}
-            <div className="w-1/2 p-6 flex flex-col gap-6 border-r border-gray-100 bg-white">
+            <div className="w-1/2 p-6 flex flex-col gap-6 border-r border-gray-100 dark:border-gray-800 bg-white dark:bg-black">
               <div className="flex-1 flex flex-col gap-2">
-                <label className="text-sm font-semibold text-gray-700">
+                <label className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   Campaign Message
                 </label>
                 <Textarea
                   placeholder="Type your message here... (e.g., Early bird tickets for our next event are now available!)"
-                  className="flex-1 resize-none bg-gray-50 border-gray-200 focus:bg-white transition-colors text-base p-4"
+                  className="flex-1 resize-none bg-gray-50 dark:bg-gray-900/50 border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-black transition-colors text-base p-4 dark:text-gray-100 dark:placeholder-gray-500"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                 />
-                <p className="text-xs text-gray-400 text-right">
+                <p className="text-xs text-gray-400 dark:text-gray-500 text-right">
                   {message.length} characters
                 </p>
               </div>
 
-              <div className="bg-blue-50/50 rounded-xl p-4 border border-blue-100">
-                <h4 className="text-sm font-semibold text-blue-900 mb-3">
+              <div className="bg-blue-50/50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
+                <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3">
                   Campaign Summary
                 </h4>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Recipients</span>
-                    <span className="font-medium text-gray-900">
+                    <span className="text-gray-600 dark:text-gray-400">Recipients</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
                       {users.length}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Cost per SMS</span>
-                    <span className="font-medium text-gray-900">
+                    <span className="text-gray-600 dark:text-gray-400">Cost per SMS</span>
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
                       {pricing.sms} ETB
                     </span>
                   </div>
-                  <Separator className="bg-blue-200/50" />
-                  <div className="flex justify-between text-base font-bold text-blue-700 pt-1">
+                  <Separator className="bg-blue-200/50 dark:bg-blue-800/50" />
+                  <div className="flex justify-between text-base font-bold text-blue-700 dark:text-blue-400 pt-1">
                     <span>Estimated Total</span>
                     <span>{totalCost.toFixed(2)} ETB</span>
                   </div>
@@ -437,12 +382,12 @@ export default function TableComp({ event }: { event: Event }) {
             </div>
 
             {/* RIGHT COLUMN: User List */}
-            <div className="w-1/2 flex flex-col bg-gray-50/30">
-              <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
-                <span className="font-semibold text-gray-700">
+            <div className="w-1/2 flex flex-col bg-gray-50/30 dark:bg-gray-900/20">
+              <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-black">
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
                   Target Audience
                 </span>
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
+                <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-2 py-1 rounded-full">
                   {users.length} added
                 </span>
               </div>
@@ -450,14 +395,14 @@ export default function TableComp({ event }: { event: Event }) {
               <div className="flex-1 overflow-y-auto px-4 py-2 min-h-0">
                 <div className="space-y-2 py-2">
                   {/* Add User Row */}
-                  <div className="flex items-center justify-between p-3 rounded-xl border border-dashed border-gray-300 bg-white/50 hover:bg-white hover:border-blue-300 transition-all group">
+                  <div className="flex items-center justify-between p-3 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white/50 dark:bg-black/50 hover:bg-white dark:hover:bg-black hover:border-blue-300 dark:hover:border-blue-700 transition-all group">
                     {showInput ? (
                       <div className="flex flex-1 items-center gap-2">
                         <Input
                           placeholder="Phone (e.g., 0911...)"
                           value={newPhone}
                           onChange={(e) => setNewPhone(e.target.value)}
-                          className="h-9"
+                          className="h-9 dark:bg-black dark:border-gray-700 dark:text-gray-100"
                           autoFocus
                         />
                         <Button size="sm" onClick={handleAddUser}>
@@ -467,19 +412,20 @@ export default function TableComp({ event }: { event: Event }) {
                           size="sm"
                           variant="ghost"
                           onClick={() => setShowInput(false)}
+                          className="dark:text-gray-400 dark:hover:text-gray-200"
                         >
                           X
                         </Button>
                       </div>
                     ) : (
                       <div
-                        className="flex flex-1 items-center gap-3 cursor-pointer text-gray-500 hover:text-blue-600"
+                        className="flex flex-1 items-center gap-3 cursor-pointer text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
                         onClick={() => setShowInput(true)}
                       >
-                        <div className="w-8 h-8 rounded-full bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 flex items-center justify-center transition-colors">
                           <Plus
                             size={16}
-                            className="group-hover:text-blue-600"
+                            className="group-hover:text-blue-600 dark:group-hover:text-blue-400"
                           />
                         </div>
                         <span className="text-sm font-medium">
@@ -493,17 +439,17 @@ export default function TableComp({ event }: { event: Event }) {
                   {users.map((user, idx) => (
                     <div
                       key={user.phone + idx}
-                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white shadow-sm"
+                      className="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-black shadow-sm"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-xs">
+                        <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xs">
                           {user.username.charAt(0)}
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900 leading-none">
+                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-none">
                             {user.username}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1 font-mono">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
                             {user.phone}
                           </p>
                         </div>
@@ -511,10 +457,8 @@ export default function TableComp({ event }: { event: Event }) {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-gray-300 hover:text-red-500 hover:bg-red-50"
+                        className="h-7 w-7 text-gray-300 dark:text-gray-600 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
                         onClick={() => {
-                          // Logic to remove... for now filtered tickets are hard to remove individually unless we exclude
-                          // Implementing removal for manual users is easy.
                           if (manualUsers.includes(user)) {
                             setManualUsers(
                               manualUsers.filter((u) => u !== user),
@@ -530,7 +474,7 @@ export default function TableComp({ event }: { event: Event }) {
                   ))}
 
                   {users.length === 0 && (
-                    <div className="text-center py-10 text-gray-400 text-sm">
+                    <div className="text-center py-10 text-gray-400 dark:text-gray-500 text-sm">
                       No recipients yet
                     </div>
                   )}
@@ -539,13 +483,15 @@ export default function TableComp({ event }: { event: Event }) {
             </div>
           </div>
 
-          <div className="p-4 bg-white border-t border-gray-100 flex justify-end gap-3 z-10">
+          <div className="p-4 bg-white dark:bg-black border-t border-gray-100 dark:border-gray-800 flex justify-end gap-3 z-10">
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button variant="outline" className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800">
+                Cancel
+              </Button>
             </DialogClose>
             <Button
               onClick={handleLaunchCampaign}
-              className="bg-blue-600 hover:bg-blue-700 min-w-[150px]"
+              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 min-w-[150px]"
               disabled={isSubmitting || users.length === 0}
             >
               {isSubmitting ? (

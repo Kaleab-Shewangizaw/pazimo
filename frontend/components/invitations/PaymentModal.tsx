@@ -74,22 +74,24 @@ export default function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl max-w-md w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
           Payment Required
         </h3>
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
           Complete payment to send invitation for:{" "}
-          <strong>{pendingInvitation?.selectedEvent?.title}</strong>
+          <strong className="text-gray-900 dark:text-gray-100">
+            {pendingInvitation?.selectedEvent?.title}
+          </strong>
         </p>
 
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-          <div className="flex justify-between text-sm mb-2">
+        <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex justify-between text-sm mb-2 text-gray-600 dark:text-gray-400">
             <span>Invitation Cost:</span>
-            <span>{amount} ETB</span>
+            <span className="text-gray-900 dark:text-gray-100">{amount} ETB</span>
           </div>
-          <div className="border-t border-gray-300 pt-2 flex justify-between font-semibold">
+          <div className="border-t border-gray-300 dark:border-gray-700 pt-2 flex justify-between font-semibold text-gray-900 dark:text-gray-100">
             <span>Total:</span>
             <span>{amount} ETB</span>
           </div>
@@ -97,11 +99,11 @@ export default function PaymentModal({
 
         <div className="space-y-6 mb-6">
           <div>
-            <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+            <Label className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2 block">
               Phone Number
             </Label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium z-10">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-medium z-10">
                 +251
               </span>
               <Input
@@ -113,13 +115,13 @@ export default function PaymentModal({
                   setPhoneNumber(val);
                 }}
                 placeholder="911234567"
-                className="pl-14 placeholder:text-gray-300"
+                className="pl-14 placeholder:text-gray-300 dark:placeholder:text-gray-500 bg-white dark:bg-black border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
           </div>
 
           <div>
-            <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+            <Label className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2 block">
               Payment Method
             </Label>
             <AnimatePresence>
@@ -129,7 +131,7 @@ export default function PaymentModal({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.35 }}
-                  className="mb-2 flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-[11px] font-medium text-blue-700"
+                  className="mb-2 flex items-center gap-2 rounded-full border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-3 py-1 text-[11px] font-medium text-blue-700 dark:text-blue-400"
                 >
                   <motion.span
                     animate={{ x: [-2, 2, -2] }}
@@ -154,7 +156,7 @@ export default function PaymentModal({
 
         <Button
           onClick={handlePayment}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg mb-4"
+          className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white h-12 text-lg mb-4"
           disabled={
             isSantimLoading ||
             !phoneNumber ||
@@ -176,7 +178,7 @@ export default function PaymentModal({
         <div className="mt-2">
           <button
             onClick={onCancel}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 hover:bg-gray-50 transition-all duration-200 font-medium"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200 font-medium"
           >
             Cancel
           </button>

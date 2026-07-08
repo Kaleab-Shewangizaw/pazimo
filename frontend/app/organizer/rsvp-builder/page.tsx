@@ -94,7 +94,7 @@ export default function RSVPDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br px-4 from-slate-50 to-slate-100 dark:from-slate-950 dark:to-black">
       <main className="container mx-auto py-12">
         <motion.div
           initial={{ opacity: 0, y: 12 }}

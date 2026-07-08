@@ -46,20 +46,20 @@ export default function InviteModal({
   onSend,
 }: InviteModalProps) {
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white border border-gray-200 rounded-xl max-w-lg w-full p-6 md:p-8 shadow-xl">
-        <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl max-w-lg w-full p-6 md:p-8 shadow-xl">
+        <h3 className="text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
           Professional Invitation
         </h3>
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
           Sending invitation for:{" "}
-          <strong className="text-gray-900">{selectedEvent?.title}</strong>
+          <strong className="text-gray-900 dark:text-gray-100">{selectedEvent?.title}</strong>
         </p>
 
         <div className="space-y-4">
           {/* Customer Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">
               Customer Name
             </label>
             <input
@@ -67,7 +67,7 @@ export default function InviteModal({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="Enter customer name"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
               required
             />
           </div>
@@ -75,7 +75,7 @@ export default function InviteModal({
           {/* Contact Method and Guest Type Row */}
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-900 mb-3">
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-3">
                 Contact Method
               </label>
               <div className="space-y-2">
@@ -88,10 +88,10 @@ export default function InviteModal({
                     onChange={(e) =>
                       setContactType(e.target.value as "email" | "phone")
                     }
-                    className="w-4 h-4"
+                    className="w-4 h-4 dark:bg-black dark:border-gray-600"
                   />
-                  <Mail className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm text-gray-900">
+                  <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm text-gray-900 dark:text-gray-200">
                     Email ({pricing.email} ETB)
                   </span>
                 </label>
@@ -104,10 +104,10 @@ export default function InviteModal({
                     onChange={(e) =>
                       setContactType(e.target.value as "email" | "phone")
                     }
-                    className="w-4 h-4"
+                    className="w-4 h-4 dark:bg-black dark:border-gray-600"
                   />
-                  <Phone className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm text-gray-900">
+                  <Phone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm text-gray-900 dark:text-gray-200">
                     SMS ({pricing.sms} ETB)
                   </span>
                 </label>
@@ -115,7 +115,7 @@ export default function InviteModal({
             </div>
 
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-900 mb-3">
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-3">
                 Guest Type
               </label>
               <div className="space-y-2">
@@ -128,9 +128,9 @@ export default function InviteModal({
                     onChange={(e) =>
                       setGuestType(e.target.value as "guest" | "paid")
                     }
-                    className="w-4 h-4"
+                    className="w-4 h-4 dark:bg-black dark:border-gray-600"
                   />
-                  <span className="text-sm text-gray-900">Guest (Free)</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-200">Guest (Free)</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -141,9 +141,9 @@ export default function InviteModal({
                     onChange={(e) =>
                       setGuestType(e.target.value as "guest" | "paid")
                     }
-                    className="w-4 h-4"
+                    className="w-4 h-4 dark:bg-black dark:border-gray-600"
                   />
-                  <span className="text-sm text-gray-900">Paid Attendee</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-200">Paid Attendee</span>
                 </label>
               </div>
             </div>
@@ -152,13 +152,13 @@ export default function InviteModal({
           {/* Ticket Type Selection */}
           {guestType !== "paid" && (
             <div>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">
                 Ticket Type
               </label>
               <select
                 value={selectedTicketType}
                 onChange={(e) => setSelectedTicketType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
               >
                 <option value="Regular">Regular</option>
                 <option value="VIP">VIP</option>
@@ -170,7 +170,7 @@ export default function InviteModal({
           {/* Contact Method and Guest Type Row */}
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-900 mb-2">
+              <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">
                 {contactType === "email" ? "Email Address" : "Phone Number"}
               </label>
               <input
@@ -182,11 +182,11 @@ export default function InviteModal({
                     ? "Enter email address"
                     : "Enter phone number (+251911234567)"
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                 required
               />
               {contactType === "phone" && (
-                <p className="text-xs text-gray-600 mt-1">
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   Ethiopian format: +251911234567 or 0911234567
                 </p>
               )}
@@ -194,7 +194,7 @@ export default function InviteModal({
 
             {guestType !== "paid" && (
               <div className="w-32">
-                <label className="block text-sm font-medium text-gray-900 mb-2">
+                <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">
                   Tickets
                 </label>
                 <input
@@ -204,7 +204,7 @@ export default function InviteModal({
                   onChange={(e) =>
                     setQrCodeCount(Math.max(1, parseInt(e.target.value) || 1))
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
                 />
               </div>
             )}
@@ -212,7 +212,7 @@ export default function InviteModal({
 
           {/* Message */}
           <div>
-            <label className="block text-sm font-medium text-gray-900 mb-2">
+            <label className="block text-sm font-medium text-gray-900 dark:text-gray-200 mb-2">
               Message (Optional)
             </label>
             <textarea
@@ -220,12 +220,12 @@ export default function InviteModal({
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Add a personal message to the invitation"
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-black text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
             />
           </div>
 
           {/* Cost Summary */}
-          <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+          <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg text-sm text-gray-600 dark:text-gray-400">
             {(() => {
               const shouldSkipPayment =
                 (selectedEvent?.eventType === "private" ||
@@ -238,10 +238,10 @@ export default function InviteModal({
               if (shouldSkipPayment) {
                 return (
                   <div className="text-center">
-                    <div className="text-lg font-bold text-green-600 mb-2">
+                    <div className="text-lg font-bold text-green-600 dark:text-green-400 mb-2">
                       FREE INVITATION
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       No charges for paid attendees in events with paid tickets
                     </div>
                   </div>
@@ -252,7 +252,7 @@ export default function InviteModal({
                 <>
                   <div className="flex justify-between items-center">
                     <span>Invitation Cost:</span>
-                    <span className="font-medium text-gray-900">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">
                       {(
                         (contactType === "email"
                           ? pricing.email
@@ -261,9 +261,9 @@ export default function InviteModal({
                       ETB
                     </span>
                   </div>
-                  <div className="border-t border-gray-300 mt-2 pt-2 flex justify-between items-center">
+                  <div className="border-t border-gray-300 dark:border-gray-700 mt-2 pt-2 flex justify-between items-center">
                     <span className="font-semibold">Total:</span>
-                    <span className="font-bold text-gray-900">
+                    <span className="font-bold text-gray-900 dark:text-gray-100">
                       {(
                         (contactType === "email"
                           ? pricing.email
@@ -272,7 +272,7 @@ export default function InviteModal({
                       ETB
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {qrCodeCount} Ticket{qrCodeCount > 1 ? "s" : ""} via{" "}
                     {contactType === "email" ? "Email" : "SMS"}
                   </div>
@@ -285,14 +285,14 @@ export default function InviteModal({
         <div className="flex gap-3 mt-6">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-900 hover:bg-gray-50 transition-all duration-200 font-medium"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200 font-medium"
           >
             Cancel
           </button>
           <button
             onClick={onSend}
             disabled={!contact || !customerName || isSubmitting}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
           >
             {isSubmitting
               ? "Processing..."
