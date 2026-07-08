@@ -1,6 +1,10 @@
 const axios = require("axios");
 
-const sendSMS = async (phone, message, retries = 3) => {
+// retries defaults to 1 (no retry): GeezSMS isn't idempotent from our side — if it
+// processes the request but replies with an error/timeout, retrying sends a second
+// real SMS to the customer. Only call with retries > 1 if you've confirmed the
+// gateway is safe to retry.
+const sendSMS = async (phone, message, retries = 1) => {
   const startTime = Date.now();
   
   try {

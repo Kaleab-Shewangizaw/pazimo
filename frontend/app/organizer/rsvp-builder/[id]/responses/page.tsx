@@ -176,7 +176,7 @@ export default function ResponsesPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
-        <div className="text-slate-600 dark:text-slate-400">Loading responses…</div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600 dark:border-slate-400"></div>
       </div>
     );
   }

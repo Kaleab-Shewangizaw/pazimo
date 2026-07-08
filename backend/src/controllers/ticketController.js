@@ -14,6 +14,10 @@ const {
   createEmailTemplate,
 } = require("./invitationEmailController");
 const { sendSMS } = require("../utils/sms");
+const {
+  sendTicketConfirmationEmail,
+  isPlaceholderEmail,
+} = require("../utils/ticketConfirmationEmail");
 const axios = require("axios");
 const Payment = require("../models/Payment");
 const SantimPayService = require("../services/santimPayService");
@@ -328,6 +332,35 @@ const processSuccessfulPayment = async (payment) => {
       })
       .catch((smsError) => {
         console.error("[SMS] ❌ Unexpected error sending SMS:", smsError);
+      });
+  }
+
+  // ⚡ Send ticket confirmation EMAIL asynchronously (non-blocking), but only
+  // when the buyer gave us a real address — skip our own auto-generated
+  // "customerpazimo######@gmail.com" placeholders used when no email was provided.
+  const recipientEmail = (
+    (user && user.email) ||
+    payment.ticketDetails?.email ||
+    ""
+  )
+    .toLowerCase()
+    .trim();
+
+  if (recipientEmail && !isPlaceholderEmail(recipientEmail)) {
+    const recipientName = user ? user.firstName : (payment.guestName || "Customer");
+
+    sendTicketConfirmationEmail({
+      event,
+      ticket,
+      recipientEmail,
+      recipientName,
+      ticketCount: ticketCount || 1,
+    })
+      .then(() => {
+        console.log(`[EMAIL] ✅ Ticket confirmation sent to ${recipientEmail}`);
+      })
+      .catch((emailError) => {
+        console.error(`[EMAIL] ❌ Failed to send ticket confirmation to ${recipientEmail}:`, emailError.message);
       });
   }
 
@@ -1972,7 +2005,7 @@ const getPublicTicketDetails = async (req, res) => {
     const tickets = await Ticket.find(query)
       .populate(
         "event",
-        "title startDate endDate location organizer coverImages"
+        "title startDate endDate startTime endTime location organizer coverImages"
       )
       .populate("user", "firstName lastName email")
       .lean(); // Use lean() for faster queries since we don't need Mongoose documents

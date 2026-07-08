@@ -43,7 +43,13 @@ import Link from "next/link";
 export default function RsvpFlow() {
   return (
     <div className="brand-scope">
-      <Suspense fallback={<div>Loading...</div>}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-white dark:bg-[#0A0A0A] flex items-center justify-center transition-colors">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 dark:border-gray-300"></div>
+          </div>
+        }
+      >
         <RsvpContent />
       </Suspense>
     </div>
@@ -159,7 +165,7 @@ function RsvpContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-white dark:bg-[#0A0A0A] flex items-center justify-center transition-colors">
-        <div className="text-gray-600 dark:text-gray-300">Loading form…</div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 dark:border-gray-300"></div>
       </div>
     );
   }

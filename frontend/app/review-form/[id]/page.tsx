@@ -15,7 +15,13 @@ import { toast } from "sonner";
 
 export default function ReviewFlow() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600 dark:border-gray-300"></div>
+        </div>
+      }
+    >
       <ReviewContent />
     </Suspense>
   );
@@ -84,7 +90,7 @@ function ReviewContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center">
-        <div className="text-slate-600 dark:text-slate-400">Loading form…</div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600 dark:border-slate-400"></div>
       </div>
     );
   }
