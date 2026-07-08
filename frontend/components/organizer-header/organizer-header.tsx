@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { io, type Socket } from "socket.io-client"
+import ThemeToggle from "../theme-toggle"
 
 interface Notification {
   _id: string
@@ -201,7 +202,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
 
   return (
     <>
-      <header className="md:relative fixed top-0 left-0 right-0 z-50 py-4 px-4 sm:px-8 md:px-16 border-b border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm transition-all duration-300 ease-out">
+      <header className="md:relative dark:bg-black fixed top-0 left-0 right-0 z-50 py-4 px-4 sm:px-8 md:px-16 border-b dark:border-gray-600 border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm transition-all duration-300 ease-out">
         <div className="flex flex-row items-center justify-between md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
           {/* Logo */}
         
@@ -224,7 +225,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="relative p-2 h-auto w-auto text-gray-700 hover:text-[#115db1] hover:bg-blue-50 transition-all duration-200 rounded-full"
+                  className="relative p-2 h-auto w-auto text-gray-700 dark:text-gray-300 hover:text-[#115db1] hover:bg-blue-50 transition-all duration-200 rounded-full"
                   onClick={handleNotificationClick}
                 >
                   <Bell className="h-5 w-5" />
@@ -234,13 +235,14 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                     </div>
                   )}
                 </Button>
+                <ThemeToggle/>
 
                 {/* Notification Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-hidden">
-                    <div className="p-4 border-b border-gray-100">
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-black rounded-lg shadow-xl border dark:border-gray-600 border-gray-200 z-50 max-h-96 overflow-hidden">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-900">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Notifications</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-300">Notifications</h3>
                         {unreadCount > 0 && (
                           <Badge className="bg-blue-100 text-blue-700 text-xs">
                             {unreadCount} new
@@ -252,7 +254,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                     <div className="max-h-64 overflow-y-auto">
                       {loading ? (
                         <div className="p-4 text-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 dark:border-blue-500 mx-auto"></div>
                           <p className="text-sm text-gray-500 mt-2">Loading...</p>
                         </div>
                       ) : notifications.length === 0 ? (
@@ -261,12 +263,12 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                           <p className="text-sm text-gray-500">No notifications yet</p>
                         </div>
                       ) : (
-                        <div className="divide-y divide-gray-100">
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
                           {notifications.map((notification) => (
                             <div
                               key={notification._id}
-                              className={`p-4 hover:bg-gray-50 transition-colors cursor-pointer ${
-                                !notification.read ? "bg-blue-50" : ""
+                              className={`p-4 hover:bg-gray-50 dark:hover:bg-black/90 transition-colors cursor-pointer ${
+                                !notification.read ? "bg-blue-50 dark:bg-blue-900" : ""
                               }`}
                               onClick={() => {
                                 setShowNotifications(false)
@@ -283,7 +285,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className={`text-sm font-medium ${
-                                    notification.read ? "text-gray-700" : "text-blue-900"
+                                    notification.read ? "text-gray-700 dark:text-gray-300" : "text-blue-900"
                                   }`}>
                                     {notification.message}
                                   </p>
@@ -304,7 +306,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                     </div>
                     
                     {notifications.length > 0 && (
-                      <div className="p-3 border-t border-gray-100">
+                      <div className="p-3 border-t border-gray-100 dark:border-gray-600">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -321,7 +323,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
 
               <Button
                 variant="ghost"
-                className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 transition-all duration-200 rounded-xl px-4 py-2 h-auto"
+                className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r h-auto"
                 onClick={handleUserClick}
               >
                 <div className="flex items-center gap-2">
@@ -329,7 +331,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                     <User className="h-4 w-4 text-white" />
                   </div>
                   <div className="flex flex-col items-start">
-                    <span className="text-sm">{user?.firstName || "Organizer"}</span>
+                    <span className="text-sm dark:text-gray-300">{user?.firstName || "Organizer"}</span>
                     <span className="text-xs text-[#ffc107] font-medium">Organizer</span>
                   </div>
                 </div>
