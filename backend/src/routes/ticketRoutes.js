@@ -220,6 +220,20 @@ router.post("/ticket/initiate", async (req, res) => {
     }
     // ------------------------------------
 
+    // The `phoneNumber` check above only covers the number typed into this
+    // specific checkout form. A banned user can dodge it by paying with a
+    // fresh, non-blacklisted number while still checking out on their own
+    // (banned) account — so also refuse to initiate payment if the resolved
+    // account itself (logged-in via userId, or matched/created by phone or
+    // email during guest checkout above) is banned.
+    if (user && (user.isBanned || !user.isActive)) {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_BANNED",
+        error: user.banReason || "This account is not permitted to make purchases.",
+      });
+    }
+
     const selectedEvent = await findEventForTicketPurchase(ticketDetails.eventId);
     if (!selectedEvent) {
       return res.status(404).json({ success: false, error: "Event not found" });
@@ -438,6 +452,20 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       } else {
         console.log(`[CHAPA-INIT] ⚠️ No user found/created - proceeding as guest`);
       }
+    }
+
+    // The `phoneNumber` check above only covers the number typed into this
+    // specific checkout form. A banned user can dodge it by paying with a
+    // fresh, non-blacklisted number while still checking out on their own
+    // (banned) account — so also refuse to initiate payment if the resolved
+    // account itself (logged-in via userId, or matched/created by phone or
+    // email during guest checkout above) is banned.
+    if (user && (user.isBanned || !user.isActive)) {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_BANNED",
+        error: user.banReason || "This account is not permitted to make purchases.",
+      });
     }
 
     const selectedEvent = await findEventForTicketPurchase(ticketDetails.eventId);

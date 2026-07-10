@@ -3,6 +3,7 @@ const User = require("../models/User");
 const Admin = require("../models/Admin");
 const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
+const { isPhoneBanned } = require("../utils/fraudGuard");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
@@ -338,6 +339,18 @@ const register = async (req, res) => {
   try {
     // Whitelist allowed fields — never trust role from the client
     const { email, password, firstName, lastName, phoneNumber } = req.body;
+
+    // Block ban evasion: a banned user can't dodge their ban by signing up
+    // again with a new email but the same real phone number (differently
+    // formatted or not — isPhoneBanned normalizes across "0.../ +251.../251...").
+    if (phoneNumber && (await isPhoneBanned(phoneNumber))) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        status: "error",
+        code: "PHONE_BANNED",
+        message: "This phone number is not permitted to create an account.",
+      });
+    }
+
     const user = await User.create({ email, password, firstName, lastName, phoneNumber, role: 'customer' });
     const token = signToken(user._id, user.role);
 

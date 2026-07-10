@@ -7,6 +7,7 @@ const {
   BadRequestError,
   NotFoundError,
   UnauthorizedError,
+  ForbiddenError,
 } = require("../errors");
 const mongoose = require("mongoose");
 const {
@@ -24,6 +25,7 @@ const SantimPayService = require("../services/santimPayService");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { isPhoneBanned } = require("../utils/fraudGuard");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
 const isEthiopianNumber = (phone) => {
@@ -193,6 +195,17 @@ const processSuccessfulPayment = async (payment) => {
 
     const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
     const phone = rawPhone ? rawPhone.replace(/\s+/g, "") : null;
+
+    // Guest checkout is the one path that can silently create a brand-new
+    // User account (see the `else if (email && phone)` branch below) or link
+    // to a pre-existing one purely by phone/email match, with no ban check
+    // upstream of it. Refuse to fulfill (create a ticket or account) for a
+    // phone that's on the fraud blacklist, even though the payment already
+    // succeeded — this stops ban evasion via a second email on the same phone.
+    if (phone && (await isPhoneBanned(phone))) {
+      console.error(`[TICKET-CREATE] ❌ BLOCKED: phone ${phone} is fraud-blacklisted — refusing to create ticket/account for txn ${payment.transactionId}`);
+      throw new ForbiddenError("This phone number is not permitted to make purchases.");
+    }
 
     console.log(`[TICKET-CREATE] GUEST CHECKOUT - Searching for user by phone: ${phone} or email: ${email}`);
 
@@ -2031,10 +2044,21 @@ const getPublicTicketDetails = async (req, res) => {
     const tickets = await Ticket.find(query)
       .populate(
         "event",
-        "title startDate endDate startTime endTime location organizer coverImages"
+        "title startDate endDate startTime endTime location organizer coverImages ticketTypes"
       )
       .populate("user", "firstName lastName email")
       .lean(); // Use lean() for faster queries since we don't need Mongoose documents
+
+    // Attach remaining ticket count for this ticket's type (quantity left, not quantity purchased)
+    tickets.forEach((ticket) => {
+      const matchedType = ticket.event?.ticketTypes?.find(
+        (t) => t.name === ticket.ticketType
+      );
+      ticket.ticketsRemaining =
+        typeof matchedType?.quantity === "number" ? matchedType.quantity : null;
+      // Don't leak the full ticketTypes array (pricing/config for other tiers) to the public endpoint
+      if (ticket.event) delete ticket.event.ticketTypes;
+    });
 
     console.log(`[TICKET-FETCH] Found ${tickets?.length || 0} ticket(s)`);
 
