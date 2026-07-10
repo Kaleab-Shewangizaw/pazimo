@@ -11,6 +11,7 @@ router.post('/', userController.createUser);
 
 // Listing/reading/updating/deleting user accounts is mass/sensitive data - admin only.
 router.get('/', protect, restrictTo('admin'), userController.getAllUsers);
+router.get('/:id/fraud-incidents', protect, restrictTo('admin'), userController.getUserFraudIncidents);
 router.get('/:id', protect, restrictTo('admin'), userController.getUser);
 router.put('/:id', protect, restrictTo('admin'), userController.updateUser);
 router.delete('/:id', protect, restrictTo('admin'), userController.deleteUser);

@@ -13,6 +13,7 @@ exports.getAllUsers = async (req, res) => {
     const limit = parseInt(req.query.limit) || 5;
     const skip = (page - 1) * limit;
     const role = req.query.role; // Get role from query parameters
+    const status = req.query.status; // 'banned' | 'active' | 'inactive'
     const search = (req.query.search || '').trim();
     const isPhoneLikeSearch = /^[\d\s()+-]+$/.test(search) && search.length > 0;
 
@@ -20,6 +21,18 @@ exports.getAllUsers = async (req, res) => {
     const query = {};
     if (role) {
       query.role = role; // Add role filter if provided
+    }
+
+    if (status === 'banned') {
+      query.isBanned = true;
+    } else if (status === 'inactive') {
+      // "Inactive" means not-yet-approved/deactivated for reasons other than
+      // fraud (e.g. an organizer awaiting admin approval) — banned accounts
+      // have their own filter and shouldn't double up in this one.
+      query.isActive = false;
+      query.isBanned = { $ne: true };
+    } else if (status === 'active') {
+      query.isActive = true;
     }
 
     if (search) {
@@ -272,6 +285,40 @@ exports.getOrganizersWithStats = async (req, res) => {
     res.status(400).json({
       status: 'error',
       message: error.message
+    });
+  }
+};
+
+// Get the fraud history behind a banned user's ban — what they actually did.
+exports.getUserFraudIncidents = async (req, res) => {
+  try {
+    const FraudBlacklist = require('../models/FraudBlacklist');
+    const { normalizePhone } = require('../utils/fraudGuard');
+
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ status: 'error', message: 'User not found' });
+    }
+
+    const normalizedPhone = normalizePhone(user.phoneNumber);
+    const blacklistEntry = normalizedPhone
+      ? await FraudBlacklist.findOne({ phoneNumber: normalizedPhone })
+      : null;
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        isBanned: user.isBanned,
+        banReason: user.banReason,
+        bannedAt: user.bannedAt,
+        offenseCount: blacklistEntry?.offenseCount || 0,
+        incidents: blacklistEntry?.incidents || [],
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'error',
+      message: error.message,
     });
   }
 };

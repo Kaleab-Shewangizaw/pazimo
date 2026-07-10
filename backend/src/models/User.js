@@ -53,6 +53,16 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // isBanned is set alongside isActive:false whenever the fraud guard (or
+    // an admin) bans an account — it exists purely so bans can be filtered/
+    // reported on distinctly from any other reason an account might be
+    // inactive. Access is still enforced via isActive in the auth
+    // middleware; isBanned never gates access on its own.
+    isBanned: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     banReason: {
       type: String,
     },

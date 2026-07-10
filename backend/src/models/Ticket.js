@@ -247,7 +247,7 @@ TicketSchema.pre("save", async function (next) {
 
       // White background padding (slightly larger than logo)
       const padding = 1;
-      const bgSicenterze = logoSize + padding * 2;
+      const bgSize = logoSize + padding * 2;
       const bgX = x - padding;
       const bgY = y - padding;
 

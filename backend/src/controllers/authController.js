@@ -381,14 +381,20 @@ const login = async (req, res) => {
       throw new UnauthorizedError("Invalid credentials");
     }
 
-    // Check if user is active
+    // Check if user is active. isActive:false covers two unrelated cases —
+    // a fraud ban (isBanned:true) and a not-yet-approved organizer account —
+    // so only the former gets the ban code/messaging.
     if (!user.isActive) {
+      if (user.isBanned) {
+        return res.status(StatusCodes.FORBIDDEN).json({
+          status: "error",
+          code: "ACCOUNT_BANNED",
+          message: user.banReason || "Your account has been suspended.",
+        });
+      }
       return res.status(StatusCodes.FORBIDDEN).json({
         status: "error",
-        code: "ACCOUNT_BANNED",
-        message:
-          user.banReason ||
-          "Your account is not active. Please contact your administrator.",
+        message: "Your account is not active. Please contact your administrator.",
       });
     }
 
@@ -651,10 +657,11 @@ const adminLogin = async (req, res) => {
     const admin = await Admin.findOne({ email }).select("+password");
     if (admin && (await admin.comparePassword(password))) {
       if (!admin.isActive) {
+        // Admins have no fraud-ban concept (no isBanned/banReason on the
+        // Admin model) — a deactivated admin is just deactivated.
         return res.status(403).json({
           status: "error",
-          code: "ACCOUNT_BANNED",
-          message: admin.banReason || "Access denied. Account is not active.",
+          message: "Access denied. Account is not active.",
         });
       }
 
@@ -681,10 +688,16 @@ const adminLogin = async (req, res) => {
     }
 
     if (!partner.isActive) {
+      if (partner.isBanned) {
+        return res.status(403).json({
+          status: "error",
+          code: "ACCOUNT_BANNED",
+          message: partner.banReason || "Your account has been suspended.",
+        });
+      }
       return res.status(403).json({
         status: "error",
-        code: "ACCOUNT_BANNED",
-        message: partner.banReason || "Access denied. Account is not active.",
+        message: "Access denied. Account is not active.",
       });
     }
 

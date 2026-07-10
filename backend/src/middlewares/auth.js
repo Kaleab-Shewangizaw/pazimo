@@ -45,9 +45,15 @@ const authenticateUser = async (req, res, next) => {
   }
 
   // Outside the try/catch above on purpose: a banned account is not a token
-  // problem, and must not be reported as one.
+  // problem, and must not be reported as one. isActive:false also covers
+  // unrelated cases (e.g. an organizer awaiting admin approval), so only
+  // isBanned:true gets the ban-specific signal — everything else keeps the
+  // original generic rejection.
   if (account.isActive === false) {
-    return next(bannedAccountError(account));
+    if (account.isBanned) {
+      return next(bannedAccountError(account));
+    }
+    return next(new UnauthorizedError("Authentication invalid"));
   }
 
   req.user = {
@@ -116,9 +122,15 @@ const protect = async (req, res, next) => {
   }
 
   // Outside the try/catch above on purpose: a banned account is not a token
-  // problem, and must not be reported as one.
+  // problem, and must not be reported as one. isActive:false also covers
+  // unrelated cases (e.g. an organizer awaiting admin approval), so only
+  // isBanned:true gets the ban-specific signal — everything else keeps the
+  // original generic rejection.
   if (account.isActive === false) {
-    return next(bannedAccountError(account));
+    if (account.isBanned) {
+      return next(bannedAccountError(account));
+    }
+    return next(new UnauthorizedError("Account is not active"));
   }
 
   req.user = account;

@@ -1284,7 +1284,7 @@ const getEventTickets = async (req, res) => {
     console.log(`[GET-EVENT-TICKETS] ⚡ Loading tickets for event ${eventId}, page ${page}, filter: ${filter || 'all'}`);
     const startTime = Date.now();
 
-    // Admins/partners can view any event's tickets; organizers only their own.
+    // Admins only can view any event's tickets; organizers only their own.
     if (req.user && req.user.role === "organizer") {
       // ⚡ Use lean() and minimal fields for auth check
       const event = await Event.findOne({

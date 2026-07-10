@@ -70,6 +70,7 @@ const flagTamperAttempt = async ({ phone, userId, reason, meta = {} }) => {
 
     await User.updateMany(banFilter, {
       isActive: false,
+      isBanned: true,
       banReason: "Repeated payment manipulation attempts",
       bannedAt: new Date(),
     });
