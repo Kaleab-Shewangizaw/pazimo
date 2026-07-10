@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { Loader2, Download } from "lucide-react";
 import Image from "next/image";
@@ -88,7 +89,7 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-background">
+      <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-500" />
       </div>
     );
@@ -96,7 +97,7 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
 
   if (error || !ticket) {
     return (
-      <div className="flex h-screen items-center justify-center flex-col gap-4 bg-gray-50 dark:bg-background">
+      <div className="flex h-full items-center justify-center flex-col gap-4 bg-gray-50 dark:bg-background">
         <p className="text-red-500 dark:text-red-400 font-medium">
           {error || "Ticket not found"}
         </p>
@@ -132,28 +133,28 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
   const isActive = ticket.status === "active" && ticket.ticketCount > 0;
   const eventImageUrl = buildEventImageUrl(ticket.event.coverImages);
 
-  return (
-    <div className="relative min-h-screen w-full">
-      {/* Full-screen event backdrop */}
-      <div className="fixed inset-0 -z-10 overflow-hidden bg-gray-50 dark:bg-background">
-        {eventImageUrl ? (
-          <>
-            <Image
-              src={eventImageUrl}
-              alt=""
-              fill
-              priority
-              sizes="100vw"
-              className="scale-110 object-cover blur-md"
-            />
-            <div className="absolute inset-0 bg-black/50" />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/35 to-black/80" />
-          </>
-        ) : null}
-      </div>
+  // Shared "fixed" background so the notch cutouts below can peek through to the
+  // exact same image/overlay as the full-screen backdrop, wherever they land on screen.
+  const backdropStyle: CSSProperties | undefined = eventImageUrl
+    ? {
+        backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.8)), linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(${eventImageUrl})`,
+        backgroundSize: "cover, cover, cover",
+        backgroundPosition: "center, center, center",
+        backgroundAttachment: "fixed, fixed, fixed",
+        backgroundRepeat: "no-repeat, no-repeat, no-repeat",
+      }
+    : undefined;
 
-      <div className="relative py-20 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
-      <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl shadow-2xl ring-1 ring-white/10 overflow-hidden">
+  return (
+    <div className="relative h-full w-full overflow-hidden">
+      {/* Full-screen event backdrop */}
+      <div
+        className="fixed inset-0 -z-10 bg-gray-50 dark:bg-background"
+        style={backdropStyle}
+      />
+
+      <div className="relative h-full w-full overflow-y-auto px-4 py-6 sm:px-6 flex justify-center items-start pt-20 border-0">
+      <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl border-0 shadow-2xl ring-1 ring-white/10 overflow-hidden">
         {/* Blue header block */}
         <div className="relative overflow-hidden bg-gradient-to-br from-[#06283D] to-[#1A5D8C] px-7 py-10">
           <span className="pointer-events-none absolute -bottom-4 right-5 select-none text-6xl font-black tracking-tight text-white/10 whitespace-nowrap">
@@ -202,8 +203,14 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
 
         {/* Perforation with die-cut notches */}
         <div className="relative">
-          <div className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full bg-black/50 backdrop-blur-sm" />
-          <div className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-black/50 backdrop-blur-sm" />
+          <div
+            className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background border-0"
+            style={backdropStyle}
+          />
+          <div
+            className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background"
+            style={backdropStyle}
+          />
           <div className="mx-5 border-t-2 border-dashed border-gray-300 dark:border-border" />
         </div>
 

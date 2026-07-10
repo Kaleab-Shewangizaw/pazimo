@@ -24,6 +24,7 @@ export default function LayoutWrapper({
   const isOrganizerRoute = pathname?.startsWith("/organizer");
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isRsvpForm = pathname?.startsWith("/rsvp-form/");
+  const isTicketPage = pathname?.startsWith("/ticket/");
 
   // Hide Header and Footer for admin and organizer routes, as they have their own layouts/headers/footers
   const hideGlobalHeaderFooter = isAdminRoute || isOrganizerRoute;
@@ -31,6 +32,18 @@ export default function LayoutWrapper({
   // Show a minimal layout during SSR to prevent hydration issues
   if (!mounted) {
     return <main className="flex-1">{children}</main>;
+  }
+
+  // The ticket view is a single-screen card and must never grow the document's
+  // scroll height — Header stays in flow, main is capped to the leftover space.
+  if (isTicketPage) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden">
+        {!hideGlobalHeaderFooter && !isSignIn && <Header />}
+        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        {!hideGlobalHeaderFooter && !isSignIn && <Footer />}
+      </div>
+    );
   }
 
   return (
