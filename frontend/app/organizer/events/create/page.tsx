@@ -529,8 +529,8 @@ export default function CreateEventPage() {
       return;
     }
 
-    if (waveDrafts.length < 2) {
-      toast.error("Please add at least two waves");
+    if (waveDrafts.length < 1) {
+      toast.error("Please add at least one wave");
       return;
     }
 
@@ -557,10 +557,29 @@ export default function CreateEventPage() {
       });
     };
 
-    const parentWave = buildWaveTicket(waveDrafts[0], 1);
-    const childWaves = waveDrafts
-      .slice(1)
-      .map((draft, index) => buildWaveTicket(draft, index + 2));
+    // Collapsing back down to a single wave means this is no longer a wave
+    // chain — revert it to a plain ticket type with no wave metadata.
+    const buildPlainTicket = (draft: WaveDraft): TicketType =>
+      syncLegacyPriceField({
+        name: draft.name,
+        price: "",
+        priceETB: draft.priceETB,
+        priceUSD: draft.priceUSD,
+        quantity: draft.quantity || baseTicket.quantity || "0",
+        description: draft.description || baseTicket.description || "",
+        saleStartDate: "",
+        saleEndDate: "",
+        isActive: true,
+        hasDateRange: false,
+      });
+
+    const nextWaveTickets =
+      waveDrafts.length === 1
+        ? [buildPlainTicket(waveDrafts[0])]
+        : [
+            buildWaveTicket(waveDrafts[0], 1),
+            ...waveDrafts.slice(1).map((draft, index) => buildWaveTicket(draft, index + 2)),
+          ];
 
     const nextTicketTypes = formData.ticketTypes.filter((ticket, index) => {
       if (index === selectedRegularTicketIndex) {
@@ -571,7 +590,7 @@ export default function CreateEventPage() {
     });
 
     const insertionIndex = Math.min(selectedRegularTicketIndex, nextTicketTypes.length);
-    nextTicketTypes.splice(insertionIndex, 0, parentWave, ...childWaves);
+    nextTicketTypes.splice(insertionIndex, 0, ...nextWaveTickets);
 
     setFormData((prev) => ({
       ...prev,
@@ -581,12 +600,14 @@ export default function CreateEventPage() {
     setWaveDrafts([]);
     setSelectedRegularTicketIndex(null);
     setWaveDialogOpen(false);
-    toast.success("Wave tickets updated");
+    toast.success(
+      waveDrafts.length === 1 ? "Wave removed" : "Wave tickets updated",
+    );
   };
 
   const validateWaveForm = () => {
-    if (waveDrafts.length < 2) {
-      return "Please add at least two waves";
+    if (waveDrafts.length < 1) {
+      return "Please add at least one wave";
     }
 
     const priceSignatures: string[] = [];

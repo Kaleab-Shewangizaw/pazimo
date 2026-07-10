@@ -184,7 +184,7 @@ export function TicketTypesSection({
                       <Waves className="mr-2 h-4 w-4" />
                       {childWaves.length > 0 || ticket.waveGroup ? "Manage waves" : "Create waves"}
                     </Button>
-                    {index > 0 && !ticket.waveGroup ? (
+                    {index > 0 ? (
                       <Button
                         type="button"
                         variant="ghost"

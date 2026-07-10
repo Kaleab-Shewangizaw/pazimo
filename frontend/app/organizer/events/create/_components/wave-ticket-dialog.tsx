@@ -106,7 +106,7 @@ export function WaveTicketDialog({
                           : "Final wave in the sequence."}
                     </p>
                   </div>
-                  {waveDrafts.length > 1 ? (
+                  {index > 0 ? (
                     <Button
                       type="button"
                       variant="ghost"

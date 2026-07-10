@@ -177,7 +177,7 @@ function AdminEditEventSidebar({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[28px] border border-slate-200 dark:bg-slate-800 dark:border-slate-600 p-4 shadow-sm">
         <div className="flex flex-col gap-3">
           <Button
             type="submit"
@@ -191,11 +191,11 @@ function AdminEditEventSidebar({
             type="button"
             variant="outline"
             onClick={onCancel}
-            className="h-11 rounded-2xl border-slate-200"
+            className="h-11 rounded-2xl border-slate-200 dark:text-slate-00 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
             Cancel
           </Button>
-          <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+          <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400">
             <ShieldCheck className="mr-2 h-4 w-4" />
             Admin can edit all event fields
           </div>
@@ -698,8 +698,8 @@ export default function AdminEditEventPage() {
   };
 
   const validateWaveForm = () => {
-    if (waveDrafts.length < 2) {
-      return "Please add at least two waves";
+    if (waveDrafts.length < 1) {
+      return "Please add at least one wave";
     }
 
     const priceSignatures: string[] = [];
@@ -768,8 +768,8 @@ export default function AdminEditEventPage() {
       return;
     }
 
-    if (waveDrafts.length < 2) {
-      toast.error("Please add at least two waves");
+    if (waveDrafts.length < 1) {
+      toast.error("Please add at least one wave");
       return;
     }
 
@@ -796,10 +796,29 @@ export default function AdminEditEventPage() {
       });
     };
 
-    const parentWave = buildWaveTicket(waveDrafts[0], 1);
-    const childWaves = waveDrafts
-      .slice(1)
-      .map((draft, index) => buildWaveTicket(draft, index + 2));
+    // Collapsing back down to a single wave means this is no longer a wave
+    // chain — revert it to a plain ticket type with no wave metadata.
+    const buildPlainTicket = (draft: WaveDraft): TicketType =>
+      syncLegacyPriceField({
+        name: draft.name,
+        price: "",
+        priceETB: draft.priceETB,
+        priceUSD: draft.priceUSD,
+        quantity: draft.quantity || baseTicket.quantity || "0",
+        description: draft.description || baseTicket.description || "",
+        saleStartDate: "",
+        saleEndDate: "",
+        isActive: true,
+        hasDateRange: false,
+      });
+
+    const nextWaveTickets =
+      waveDrafts.length === 1
+        ? [buildPlainTicket(waveDrafts[0])]
+        : [
+            buildWaveTicket(waveDrafts[0], 1),
+            ...waveDrafts.slice(1).map((draft, index) => buildWaveTicket(draft, index + 2)),
+          ];
 
     const nextTicketTypes = formData.ticketTypes.filter((ticket, index) => {
       if (index === selectedRegularTicketIndex) {
@@ -810,7 +829,7 @@ export default function AdminEditEventPage() {
     });
 
     const insertionIndex = Math.min(selectedRegularTicketIndex, nextTicketTypes.length);
-    nextTicketTypes.splice(insertionIndex, 0, parentWave, ...childWaves);
+    nextTicketTypes.splice(insertionIndex, 0, ...nextWaveTickets);
 
     setFormData((prev) => ({
       ...prev,
@@ -820,7 +839,9 @@ export default function AdminEditEventPage() {
     setWaveDrafts([]);
     setSelectedRegularTicketIndex(null);
     setWaveDialogOpen(false);
-    toast.success("Wave tickets updated");
+    toast.success(
+      waveDrafts.length === 1 ? "Wave removed" : "Wave tickets updated",
+    );
   };
 
   const validateForm = () => {
@@ -938,7 +959,11 @@ export default function AdminEditEventPage() {
                   waveSwitchMode: ticket.waveSwitchMode || "date",
                 }
               : {}),
-            ...((ticket.hasDateRange || ticket.waveSwitchMode !== "quantity") &&
+            ...(ticket.waveOrder && ticket.saleStartDate
+              ? { startDate: ticket.saleStartDate }
+              : {}),
+            ...(!ticket.waveOrder &&
+            ticket.hasDateRange &&
             ticket.saleStartDate &&
             ticket.saleEndDate
               ? {
@@ -1088,12 +1113,12 @@ export default function AdminEditEventPage() {
 
             <EventFormSection id="admin-controls">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 dark:bg-slate-800 dark:border-slate-600 px-4 py-4">
                   <div>
-                    <Label htmlFor="admin-sold-out" className="text-sm font-medium text-slate-950">
+                    <Label htmlFor="admin-sold-out" className="text-sm font-medium text-slate-950 dark:text-slate-50">
                       Mark as sold out
                     </Label>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                       Overrides ticket availability on the public event page.
                     </p>
                   </div>
@@ -1122,13 +1147,13 @@ export default function AdminEditEventPage() {
             />
 
             {existingCoverImageUrls.length > 0 ? (
-              <section className="rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+              <section className="rounded-[24px] border border-slate-200 bg-slate-50/70 dark:bg-slate-800 dark:border-slate-600 p-4 sm:p-5">
                 <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h2 className="text-base font-semibold text-slate-950">
+                    <h2 className="text-base font-semibold text-slate-950 dark:text-slate-50">
                       Current cover images
                     </h2>
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       Uploading new images will replace the current set on this event.
                     </p>
                   </div>
