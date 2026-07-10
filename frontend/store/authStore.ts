@@ -16,6 +16,10 @@ interface AuthState {
   user: User | null;
   token: string | null;
   error: string | null;
+  isBanned: boolean;
+  banReason: string | null;
+  setBanned: (reason: string | null) => void;
+  checkAccountStatus: () => Promise<void>;
   signup: (userData: {
     email: string;
     password: string;
@@ -44,6 +48,28 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       error: null,
       isAuthenticated: false,
+      isBanned: false,
+      banReason: null,
+      setBanned: (reason) => set({ isBanned: true, banReason: reason }),
+      checkAccountStatus: async () => {
+        const { token } = useAuthStore.getState();
+        if (!token) return;
+
+        try {
+          const response = await fetch(`${API_URL}/auth/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+
+          if (response.status === 403) {
+            const data = await response.json().catch(() => null);
+            if (data?.code === "ACCOUNT_BANNED") {
+              set({ isBanned: true, banReason: data.message || null });
+            }
+          }
+        } catch (error) {
+          // Network hiccup — don't block the app over a status check.
+        }
+      },
       signup: async (userData) => {
         try {
           const response = await fetch(`${API_URL}/auth/register`, {
@@ -155,6 +181,8 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           isAuthenticated: false,
           error: null,
+          isBanned: false,
+          banReason: null,
         });
         // Clear localStorage
         localStorage.removeItem("auth-storage");

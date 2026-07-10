@@ -7,13 +7,13 @@
 const express = require('express');
 const router = express.Router();
 const { smsQueue } = require('../services/smsQueue');
-const { authenticateToken, authorizeRoles } = require('../middleware/auth');
+const { authenticateUser, restrictTo } = require('../middlewares/auth');
 
 /**
  * GET /api/admin/sms-queue/stats
  * Get SMS queue statistics
  */
-router.get('/stats', authenticateToken, authorizeRoles('admin'), (req, res) => {
+router.get('/stats', authenticateUser, restrictTo('admin'), (req, res) => {
   try {
     const stats = smsQueue.getStats();
     res.json({
@@ -32,7 +32,7 @@ router.get('/stats', authenticateToken, authorizeRoles('admin'), (req, res) => {
  * GET /api/admin/sms-queue/failed
  * Get failed SMS messages
  */
-router.get('/failed', authenticateToken, authorizeRoles('admin'), (req, res) => {
+router.get('/failed', authenticateUser, restrictTo('admin'), (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const failed = smsQueue.getFailedMessages(limit);
@@ -53,7 +53,7 @@ router.get('/failed', authenticateToken, authorizeRoles('admin'), (req, res) => 
  * POST /api/admin/sms-queue/retry/:messageId
  * Retry a specific failed message
  */
-router.post('/retry/:messageId', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.post('/retry/:messageId', authenticateUser, restrictTo('admin'), async (req, res) => {
   try {
     const { messageId } = req.params;
     const newId = await smsQueue.retry(messageId);
@@ -74,7 +74,7 @@ router.post('/retry/:messageId', authenticateToken, authorizeRoles('admin'), asy
  * POST /api/admin/sms-queue/retry-all
  * Retry all failed messages
  */
-router.post('/retry-all', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.post('/retry-all', authenticateUser, restrictTo('admin'), async (req, res) => {
   try {
     const count = await smsQueue.retryAll();
     res.json({
@@ -94,7 +94,7 @@ router.post('/retry-all', authenticateToken, authorizeRoles('admin'), async (req
  * POST /api/admin/sms-queue/send-test
  * Send a test SMS (for debugging)
  */
-router.post('/send-test', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+router.post('/send-test', authenticateUser, restrictTo('admin'), async (req, res) => {
   try {
     const { phone, message } = req.body;
 
@@ -107,7 +107,7 @@ router.post('/send-test', authenticateToken, authorizeRoles('admin'), async (req
 
     const id = await smsQueue.enqueue(phone, message, {
       priority: 'high',
-      metadata: { test: true, adminId: req.user.id },
+      metadata: { test: true, adminId: req.user.userId },
     });
 
     res.json({
@@ -127,7 +127,7 @@ router.post('/send-test', authenticateToken, authorizeRoles('admin'), async (req
  * DELETE /api/admin/sms-queue/clear-old
  * Clear old failed messages
  */
-router.delete('/clear-old', authenticateToken, authorizeRoles('admin'), (req, res) => {
+router.delete('/clear-old', authenticateUser, restrictTo('admin'), (req, res) => {
   try {
     const days = parseInt(req.query.days) || 7;
     const count = smsQueue.clearOldFailedMessages(days);

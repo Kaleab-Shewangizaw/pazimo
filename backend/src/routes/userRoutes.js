@@ -1,17 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
+const { protect, restrictTo } = require('../middlewares/auth');
 
 // Optimized route for fetching organizers with stats (must be before /:id)
-router.get('/organizers-stats', userController.getOrganizersWithStats);
+router.get('/organizers-stats', protect, restrictTo('admin'), userController.getOrganizersWithStats);
 
-// User routes without middleware protection
-router.get('/', userController.getAllUsers);
-router.get('/:id', userController.getUser);
+// Account creation stays open (public signup path); role is never accepted from the body.
 router.post('/', userController.createUser);
-router.put('/:id', userController.updateUser);
-router.delete('/:id', userController.deleteUser);
 
-module.exports = router; 
+// Listing/reading/updating/deleting user accounts is mass/sensitive data - admin only.
+router.get('/', protect, restrictTo('admin'), userController.getAllUsers);
+router.get('/:id', protect, restrictTo('admin'), userController.getUser);
+router.put('/:id', protect, restrictTo('admin'), userController.updateUser);
+router.delete('/:id', protect, restrictTo('admin'), userController.deleteUser);
+
+module.exports = router;
 
 

@@ -31,6 +31,8 @@ const ChapaService = require("../services/chapaService");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const Payment = require("../models/Payment");
+const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
+const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 
 const resolveWebhookBaseUrl = (req) => {
   const explicitPublicUrl =
@@ -91,6 +93,47 @@ router.post("/ticket/initiate", async (req, res) => {
         .status(400)
         .json({ success: false, error: "ticketDetails is required" });
     }
+
+    if (phoneNumber && (await isPhoneBanned(phoneNumber))) {
+      return res
+        .status(403)
+        .json({ success: false, code: "PHONE_BANNED", error: "This number is not permitted to make purchases." });
+    }
+
+    // The price is always computed from the event's own ticket type data —
+    // never from the client-supplied `amount`. If the client's amount doesn't
+    // match, this is a manipulation attempt: log it, warn/ban the phone, and
+    // refuse to initiate the payment for the tampered amount.
+    const pricing = await resolveTicketPrice({
+      eventId: ticketDetails.eventId,
+      ticketTypeId: ticketDetails.ticketTypeId,
+      quantity: ticketDetails.quantity,
+      currency: "ETB",
+    });
+
+    if (!pricing.ok) {
+      return res.status(pricing.statusCode).json({ success: false, error: pricing.message });
+    }
+
+    if (amount !== undefined && !amountsMatch(amount, pricing.amount)) {
+      if (phoneNumber) {
+        await flagTamperAttempt({
+          phone: phoneNumber,
+          userId: ticketDetails.userId,
+          reason: "Amount mismatch on POST /tickets/ticket/initiate (SantimPay)",
+          meta: {
+            eventId: ticketDetails.eventId,
+            ticketTypeId: ticketDetails.ticketTypeId,
+            quantity: ticketDetails.quantity,
+            submittedAmount: amount,
+            expectedAmount: pricing.amount,
+          },
+        });
+      }
+      return res.status(400).json({ success: false, error: "Payment amount could not be verified." });
+    }
+
+    const verifiedAmount = pricing.amount;
 
     // Require email for guest checkout
     if (!ticketDetails.userId && !ticketDetails.email) {
@@ -197,7 +240,7 @@ router.post("/ticket/initiate", async (req, res) => {
     // Call SantimPay directPayment via Service
     const response = await SantimPayService.directPayment(
       transactionId,
-      amount,
+      verifiedAmount,
       reason,
       notifyUrl,
       phoneNumber,
@@ -216,7 +259,7 @@ router.post("/ticket/initiate", async (req, res) => {
       contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber, // Use account phone for logged-in users
       paymentPhone: phoneNumber, // Store payment phone separately
       method: method,
-      price: amount,
+      price: verifiedAmount,
       eventId: selectedEventId,
       userId: userId, // Use the found/created userId
       ticketDetails: {
@@ -243,6 +286,7 @@ router.post("/ticket/initiate", async (req, res) => {
             firstName: user.firstName,
             lastName: user.lastName,
             email: user.email,
+            phoneNumber: user.phoneNumber,
             role: user.role,
           }
         : null,
@@ -271,6 +315,47 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         .status(400)
         .json({ success: false, error: "ticketDetails is required" });
     }
+
+    if (phoneNumber && (await isPhoneBanned(phoneNumber))) {
+      return res
+        .status(403)
+        .json({ success: false, code: "PHONE_BANNED", error: "This number is not permitted to make purchases." });
+    }
+
+    // The price is always computed from the event's own ticket type data —
+    // never from the client-supplied `amount`. If the client's amount doesn't
+    // match, this is a manipulation attempt: log it, warn/ban the phone, and
+    // refuse to initiate the payment for the tampered amount.
+    const pricing = await resolveTicketPrice({
+      eventId: ticketDetails.eventId,
+      ticketTypeId: ticketDetails.ticketTypeId,
+      quantity: ticketDetails.quantity,
+      currency,
+    });
+
+    if (!pricing.ok) {
+      return res.status(pricing.statusCode).json({ success: false, error: pricing.message });
+    }
+
+    if (amount !== undefined && !amountsMatch(amount, pricing.amount)) {
+      if (phoneNumber) {
+        await flagTamperAttempt({
+          phone: phoneNumber,
+          userId: ticketDetails.userId,
+          reason: "Amount mismatch on POST /tickets/ticket/initiate/chapa",
+          meta: {
+            eventId: ticketDetails.eventId,
+            ticketTypeId: ticketDetails.ticketTypeId,
+            quantity: ticketDetails.quantity,
+            submittedAmount: amount,
+            expectedAmount: pricing.amount,
+          },
+        });
+      }
+      return res.status(400).json({ success: false, error: "Payment amount could not be verified." });
+    }
+
+    const verifiedAmount = pricing.amount;
 
     // Require email for guest checkout
     if (!ticketDetails.userId && !ticketDetails.email) {
@@ -449,7 +534,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         }
 
         const initializePayload = {
-          amount: String(amount),
+          amount: String(verifiedAmount),
           currency: currency, // Pass currency (ETB or USD)
           email: user ? user.email : ticketDetails.email || "guest@example.com",
           first_name: ticketDetails.fullName.split(" ")[0],
@@ -486,7 +571,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         console.log(`[CHAPA-INIT] Using DIRECT CHARGE for mobile money. Method: ${method}, Type: ${chapaType}, Currency: ${currency}`);
         
         response = await ChapaService.directCharge({
-          amount: String(amount),
+          amount: String(verifiedAmount),
           currency: currency, // Pass currency (directCharge will force to ETB)
           mobile: chapaMobile,
           type: chapaType,
@@ -585,7 +670,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       paymentPhone: phoneNumber,
       method: method,
       provider: "chapa",
-      price: amount,
+      price: verifiedAmount,
       currency: currency, // Store currency in payment record
       eventId: selectedEventId,
       userId: userId,
@@ -612,6 +697,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
             firstName: user.firstName,
             lastName: user.lastName,
             email: user.email,
+            phoneNumber: user.phoneNumber,
             role: user.role,
           }
         : null,
@@ -622,7 +708,12 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
   }
 });
 
-router.get("/event/:eventId", getEventTickets);
+router.get(
+  "/event/:eventId",
+  authenticateUser,
+  restrictTo("admin", "organizer", "partner"),
+  getEventTickets
+);
 router.get("/invitation/:ticketId", getInvitationTicket);
 router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
@@ -683,6 +774,6 @@ router.get("/details/:id", getTicketDetails);
 router.get("/:ticketId", getTicket);
 router.patch("/:ticketId/cancel", cancelTicket);
 router.delete("/:ticketId", deleteTicket);
-router.get("/admin/all", getAllTicketsAdmin);
+router.get("/admin/all", restrictTo("admin"), getAllTicketsAdmin);
 
 module.exports = router;

@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { useAuthStore } from "@/store/authStore"
+import { useAdminAuthStore } from "@/store/adminAuthStore"
 
 interface UserData {
   _id: string;
@@ -49,7 +49,7 @@ export default function UsersPage() {
   const [userToDelete, setUserToDelete] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { token: authToken } = useAuthStore()
+  const { token: authToken } = useAdminAuthStore()
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalUsers, setTotalUsers] = useState(0)
@@ -148,6 +148,7 @@ export default function UsersPage() {
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
         },
         body: JSON.stringify(editForm),
       })
@@ -228,11 +229,11 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="container mx-auto py-10 p-10">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto py-10 p-4 sm:p-10">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-8">
         <h1 className="text-3xl font-bold">All Users</h1>
-        <div className="flex items-center gap-4">
-          <Button 
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <Button
             onClick={() => router.push('/admin/users/add')}
             className="bg-primary hover:bg-primary/90"
           >
@@ -246,7 +247,7 @@ export default function UsersPage() {
               setCurrentPage(1)
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Items per page" />
             </SelectTrigger>
             <SelectContent>
@@ -364,13 +365,13 @@ export default function UsersPage() {
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex items-center justify-between mt-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
         <div className="text-sm text-muted-foreground">
           {totalUsers > 0
             ? `Showing ${(currentPage - 1) * itemsPerPage + 1} to ${Math.min((currentPage - 1) * itemsPerPage + users.length, totalUsers)} of ${totalUsers} users`
             : 'No users to display'}
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"

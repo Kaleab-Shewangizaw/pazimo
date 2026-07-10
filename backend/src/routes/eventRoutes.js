@@ -2,11 +2,13 @@ const express = require("express");
 const router = express.Router();
 const eventController = require("../controllers/eventController");
 const upload = require("../middlewares/upload");
-const { authenticateUser } = require("../middlewares/auth");
+const { authenticateUser, optionalAuth } = require("../middlewares/auth");
 
 // Public routes
 router.get("/public-events", eventController.getPublicEvents);
-router.get("/", eventController.getAllEvents);
+// optionalAuth: admins/organizers get full event data (incl. drafts),
+// anonymous callers only get published + public events with sanitized fields.
+router.get("/", optionalAuth, eventController.getAllEvents);
 router.get("/short/:shortId", eventController.getEventDetailsByShortId);
 router.get("/details/:id", eventController.getEventDetails);
 

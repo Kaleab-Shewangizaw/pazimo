@@ -4,34 +4,41 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const { protect, authenticateUser } = require('../middlewares/auth');
+const { protect } = require('../middlewares/auth');
+const {
+  loginLimiter,
+  adminLoginLimiter,
+  registerLimiter,
+  otpLimiter,
+  unifiedAuthLimiter,
+} = require('../middlewares/rateLimiters');
 
 // Registration route
-router.post('/register', authController.register);
+router.post('/register', registerLimiter, authController.register);
 
 // Login route
-router.post('/login', authController.login);
+router.post('/login', loginLimiter, authController.login);
 
 // Get current user
 router.get('/me', protect, authController.getMe);
 
-// Password reset routes
+// Password reset routes - not a functioning feature yet, left unlimited for now
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 router.put('/update-profile', protect, authController.updateProfile);
 
 
 // OTP routes
-router.post('/send-otp', authController.sendOtp);
+router.post('/send-otp', otpLimiter, authController.sendOtp);
 
 // Unified auth route for ticket purchase
-router.post('/unified-auth', authController.unifiedAuth);
+router.post('/unified-auth', unifiedAuthLimiter, authController.unifiedAuth);
 
 // Delete account route
 router.delete('/delete-account', protect, authController.deleteAccount);
 
 // Admin routes
-router.post('/admin/login', authController.adminLogin);
-router.get('/admin/me', protect, authenticateUser, authController.getMe);
+router.post('/admin/login', adminLoginLimiter, authController.adminLogin);
+router.get('/admin/me', protect, authController.getMe);
 
 module.exports = router;

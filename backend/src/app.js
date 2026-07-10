@@ -206,6 +206,7 @@ app.use((err, req, res, next) => {
   res.status(statusCode).json({
     status: "error",
     message: err.message || "Something went wrong!",
+    ...(err.code && { code: err.code }),
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });

@@ -607,7 +607,14 @@ export default function EventDetailClient() {
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.message || "Payment initiation failed");
+        if (data.code === "PHONE_BANNED") {
+          throw new Error(
+            "This phone number has been blocked from making purchases on Pazimo. Contact support if you believe this is a mistake."
+          );
+        }
+        // Backend error responses use `error`, not `message` — fall back to
+        // both so the real reason (e.g. amount/availability issues) reaches the user.
+        throw new Error(data.error || data.message || "Payment initiation failed");
       }
 
       // Handle auto-login from payment response for guest users (new or existing)

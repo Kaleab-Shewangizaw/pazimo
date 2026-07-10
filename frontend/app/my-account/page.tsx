@@ -2,7 +2,7 @@
 
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -52,6 +52,7 @@ export default function MyAccount() {
     email: "",
     phoneNumber: "",
   });
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -92,6 +93,13 @@ export default function MyAccount() {
       return;
     }
 
+    // Guard against re-fetching every time `user` is replaced by setUser()
+    // below (which would otherwise re-trigger this effect and loop forever).
+    if (hasFetchedRef.current) {
+      return;
+    }
+    hasFetchedRef.current = true;
+
     const fetchUserData = async () => {
       try {
         const response = await fetch(
@@ -106,6 +114,7 @@ export default function MyAccount() {
         if (response.ok) {
           const data = await response.json();
           if (data.status === "success" && data.data) {
+            setUser(data.data);
             setFormData({
               firstName: data.data.firstName || "",
               lastName: data.data.lastName || "",
@@ -160,7 +169,11 @@ export default function MyAccount() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(formData),
+          body: JSON.stringify({
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+          }),
         }
       );
 
@@ -168,6 +181,12 @@ export default function MyAccount() {
 
       if (response.ok) {
         setUser(data.data);
+        setFormData((prev) => ({
+          ...prev,
+          firstName: data.data.firstName || "",
+          lastName: data.data.lastName || "",
+          email: data.data.email || "",
+        }));
         setIsEditing(false);
         toast.success("Profile updated successfully!");
       } else {
@@ -343,10 +362,13 @@ export default function MyAccount() {
                   <Input
                     name="phoneNumber"
                     value={formData.phoneNumber}
-                    onChange={handleInputChange}
-                    required
-                    className="h-11 dark:bg-[#0A0A0A] dark:border-white/10 dark:text-white"
+                    disabled
+                    readOnly
+                    className="h-11 dark:bg-[#0A0A0A] dark:border-white/10 dark:text-white opacity-60 cursor-not-allowed"
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Phone number cannot be changed. Contact support if this is incorrect.
+                  </p>
                 </div>
               </div>
 
@@ -389,7 +411,7 @@ export default function MyAccount() {
                     Full Name
                   </p>
                   <p className="font-medium text-lg dark:text-gray-200">
-                    {user.firstName} {user.lastName}
+                    {formData.firstName} {formData.lastName}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -397,7 +419,7 @@ export default function MyAccount() {
                     <Phone className="h-4 w-4" />
                     Phone Number
                   </p>
-                  <p className="font-medium text-lg dark:text-gray-200">{user.phoneNumber}</p>
+                  <p className="font-medium text-lg dark:text-gray-200">{formData.phoneNumber}</p>
                 </div>
               </div>
               <div className="space-y-4">
@@ -406,7 +428,7 @@ export default function MyAccount() {
                     <Mail className="h-4 w-4" />
                     Email Address
                   </p>
-                  <p className="font-medium text-lg break-all dark:text-gray-200">{user.email}</p>
+                  <p className="font-medium text-lg break-all dark:text-gray-200">{formData.email}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-gray-500 dark:text-gray-400">Account Status</p>
