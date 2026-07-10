@@ -162,6 +162,73 @@ const protect = async (req, res, next) => {
   next();
 };
 
+// ============================================================================
+// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, REVERT BY WEEKEND (2026-07-12)
+// ----------------------------------------------------------------------------
+// The organizer mobile app has a bug (auth header commented out client-side)
+// that can't be fixed until the weekend release. Until then, GET /api/users/:id
+// falls back to trusting the :id in the URL with NO token at all, IF that
+// account's role is admin/organizer. This is a real IDOR: anyone who has (or
+// guesses) an organizer/admin's Mongo id can read their email/phone/ban
+// status with zero credentials. Customer accounts are NOT exposed by this -
+// only admin/organizer, and only on this one route (PUT/DELETE/list are
+// untouched). Every use of the fallback path is logged below so usage can be
+// audited.
+//
+// TO REVERT: delete this whole block and the `protectStrictOrTrustParamId`
+// export, then in userRoutes.js change the GET /:id route back to:
+//   router.get('/:id', protect, restrictTo('admin', 'organizer'), userController.getUser);
+// ============================================================================
+const protectStrictOrTrustParamId = async (req, res, next) => {
+  const token = extractToken(req);
+
+  // Token present: behave exactly like the normal, secure `protect` +
+  // restrictTo('admin', 'organizer') pair this route used before the bypass.
+  if (token) {
+    return protect(req, res, (err) => {
+      if (err) return next(err);
+      if (!["admin", "organizer"].includes(req.user.role)) {
+        return res.status(403).json({
+          status: "error",
+          message: "You do not have permission to perform this action",
+        });
+      }
+      next();
+    });
+  }
+
+  // No token at all - TEMPORARY fallback. Trust req.params.id directly.
+  try {
+    let account = await User.findById(req.params.id);
+    if (!account) {
+      account = await Admin.findById(req.params.id);
+    }
+
+    if (!account || !["admin", "organizer"].includes(account.role)) {
+      return next(new UnauthorizedError("Not authorized to access this route"));
+    }
+
+    if (account.isActive === false) {
+      if (account.isBanned) {
+        return next(bannedAccountError(account));
+      }
+      return next(new UnauthorizedError("Account is not active"));
+    }
+
+    console.warn(
+      `TEMP-BYPASS-2026-07-10: unauthenticated ${req.method} ${req.originalUrl} allowed through with no token (role=${account.role}). Remove this bypass by 2026-07-12.`
+    );
+
+    req.user = account;
+    next();
+  } catch (error) {
+    return next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+// ============================================================================
+// END TEMP-BYPASS-2026-07-10
+// ============================================================================
+
 const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -197,4 +264,5 @@ module.exports = {
   optionalAuth,
   restrictTo,
   isAdmin,
+  protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };
