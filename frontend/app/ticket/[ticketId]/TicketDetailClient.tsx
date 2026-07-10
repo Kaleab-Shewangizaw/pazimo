@@ -30,6 +30,16 @@ interface TicketDetails {
   ticketCount: number;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+const buildEventImageUrl = (coverImages?: string[]) => {
+  if (!coverImages || coverImages.length === 0) return "";
+  const img = coverImages[0];
+  if (!img) return "";
+  if (img.startsWith("http")) return img;
+  return `${API_URL}${img.startsWith("/") ? img : `/${img}`}`;
+};
+
 const formatEventDate = (isoDate: string) => {
   const date = new Date(isoDate);
   const weekday = date
@@ -120,12 +130,28 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
   const orderId = ticket.ticketId.slice(-6).toUpperCase();
   const watermark = ticket.event.title.split(" ")[0]?.toUpperCase() || "";
   const isActive = ticket.status === "active" && ticket.ticketCount > 0;
+  const eventImageUrl = buildEventImageUrl(ticket.event.coverImages);
 
   return (
     <div className=" bg-gray-50  dark:bg-background py-20 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
       <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl shadow-xl dark:shadow-none  overflow-hidden">
         {/* Blue header block */}
-        <div className="relative overflow-hidden bg-gradient-to-br  from-[#06283D] to-[#1A5D8C] px-7 py-10">
+        <div className="relative overflow-hidden bg-gradient-to-br from-[#06283D] to-[#1A5D8C] px-7 py-10">
+          {eventImageUrl ? (
+            <>
+              <Image
+                src={eventImageUrl}
+                alt=""
+                fill
+                priority
+                sizes="384px"
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-br from-[#06283D]/95 via-[#0a3a57]/85 to-[#1A5D8C]/75" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#06283D] via-[#06283D]/10 to-transparent" />
+            </>
+          ) : null}
+
           <span className="pointer-events-none absolute -bottom-4 right-5 select-none text-6xl font-black tracking-tight text-white/10 whitespace-nowrap">
             {watermark}
           </span>
