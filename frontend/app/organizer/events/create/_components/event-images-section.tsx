@@ -36,9 +36,9 @@ export function EventImagesSection({
   return (
     <EventFormSection id="media">
       <div className="grid gap-4">
-        <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50/70 p-5">
+        <div className="rounded-[24px] border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 p-5">
           <div className="space-y-3">
-            <Label htmlFor="coverImages" className="text-sm font-semibold text-slate-900">
+            <Label htmlFor="coverImages" className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Cover images
             </Label>
             <Input
@@ -48,7 +48,7 @@ export function EventImagesSection({
               onChange={onImageChange}
               multiple
               required={required ?? coverImages.length === 0}
-              className="rounded-xl border-slate-200 bg-white"
+              className="rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
             />
             <FieldHint>
               Recommended format: wide, high-contrast artwork around `1200x600`.
@@ -61,7 +61,7 @@ export function EventImagesSection({
             {coverImages.map((image, index) => (
               <div
                 key={`${image.name}-${index}`}
-                className="group overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm"
+                className="group overflow-hidden rounded-[24px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
               >
                 <div className="relative aspect-[16/10]">
                   {previewUrls[index] ? (
@@ -81,7 +81,7 @@ export function EventImagesSection({
                   </button>
                 </div>
                 <div className="p-3">
-                  <p className="truncate text-xs text-slate-500">{image.name}</p>
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">{image.name}</p>
                 </div>
               </div>
             ))}

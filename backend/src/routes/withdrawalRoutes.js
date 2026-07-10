@@ -7,32 +7,37 @@ const {
   getAllWithdrawals,
   getOrganizerWithdrawals
 } = require('../controllers/withdrawalController');
-const { authenticateUser } = require('../middlewares/auth');
+const { authenticateUser, restrictTo } = require('../middlewares/auth');
 
 // Admin routes
-router.get('/', 
-  authenticateUser, 
+router.get('/',
+  authenticateUser,
+  restrictTo('admin'),
   getAllWithdrawals
 );
 
-router.post('/', 
-  authenticateUser, 
+router.post('/',
+  authenticateUser,
+  restrictTo('admin', 'organizer'),
   createWithdrawal
 );
 
-router.patch('/:withdrawalId', 
-  authenticateUser, 
+router.patch('/:withdrawalId',
+  authenticateUser,
+  restrictTo('admin'),
   updateWithdrawalStatus
 );
 
-// Organizer routes
-router.get('/organizer/:organizerId/balance', 
-  authenticateUser, 
+// Organizer routes (also usable by admin, scoped to the requested organizer)
+router.get('/organizer/:organizerId/balance',
+  authenticateUser,
+  restrictTo('admin', 'organizer'),
   getOrganizerBalance
 );
 
-router.get('/organizer/:organizerId/withdrawals', 
-  authenticateUser, 
+router.get('/organizer/:organizerId/withdrawals',
+  authenticateUser,
+  restrictTo('admin', 'organizer'),
   getOrganizerWithdrawals
 );
 

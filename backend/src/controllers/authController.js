@@ -1,342 +1,6 @@
-// const jwt = require('jsonwebtoken');
-// const User = require('../models/User');
-// const { UnauthorizedError } = require('../errors');
-// const { StatusCodes } = require('http-status-codes');
-
-// const signToken = (id, role) => {
-//   if (!process.env.JWT_SECRET) {
-//     throw new Error('JWT_SECRET is not defined in environment variables');
-//   }
-//   return jwt.sign(
-//     { id, role },
-//     process.env.JWT_SECRET,
-//     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-//   );
-// };
-
-// // Register user
-// const register = async (req, res) => {
-//   try {
-//     const user = await User.create(req.body);
-//     const token = signToken(user._id, user.role);
-
-//     res.status(StatusCodes.CREATED).json({
-//       status: 'success',
-//       data: {
-//         user: {
-//           _id: user._id,
-//           firstName: user.firstName,
-//           lastName: user.lastName,
-//           email: user.email,
-//           role: user.role,
-//         },
-//         token,
-//       },
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.BAD_REQUEST).json({
-//       status: 'error',
-//       message: error.message,
-//     });
-//   }
-// };
-
-// // Login user
-// const login = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-
-//     // Find user
-//     const user = await User.findOne({ email }).select('+password');
-//     if (!user) {
-//       throw new UnauthorizedError('Invalid credentials');
-//     }
-
-//     // Check password
-//     const isPasswordCorrect = await user.comparePassword(password);
-//     if (!isPasswordCorrect) {
-//       throw new UnauthorizedError('Invalid credentials');
-//     }
-
-//     // Check if user is active
-//     if (!user.isActive) {
-//       return res.status(StatusCodes.FORBIDDEN).json({
-//         status: 'error',
-//         message: 'Your account is not active. Please contact your administrator.'
-//       });
-//     }
-
-//     // Generate token
-//     const token = signToken(user._id, user.role);
-
-//     res.status(StatusCodes.OK).json({
-//       status: 'success',
-//       data: {
-//         user: {
-//           _id: user._id,
-//           firstName: user.firstName,
-//           lastName: user.lastName,
-//           email: user.email,
-//           role: user.role,
-//           isActive: user.isActive
-//         },
-//         token,
-//       },
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.UNAUTHORIZED).json({
-//       status: 'error',
-//       message: error.message,
-//     });
-//   }
-// };
-
-// // Get current user
-// const getMe = async (req, res) => {
-//   try {
-//     const user = await User.findById(req.user._id).select('-password');
-//     res.status(StatusCodes.OK).json({
-//       status: 'success',
-//       data: user,
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.BAD_REQUEST).json({
-//       status: 'error',
-//       message: error.message,
-//     });
-//   }
-// };
-
-// // Update password
-// const updatePassword = async (req, res) => {
-//   try {
-//     const { currentPassword, newPassword } = req.body;
-//     const user = await User.findById(req.user._id);
-
-//     // Check current password
-//     const isPasswordCorrect = await user.comparePassword(currentPassword);
-//     if (!isPasswordCorrect) {
-//       throw new UnauthorizedError('Current password is incorrect');
-//     }
-
-//     // Update password
-//     user.password = newPassword;
-//     await user.save();
-
-//     res.status(StatusCodes.OK).json({
-//       status: 'success',
-//       message: 'Password updated successfully',
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.BAD_REQUEST).json({
-//       status: 'error',
-//       message: error.message,
-//     });
-//   }
-// };
-
-// // Update profile
-// const updateProfile = async (req, res) => {
-//   try {
-//     const { name, email } = req.body;
-//     const user = await User.findByIdAndUpdate(
-//       req.user._id,
-//       { name, email },
-//       { new: true, runValidators: true }
-//     ).select('-password');
-
-//     res.status(StatusCodes.OK).json({
-//       status: 'success',
-//       data: user,
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.BAD_REQUEST).json({
-//       status: 'error',
-//       message: error.message,
-//     });
-//   }
-// };
-
-// // Add new method to update phone number
-// const updatePhoneNumber = async (req, res) => {
-//   try {
-//     const { phoneNumber } = req.body;
-//     const userId = req.user.id;
-
-//     // Check if phone number is already registered
-//     const existingUser = await User.findOne({ phoneNumber });
-//     if (existingUser && existingUser._id.toString() !== userId) {
-//       return res.status(400).json({
-//         status: 'error',
-//         message: 'Phone number already registered'
-//       });
-//     }
-
-//     // Update user's phone number
-//     const user = await User.findByIdAndUpdate(
-//       userId,
-//       {
-//         phoneNumber,
-//         isPhoneVerified: false // Reset verification status when phone number changes
-//       },
-//       { new: true, runValidators: true }
-//     );
-
-//     user.password = undefined;
-
-//     res.status(200).json({
-//       status: 'success',
-//       data: { user }
-//     });
-//   } catch (error) {
-//     res.status(400).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// // Add new method to verify phone number
-// const verifyPhoneNumber = async (req, res) => {
-//   try {
-//     const { verificationCode } = req.body;
-//     const userId = req.user.id;
-
-//     // Here you would typically verify the code against what was sent to the user
-//     // This is a placeholder for the actual verification logic
-//     const isValidCode = true; // Replace with actual verification logic
-
-//     if (!isValidCode) {
-//       return res.status(400).json({
-//         status: 'error',
-//         message: 'Invalid verification code'
-//       });
-//     }
-
-//     // Update user's phone verification status
-//     const user = await User.findByIdAndUpdate(
-//       userId,
-//       { isPhoneVerified: true },
-//       { new: true }
-//     );
-
-//     user.password = undefined;
-
-//     res.status(200).json({
-//       status: 'success',
-//       data: { user }
-//     });
-//   } catch (error) {
-//     res.status(400).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// const adminLogin = async (req, res) => {
-//   try {
-//     console.log('Admin login attempt:', req.body); // Debug log
-
-//     const { email, password } = req.body;
-
-//     // Check if email and password exist
-//     if (!email || !password) {
-//       console.log('Missing email or password'); // Debug log
-//       return res.status(400).json({
-//         status: 'error',
-//         message: 'Please provide email and password'
-//       });
-//     }
-
-//     // Check if user exists && password is correct
-//     const user = await User.findOne({ email }).select('+password');
-//     console.log('Found user:', user ? 'Yes' : 'No'); // Debug log
-
-//     if (!user) {
-//       return res.status(401).json({
-//         status: 'error',
-//         message: 'Incorrect email or password'
-//       });
-//     }
-
-//     const isPasswordCorrect = await user.comparePassword(password);
-//     console.log('Password correct:', isPasswordCorrect); // Debug log
-
-//     if (!isPasswordCorrect) {
-//       return res.status(401).json({
-//         status: 'error',
-//         message: 'Incorrect email or password'
-//       });
-//     }
-
-//     // Check if user is admin
-//     if (user.role !== 'admin') {
-//       console.log('User role:', user.role); // Debug log
-//       return res.status(403).json({
-//         status: 'error',
-//         message: 'Access denied. Admin privileges required.'
-//       });
-//     }
-
-//     // Update last login
-//     user.lastLogin = Date.now();
-//     await user.save({ validateBeforeSave: false });
-
-//     // Generate token
-//     const token = signToken(user._id, user.role);
-
-//     // Remove password from output
-//     user.password = undefined;
-
-//     console.log('Login successful for admin:', user.email); // Debug log
-
-//     res.status(200).json({
-//       status: 'success',
-//       token,
-//       data: { user }
-//     });
-//   } catch (error) {
-//     console.error('Admin login error:', error);
-//     res.status(400).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// // Add admin middleware
-// const isAdmin = async (req, res, next) => {
-//   try {
-//     if (req.user.role !== 'admin') {
-//       return res.status(403).json({
-//         status: 'error',
-//         message: 'Access denied. Admin privileges required.'
-//       });
-//     }
-//     next();
-//   } catch (error) {
-//     res.status(400).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// module.exports = {
-//   register,
-//   login,
-//   getMe,
-//   updatePassword,
-//   updateProfile,
-//   updatePhoneNumber,
-//   verifyPhoneNumber,
-//   isAdmin,
-//   adminLogin,
-// };
-
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const Admin = require("../models/Admin");
 const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
 const crypto = require("crypto");
@@ -544,10 +208,11 @@ const forgotPassword = async (req, res) => {
     console.log("Forgot password request for:", email);
 
     const user = await User.findOne({ email });
+    // Always return 200 — never reveal whether the email exists
     if (!user) {
-      return res.status(404).json({
-        status: "error",
-        message: "No user found with that email address",
+      return res.status(200).json({
+        status: "success",
+        message: "If that email is registered, a reset link has been sent.",
       });
     }
 
@@ -671,7 +336,9 @@ const resetPassword = async (req, res) => {
 // Register user
 const register = async (req, res) => {
   try {
-    const user = await User.create(req.body);
+    // Whitelist allowed fields — never trust role from the client
+    const { email, password, firstName, lastName, phoneNumber } = req.body;
+    const user = await User.create({ email, password, firstName, lastName, phoneNumber, role: 'customer' });
     const token = signToken(user._id, user.role);
 
     res.status(StatusCodes.CREATED).json({
@@ -756,7 +423,8 @@ const getMe = async (req, res) => {
     if (!req.user || !req.user._id) {
       throw new UnauthorizedError("User not authenticated");
     }
-    const user = await User.findById(req.user._id).select("-password");
+    const Model = req.user.role === "admin" ? Admin : User;
+    const user = await Model.findById(req.user._id).select("-password");
     res.status(StatusCodes.OK).json({
       status: "success",
       data: user,
@@ -974,52 +642,56 @@ const adminLogin = async (req, res) => {
       });
     }
 
-    // Check if user exists && password is correct
-    const user = await User.findOne({ email }).select("+password");
-    // console.log('Found user:', user ? 'Yes' : 'No'); // Debug log
+    // Admins live exclusively in the Admin collection - there is no API that
+    // creates one, so this is the only account type that can ever match here.
+    const admin = await Admin.findOne({ email }).select("+password");
+    if (admin && (await admin.comparePassword(password))) {
+      if (!admin.isActive) {
+        return res.status(403).json({
+          status: "error",
+          message: "Access denied. Account is not active.",
+        });
+      }
 
-    if (!user) {
+      admin.lastLogin = Date.now();
+      await admin.save({ validateBeforeSave: false });
+
+      const token = signToken(admin._id, admin.role);
+      admin.password = undefined;
+
+      return res.status(200).json({
+        status: "success",
+        token,
+        data: { user: admin },
+      });
+    }
+
+    // Partners are business accounts stored on the User model.
+    const partner = await User.findOne({ email, role: "partner" }).select("+password");
+    if (!partner || !(await partner.comparePassword(password))) {
       return res.status(401).json({
         status: "error",
         message: "Incorrect email or password",
       });
     }
 
-    const isPasswordCorrect = await user.comparePassword(password);
-    // console.log('Password correct:', isPasswordCorrect); // Debug log
-
-    if (!isPasswordCorrect) {
-      return res.status(401).json({
-        status: "error",
-        message: "Incorrect email or password",
-      });
-    }
-
-    // Check if user is admin or partner
-    if (user.role !== "admin" && user.role !== "partner") {
-      // console.log('User role:', user.role); // Debug log
+    if (!partner.isActive) {
       return res.status(403).json({
         status: "error",
-        message: "Access denied. Admin or partner privileges required.",
+        message: "Access denied. Account is not active.",
       });
     }
 
-    // Update last login
-    user.lastLogin = Date.now();
-    await user.save({ validateBeforeSave: false });
+    partner.lastLogin = Date.now();
+    await partner.save({ validateBeforeSave: false });
 
-    // Generate token
-    const token = signToken(user._id, user.role);
-
-    // Remove password from output
-    user.password = undefined;
-
-    // console.log('Login successful for admin:', user.email); // Debug log
+    const token = signToken(partner._id, partner.role);
+    partner.password = undefined;
 
     res.status(200).json({
       status: "success",
       token,
-      data: { user },
+      data: { user: partner },
     });
   } catch (error) {
     console.error("Admin login error:", error);
@@ -1030,32 +702,8 @@ const adminLogin = async (req, res) => {
   }
 };
 
-// Add admin middleware
-const isAdmin = async (req, res, next) => {
-  try {
-    if (!req.user || !req.user.role) {
-      return res.status(401).json({
-        status: "error",
-        message: "User not authenticated",
-      });
-    }
-
-    if (req.user.role !== "admin" && req.user.role !== "partner") {
-      return res.status(403).json({
-        status: "error",
-        message: "Access denied. Admin or partner privileges required.",
-      });
-    }
-    next();
-  } catch (error) {
-    res.status(400).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-
 // ... keep all existing functions (register, login, getMe, etc.)
+// isAdmin middleware lives in ../middlewares/auth.js - not duplicated here.
 
 // Send OTP
 const sendOtp = async (req, res) => {
@@ -1278,7 +926,6 @@ module.exports = {
   updateProfile,
   updatePhoneNumber,
   verifyPhoneNumber,
-  isAdmin,
   adminLogin,
   forgotPassword,
   resetPassword,

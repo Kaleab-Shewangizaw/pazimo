@@ -25,7 +25,7 @@ export function EventFormSection({
     <Card
       id={id}
       className={cn(
-        "rounded-[28px] border-slate-200 bg-white shadow-sm",
+        "rounded-[28px] border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm",
         className,
       )}
     >

@@ -18,7 +18,7 @@ interface FieldHintProps {
 
 export function FieldHint({ children, className }: FieldHintProps) {
   return (
-    <p className={cn("text-xs leading-5 text-slate-500", className)}>
+    <p className={cn("text-xs leading-5 text-slate-500 dark:text-slate-400", className)}>
       {children}
     </p>
   );

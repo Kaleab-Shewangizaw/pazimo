@@ -57,7 +57,7 @@ export function BasicInfoSection({
               onChange={onFieldChange}
               placeholder="title"
               required
-              className="h-11 rounded-xl border-slate-200"
+              className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
             />
           </FieldGroup>
 
@@ -70,7 +70,7 @@ export function BasicInfoSection({
               onChange={onFieldChange}
               placeholder="description"
               required
-              className="min-h-36 rounded-2xl border-slate-200"
+              className="min-h-36 rounded-2xl border-slate-200 dark:border-slate-800"
             />
           </FieldGroup>
 
@@ -82,7 +82,7 @@ export function BasicInfoSection({
                 onValueChange={onCategoryChange}
                 disabled={isLoadingCategories}
               >
-                <SelectTrigger id="category" className="h-11 rounded-xl border-slate-200">
+                <SelectTrigger id="category" className="h-11 rounded-xl border-slate-200 dark:border-slate-800">
                   <SelectValue
                     placeholder={
                       isLoadingCategories
@@ -109,7 +109,7 @@ export function BasicInfoSection({
               >
                 <SelectTrigger
                   id="event-type"
-                  className="h-11 rounded-xl border-slate-200"
+                  className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
                 >
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
@@ -133,7 +133,7 @@ export function BasicInfoSection({
                 onChange={onFieldChange}
                 placeholder="How many attendees can you host?"
                 required
-                className="h-11 rounded-xl border-slate-200"
+                className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
               />
             </FieldGroup>
 
@@ -145,21 +145,21 @@ export function BasicInfoSection({
                 value={formData.tags}
                 onChange={onFieldChange}
                 placeholder="music, festival, after party"
-                className="h-11 rounded-xl border-slate-200"
+                className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
               />
               <FieldHint>Optional. Comma-separated keywords for internal organization.</FieldHint>
             </FieldGroup>
           </div>
         </div>
 
-        <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+        <div className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-4 sm:p-5">
           <div className="space-y-5">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">Schedule</p>
-                <p className="text-xs text-slate-500">Reference date: {currentDate}</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Schedule</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Reference date: {currentDate}</p>
               </div>
-              <Badge className="rounded-full bg-white text-slate-700 hover:bg-white">
+              <Badge className="rounded-full bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800">
                 Local timezone
               </Badge>
             </div>
@@ -188,7 +188,7 @@ export function BasicInfoSection({
 
               <FieldGroup>
                 <Label htmlFor="startTime" className="flex items-center gap-2">
-                  <Clock3 className="h-4 w-4 text-slate-500" />
+                  <Clock3 className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                   Start time
                 </Label>
                 <Input
@@ -198,13 +198,13 @@ export function BasicInfoSection({
                   value={formData.startTime}
                   onChange={(e) => onStartTimeChange(e.target.value)}
                   required
-                  className="h-11 rounded-xl border-slate-200"
+                  className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
                 />
               </FieldGroup>
 
               <FieldGroup>
                 <Label htmlFor="endTime" className="flex items-center gap-2">
-                  <Clock3 className="h-4 w-4 text-slate-500" />
+                  <Clock3 className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                   End time
                 </Label>
                 <Input
@@ -214,7 +214,7 @@ export function BasicInfoSection({
                   value={formData.endTime}
                   onChange={(e) => onEndTimeChange(e.target.value)}
                   required
-                  className="h-11 rounded-xl border-slate-200"
+                  className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
                 />
               </FieldGroup>
             </div>
@@ -222,7 +222,7 @@ export function BasicInfoSection({
             <div id="venue" className="grid gap-4">
               <FieldGroup>
                 <Label htmlFor="location.address" className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-slate-500" />
+                  <MapPin className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                   Venue
                 </Label>
                 <Input
@@ -231,7 +231,7 @@ export function BasicInfoSection({
                   value={formData.location.address}
                   onChange={onFieldChange}
                   placeholder="Venue name or full address"
-                  className="h-11 rounded-xl border-slate-200"
+                  className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
                 />
               </FieldGroup>
 
@@ -245,13 +245,13 @@ export function BasicInfoSection({
                     onChange={onFieldChange}
                     placeholder="Addis Ababa"
                     required
-                    className="h-11 rounded-xl border-slate-200"
+                    className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
                   />
                 </FieldGroup>
 
                 <FieldGroup>
                   <Label htmlFor="location.country" className="flex items-center gap-2">
-                    <Globe2 className="h-4 w-4 text-slate-500" />
+                    <Globe2 className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                     Country
                   </Label>
                   <Input
@@ -261,7 +261,7 @@ export function BasicInfoSection({
                     onChange={onFieldChange}
                     placeholder="Ethiopia"
                     required
-                    className="h-11 rounded-xl border-slate-200"
+                    className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
                   />
                 </FieldGroup>
               </div>
@@ -270,19 +270,19 @@ export function BasicInfoSection({
         </div>
       </div>
 
-      <div className="rounded-[24px] border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+      <div className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-4 sm:p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-slate-500" />
-              <p className="text-sm font-semibold text-slate-900">Age restriction</p>
+              <ShieldCheck className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Age restriction</p>
             </div>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Turn this on only if entry depends on an age range.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center gap-3 rounded-full border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2">
             <Switch
               id="age-restriction-toggle"
               checked={formData.ageRestriction.hasRestriction}
@@ -307,7 +307,7 @@ export function BasicInfoSection({
                 value={formData.ageRestriction.minAge}
                 onChange={onFieldChange}
                 placeholder="18"
-                className="h-11 rounded-xl border-slate-200"
+                className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
               />
             </FieldGroup>
 
@@ -322,7 +322,7 @@ export function BasicInfoSection({
                 value={formData.ageRestriction.maxAge}
                 onChange={onFieldChange}
                 placeholder="60"
-                className="h-11 rounded-xl border-slate-200"
+                className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
               />
             </FieldGroup>
           </div>

@@ -229,7 +229,7 @@ const Header = () => {
     <>
       {/* Fixed header for mobile, normal for desktop */}
       <header
-        className={`md:relative fixed! bg-white/90 dark:bg-[#0A0A0A]/90 backdrop-blur-3xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 border-b border-border/40 dark:border-white/10 transition-all duration-300 ease-out
+        className={`md:relative fixed! bg-white/90 dark:bg-black/95 backdrop-blur-3xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 border-b border-border/40 dark:border-white/10 transition-all duration-300 ease-out
         `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
