@@ -27,4 +27,8 @@ coverage/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Local-only admin seeding scripts - never push these
+scripts/seed-admin.js
+scripts/seed-admin-production.js

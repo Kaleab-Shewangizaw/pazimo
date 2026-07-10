@@ -191,14 +191,15 @@ const normalizeTicketTypes = (rawTickets = []) =>
     };
   });
 
+// Deliberately excludes waveOrder: deleting a wave from the middle of a chain
+// shifts every later wave's waveOrder down, which would otherwise make a
+// surviving wave's key stop matching its own prior record on the very save
+// that removes its sibling, silently losing any manualDisabled override.
+// Waves are still distinguished by name within their waveGroup.
 const createTicketTypeKey = (ticket = {}) => {
   const name = String(ticket.name || "").trim().toLowerCase();
   const waveGroup = String(ticket.waveGroup || "").trim().toLowerCase();
-  const waveOrder =
-    ticket.waveOrder === undefined || ticket.waveOrder === null
-      ? ""
-      : String(ticket.waveOrder);
-  return `${name}::${waveGroup}::${waveOrder}`;
+  return `${name}::${waveGroup}`;
 };
 
 const ensureEventUrlFields = async (event) => {
@@ -395,7 +396,9 @@ const buyTicket = async (req, res) => {
     await event.save();
   }
 
-  const index = event.ticketTypes.findIndex((t) => t.name === ticketType);
+  const index = event.ticketTypes.findIndex(
+    (t) => t.name === ticketType || t._id.toString() === ticketType
+  );
 
   if (index === -1) {
     throw new BadRequestError("Invalid ticket type");

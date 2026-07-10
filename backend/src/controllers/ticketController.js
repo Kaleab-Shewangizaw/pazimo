@@ -125,6 +125,30 @@ const processSuccessfulPayment = async (payment) => {
     throw new BadRequestError("Ticket type is not available or sold out");
   }
 
+  // ⚡ Atomically claim the stock. The check above reads a snapshot that can
+  // go stale if two purchases for the same wave land at the same moment —
+  // both could read "enough left" before either writes. The actual decrement
+  // must re-verify quantity/availability in the same DB operation; if a
+  // concurrent purchase already took the remaining tickets, this matches
+  // nothing and we abort instead of overselling.
+  const stockClaim = await Event.updateOne(
+    {
+      _id: eventId,
+      ticketTypes: {
+        $elemMatch: {
+          _id: ticketTypeInfo._id,
+          available: true,
+          quantity: { $gte: ticketCount || 1 },
+        },
+      },
+    },
+    { $inc: { "ticketTypes.$.quantity": -(ticketCount || 1) } }
+  );
+
+  if (stockClaim.matchedCount === 0) {
+    throw new BadRequestError("Ticket type is not available or sold out");
+  }
+
   // Prepare ticket data
   const paymentCurrency = payment.currency === "USD" ? "USD" : "ETB";
   const unitPrice =
@@ -267,31 +291,33 @@ const processSuccessfulPayment = async (payment) => {
   const ticket = await Ticket.create(ticketData);
   console.log(`[TICKET-CREATE] ✅ Ticket created: ${ticket._id} for ${finalUserId ? 'user' : 'guest'}`);
 
-  // ⚡ OPTIMIZATION: Use atomic operations to avoid multiple DB queries
-  // Update event ticket quantity and user tickets in parallel
-  const updatePromises = [];
-  
-  // Update event ticket quantity atomically
-  updatePromises.push(
-    Event.updateOne(
-      { _id: eventId, 'ticketTypes._id': ticketTypeInfo._id },
-      { $inc: { 'ticketTypes.$.quantity': -(ticketCount || 1) } }
-    )
-  );
-
-  // If user exists, add ticket to user's history atomically
+  // ⚡ Event stock was already atomically claimed above; only the user's
+  // ticket history still needs updating here.
   if (finalUserId) {
-    updatePromises.push(
-      User.updateOne(
-        { _id: finalUserId },
-        { $push: { tickets: ticket._id } }
-      )
+    await User.updateOne(
+      { _id: finalUserId },
+      { $push: { tickets: ticket._id } }
     );
   }
-  
-  // ⚡ Execute both updates in parallel
-  await Promise.all(updatePromises);
   console.log(`[TICKET-CREATE] ✅ Updated event & user records`);
+
+  // ⚡ Re-evaluate wave/date availability right away so a wave that just sold
+  // out (or whose date trigger already passed) hands off to the next wave
+  // immediately, instead of waiting up to 60s for the background scheduler.
+  // Non-blocking: this must never delay ticket delivery to the buyer.
+  Event.findById(eventId)
+    .then(async (freshEvent) => {
+      if (!freshEvent) return;
+      if (applyTicketAvailabilityRules(freshEvent, new Date()).changed) {
+        await freshEvent.save();
+      }
+    })
+    .catch((availabilityError) => {
+      console.error(
+        "[TICKET-CREATE] ❌ Failed to refresh ticket availability:",
+        availabilityError,
+      );
+    });
 
   // ⚡ Send SMS Confirmation ASYNCHRONOUSLY (non-blocking)
   // This prevents SMS delays from blocking ticket delivery
