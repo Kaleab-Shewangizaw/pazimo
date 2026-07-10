@@ -192,8 +192,8 @@ export default function CategoriesPage() {
                           className="w-12 h-12 object-cover rounded-lg"
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <span className="text-gray-400 text-xs">No image</span>
+                        <div className="w-12 h-12 bg-gray-200 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                          <span className="text-gray-400 dark:text-gray-500 text-xs">No image</span>
                         </div>
                       )}
                     </TableCell>

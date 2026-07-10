@@ -150,7 +150,7 @@ export default function WithdrawalsPage() {
       <div className="text-sm">
         <div className="font-medium">{bankName}</div>
         <div>{accountName}</div>
-        <div className="text-gray-500">{accountNumber}</div>
+        <div className="text-gray-500 dark:text-gray-400">{accountNumber}</div>
       </div>
     )
   }
@@ -226,25 +226,25 @@ export default function WithdrawalsPage() {
         </div>
 
         {/* Withdrawals Table */}
-        <Card className="border border-gray-200 shadow-lg hover:shadow-xl border-t-4 border-t-red-600">
+        <Card className="border border-gray-200 dark:border-gray-800 shadow-lg hover:shadow-xl border-t-4 border-t-red-600">
           <CardContent className="p-6">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-gray-200">
-                    <TableHead className="font-semibold text-gray-700">Organizer</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Amount</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Status</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Bank Details</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Created</TableHead>
-                    <TableHead className="font-semibold text-gray-700">Processed</TableHead>
-                    <TableHead className="font-semibold text-gray-700 text-right">Actions</TableHead>
+                  <TableRow className="border-gray-200 dark:border-gray-800">
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Organizer</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Amount</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Status</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Bank Details</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Created</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Processed</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredWithdrawals.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-gray-500 py-12">
+                      <TableCell colSpan={7} className="text-center text-gray-500 dark:text-gray-400 py-12">
                         <CreditCard className="h-8 w-8 text-red-400 mx-auto mb-3" />
                         <p className="font-medium">No withdrawal requests found</p>
                         <p className="text-sm">Withdrawal requests for the selected filter will appear here</p>
@@ -252,28 +252,28 @@ export default function WithdrawalsPage() {
                     </TableRow>
                   ) : (
                     filteredWithdrawals.map((withdrawal) => (
-                      <TableRow key={withdrawal._id} className="border-gray-100">
+                      <TableRow key={withdrawal._id} className="border-gray-100 dark:border-gray-800">
                         <TableCell>
                           <div>
-                            <p className="font-medium text-gray-900">
+                            <p className="font-medium text-gray-900 dark:text-gray-100">
                               {withdrawal.organizer.firstName} {withdrawal.organizer.lastName}
                             </p>
-                            <p className="text-sm text-gray-600">{withdrawal.organizer.email}</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">{withdrawal.organizer.email}</p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="font-semibold text-green-600">{withdrawal.amount.toFixed(2)} {withdrawal.currency || currencyFilter}</span>
+                          <span className="font-semibold text-green-600 dark:text-green-400">{withdrawal.amount.toFixed(2)} {withdrawal.currency || currencyFilter}</span>
                         </TableCell>
                         <TableCell>
                           <Badge
                             className={
                               withdrawal.status === "completed"
-                                ? "bg-green-100 text-green-800 border-green-200"
+                                ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900"
                                 : withdrawal.status === "approved"
-                                  ? "bg-blue-100 text-blue-800 border-blue-200"
+                                  ? "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
                                   : withdrawal.status === "rejected"
-                                    ? "bg-red-100 text-red-800 border-red-200"
-                                    : "bg-yellow-100 text-yellow-800 border-yellow-200"
+                                    ? "bg-red-100 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
+                                    : "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-900"
                             }
                           >
                             {withdrawal.status}
@@ -282,10 +282,10 @@ export default function WithdrawalsPage() {
                         <TableCell>
                           {renderBankDetails(withdrawal)}
                         </TableCell>
-                        <TableCell className="text-gray-600">
+                        <TableCell className="text-gray-600 dark:text-gray-400">
                           {new Date(withdrawal.createdAt).toLocaleDateString()}
                         </TableCell>
-                        <TableCell className="text-gray-600">
+                        <TableCell className="text-gray-600 dark:text-gray-400">
                           {withdrawal.processedAt ? new Date(withdrawal.processedAt).toLocaleDateString() : "-"}
                         </TableCell>
                         <TableCell className="text-right">
@@ -313,7 +313,7 @@ export default function WithdrawalsPage() {
 
             {/* Pagination */}
             <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 Page {page} of {totalPages}
               </div>
               <div className="flex items-center space-x-2">
@@ -322,7 +322,7 @@ export default function WithdrawalsPage() {
                   size="sm"
                   onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                   disabled={page === 1}
-                  className="border-gray-300 hover:bg-gray-50"
+                  className="border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
@@ -331,7 +331,7 @@ export default function WithdrawalsPage() {
                   size="sm"
                   onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
                   disabled={page === totalPages}
-                  className="border-gray-300 hover:bg-gray-50"
+                  className="border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -344,7 +344,7 @@ export default function WithdrawalsPage() {
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-gray-900">Update Withdrawal Status</DialogTitle>
+              <DialogTitle className="text-gray-900 dark:text-gray-100">Update Withdrawal Status</DialogTitle>
               <DialogDescription>
                 Update the status for {selectedWithdrawal?.organizer.firstName}{" "}
                 {selectedWithdrawal?.organizer.lastName}'s request of {selectedWithdrawal?.amount.toFixed(2)} {selectedWithdrawal?.currency || currencyFilter}.
@@ -352,29 +352,29 @@ export default function WithdrawalsPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label className="text-gray-700">Status</Label>
+                <Label className="text-gray-700 dark:text-gray-300">Status</Label>
                 <Select
                   value={updateStatus}
                   onValueChange={(value: "approved" | "rejected" | "completed") => setUpdateStatus(value)}
                 >
-                  <SelectTrigger className="border-gray-300" >
+                  <SelectTrigger className="border-gray-300 dark:border-gray-700" >
                     <SelectValue placeholder="Select status" />
-                  
+
                   </SelectTrigger>
                   <SelectContent>
-                    
+
                     <SelectItem value="approved">Approve</SelectItem>
                     <SelectItem value="rejected">Reject</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label className="text-gray-700">Transaction ID</Label>
+                <Label className="text-gray-700 dark:text-gray-300">Transaction ID</Label>
                 <Input
                   value={transactionId}
                   onChange={(e) => setTransactionId(e.target.value)}
                   placeholder="Enter transaction ID (if applicable)"
-                  className="border-gray-300"
+                  className="border-gray-300 dark:border-gray-700"
                 />
               </div>
             </div>
@@ -382,7 +382,7 @@ export default function WithdrawalsPage() {
               <Button
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
-                className="border-gray-300"
+                className="border-gray-300 dark:border-gray-700"
               >
                 Cancel
               </Button>

@@ -73,18 +73,18 @@ type VisibilityFilter = (typeof VISIBILITY_OPTIONS)[number];
 type FlagFilter = (typeof FLAG_OPTIONS)[number];
 
 const statusTone: Record<string, string> = {
-  draft: "bg-slate-100 text-slate-700 border-slate-200",
-  published: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  cancelled: "bg-rose-100 text-rose-700 border-rose-200",
-  hidden: "bg-amber-100 text-amber-700 border-amber-200",
-  archived: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  review: "bg-violet-100 text-violet-700 border-violet-200",
-  closed: "bg-slate-200 text-slate-800 border-slate-300",
+  draft: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  published: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900",
+  cancelled: "bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900",
+  hidden: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+  archived: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700",
+  review: "bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900",
+  closed: "bg-slate-200 text-slate-800 border-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600",
 };
 
 const typeTone: Record<"rsvp" | "review", string> = {
-  rsvp: "bg-sky-100 text-sky-700 border-sky-200",
-  review: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+  rsvp: "bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-900",
+  review: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200 dark:bg-fuchsia-950/40 dark:text-fuchsia-300 dark:border-fuchsia-900",
 };
 
 const getStatusLabel = (event: RsvpEvent) => event.status || "draft";
@@ -421,7 +421,7 @@ export default function AdminRsvpPage() {
                         </TableCell>
                         <TableCell className="align-top">
                           <div className="flex flex-wrap gap-2">
-                            <Badge variant="outline" className={`rounded-full border ${event.isPublic === false ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-emerald-100 text-emerald-700 border-emerald-200"}`}>
+                            <Badge variant="outline" className={`rounded-full border ${event.isPublic === false ? "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" : "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"}`}>
                               {event.isPublic === false ? "Private" : "Public"}
                             </Badge>
                             {event.isClosed ? <Badge variant="outline" className="rounded-full border bg-rose-100 text-rose-700 border-rose-200">Closed</Badge> : null}
@@ -501,7 +501,7 @@ export default function AdminRsvpPage() {
                               size="sm"
                               className={
                                 event.status === "published"
-                                  ? "text-gray-600 hover:text-gray-700"
+                                  ? "text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                                   : "text-blue-600 hover:text-blue-700"
                               }
                               onClick={() =>
@@ -574,7 +574,7 @@ export default function AdminRsvpPage() {
                         {event.isFeatured ? <Badge variant="outline" className="rounded-full border bg-violet-100 text-violet-700 border-violet-200">Featured</Badge> : null}
                         {event.isTrending ? <Badge variant="outline" className="rounded-full border bg-amber-100 text-amber-700 border-amber-200">Trending</Badge> : null}
                         {event.bannerStatus ? <Badge variant="outline" className="rounded-full border bg-sky-100 text-sky-700 border-sky-200">Banner</Badge> : null}
-                        <Badge variant="outline" className={`rounded-full border ${event.isPublic === false ? "bg-slate-100 text-slate-700 border-slate-200" : "bg-emerald-100 text-emerald-700 border-emerald-200"}`}>
+                        <Badge variant="outline" className={`rounded-full border ${event.isPublic === false ? "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700" : "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900"}`}>
                           {event.isPublic === false ? "Private" : "Public"}
                         </Badge>
                       </div>

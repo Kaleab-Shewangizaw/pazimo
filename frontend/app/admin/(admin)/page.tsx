@@ -680,7 +680,7 @@ export default function AdminDashboardPage() {
                           <TableCell>
                             <Badge
                               variant="outline"
-                              className="capitalize border-blue-300 text-blue-700 bg-blue-50"
+                              className="capitalize border-blue-300 text-blue-700 bg-blue-50 dark:border-blue-900 dark:text-blue-300 dark:bg-blue-950/40"
                             >
                               {event.category?.name || "Uncategorized"}
                             </Badge>
@@ -694,8 +694,8 @@ export default function AdminDashboardPage() {
                               }
                               className={
                                 event.status === "published"
-                                  ? "bg-green-100 text-green-800 border-green-200"
-                                  : "bg-gray-100 text-gray-800 border-gray-200"
+                                  ? "bg-green-100 text-green-800 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900"
+                                  : "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
                               }
                             >
                               {event.status}

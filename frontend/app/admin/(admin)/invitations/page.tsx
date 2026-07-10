@@ -190,13 +190,13 @@ export default function InvitationsEventListPage() {
                     <TableRow key={event._id}>
                       <TableCell>
                         <div className="font-medium">{event.title}</div>
-                        <div className="text-xs text-gray-500 capitalize">
+                        <div className="text-xs text-gray-500 dark:text-gray-400 capitalize">
                           {event.status}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-gray-400" />
+                          <User className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                           {event.organizer
                             ? `${event.organizer.firstName} ${event.organizer.lastName}`
                             : "Unknown"}
@@ -204,13 +204,13 @@ export default function InvitationsEventListPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-gray-400" />
+                          <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                           {new Date(event.startDate).toLocaleDateString()}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-gray-400" />
+                          <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                           {event.location?.city || "Online"}
                         </div>
                       </TableCell>

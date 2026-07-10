@@ -577,19 +577,19 @@ export default function TicketsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <Calendar className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                             {new Date(event.startDate).toLocaleDateString()}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-gray-400" />
+                            <MapPin className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                             {event.location?.city || "Online"}
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <TicketIcon className="h-4 w-4 text-gray-400" />
+                            <TicketIcon className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                             {event.ticketsSold ?? 0}
                           </div>
                         </TableCell>
@@ -622,7 +622,7 @@ export default function TicketsPage() {
                 >
                   Previous
                 </Button>
-                <span className="text-sm text-gray-600">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
                   Page {currentPage} of {totalEventPages}
                 </span>
                 <Button
@@ -804,7 +804,7 @@ export default function TicketsPage() {
                         <TableCell className="font-medium">
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900">
+                              <span className="font-semibold text-gray-900 dark:text-gray-100">
                                 {ticket.isOnDoor
                                   ? "On-Door Purchase"
                                   : ticket.user?.name ||
@@ -820,7 +820,7 @@ export default function TicketsPage() {
                                 </Badge>
                               )}
                             </div>
-                            <span className="text-xs text-gray-500 font-mono mt-0.5">
+                            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
                               ID: {ticket.ticketId}
                             </span>
                           </div>
@@ -828,8 +828,8 @@ export default function TicketsPage() {
                         <TableCell>{ticket.ticketType}</TableCell>
                         <TableCell>
                           <span className="font-medium">{used}</span>
-                          <span className="text-gray-400 mx-1">/</span>
-                          <span className="text-gray-500">{total}</span>
+                          <span className="text-gray-400 dark:text-gray-500 mx-1">/</span>
+                          <span className="text-gray-500 dark:text-gray-400">{total}</span>
                         </TableCell>
                         <TableCell>
                           {ticket.price.toFixed(2)} {getTicketCurrency(ticket)}
@@ -897,7 +897,7 @@ export default function TicketsPage() {
               >
                 Previous
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-600 dark:text-gray-400">
                 Page {currentPage} of {totalTicketPages}
               </span>
               <Button
@@ -913,7 +913,7 @@ export default function TicketsPage() {
             </div>
           ) : !isSearching && hasMoreTickets ? (
             <div className="flex flex-col items-center gap-3 py-6">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 Showing {tickets.length} of {totalTicketCount} rows
               </div>
               <Button
@@ -932,7 +932,7 @@ export default function TicketsPage() {
               </Button>
             </div>
           ) : !isSearching && tickets.length > 0 ? (
-            <div className="text-center py-4 text-sm text-gray-600">
+            <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">
               All {tickets.length} tickets loaded
             </div>
           ) : null}

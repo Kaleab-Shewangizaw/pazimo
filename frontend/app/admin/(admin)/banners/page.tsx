@@ -195,7 +195,7 @@ export default function EventsPage() {
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50/80">
+              <TableRow className="bg-gray-50/80 dark:bg-gray-900/50">
                 <TableHead className="font-semibold">Event</TableHead>
                 <TableHead className="font-semibold">Details</TableHead>
                 <TableHead className="font-semibold">Location</TableHead>
@@ -206,20 +206,20 @@ export default function EventsPage() {
             </TableHeader>
             <TableBody>
               {filteredEvents.map((event) => (
-                <TableRow key={event.id} className="hover:bg-gray-50/50 transition-colors">
+                <TableRow key={event.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-900/40 transition-colors">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-12 w-20 rounded-md bg-gray-100 flex items-center justify-center overflow-hidden">
-                        <Image className="h-4 w-4 text-gray-500" />
+                      <div className="h-12 w-20 rounded-md bg-gray-100 dark:bg-gray-800 flex items-center justify-center overflow-hidden">
+                        <Image className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                       </div>
                       <div>
-                        <span className="font-medium text-gray-900">{event.title}</span>
-                        <div className="text-sm text-gray-500">{event.price}</div>
+                        <span className="font-medium text-gray-900 dark:text-gray-100">{event.title}</span>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">{event.price}</div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-gray-600 space-y-1">
+                    <div className="text-gray-600 dark:text-gray-300 space-y-1">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4" />
                         <span>{event.date}</span>
@@ -231,12 +231,12 @@ export default function EventsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-gray-600 space-y-1">
+                    <div className="text-gray-600 dark:text-gray-300 space-y-1">
                       <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4" />
                         <span>{event.venue}</span>
                       </div>
-                      <div className="text-sm text-gray-500">{event.location}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">{event.location}</div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -245,7 +245,7 @@ export default function EventsPage() {
                         <Badge
                           key={index}
                           variant="outline"
-                          className="bg-blue-50 text-blue-700 border-blue-200"
+                          className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
                         >
                           {category}
                         </Badge>
@@ -253,29 +253,29 @@ export default function EventsPage() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-gray-600">
+                    <div className="text-gray-600 dark:text-gray-300">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
                         <span>{event.attendees.toLocaleString()}+ attending</span>
                       </div>
-                      <div className="text-sm text-gray-500">Rating: {event.rating.toFixed(1)}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Rating: {event.rating.toFixed(1)}</div>
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-blue-600 hover:text-blue-700"
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                         onClick={() => router.push(`/admin/events/${event.id}/edit`)}
                       >
                         <Pencil className="h-4 w-4 mr-2" />
                         Edit
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-red-600 hover:text-red-700" 
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                         onClick={() => handleDelete(event.id)}
                       >
                         <Trash2 className="h-4 w-4 mr-2" />

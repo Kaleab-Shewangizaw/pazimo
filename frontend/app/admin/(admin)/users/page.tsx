@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Plus, Pencil, Trash2 } from "lucide-react"
+import { Search, Plus, Pencil, Trash2, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import {
   Table,
@@ -38,6 +38,15 @@ interface UserData {
   lastLogin: string;
   createdAt: string;
   isActive: boolean;
+  isBanned?: boolean;
+  banReason?: string;
+  bannedAt?: string;
+}
+
+interface FraudIncident {
+  reason: string;
+  meta?: Record<string, unknown>;
+  at: string;
 }
 
 export default function UsersPage() {
@@ -45,6 +54,16 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserData[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [accountStatusFilter, setAccountStatusFilter] = useState("all")
+  const [incidentsDialogOpen, setIncidentsDialogOpen] = useState(false)
+  const [incidentsUser, setIncidentsUser] = useState<UserData | null>(null)
+  const [incidentsLoading, setIncidentsLoading] = useState(false)
+  const [incidentsData, setIncidentsData] = useState<{
+    banReason?: string;
+    bannedAt?: string;
+    offenseCount: number;
+    incidents: FraudIncident[];
+  } | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -78,7 +97,7 @@ export default function UsersPage() {
     }, 250)
 
     return () => clearTimeout(debounceTimer)
-  }, [currentPage, itemsPerPage, searchQuery, statusFilter])
+  }, [currentPage, itemsPerPage, searchQuery, statusFilter, accountStatusFilter])
 
   const fetchUsers = async () => {
     try {
@@ -96,6 +115,10 @@ export default function UsersPage() {
 
       if (statusFilter !== 'all') {
         searchParams.set('role', statusFilter)
+      }
+
+      if (accountStatusFilter !== 'all') {
+        searchParams.set('status', accountStatusFilter)
       }
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users?${searchParams.toString()}`, {
@@ -176,6 +199,34 @@ export default function UsersPage() {
   const handleDelete = (userId: string) => {
     setUserToDelete(userId)
     setDeleteDialogOpen(true)
+  }
+
+  const handleViewIncidents = async (user: UserData) => {
+    setIncidentsUser(user)
+    setIncidentsDialogOpen(true)
+    setIncidentsLoading(true)
+    setIncidentsData(null)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${user._id}/fraud-incidents`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Accept': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch fraud incidents')
+      }
+
+      const data = await response.json()
+      setIncidentsData(data.data)
+    } catch (error) {
+      console.error('Error fetching fraud incidents:', error)
+      toast.error('Failed to load ban details')
+    } finally {
+      setIncidentsLoading(false)
+    }
   }
 
   const confirmDelete = async () => {
@@ -294,6 +345,34 @@ export default function UsersPage() {
             <SelectItem value="partner">Partner</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={accountStatusFilter}
+          onValueChange={(value) => {
+            setAccountStatusFilter(value)
+            setCurrentPage(1)
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Account status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="banned">Banned</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant={accountStatusFilter === 'banned' ? 'default' : 'outline'}
+          className={accountStatusFilter === 'banned' ? 'bg-red-600 hover:bg-red-700' : 'text-red-700 border-red-700 hover:bg-red-50'}
+          onClick={() => {
+            setAccountStatusFilter(accountStatusFilter === 'banned' ? 'all' : 'banned')
+            setCurrentPage(1)
+          }}
+        >
+          <ShieldAlert className="h-4 w-4 mr-2" />
+          {accountStatusFilter === 'banned' ? 'Showing Banned Users' : 'Show Banned Users'}
+        </Button>
       </div>
 
       <div className="rounded-md border px-6 py-4">
@@ -330,17 +409,34 @@ export default function UsersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge 
-                      variant="outline" 
-                      className={user.isActive ? 'text-green-600 border-green-600' : 'text-red-600 border-red-600'}
-                    >
-                      {user.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
+                    {user.isBanned ? (
+                      <Badge variant="outline" className="text-red-700 border-red-700 bg-red-50">
+                        Banned
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={user.isActive ? 'text-green-600 border-green-600' : 'text-red-600 border-red-600'}
+                      >
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {new Date(user.createdAt).toLocaleDateString()}
                   </TableCell>
                   <TableCell className="text-right space-x-2">
+                    {user.isBanned && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewIncidents(user)}
+                        className="text-red-700 hover:text-red-800"
+                        title="View what this user did"
+                      >
+                        <ShieldAlert className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -515,6 +611,72 @@ export default function UsersPage() {
             >
               Delete
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Fraud Incidents Dialog */}
+      <AlertDialog open={incidentsDialogOpen} onOpenChange={setIncidentsDialogOpen}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Ban details{incidentsUser ? ` — ${incidentsUser.firstName} ${incidentsUser.lastName}` : ''}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4 text-left">
+                {incidentsLoading ? (
+                  <p className="text-muted-foreground">Loading...</p>
+                ) : !incidentsData ? (
+                  <p className="text-muted-foreground">No ban details found.</p>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Reason</p>
+                      <p className="text-sm text-muted-foreground">
+                        {incidentsData.banReason || 'No reason recorded.'}
+                      </p>
+                    </div>
+                    {incidentsData.bannedAt && (
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Banned at</p>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(incidentsData.bannedAt).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Fraud attempts ({incidentsData.offenseCount})
+                      </p>
+                      {incidentsData.incidents.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">
+                          No automated fraud attempts on record — this was a manual ban.
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+                          {incidentsData.incidents.map((incident, index) => (
+                            <li key={index} className="text-sm border rounded-md p-2">
+                              <p className="font-medium text-foreground">{incident.reason}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(incident.at).toLocaleString()}
+                              </p>
+                              {incident.meta && (
+                                <pre className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap break-words">
+                                  {JSON.stringify(incident.meta, null, 2)}
+                                </pre>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Close</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

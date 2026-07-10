@@ -337,7 +337,7 @@ export default function EventInvitationsPage() {
                         <TableRow key={inv._id}>
                           <TableCell>
                             <div className="font-medium">{inv.guestName}</div>
-                            <div className="text-sm text-gray-500 flex items-center gap-1">
+                            <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                               {inv.type === "email" || inv.type === "both" ? (
                                 <Mail className="h-3 w-3" />
                               ) : (
@@ -348,11 +348,11 @@ export default function EventInvitationsPage() {
                           </TableCell>
                           <TableCell>
                             {displayTicketType === "-" ? (
-                              <span className="text-gray-400">-</span>
+                              <span className="text-gray-400 dark:text-gray-500">-</span>
                             ) : (
                               <Badge
                                 variant="outline"
-                                className="bg-purple-50 text-purple-700 border-purple-200"
+                                className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900"
                               >
                                 {displayTicketType}
                               </Badge>
@@ -360,14 +360,14 @@ export default function EventInvitationsPage() {
                           </TableCell>
                           <TableCell>
                             {displayUsage === "-" ? (
-                              <span className="text-gray-400">-</span>
+                              <span className="text-gray-400 dark:text-gray-500">-</span>
                             ) : (
                               <Badge
                                 variant="outline"
                                 className={`capitalize ${
                                   displayUsage.startsWith("0/")
-                                    ? "bg-gray-50 text-gray-700 border-gray-200"
-                                    : "bg-green-50 text-green-700 border-green-200"
+                                    ? "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
+                                    : "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900"
                                 }`}
                               >
                                 {displayUsage}
@@ -384,8 +384,8 @@ export default function EventInvitationsPage() {
                               variant="outline"
                               className={`capitalize ${
                                 ticket
-                                  ? "bg-green-50 text-green-700 border-green-200"
-                                  : "bg-blue-50 text-blue-700 border-blue-200"
+                                  ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-300 dark:border-green-900"
+                                  : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900"
                               }`}
                             >
                               {ticket ? "Paid" : "Guest"}
@@ -401,16 +401,16 @@ export default function EventInvitationsPage() {
                           </TableCell>
                           <TableCell>
                             {displayStatus === "-" ? (
-                              <span className="text-gray-400">-</span>
+                              <span className="text-gray-400 dark:text-gray-500">-</span>
                             ) : (
                               <Badge
                                 className={`capitalize ${
                                   displayStatus === "confirmed" ||
                                   displayStatus === "used"
-                                    ? "bg-green-100 text-green-700 hover:bg-green-100"
+                                    ? "bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-950/40 dark:text-green-300 dark:hover:bg-green-950/40"
                                     : displayStatus === "declined"
-                                    ? "bg-red-100 text-red-700 hover:bg-red-100"
-                                    : "bg-yellow-100 text-yellow-700 hover:bg-yellow-100"
+                                    ? "bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/40"
+                                    : "bg-yellow-100 text-yellow-700 hover:bg-yellow-100 dark:bg-yellow-950/40 dark:text-yellow-300 dark:hover:bg-yellow-950/40"
                                 }`}
                               >
                                 {displayStatus}

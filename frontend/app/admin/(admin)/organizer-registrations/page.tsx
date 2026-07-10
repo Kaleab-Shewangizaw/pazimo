@@ -530,9 +530,9 @@ export default function OrganizerRegistrationsPage() {
                 </CardHeader>
                 <CardContent className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-3">
-                    <div className="flex items-center gap-2 font-medium">Agreed to Terms: <span className={selectedRegistration.agreeTerms ? 'bg-green-100 text-green-700 px-2 py-1 rounded' : 'bg-gray-100 text-gray-700 px-2 py-1 rounded'}>{selectedRegistration.agreeTerms ? 'Yes' : 'No'}</span></div>
-                    <div className="flex items-center gap-2 font-medium">Agreed to Fee: <span className={selectedRegistration.agreeFee ? 'bg-green-100 text-green-700 px-2 py-1 rounded' : 'bg-gray-100 text-gray-700 px-2 py-1 rounded'}>{selectedRegistration.agreeFee ? 'Yes' : 'No'}</span></div>
-                    <div className="flex items-center gap-2 font-medium">Digital Signature: <span className={selectedRegistration.digitalSignature ? 'bg-green-100 text-green-700 px-2 py-1 rounded' : 'bg-gray-100 text-gray-700 px-2 py-1 rounded'}>{selectedRegistration.digitalSignature ? 'Yes' : 'No'}</span></div>
+                    <div className="flex items-center gap-2 font-medium">Agreed to Terms: <span className={selectedRegistration.agreeTerms ? 'bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950/40 dark:text-green-300' : 'bg-gray-100 text-gray-700 px-2 py-1 rounded dark:bg-gray-800 dark:text-gray-300'}>{selectedRegistration.agreeTerms ? 'Yes' : 'No'}</span></div>
+                    <div className="flex items-center gap-2 font-medium">Agreed to Fee: <span className={selectedRegistration.agreeFee ? 'bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950/40 dark:text-green-300' : 'bg-gray-100 text-gray-700 px-2 py-1 rounded dark:bg-gray-800 dark:text-gray-300'}>{selectedRegistration.agreeFee ? 'Yes' : 'No'}</span></div>
+                    <div className="flex items-center gap-2 font-medium">Digital Signature: <span className={selectedRegistration.digitalSignature ? 'bg-green-100 text-green-700 px-2 py-1 rounded dark:bg-green-950/40 dark:text-green-300' : 'bg-gray-100 text-gray-700 px-2 py-1 rounded dark:bg-gray-800 dark:text-gray-300'}>{selectedRegistration.digitalSignature ? 'Yes' : 'No'}</span></div>
                   </div>
                 </CardContent>
               </Card>
