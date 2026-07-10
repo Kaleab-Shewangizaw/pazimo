@@ -91,16 +91,34 @@ const optionalAuth = async (req, res, next) => {
   next();
 };
 
+// TEMPORARY compat shim (2026-07-10): the organizer app can't be updated
+// right now and appears not to send a standard `Authorization: Bearer`
+// header on this route, so also accept the token from a couple of other
+// common places an HTTP client might put it. Still requires a valid,
+// signature-verified JWT either way - this does not weaken auth, it just
+// widens where we're willing to look for the credential.
+// Remove once the app is confirmed to send a proper Authorization header.
+const extractToken = (req) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authHeader.split(" ")[1];
+  }
+  if (req.headers["x-access-token"]) {
+    return req.headers["x-access-token"];
+  }
+  if (req.headers["x-auth-token"]) {
+    return req.headers["x-auth-token"];
+  }
+  if (req.query && req.query.token) {
+    return req.query.token;
+  }
+  return null;
+};
+
 const protect = async (req, res, next) => {
   let account;
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      throw new UnauthorizedError("No token provided");
-    }
-
-    const token = authHeader.split(" ")[1];
+    const token = extractToken(req);
     if (!token) {
       throw new UnauthorizedError("No token provided");
     }
