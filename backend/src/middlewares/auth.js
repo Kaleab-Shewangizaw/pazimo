@@ -1,14 +1,32 @@
 const jwt = require("jsonwebtoken");
-const { UnauthorizedError } = require("../errors");
+const { UnauthorizedError, ForbiddenError } = require("../errors");
 const User = require("../models/User");
+const Admin = require("../models/Admin");
 
-const authenticateUser = (req, res, next) => {
-  // Bypass authentication for ticket event routes
-  if (req.originalUrl && req.originalUrl.includes("/api/tickets/event/")) {
-    req.user = { userId: "bypass", role: "admin" };
-    return next();
+// A banned account needs to reach the client as a distinct, stable signal
+// (not folded into a generic "invalid token" 401) so the frontend can show a
+// dedicated "account suspended" screen instead of silently bouncing to login.
+const bannedAccountError = (account) => {
+  const err = new ForbiddenError(
+    account?.banReason || "Your account has been suspended."
+  );
+  err.code = "ACCOUNT_BANNED";
+  return err;
+};
+
+// Admins live in their own collection; every other role lives on User.
+// Looking the account up for real on every request (instead of trusting
+// the JWT's role claim) means a stale or tampered token can never grant
+// access that the account no longer has.
+const findAccountByPayload = (payload) => {
+  if (payload.role === "admin") {
+    return Admin.findById(payload.id);
   }
+  return User.findById(payload.id);
+};
 
+const authenticateUser = async (req, res, next) => {
+  let account;
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -18,18 +36,57 @@ const authenticateUser = (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.user = {
-      userId: payload.id,
-      role: payload.role,
-    };
-
-    next();
+    account = await findAccountByPayload(payload);
+    if (!account) {
+      throw new UnauthorizedError("Authentication invalid");
+    }
   } catch (error) {
-    next(new UnauthorizedError("Authentication invalid"));
+    return next(new UnauthorizedError("Authentication invalid"));
   }
+
+  // Outside the try/catch above on purpose: a banned account is not a token
+  // problem, and must not be reported as one.
+  if (account.isActive === false) {
+    return next(bannedAccountError(account));
+  }
+
+  req.user = {
+    userId: account._id.toString(),
+    role: account.role,
+  };
+
+  next();
+};
+
+// Attaches req.user when a valid token is present, but never blocks the
+// request — used by routes that serve different data to logged-in vs
+// anonymous callers (e.g. admins seeing full event data on an otherwise
+// public listing endpoint).
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const token = authHeader.split(" ")[1];
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const account = await findAccountByPayload(payload);
+
+    if (account && account.isActive !== false) {
+      req.user = {
+        userId: account._id.toString(),
+        role: account.role,
+      };
+    }
+  } catch (error) {
+    // Invalid/expired token: treat the caller as anonymous instead of failing.
+  }
+  next();
 };
 
 const protect = async (req, res, next) => {
+  let account;
   try {
     const authHeader = req.headers.authorization;
 
@@ -43,18 +100,11 @@ const protect = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+    account = await findAccountByPayload(decoded);
 
-    if (!user) {
+    if (!account) {
       throw new UnauthorizedError("User not found");
     }
-
-    if (!user.isActive) {
-      throw new UnauthorizedError("Account is not active");
-    }
-
-    req.user = user;
-    next();
   } catch (error) {
     if (error.name === "JsonWebTokenError") {
       return next(new UnauthorizedError("Invalid token"));
@@ -62,8 +112,17 @@ const protect = async (req, res, next) => {
     if (error.name === "TokenExpiredError") {
       return next(new UnauthorizedError("Token expired"));
     }
-    next(new UnauthorizedError("Not authorized to access this route"));
+    return next(new UnauthorizedError("Not authorized to access this route"));
   }
+
+  // Outside the try/catch above on purpose: a banned account is not a token
+  // problem, and must not be reported as one.
+  if (account.isActive === false) {
+    return next(bannedAccountError(account));
+  }
+
+  req.user = account;
+  next();
 };
 
 const restrictTo = (...roles) => {
@@ -98,6 +157,7 @@ const isAdmin = async (req, res, next) => {
 module.exports = {
   protect,
   authenticateUser,
+  optionalAuth,
   restrictTo,
   isAdmin,
 };

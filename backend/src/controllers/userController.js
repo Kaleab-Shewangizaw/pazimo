@@ -303,7 +303,8 @@ exports.getUser = async (req, res) => {
 // Create user
 exports.createUser = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, phoneNumber, role } = req.body;
+    // Never trust role from the client — every user created here is a customer.
+    const { email, password, firstName, lastName, phoneNumber } = req.body;
 
     // Check if user exists
     const existingUser = await User.findOne({ email });
@@ -330,7 +331,7 @@ exports.createUser = async (req, res) => {
       firstName,
       lastName,
       phoneNumber,
-      role
+      role: 'customer'
     });
 
     // Remove password from output
@@ -351,7 +352,8 @@ exports.createUser = async (req, res) => {
 // Update user
 exports.updateUser = async (req, res) => {
   try {
-    const { firstName, lastName, phoneNumber, role } = req.body;
+    // Role is never accepted from the client on this endpoint
+    const { firstName, lastName, phoneNumber } = req.body;
     const userId = req.params.id;
 
     // Check if phone number is already used by another user
@@ -371,11 +373,10 @@ exports.updateUser = async (req, res) => {
     // Update user
     const user = await User.findByIdAndUpdate(
       userId,
-      { 
-        firstName, 
-        lastName, 
-        phoneNumber, 
-        role 
+      {
+        firstName,
+        lastName,
+        phoneNumber
       },
       { new: true, runValidators: true }
     ).select('-password');

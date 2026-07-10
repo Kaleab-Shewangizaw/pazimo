@@ -9,6 +9,18 @@ const {
 } = require("./invitationController");
 const { processGuestInvitation } = require("./ticketController");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
+const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
+
+// These two routes (savePendingTransaction / fulfillPayment) are only ever
+// meant to be called server-to-server (e.g. from a Next.js API route), never
+// directly by a browser or Postman. They carry no session/JWT, so a shared
+// secret is the only thing standing between them and anyone on the internet.
+const INTERNAL_PAYMENTS_SECRET = process.env.INTERNAL_PAYMENTS_SECRET;
+
+const hasValidInternalSecret = (req) =>
+  Boolean(INTERNAL_PAYMENTS_SECRET) &&
+  req.headers["x-internal-secret"] === INTERNAL_PAYMENTS_SECRET;
 
 // Consolidated Fulfillment Logic
 const processTransactionFulfillment = async (transaction, paymentId) => {
@@ -126,6 +138,39 @@ const initiatePayment = async (req, res) => {
       });
     }
 
+    if (phoneNumber && (await isPhoneBanned(phoneNumber))) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        code: "PHONE_BANNED",
+        message: "This number is not permitted to make purchases.",
+      });
+    }
+
+    // The charge amount is always computed from the event's own ticket type
+    // data — never from the client-supplied `amount`. A mismatch means the
+    // request has been tampered with.
+    const pricing = await resolveTicketPrice({ eventId, ticketTypeId, quantity });
+    if (!pricing.ok) {
+      return res.status(pricing.statusCode).json({ success: false, message: pricing.message });
+    }
+
+    if (!amountsMatch(amount, pricing.amount)) {
+      if (phoneNumber) {
+        await flagTamperAttempt({
+          phone: phoneNumber,
+          userId,
+          reason: "Amount mismatch on POST /api/payments/santimpay/initiate",
+          meta: { eventId, ticketTypeId, quantity, submittedAmount: amount, expectedAmount: pricing.amount },
+        });
+      }
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "Payment amount could not be verified.",
+      });
+    }
+
+    const verifiedAmount = pricing.amount;
+
     // Define redirect URLs
     const baseUrl = process.env.FRONTEND_URL || "https://pazimo.com";
     const backendUrl =
@@ -138,7 +183,7 @@ const initiatePayment = async (req, res) => {
     const notifyUrl = `${backendUrl}/api/webhook/santimpay`;
 
     const result = await SantimPayService.initiatePayment({
-      amount,
+      amount: verifiedAmount,
       paymentReason,
       successRedirectUrl,
       failureRedirectUrl,
@@ -153,7 +198,7 @@ const initiatePayment = async (req, res) => {
     await SantimTransaction.create({
       transactionId: result.transactionId,
       merchantId: SantimPayService.merchantId,
-      amount,
+      amount: verifiedAmount,
       paymentReason,
       status: "PENDING",
       paymentUrl: result.paymentUrl,
@@ -370,6 +415,16 @@ const handleWebhook = async (req, res) => {
 // Save Pending Transaction (called by Next.js API)
 const savePendingTransaction = async (req, res) => {
   try {
+    // Server-to-server only (called from the Next.js backend, never a browser).
+    // There's no session/JWT here, so a missing/wrong shared secret is treated
+    // as an unauthorized external call, not a misconfiguration.
+    if (!hasValidInternalSecret(req)) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     console.log(
       "savePendingTransaction body:",
       JSON.stringify(req.body, null, 2)
@@ -383,6 +438,49 @@ const savePendingTransaction = async (req, res) => {
       invitationData,
       method,
     } = req.body;
+
+    if (phoneNumber && (await isPhoneBanned(phoneNumber))) {
+      return res.status(StatusCodes.FORBIDDEN).json({
+        success: false,
+        code: "PHONE_BANNED",
+        message: "This number is not permitted to make purchases.",
+      });
+    }
+
+    // For ticket purchases (as opposed to custom-priced invitations) the
+    // amount is always recomputed from the event's own ticket type data.
+    let verifiedAmount = amount;
+    if (ticketData?.eventId && ticketData?.ticketTypeId) {
+      const pricing = await resolveTicketPrice({
+        eventId: ticketData.eventId,
+        ticketTypeId: ticketData.ticketTypeId,
+        quantity: ticketData.quantity,
+      });
+      if (!pricing.ok) {
+        return res.status(pricing.statusCode).json({ success: false, message: pricing.message });
+      }
+      if (!amountsMatch(amount, pricing.amount)) {
+        if (phoneNumber) {
+          await flagTamperAttempt({
+            phone: phoneNumber,
+            userId: ticketData.userId,
+            reason: "Amount mismatch on POST /api/payments/santim/save-pending",
+            meta: {
+              eventId: ticketData.eventId,
+              ticketTypeId: ticketData.ticketTypeId,
+              quantity: ticketData.quantity,
+              submittedAmount: amount,
+              expectedAmount: pricing.amount,
+            },
+          });
+        }
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "Payment amount could not be verified.",
+        });
+      }
+      verifiedAmount = pricing.amount;
+    }
 
     const merchantId = SantimPayService.merchantId;
     console.log("Merchant ID:", merchantId);
@@ -452,7 +550,7 @@ const savePendingTransaction = async (req, res) => {
     console.log("Creating SantimTransaction with:", {
       transactionId: orderId,
       merchantId,
-      amount,
+      amount: verifiedAmount,
       paymentReason: reason,
       status: "PENDING",
       metaData,
@@ -461,7 +559,7 @@ const savePendingTransaction = async (req, res) => {
     await SantimTransaction.create({
       transactionId: orderId,
       merchantId,
-      amount,
+      amount: verifiedAmount,
       paymentReason: reason,
       status: "PENDING",
       metaData,
@@ -479,7 +577,24 @@ const savePendingTransaction = async (req, res) => {
 // Fulfill Payment (called by Next.js Webhook)
 const fulfillPayment = async (req, res) => {
   try {
-    const { id, status, paymentId } = req.body;
+    const { id, paymentId } = req.body;
+
+    // Server-to-server only. A caller without the shared secret is not our
+    // Next.js backend — treat it as a forged-fulfillment attempt.
+    if (!hasValidInternalSecret(req)) {
+      const suspectTransaction = id
+        ? await SantimTransaction.findOne({ transactionId: id })
+        : null;
+      if (suspectTransaction?.metaData?.phoneNumber) {
+        await flagTamperAttempt({
+          phone: suspectTransaction.metaData.phoneNumber,
+          userId: suspectTransaction.metaData.userId,
+          reason: "Unauthorized call to POST /api/payments/santim/webhook-fulfill",
+          meta: { transactionId: id },
+        });
+      }
+      return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, message: "Unauthorized" });
+    }
 
     const transaction = await SantimTransaction.findOne({ transactionId: id });
 
@@ -489,13 +604,32 @@ const fulfillPayment = async (req, res) => {
         .json({ message: "Transaction not found" });
     }
 
+    // Never trust a caller-claimed status — always confirm directly with
+    // SantimPay before fulfilling. This is what previously let anyone who
+    // knew (or guessed) a transactionId fulfill it themselves for free.
+    let remoteStatus;
+    try {
+      remoteStatus = await SantimPayService.checkTransactionStatus(id);
+    } catch (err) {
+      console.error("Fulfill Payment - remote status check failed:", err.message);
+      return res.status(StatusCodes.BAD_GATEWAY).json({
+        success: false,
+        message: "Could not verify payment status with SantimPay",
+      });
+    }
+
+    const remoteStatusValue =
+      remoteStatus.status ||
+      remoteStatus.paymentStatus ||
+      (remoteStatus.data && remoteStatus.data.status);
+
     if (
       transaction.status !== "COMPLETED" &&
-      (status === "COMPLETED" || status === "SUCCESS")
+      (remoteStatusValue === "COMPLETED" || remoteStatusValue === "SUCCESS")
     ) {
       await processTransactionFulfillment(transaction, paymentId);
-    } else if (status === "FAILED" || status === "CANCELLED") {
-      transaction.status = status;
+    } else if (remoteStatusValue === "FAILED" || remoteStatusValue === "CANCELLED") {
+      transaction.status = remoteStatusValue;
       await transaction.save();
     }
 

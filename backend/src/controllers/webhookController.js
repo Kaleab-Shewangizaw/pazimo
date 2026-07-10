@@ -4,6 +4,9 @@ const Event = require("../models/Event");
 const User = require("../models/User");
 const Payment = require("../models/Payment");
 const { processSuccessfulPayment } = require("./ticketController");
+const ChapaService = require("../services/chapaService");
+const { flagTamperAttempt } = require("../utils/fraudGuard");
+const { amountsMatch } = require("../utils/pricing");
 
 const CHAPA_PAYMENT_GRACE_MS = 2 * 60 * 1000;
 
@@ -72,6 +75,38 @@ const chapaWebhook = async (req, res) => {
 
       if (isSuccessEvent) {
         if (payment.status !== "PAID") {
+          // Never fulfill off the webhook body alone — anyone who can guess a
+          // tx_ref could POST a fake "success" payload here. Confirm directly
+          // with Chapa's own verify API (the authoritative source for both
+          // status and the amount actually paid) before creating any ticket.
+          let verifyResult;
+          try {
+            verifyResult = await ChapaService.verify(txRef);
+          } catch (err) {
+            console.error("Chapa verify failed during webhook fulfillment:", err.message);
+            return res.status(502).json({ error: "Could not verify payment with Chapa" });
+          }
+
+          const verifiedStatus = String(
+            verifyResult?.data?.status || verifyResult?.status || ""
+          ).toLowerCase();
+          const verifiedAmount = verifyResult?.data?.amount;
+
+          if (verifiedStatus !== "success" || !amountsMatch(verifiedAmount, payment.price)) {
+            await flagTamperAttempt({
+              phone: payment.paymentPhone || payment.contact,
+              userId: payment.userId,
+              reason: "Chapa webhook claimed success but verify() disagreed",
+              meta: {
+                transactionId: txRef,
+                expectedAmount: payment.price,
+                verifiedAmount,
+                verifiedStatus,
+              },
+            });
+            return res.status(400).json({ error: "Payment could not be verified with Chapa" });
+          }
+
           payment.status = "PAID";
           payment.santimPayResponse = data;
           await payment.save();
@@ -130,9 +165,7 @@ const chapaWebhook = async (req, res) => {
 
     // Legacy fallback flow: pre-created pending tickets
     if (isSuccessEvent) {
-      const { amount } = data;
-
-      console.log("Legacy ticket webhook received:", { tx_ref: txRef, amount });
+      console.log("Legacy ticket webhook received:", { tx_ref: txRef });
 
       // Find pending ticket purchase by reference
       const tickets = await Ticket.find({
@@ -145,15 +178,36 @@ const chapaWebhook = async (req, res) => {
         return res.status(200).json({ message: "No matching payment or pending tickets" });
       }
 
+      // Don't trust the webhook body's amount — confirm directly with Chapa.
+      let verifyResult;
+      try {
+        verifyResult = await ChapaService.verify(txRef);
+      } catch (err) {
+        console.error("Chapa verify failed during legacy webhook fulfillment:", err.message);
+        return res.status(502).json({ error: "Could not verify payment with Chapa" });
+      }
+
+      const verifiedStatus = String(
+        verifyResult?.data?.status || verifyResult?.status || ""
+      ).toLowerCase();
+      const verifiedAmount = verifyResult?.data?.amount;
+
       // Verify payment amount matches ticket total
       const totalAmount = tickets.reduce(
         (sum, ticket) => sum + ticket.price,
         0
       );
-      if (Math.abs(totalAmount - amount) > 0.01) {
-        console.log("Amount mismatch:", {
+      if (verifiedStatus !== "success" || !amountsMatch(verifiedAmount, totalAmount)) {
+        console.log("Amount/status mismatch:", {
           expected: totalAmount,
-          received: amount,
+          verifiedAmount,
+          verifiedStatus,
+        });
+        await flagTamperAttempt({
+          phone: tickets[0]?.guestPhone || tickets[0]?.user?.phoneNumber,
+          userId: tickets[0]?.user?._id,
+          reason: "Chapa legacy webhook claimed success but verify() disagreed",
+          meta: { transactionId: txRef, expectedAmount: totalAmount, verifiedAmount, verifiedStatus },
         });
         return res.status(400).json({ error: "Amount mismatch" });
       }

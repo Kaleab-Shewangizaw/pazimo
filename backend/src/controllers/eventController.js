@@ -1,11 +1,14 @@
 const Event = require("../models/Event");
 const User = require("../models/User");
+const Payment = require("../models/Payment");
+const SantimTransaction = require("../models/SantimTransaction");
 const { StatusCodes } = require("http-status-codes");
 const { BadRequestError, NotFoundError } = require("../errors");
 const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 const {
   generateShortId,
   slugify,
@@ -31,6 +34,50 @@ const toDateOrUndefined = (value) => {
   if (!value) return undefined;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+
+// Roles allowed to see full, unsanitized event data (draft events, organizer
+// email, internal ticket-wave config) on otherwise-public listing endpoints.
+const PRIVILEGED_EVENT_ROLES = ["admin", "organizer", "partner"];
+
+const sanitizePublicOrganizer = (organizer) => {
+  if (!organizer || typeof organizer !== "object") return organizer;
+  const { firstName, lastName, fullName, organizerProfile } = organizer;
+  return {
+    _id: organizer._id,
+    firstName,
+    lastName,
+    fullName: fullName || `${firstName || ""} ${lastName || ""}`.trim(),
+    organizerProfile: organizerProfile
+      ? { organization: organizerProfile.organization }
+      : undefined,
+  };
+};
+
+const sanitizePublicTicketTypes = (ticketTypes = []) =>
+  ticketTypes.map((ticket) => ({
+    _id: ticket._id,
+    name: ticket.name,
+    price: ticket.price,
+    priceETB: ticket.priceETB,
+    priceUSD: ticket.priceUSD,
+    quantity: ticket.quantity,
+    description: ticket.description,
+    available: ticket.available,
+  }));
+
+// Strips internal/admin-only fields (organizer email, ticket-wave scheduling
+// config, Mongoose version key) before an event is sent to an unauthenticated
+// caller.
+const sanitizePublicEvent = (eventDoc) => {
+  const event =
+    typeof eventDoc.toObject === "function" ? eventDoc.toObject() : eventDoc;
+  const { __v, organizer, ticketTypes, ...rest } = event;
+  return {
+    ...rest,
+    organizer: sanitizePublicOrganizer(organizer),
+    ticketTypes: sanitizePublicTicketTypes(ticketTypes),
+  };
 };
 
 const detectWaveOrderFromName = (name) => {
@@ -330,6 +377,15 @@ const buyTicket = async (req, res) => {
     throw new BadRequestError("Missing required fields");
   }
 
+  const buyer = await User.findById(userId).select("phoneNumber");
+  if (buyer?.phoneNumber && (await isPhoneBanned(buyer.phoneNumber))) {
+    return res.status(StatusCodes.FORBIDDEN).json({
+      status: "error",
+      code: "ACCOUNT_BANNED",
+      message: "This account is not permitted to purchase tickets.",
+    });
+  }
+
   const event = await Event.findById(eventId);
   if (!event) throw new NotFoundError("Event not found");
 
@@ -358,6 +414,45 @@ const buyTicket = async (req, res) => {
     throw new BadRequestError("Ticket sales ended");
   }
 
+  // A ticket only becomes active/paid if we can independently verify a
+  // completed payment for this exact purchase. Never trust the client's
+  // say-so here — that's what let anyone get a free active ticket by simply
+  // omitting paymentReference.
+  let isVerifiedPaid = false;
+  if (paymentReference) {
+    const paidMatch = await Payment.findOne({
+      transactionId: paymentReference,
+      status: "PAID",
+      eventId: event._id,
+      userId,
+    });
+
+    const completedMatch =
+      !paidMatch &&
+      (await SantimTransaction.findOne({
+        transactionId: paymentReference,
+        status: "COMPLETED",
+        "metaData.eventId": String(event._id),
+        "metaData.userId": String(userId),
+      }));
+
+    if (!paidMatch && !completedMatch) {
+      if (buyer?.phoneNumber) {
+        await flagTamperAttempt({
+          phone: buyer.phoneNumber,
+          userId,
+          reason: "Forged paymentReference on POST /events/:id/buy",
+          meta: { eventId: String(event._id), ticketType, quantity, paymentReference },
+        });
+      }
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Payment could not be verified.",
+      });
+    }
+    isVerifiedPaid = true;
+  }
+
   event.ticketTypes[index].quantity -= quantity;
   if (event.ticketTypes[index].quantity === 0) {
     event.ticketTypes[index].available = false;
@@ -377,13 +472,15 @@ const buyTicket = async (req, res) => {
     paymentReference:
       paymentReference ||
       `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    status: paymentReference ? "pending" : "active",
-    paymentStatus: paymentReference ? "pending" : "completed",
+    status: isVerifiedPaid ? "active" : "pending",
+    paymentStatus: isVerifiedPaid ? "completed" : "pending",
   });
 
   res.status(StatusCodes.CREATED).json({
     success: true,
-    message: "Tickets purchased successfully",
+    message: isVerifiedPaid
+      ? "Tickets purchased successfully"
+      : "Ticket reserved — awaiting payment confirmation",
     tickets: [ticket],
   });
 };
@@ -615,7 +712,23 @@ const getAllEvents = async (req, res) => {
   const page = Number.parseInt(req.query.page, 10) || 1;
   const limit = Number.parseInt(req.query.limit, 10) || 10;
 
-  const events = await Event.find()
+  // This route has no auth middleware in front of it (the public homepage
+  // and admin dashboard both hit it), so privilege is resolved per-request
+  // from optionalAuth instead. Anonymous callers only ever get published,
+  // public events with sanitized fields; admins/organizers keep seeing
+  // everything, matching the existing admin dashboard behavior.
+  const isPrivileged =
+    !!req.user && PRIVILEGED_EVENT_ROLES.includes(req.user.role);
+
+  const query = {};
+  if (!isPrivileged) {
+    query.status = "published";
+    query.$or = [{ isPublic: true }, { isPublic: { $exists: false } }];
+  } else if (req.query.status) {
+    query.status = req.query.status;
+  }
+
+  const events = await Event.find(query)
     .populate("category", "name description")
     .populate({
       path: "organizer",
@@ -669,14 +782,16 @@ const getAllEvents = async (req, res) => {
   }
 
   const eventsWithTicketsSold = events.map((event) => {
-    const plainEvent = event.toObject();
+    const plainEvent = isPrivileged
+      ? event.toObject()
+      : sanitizePublicEvent(event);
     return {
       ...plainEvent,
       ticketsSold: ticketStatsByEvent.get(event._id.toString()) || 0,
     };
   });
 
-  const total = await Event.countDocuments();
+  const total = await Event.countDocuments(query);
 
   res.status(StatusCodes.OK).json({
     status: "success",
@@ -733,7 +848,7 @@ const getEventDetails = async (req, res) => {
       .populate("category", "name description")
       .populate({
         path: "organizer",
-        select: "firstName lastName email",
+        select: "firstName lastName",
         populate: {
           path: "organizerProfile",
           select: "organization",
@@ -741,9 +856,9 @@ const getEventDetails = async (req, res) => {
       });
 
     if (!event) {
-      return res.status(StatusCodes.NOT_FOUND).json({ 
-        status: "error", 
-        message: "Event not found" 
+      return res.status(StatusCodes.NOT_FOUND).json({
+        status: "error",
+        message: "Event not found"
       });
     }
 
@@ -753,7 +868,9 @@ const getEventDetails = async (req, res) => {
       await event.save();
     }
 
-    res.status(StatusCodes.OK).json({ status: "success", data: event });
+    res
+      .status(StatusCodes.OK)
+      .json({ status: "success", data: sanitizePublicEvent(event) });
   } catch (error) {
     console.error("[EVENT-DETAILS] Error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -778,7 +895,7 @@ const getEventDetailsByShortId = async (req, res) => {
       .populate("category", "name description")
       .populate({
         path: "organizer",
-        select: "firstName lastName email",
+        select: "firstName lastName",
         populate: {
           path: "organizerProfile",
           select: "organization",
@@ -798,7 +915,9 @@ const getEventDetailsByShortId = async (req, res) => {
       await event.save();
     }
 
-    res.status(StatusCodes.OK).json({ status: "success", data: event });
+    res
+      .status(StatusCodes.OK)
+      .json({ status: "success", data: sanitizePublicEvent(event) });
   } catch (error) {
     console.error("[EVENT-DETAILS-BY-SHORT-ID] Error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -840,7 +959,7 @@ const getPublicEvents = async (req, res) => {
       .populate("category", "name description")
       .populate({
         path: "organizer",
-        select: "firstName lastName email",
+        select: "firstName lastName",
         populate: {
           path: "organizerProfile",
           select: "organization",
@@ -867,7 +986,7 @@ const getPublicEvents = async (req, res) => {
 
     res.status(StatusCodes.OK).json({
       status: "success",
-      data: events,
+      data: events.map(sanitizePublicEvent),
       meta: {
         total,
         limit: hasLimit ? safeLimit : undefined,

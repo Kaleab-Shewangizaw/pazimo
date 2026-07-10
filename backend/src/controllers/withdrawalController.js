@@ -13,7 +13,9 @@ const { calculateOrganizerBalance } = require("../services/financeService");
 // Get organizer's available balance
 const getOrganizerBalance = async (req, res) => {
   try {
-    const { organizerId } = req.params;
+    // Organizers may only ever see their own balance; only admins can view another's.
+    const organizerId =
+      req.user.role === "organizer" ? req.user.userId : req.params.organizerId;
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
     const balanceData = await calculateOrganizerBalance(organizerId, currency);

@@ -385,7 +385,9 @@ const login = async (req, res) => {
     if (!user.isActive) {
       return res.status(StatusCodes.FORBIDDEN).json({
         status: "error",
+        code: "ACCOUNT_BANNED",
         message:
+          user.banReason ||
           "Your account is not active. Please contact your administrator.",
       });
     }
@@ -494,7 +496,9 @@ const updatePassword = async (req, res) => {
 // Update profile
 const updateProfile = async (req, res) => {
   try {
-    const { firstName, lastName, email, phoneNumber } = req.body;
+    // Phone number is not editable here (it's the user's verified login
+    // identifier) — only accept name and email changes.
+    const { firstName, lastName, email } = req.body;
 
     if (!req.user || !req.user._id) {
       return res.status(401).json({
@@ -518,7 +522,7 @@ const updateProfile = async (req, res) => {
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { firstName, lastName, email, phoneNumber },
+      { firstName, lastName, email },
       { new: true, runValidators: true },
     ).select("-password");
 
@@ -649,7 +653,8 @@ const adminLogin = async (req, res) => {
       if (!admin.isActive) {
         return res.status(403).json({
           status: "error",
-          message: "Access denied. Account is not active.",
+          code: "ACCOUNT_BANNED",
+          message: admin.banReason || "Access denied. Account is not active.",
         });
       }
 
@@ -678,7 +683,8 @@ const adminLogin = async (req, res) => {
     if (!partner.isActive) {
       return res.status(403).json({
         status: "error",
-        message: "Access denied. Account is not active.",
+        code: "ACCOUNT_BANNED",
+        message: partner.banReason || "Access denied. Account is not active.",
       });
     }
 
