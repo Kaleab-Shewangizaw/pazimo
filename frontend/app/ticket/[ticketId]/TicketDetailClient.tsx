@@ -133,25 +133,29 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
   const eventImageUrl = buildEventImageUrl(ticket.event.coverImages);
 
   return (
-    <div className=" bg-gray-50  dark:bg-background py-20 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
-      <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl shadow-xl dark:shadow-none  overflow-hidden">
+    <div className="relative min-h-screen w-full">
+      {/* Full-screen event backdrop */}
+      <div className="fixed inset-0 -z-10 overflow-hidden bg-gray-50 dark:bg-background">
+        {eventImageUrl ? (
+          <>
+            <Image
+              src={eventImageUrl}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="scale-110 object-cover blur-md"
+            />
+            <div className="absolute inset-0 bg-black/50" />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/35 to-black/80" />
+          </>
+        ) : null}
+      </div>
+
+      <div className="relative py-20 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
+      <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl shadow-2xl ring-1 ring-white/10 overflow-hidden">
         {/* Blue header block */}
         <div className="relative overflow-hidden bg-gradient-to-br from-[#06283D] to-[#1A5D8C] px-7 py-10">
-          {eventImageUrl ? (
-            <>
-              <Image
-                src={eventImageUrl}
-                alt=""
-                fill
-                priority
-                sizes="384px"
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-br from-[#06283D]/95 via-[#0a3a57]/85 to-[#1A5D8C]/75" />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#06283D] via-[#06283D]/10 to-transparent" />
-            </>
-          ) : null}
-
           <span className="pointer-events-none absolute -bottom-4 right-5 select-none text-6xl font-black tracking-tight text-white/10 whitespace-nowrap">
             {watermark}
           </span>
@@ -198,8 +202,8 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
 
         {/* Perforation with die-cut notches */}
         <div className="relative">
-          <div className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background" />
-          <div className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background" />
+          <div className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full bg-black/50 backdrop-blur-sm" />
+          <div className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-black/50 backdrop-blur-sm" />
           <div className="mx-5 border-t-2 border-dashed border-gray-300 dark:border-border" />
         </div>
 
@@ -228,7 +232,8 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
           </div>
         </div>
 
-      
+
+      </div>
       </div>
     </div>
   );
