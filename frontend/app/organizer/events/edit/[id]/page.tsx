@@ -1026,27 +1026,27 @@ export default function EditEventPage() {
           }
         >
           <div className="flex w-full flex-col gap-6">
-            <section className="rounded-[28px]  border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900 p-6 text-white shadow-sm sm:p-8">
-              <div className="flex items-center ">
+            <section className="rounded-[28px]  border-slate-200 dark:border-slate-800 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-gradient-to-br from-slate-950 via-slate-900 to-sky-900 p-6 text-white shadow-sm sm:p-8">
+              <div className="flex items-center min-w-0">
                 <Button
                 type="button"
                 variant="ghost"
                 onClick={() => router.back()}
-                className=" h-10 cursor-pointer rounded-full border border-white/10 bg-white/5 px-4 text-white hover:bg-white/10 hover:text-white"
+                className=" h-10 shrink-0 cursor-pointer rounded-full border border-white/10 bg-white/5 px-4 text-white hover:bg-white/10 hover:text-white"
               >
                 <ArrowLeft className=" h-4 w-4" />
-               
+
               </Button>
 
-              <h1 className="text-xl font-bold ml-5">
+              <h1 className="text-xl font-bold ml-5 truncate">
                 Edit Event
               </h1>
               </div>
-                
-                <Badge className="rounded-full bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/10">
+
+                <Badge className="rounded-full bg-white/10 px-3 py-1 text-xs text-white hover:bg-white/10 self-start sm:self-auto">
                   Organizer event editor
                 </Badge>
-           
+
             </section>
 
             <BasicInfoSection

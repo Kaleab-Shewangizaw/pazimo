@@ -154,7 +154,7 @@ export function BasicInfoSection({
 
         <div className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/40 p-4 sm:p-5">
           <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Schedule</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Reference date: {currentDate}</p>

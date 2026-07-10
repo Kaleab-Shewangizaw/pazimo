@@ -80,8 +80,8 @@ export default function OrganizerSignUpPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-[400px]">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
+      <Card className="w-full max-w-[400px]">
         <CardHeader>
           <CardTitle>Create Organizer Account</CardTitle>
           <CardDescription>Sign up to start managing your events</CardDescription>

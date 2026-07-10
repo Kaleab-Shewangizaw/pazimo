@@ -99,7 +99,7 @@ export default function CreateCampaignPage() {
   }, [limit]);
 
   return (
-    <div className="w-full h-full flex bg-white dark:bg-black rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-sm">
+    <div className="w-full h-full flex flex-col lg:flex-row bg-white dark:bg-black rounded-2xl border border-gray-200 dark:border-gray-800 overflow-x-hidden overflow-y-auto lg:overflow-hidden shadow-sm">
       <CustomCampaignModal
         isOpen={showCustomCampaign}
         onClose={() => setShowCustomCampaign(false)}
@@ -108,7 +108,7 @@ export default function CreateCampaignPage() {
       />
 
       {/* Left Panel - Hero Section */}
-      <div className="w-1/2 relative overflow-hidden flex flex-col justify-center p-12 text-white bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-500">
+      <div className="w-full lg:w-1/2 shrink-0 relative overflow-hidden flex flex-col justify-center p-8 sm:p-10 lg:p-12 text-white bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-500">
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <filter id="noiseFilter">
@@ -164,13 +164,13 @@ export default function CreateCampaignPage() {
           </div>
 
           <div>
-            <h1 className="text-5xl font-extrabold tracking-tight leading-tight mb-4 drop-shadow-sm">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight mb-4 drop-shadow-sm">
               Engage your fans <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-200">
                 like never before.
               </span>
             </h1>
-            <p className="text-lg text-blue-100 leading-relaxed font-light border-l-4 border-blue-400/50 pl-4">
+            <p className="text-base sm:text-lg text-blue-100 leading-relaxed font-light border-l-4 border-blue-400/50 pl-4">
               Don&apos;t wait for them to check social media. Send targeted SMS
               campaigns directly to their phones for new events, discounts, and
               updates.
@@ -194,9 +194,9 @@ export default function CreateCampaignPage() {
       </div>
 
       {/* Right Panel - Top Customers */}
-      <div className="w-1/2 flex flex-col h-full bg-white dark:bg-black">
+      <div className="w-full lg:w-1/2 shrink-0 lg:shrink flex flex-col h-[600px] lg:h-full bg-white dark:bg-black">
         {/* Header */}
-        <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-white dark:bg-black shrink-0">
+        <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 flex flex-wrap gap-3 justify-between items-center bg-white dark:bg-black shrink-0">
           <div>
             <h3 className="font-bold text-gray-900 dark:text-gray-100 text-xl flex items-center gap-2">
               <Crown className="text-yellow-500 fill-yellow-500" size={24} />
@@ -238,28 +238,28 @@ export default function CreateCampaignPage() {
               {topCustomers.map((customer, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group px-6"
+                  className="flex items-center justify-between gap-3 p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors group px-4 sm:px-6"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
                     <div
                       className={`
-                        w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
+                        shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm
                         ${i < 3 ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 ring-2 ring-yellow-500/20" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"}
                     `}
                     >
                       {i + 1}
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-gray-100">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 truncate">
                         {customer.name || "Customer"}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5 truncate">
                         {customer.phone}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-6 text-sm">
+                  <div className="flex items-center gap-4 sm:gap-6 text-sm shrink-0">
                     <div className="text-right">
                       <span className="block font-bold text-gray-900 dark:text-gray-100">
                         {customer.eventsCount}

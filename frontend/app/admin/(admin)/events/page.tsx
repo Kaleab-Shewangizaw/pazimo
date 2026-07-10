@@ -794,8 +794,8 @@ export default function EventsPage() {
 
       {/* Pagination Controls */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-6">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-gray-600 dark:text-gray-400">
               Showing {startIndex + 1} to {Math.min(endIndex, totalEvents)} of{" "}
               {totalEvents} events
@@ -820,7 +820,7 @@ export default function EventsPage() {
             <span className="text-sm text-gray-600 dark:text-gray-400">per page</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"

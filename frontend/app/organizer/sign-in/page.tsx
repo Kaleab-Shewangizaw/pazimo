@@ -56,8 +56,8 @@ export default function OrganizerSignInPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-[400px]">
+    <div className="flex items-center justify-center min-h-screen bg-gray-50 px-4">
+      <Card className="w-full max-w-[400px]">
         <CardHeader>
           <CardTitle>Organizer Sign In</CardTitle>
           <CardDescription>Sign in to manage your events</CardDescription>

@@ -311,7 +311,7 @@ export default function EventsPage() {
   if (!authState) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <Card className="w-[350px] dark:bg-black dark:border-gray-800">
+        <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
           <CardHeader>
             <CardTitle className="dark:text-gray-100">Authentication Required</CardTitle>
             <CardDescription className="dark:text-gray-400">
@@ -338,7 +338,7 @@ export default function EventsPage() {
     if (!isAuthenticated || !token || user.role !== "organizer") {
       return (
         <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-          <Card className="w-[350px] dark:bg-black dark:border-gray-800">
+          <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
             <CardHeader>
               <CardTitle className="dark:text-gray-100">Authentication Required</CardTitle>
               <CardDescription className="dark:text-gray-400">
@@ -361,7 +361,7 @@ export default function EventsPage() {
     console.error("Error parsing auth state:", error);
     return (
       <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <Card className="w-[350px] dark:bg-black dark:border-gray-800">
+        <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
           <CardHeader>
             <CardTitle className="dark:text-gray-100">Error</CardTitle>
             <CardDescription className="dark:text-gray-400">
@@ -395,7 +395,7 @@ export default function EventsPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <Card className="w-[350px] dark:bg-black dark:border-gray-800">
+        <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
           <CardHeader>
             <CardTitle className="dark:text-gray-100">Error</CardTitle>
             <CardDescription className="dark:text-gray-400">{error}</CardDescription>

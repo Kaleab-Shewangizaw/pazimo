@@ -214,10 +214,10 @@ export default function OrganizerRegistrationsPage() {
   }
 
   return (
-    <div className="container mx-auto py-10 p-10">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto py-10 p-4 sm:p-10">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-8">
         <h1 className="text-3xl font-bold">Organizer Registrations</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <Select
             value={itemsPerPage.toString()}
             onValueChange={(value) => {
@@ -225,7 +225,7 @@ export default function OrganizerRegistrationsPage() {
               setCurrentPage(1)
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full sm:w-[180px]">
               <SelectValue placeholder="Items per page" />
             </SelectTrigger>
             <SelectContent>
@@ -242,7 +242,7 @@ export default function OrganizerRegistrationsPage() {
         </div>
       </div>
 
-      <div className="flex gap-4 mb-6">
+      <div className="flex flex-col gap-4 mb-6 sm:flex-row">
         <div className="flex-1">
           <Input
             placeholder="Search by name or organization..."
@@ -255,7 +255,7 @@ export default function OrganizerRegistrationsPage() {
           value={statusFilter}
           onValueChange={setStatusFilter}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
@@ -357,11 +357,11 @@ export default function OrganizerRegistrationsPage() {
       </div>
 
       {/* Pagination Controls */}
-      <div className="flex items-center justify-between mt-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-4">
         <div className="text-sm text-muted-foreground">
           Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalPages * itemsPerPage)} of {totalPages * itemsPerPage} registrations
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -370,7 +370,7 @@ export default function OrganizerRegistrationsPage() {
           >
             Previous
           </Button>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center gap-1">
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
               <Button
                 key={page}

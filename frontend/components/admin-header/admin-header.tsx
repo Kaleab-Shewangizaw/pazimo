@@ -198,15 +198,15 @@ export default function AdminHeader({
           </div>
 
           {/* Mobile: Logo/Title */}
-          <div className="flex md:hidden dark:text-white items-center">
-            <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Admin Panel</h1>
+          <div className="flex md:hidden dark:text-white items-center min-w-0">
+            <h1 className="truncate text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Admin Panel</h1>
           </div>
 
           {/* Mobile Hamburger Menu */}
-          <div className="flex md:hidden items-center gap-2">
+          <div className="flex md:hidden items-center gap-1 shrink-0">
             {/* Mobile Payment Switch */}
             <div className="flex items-center gap-1 mr-1">
-              <span className="text-xs font-medium text-gray-700 dark:text-white">
+              <span className="hidden sm:inline text-xs font-medium text-gray-700 dark:text-white">
                 {activeProvider === "CHAPA" ? "Chapa" : "Santim"}
               </span>
               <Switch

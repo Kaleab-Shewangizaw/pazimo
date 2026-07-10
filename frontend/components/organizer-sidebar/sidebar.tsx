@@ -85,7 +85,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -99,7 +99,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/events")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -111,7 +111,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/rsvp-builder")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -123,7 +123,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/invitations")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -137,7 +137,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/customers")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -151,7 +151,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/campaign")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -163,7 +163,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/qr-scanner")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -175,7 +175,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/withdrawals")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -189,7 +189,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               onClick={handleLinkClick}
               className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                 isActive("/organizer/account")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                   : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
               }`}
             >
@@ -206,7 +206,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 onClick={handleLinkClick}
                 className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                   isActive("/organizer/notifications")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                     : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
                 }`}
               >
@@ -220,7 +220,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 onClick={handleLinkClick}
                 className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
                   isActive("/organizer/help")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300"
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
                     : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
                 }`}
               >

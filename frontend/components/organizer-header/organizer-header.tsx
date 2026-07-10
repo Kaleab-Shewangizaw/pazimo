@@ -207,9 +207,10 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
           {/* Logo */}
         
           {/* Hamburger for mobile - now only triggers external sidebar */}
-          <div className="flex md:hidden items-center">
+          <div className="flex md:hidden items-center gap-1">
+            <ThemeToggle />
             <button
-              className="p-2 rounded-md text-gray-700 hover:text-[#115db1] focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
+              className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
               aria-label="Open menu"
               onClick={onMenuClick}
             >
@@ -225,7 +226,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="relative p-2 h-auto w-auto text-gray-700 dark:text-gray-300 hover:text-[#115db1] hover:bg-blue-50 transition-all duration-200 rounded-full"
+                  className="relative p-2 h-auto w-auto text-gray-700 dark:text-gray-300 hover:text-[#115db1] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all duration-200 rounded-full"
                   onClick={handleNotificationClick}
                 >
                   <Bell className="h-5 w-5" />
@@ -239,36 +240,38 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
 
                 {/* Notification Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-black rounded-lg shadow-xl border dark:border-gray-600 border-gray-200 z-50 max-h-96 overflow-hidden">
-                    <div className="p-4 border-b border-gray-100 dark:border-gray-900">
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 z-50 max-h-96 overflow-hidden">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-800">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900 dark:text-gray-300">Notifications</h3>
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100">Notifications</h3>
                         {unreadCount > 0 && (
-                          <Badge className="bg-blue-100 text-blue-700 text-xs">
+                          <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs">
                             {unreadCount} new
                           </Badge>
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="max-h-64 overflow-y-auto">
                       {loading ? (
                         <div className="p-4 text-center">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 dark:border-blue-500 mx-auto"></div>
-                          <p className="text-sm text-gray-500 mt-2">Loading...</p>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Loading...</p>
                         </div>
                       ) : notifications.length === 0 ? (
                         <div className="p-6 text-center">
-                          <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                          <p className="text-sm text-gray-500">No notifications yet</p>
+                          <Bell className="h-8 w-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500 dark:text-gray-400">No notifications yet</p>
                         </div>
                       ) : (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                        <div className="divide-y divide-gray-100 dark:divide-gray-800">
                           {notifications.map((notification) => (
                             <div
                               key={notification._id}
-                              className={`p-4 hover:bg-gray-50 dark:hover:bg-black/90 transition-colors cursor-pointer ${
-                                !notification.read ? "bg-blue-50 dark:bg-blue-900" : ""
+                              className={`p-4 border-l-4 transition-colors cursor-pointer ${
+                                !notification.read
+                                  ? "border-blue-500 bg-blue-50/70 hover:bg-blue-50 dark:bg-blue-500/10 dark:hover:bg-blue-500/15"
+                                  : "border-transparent hover:bg-gray-50 dark:hover:bg-gray-800/60"
                               }`}
                               onClick={() => {
                                 setShowNotifications(false)
@@ -278,18 +281,20 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                               <div className="flex items-start gap-3">
                                 <div className="flex-shrink-0 mt-1">
                                   <div className={`p-1.5 rounded-full ${
-                                    notification.read ? "bg-gray-100" : "bg-blue-100"
+                                    notification.read ? "bg-gray-100 dark:bg-gray-800" : "bg-blue-100 dark:bg-blue-900/40"
                                   }`}>
                                     {getNotificationIcon(notification.type, notification.status)}
                                   </div>
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className={`text-sm font-medium ${
-                                    notification.read ? "text-gray-700 dark:text-gray-300" : "text-blue-900"
+                                  <p className={`text-sm ${
+                                    notification.read
+                                      ? "font-medium text-gray-700 dark:text-gray-300"
+                                      : "font-semibold text-gray-900 dark:text-gray-100"
                                   }`}>
                                     {notification.message}
                                   </p>
-                                  <p className="text-xs text-gray-500 mt-1">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     {formatTimeAgo(notification.createdAt)}
                                   </p>
                                 </div>
@@ -304,13 +309,13 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                         </div>
                       )}
                     </div>
-                    
+
                     {notifications.length > 0 && (
-                      <div className="p-3 border-t border-gray-100 dark:border-gray-600">
+                      <div className="p-3 border-t border-gray-100 dark:border-gray-800">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          className="w-full text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/30"
                           onClick={handleViewAllNotifications}
                         >
                           View all notifications

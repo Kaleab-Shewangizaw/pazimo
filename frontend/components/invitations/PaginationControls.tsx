@@ -27,12 +27,12 @@ export default function PaginationControls({
   const end = endIndex ?? start + itemsPerPage;
 
   return (
-    <div className="px-6 py-3 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-black rounded-b-xl">
+    <div className="px-4 sm:px-6 py-3 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between bg-white dark:bg-black rounded-b-xl">
       <div className="text-sm text-gray-700 dark:text-gray-300">
         Showing {start + 1} to {Math.min(end, totalItems)} of {totalItems}{" "}
         {itemName}
       </div>
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center gap-2">
         <button
           onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           disabled={currentPage === 1}

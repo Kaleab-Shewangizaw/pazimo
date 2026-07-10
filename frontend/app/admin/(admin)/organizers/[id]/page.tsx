@@ -770,8 +770,8 @@ export default function OrganizerDetailPage({
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-6">
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mt-6">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="text-sm text-muted-foreground">
                       Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                       {Math.min(
@@ -797,7 +797,7 @@ export default function OrganizerDetailPage({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -809,7 +809,7 @@ export default function OrganizerDetailPage({
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-1">
                       {Array.from({ length: totalPages }, (_, i) => i + 1).map(
                         (page) => (
                           <Button
