@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, User, Mail, Phone, Users } from "lucide-react"
 import { useAdminAuthStore } from "@/store/adminAuthStore"
 import { toast } from "sonner"
@@ -19,8 +18,7 @@ export default function AddUserPage() {
     lastName: "",
     email: "",
     password: "",
-    phoneNumber: "",
-    role: "customer"
+    phoneNumber: ""
   })
   const [errors, setErrors] = useState({
     firstName: "",
@@ -236,27 +234,12 @@ export default function AddUserPage() {
         <div className="space-y-8">
           <Card>
             <CardContent className="p-6">
-              <h2 className="text-lg font-bold mb-4">Role</h2>
-
-              <div className="mb-6">
-                <label className="block text-gray-700 font-medium mb-2">User Role</label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value) => setFormData({ ...formData, role: value })}
-                >
-                  <SelectTrigger className="h-12">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="customer">Customer</SelectItem>
-                    <SelectItem value="organizer">Organizer</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                New accounts created here are always regular customers. Organizer accounts are created via organizer sign-up, and admin accounts are seeded directly in the database.
+              </p>
 
               <div className="border-t pt-6">
-                <Button 
+                <Button
                   className="w-full bg-blue-600 hover:bg-blue-700"
                   onClick={handleSubmit}
                   disabled={isSubmitting}
