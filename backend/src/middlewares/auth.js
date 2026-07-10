@@ -149,6 +149,19 @@ const restrictTo = (...roles) => {
   };
 };
 
+// Lets a request through if the caller is an admin OR is asking for their
+// own record (req.params.id matches their own account). Used on routes that
+// are otherwise admin-only but also serve as a "get/update my profile" path.
+const selfOrAdmin = (req, res, next) => {
+  if (req.user.role === "admin" || req.user._id.toString() === req.params.id) {
+    return next();
+  }
+  return res.status(403).json({
+    status: "error",
+    message: "You do not have permission to perform this action",
+  });
+};
+
 const isAdmin = async (req, res, next) => {
   try {
     if (req.user.role !== "admin" && req.user.role !== "partner") {
@@ -171,5 +184,6 @@ module.exports = {
   authenticateUser,
   optionalAuth,
   restrictTo,
+  selfOrAdmin,
   isAdmin,
 };
