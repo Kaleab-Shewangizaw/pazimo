@@ -29,6 +29,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# User-uploaded files
+uploads/
+
 # Local-only admin seeding scripts - never push these
 scripts/seed-admin.js
 scripts/seed-admin-production.js
