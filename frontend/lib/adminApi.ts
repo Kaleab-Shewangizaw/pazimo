@@ -26,4 +26,29 @@ export const adminApi = {
     })
     return response.json()
   },
-} 
+
+  patch: async (endpoint: string, data: any) => {
+    const { token } = useAdminAuthStore.getState()
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    })
+    return response.json()
+  },
+
+  delete: async (endpoint: string) => {
+    const { token } = useAdminAuthStore.getState()
+    const response = await fetch(`${API_URL}${endpoint}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    return response.json()
+  },
+}

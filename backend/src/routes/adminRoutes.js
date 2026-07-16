@@ -13,6 +13,24 @@ const {
 	getChapaTransactionEvents,
 	getChapaSummary,
 } = require('../controllers/chapaFinanceController');
+const {
+	listGiftCards,
+	createGiftCard,
+	getGiftCard,
+	updateGiftCardStatus,
+	cancelGiftCard,
+	topUpGiftCard,
+	getGiftCardPaymentStatus,
+	createGiftCardPayout,
+	listGiftCardPayouts,
+	getGiftCardTransactions,
+	getGiftCardFeed,
+	getPayoutBanks,
+} = require('../controllers/chapaGiftCardController');
+const {
+	getV2Payments,
+	getV2Payouts,
+} = require('../controllers/chapaV2Controller');
 
 // Admin dashboard stats
 router.get('/dashboard/stats', authenticateUser, restrictTo('admin'), getDashboardStats);
@@ -27,5 +45,23 @@ router.get('/finance/chapa/balances', authenticateUser, restrictTo('admin'), get
 router.get('/finance/chapa/transactions', authenticateUser, restrictTo('admin'), getChapaTransactions);
 router.get('/finance/chapa/transactions/:ref/events', authenticateUser, restrictTo('admin'), getChapaTransactionEvents);
 router.get('/finance/chapa/summary', authenticateUser, restrictTo('admin'), getChapaSummary);
+
+// Chapa API v2 (scoped dashboard keys — payments/payouts created through v2 only)
+router.get('/finance/chapa/v2/payments', authenticateUser, restrictTo('admin'), getV2Payments);
+router.get('/finance/chapa/v2/payouts', authenticateUser, restrictTo('admin'), getV2Payouts);
+
+// Chapa Link gift cards (static paths before /:cardNumber so they don't get captured)
+router.get('/finance/chapa/giftcards/feed', authenticateUser, restrictTo('admin'), getGiftCardFeed);
+router.get('/finance/chapa/giftcards/banks', authenticateUser, restrictTo('admin'), getPayoutBanks);
+router.get('/finance/chapa/giftcards/payouts', authenticateUser, restrictTo('admin'), listGiftCardPayouts);
+router.get('/finance/chapa/giftcards/payments/:reference/status', authenticateUser, restrictTo('admin'), getGiftCardPaymentStatus);
+router.get('/finance/chapa/giftcards', authenticateUser, restrictTo('admin'), listGiftCards);
+router.post('/finance/chapa/giftcards', authenticateUser, restrictTo('admin'), createGiftCard);
+router.get('/finance/chapa/giftcards/:cardNumber', authenticateUser, restrictTo('admin'), getGiftCard);
+router.patch('/finance/chapa/giftcards/:cardNumber', authenticateUser, restrictTo('admin'), updateGiftCardStatus);
+router.delete('/finance/chapa/giftcards/:cardNumber', authenticateUser, restrictTo('admin'), cancelGiftCard);
+router.post('/finance/chapa/giftcards/:cardNumber/topup', authenticateUser, restrictTo('admin'), topUpGiftCard);
+router.post('/finance/chapa/giftcards/:cardNumber/payouts', authenticateUser, restrictTo('admin'), createGiftCardPayout);
+router.get('/finance/chapa/giftcards/:cardNumber/transactions', authenticateUser, restrictTo('admin'), getGiftCardTransactions);
 
 module.exports = router;

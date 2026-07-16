@@ -59,6 +59,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/adminApi";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import GiftCardsSection from "@/components/admin/GiftCardsSection";
+import ChapaV2Section from "@/components/admin/ChapaV2Section";
 
 interface ChapaBalance {
   currency: string;
@@ -351,6 +354,14 @@ export default function ChapaFinancePage() {
         </div>
       </div>
 
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="giftcards">Gift Cards</TabsTrigger>
+          <TabsTrigger value="v2">API v2</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="mt-4 space-y-6">
       {summary?.truncated && (
         <Card className="border-yellow-300 dark:border-yellow-800">
           <CardContent className="flex items-center gap-2 py-3 text-sm text-yellow-700 dark:text-yellow-300">
@@ -697,6 +708,17 @@ export default function ChapaFinancePage() {
           </div>
         </CardContent>
       </Card>
+
+        </TabsContent>
+
+        <TabsContent value="giftcards" className="mt-4">
+          <GiftCardsSection />
+        </TabsContent>
+
+        <TabsContent value="v2" className="mt-4">
+          <ChapaV2Section />
+        </TabsContent>
+      </Tabs>
 
       {/* Transaction detail dialog */}
       <Dialog
