@@ -40,6 +40,18 @@ export interface CardOwnerInfo {
   currency?: string;
 }
 
+// Present only on top-ups that came from a ticket purchase (gift-card
+// routing) — recovered from our own Payment record via merchant_reference,
+// since Chapa's Link API never returns the buyer's identity.
+export interface CardBuyerInfo {
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  eventTitle?: string | null;
+  ticketType?: string | null;
+  quantity?: number | null;
+}
+
 export interface CardTransaction {
   kind: "topup" | "payout";
   direction: "in" | "out";
@@ -59,6 +71,7 @@ export interface CardTransaction {
   details: CardTransactionDetails | null;
   initiated_by: string | null;
   owner?: CardOwnerInfo | null;
+  buyer?: CardBuyerInfo | null;
 }
 
 const formatMoney = (value: number, currency: string) =>
@@ -113,13 +126,41 @@ export default function GiftCardTxTable({
               "Paid via",
               tx.details?.payment_method || tx.method || "—",
             ]);
-            if (tx.details?.payer_phone)
+            if (tx.buyer) {
+              // Ticket-purchase top-up — the real buyer, recovered from our
+              // own records (Chapa's Link API doesn't return this).
+              if (tx.buyer.name || tx.buyer.phone)
+                detailRows.push([
+                  "Bought by",
+                  <span key="buyer-name">
+                    {tx.buyer.name}
+                    {tx.buyer.phone && (
+                      <>
+                        {" "}
+                        <span className="font-mono">{tx.buyer.phone}</span>
+                      </>
+                    )}
+                  </span>,
+                ]);
+              if (tx.buyer.email)
+                detailRows.push(["Email", tx.buyer.email]);
+              if (tx.buyer.eventTitle)
+                detailRows.push([
+                  "Event",
+                  <span key="buyer-event">
+                    {tx.buyer.eventTitle}
+                    {tx.buyer.ticketType && ` — ${tx.buyer.ticketType}`}
+                    {tx.buyer.quantity ? ` × ${tx.buyer.quantity}` : ""}
+                  </span>,
+                ]);
+            } else if (tx.details?.payer_phone) {
               detailRows.push([
                 "Paid by",
                 <span className="font-mono" key="payer">
                   {tx.details.payer_phone}
                 </span>,
               ]);
+            }
           } else {
             if (tx.details?.destination === "bank") {
               detailRows.push(["Sent to", `${tx.details.bank_slug} account`]);

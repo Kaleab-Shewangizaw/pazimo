@@ -6,6 +6,8 @@ const SantimPayService = require("../services/santimPayService");
 const { processSuccessfulPayment } = require("./ticketController");
 
 const ChapaService = require("../services/chapaService");
+const ChapaGiftCardService = require("../services/chapaGiftCardService");
+const { amountsMatch } = require("../utils/pricing");
 
 // For web-checkout (card/redirect) payments: allow a short grace period before
 // treating a "failed" status as terminal, since the user may still be in-flight.
@@ -179,6 +181,39 @@ class PaymentController {
                     await new Promise((resolve) => setTimeout(resolve, backoff));
                   }
                 }
+              }
+            }
+          } else if (payment.provider === "chapa_giftcard") {
+            // Chapa Link gift-card top-up — verified against the Link API's own
+            // status endpoint (never trust client polling alone), keyed by the
+            // link_reference saved at initiation time.
+            if (!payment.giftCardLinkReference) {
+              console.error(`[GIFTCARD-VERIFY] Payment ${txn} has no giftCardLinkReference`);
+            } else {
+              try {
+                const statusData = await ChapaGiftCardService.getPaymentStatus(
+                  payment.giftCardLinkReference
+                );
+                const remoteStatus = String(statusData?.status || "").toLowerCase();
+                const remoteAmount = Number(statusData?.amount) / 100; // cents -> major unit
+
+                console.log(`[GIFTCARD-VERIFY] ${txn} -> status: ${remoteStatus}, amount: ${remoteAmount}`);
+
+                if (remoteStatus === "success") {
+                  if (!amountsMatch(remoteAmount, payment.price)) {
+                    console.error(`[GIFTCARD-VERIFY] Amount mismatch for ${txn}: expected ${payment.price}, got ${remoteAmount}`);
+                  } else {
+                    payment.status = "PAID";
+                    await payment.save();
+                    await processSuccessfulPayment(payment);
+                  }
+                } else if (remoteStatus === "failed" || remoteStatus === "cancelled") {
+                  payment.status = remoteStatus === "cancelled" ? "CANCELLED" : "FAILED";
+                  await payment.save();
+                }
+                // "pending" — leave as-is, frontend will poll again
+              } catch (err) {
+                console.error(`[GIFTCARD-VERIFY] Status check failed for ${txn}:`, err.message);
               }
             }
           } else {

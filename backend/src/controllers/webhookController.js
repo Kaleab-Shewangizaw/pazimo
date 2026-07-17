@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Payment = require("../models/Payment");
 const { processSuccessfulPayment } = require("./ticketController");
 const ChapaService = require("../services/chapaService");
+const ChapaGiftCardService = require("../services/chapaGiftCardService");
 const { flagTamperAttempt } = require("../utils/fraudGuard");
 const { amountsMatch } = require("../utils/pricing");
 
@@ -246,6 +247,135 @@ const chapaWebhook = async (req, res) => {
   }
 };
 
+// Chapa Link (gift card) webhook — Link is a separate product from the main
+// Chapa checkout API, with its own webhook URL that must be registered
+// through Chapa support/account manager (not the merchant dashboard). Fires
+// payment.success / payment.failed / payment.cancelled for gift-card top-ups
+// initiated from ticket checkout when gift-card routing is enabled.
+const chapaGiftCardWebhook = async (req, res) => {
+  try {
+    const signature = req.headers["link-app-signature"];
+    const webhookSecret = process.env.CHAPA_LINK_WEBHOOK_SECRET;
+
+    if (webhookSecret) {
+      // Per Chapa Link docs, the signature is HMAC-SHA256 of the secret,
+      // signed with itself — not the request body.
+      const expectedSignature = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(webhookSecret)
+        .digest("hex");
+
+      if (signature !== expectedSignature) {
+        console.log("[GIFTCARD-WEBHOOK] Invalid signature");
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+    } else {
+      console.warn(
+        "[GIFTCARD-WEBHOOK] CHAPA_LINK_WEBHOOK_SECRET is not configured. Skipping signature validation."
+      );
+    }
+
+    const { event, merchant_reference, status, link_app_reference } = req.body || {};
+    const normalizedEvent = String(event || "").toLowerCase();
+    const normalizedStatus = String(status || "").toLowerCase();
+    const txRef = merchant_reference;
+
+    if (!txRef) {
+      return res.status(400).json({ error: "Missing merchant_reference in webhook payload" });
+    }
+
+    const payment = await Payment.findOne({
+      transactionId: txRef,
+      provider: "chapa_giftcard",
+    });
+
+    if (!payment) {
+      console.log(`[GIFTCARD-WEBHOOK] No matching gift-card payment for ${txRef}`);
+      return res.status(200).json({ message: "No matching payment", transactionId: txRef });
+    }
+
+    const isSuccessEvent = normalizedEvent === "payment.success" || normalizedStatus === "success";
+    const isFailureEvent =
+      normalizedEvent === "payment.failed" ||
+      normalizedEvent === "payment.cancelled" ||
+      normalizedStatus === "failed" ||
+      normalizedStatus === "cancelled";
+
+    if (isSuccessEvent) {
+      if (payment.status !== "PAID") {
+        // Never fulfill off the webhook body alone — confirm directly with
+        // the Link status endpoint (authoritative for both status and the
+        // amount actually paid) before creating any ticket.
+        let statusData;
+        try {
+          statusData = await ChapaGiftCardService.getPaymentStatus(
+            payment.giftCardLinkReference || link_app_reference
+          );
+        } catch (err) {
+          console.error("[GIFTCARD-WEBHOOK] Status check failed:", err.message);
+          return res.status(502).json({ error: "Could not verify payment with Chapa Link" });
+        }
+
+        const verifiedStatus = String(statusData?.status || "").toLowerCase();
+        const verifiedAmount = Number(statusData?.amount) / 100; // cents -> major unit
+
+        if (verifiedStatus !== "success" || !amountsMatch(verifiedAmount, payment.price)) {
+          await flagTamperAttempt({
+            phone: payment.paymentPhone || payment.contact,
+            userId: payment.userId,
+            reason: "Chapa Link webhook claimed success but status check disagreed",
+            meta: {
+              transactionId: txRef,
+              expectedAmount: payment.price,
+              verifiedAmount,
+              verifiedStatus,
+            },
+          });
+          return res.status(400).json({ error: "Payment could not be verified with Chapa Link" });
+        }
+
+        payment.status = "PAID";
+        await payment.save();
+        const createdTicket = await processSuccessfulPayment(payment);
+
+        return res.status(200).json({
+          message: "Webhook processed and payment fulfilled",
+          transactionId: txRef,
+          ticketId: createdTicket?.ticketId || null,
+        });
+      }
+
+      return res.status(200).json({
+        message: "Webhook already fulfilled",
+        transactionId: txRef,
+      });
+    }
+
+    if (isFailureEvent) {
+      payment.status =
+        normalizedEvent === "payment.cancelled" || normalizedStatus === "cancelled"
+          ? "CANCELLED"
+          : "FAILED";
+      await payment.save();
+
+      return res.status(200).json({
+        message: "Webhook processed with failed/cancelled status",
+        transactionId: txRef,
+        paymentStatus: payment.status,
+      });
+    }
+
+    return res.status(200).json({
+      message: "Event not handled",
+      transactionId: txRef,
+    });
+  } catch (error) {
+    console.error("[GIFTCARD-WEBHOOK] error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 module.exports = {
   chapaWebhook,
+  chapaGiftCardWebhook,
 };

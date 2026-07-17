@@ -13,8 +13,15 @@ const Payment = new mongoose.Schema({
   method: String, // "email" or "sms"
   provider: {
     type: String,
-    enum: ["santim", "chapa"],
+    enum: ["santim", "chapa", "chapa_giftcard"],
     default: "santim",
+  },
+  // Populated only when provider === "chapa_giftcard": which card received
+  // the funds, and the Chapa Link reference used to verify/poll status.
+  giftCardNumber: String,
+  giftCardLinkReference: {
+    type: String,
+    index: true,
   },
   invitationType: {
     type: String, // "guest" or "paid"

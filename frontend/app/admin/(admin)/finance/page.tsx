@@ -61,6 +61,7 @@ import { toast } from "sonner";
 import { adminApi } from "@/lib/adminApi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftCardsSection from "@/components/admin/GiftCardsSection";
+import GiftCardRouting from "@/components/admin/GiftCardRouting";
 import ChapaV2Section from "@/components/admin/ChapaV2Section";
 
 interface ChapaBalance {
@@ -711,7 +712,8 @@ export default function ChapaFinancePage() {
 
         </TabsContent>
 
-        <TabsContent value="giftcards" className="mt-4">
+        <TabsContent value="giftcards" className="mt-4 space-y-4">
+          <GiftCardRouting />
           <GiftCardsSection />
         </TabsContent>
 

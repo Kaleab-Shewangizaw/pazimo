@@ -1,6 +1,12 @@
 const axios = require("axios");
 const { StatusCodes } = require("http-status-codes");
 const GiftCardActivity = require("../models/GiftCardActivity");
+const Payment = require("../models/Payment");
+const {
+  linkClient,
+  linkErrorMessage,
+  isLinkNotActivated,
+} = require("../services/chapaGiftCardService");
 
 // Best-effort local audit trail — a DB hiccup must never fail the Chapa call
 const recordActivity = async (entry) => {
@@ -14,33 +20,6 @@ const recordActivity = async (entry) => {
 const adminIdentity = (req) =>
   req.user?.email || req.user?.id || req.user?._id?.toString() || null;
 
-// Chapa Link (gift cards) is a separate product from the main payment API.
-// It needs its own API key — the regular CHAPA_SECRET_KEY is rejected by
-// api.chapa.link until Link is activated for the merchant account.
-const LINK_BASE_URL = "https://api.chapa.link";
-
-const linkClient = axios.create({
-  baseURL: LINK_BASE_URL,
-  timeout: 20000,
-});
-
-linkClient.interceptors.request.use((config) => {
-  const key = process.env.CHAPA_LINK_API_KEY || process.env.CHAPA_SECRET_KEY;
-  config.headers.Authorization = `Bearer ${key}`;
-  return config;
-});
-
-const linkErrorMessage = (error) => {
-  const data = error.response?.data;
-  if (typeof data?.message === "string") return data.message;
-  if (data?.message && typeof data.message === "object") {
-    return Object.values(data.message).flat().join(" ");
-  }
-  if (typeof data?.error === "string") return data.error;
-  if (typeof data === "string") return data;
-  return error.message || "Chapa Link request failed";
-};
-
 const handleLinkError = (res, error, action) => {
   const httpStatus = error.response?.status;
   const message = linkErrorMessage(error);
@@ -50,18 +29,10 @@ const handleLinkError = (res, error, action) => {
     data: error.response?.data,
   });
 
-  // The Link API answers with "Unauthorized ..." when the merchant account
-  // has no Link key yet — surface that as a distinct state so the admin UI
-  // can show setup instructions instead of a generic error.
-  const notActivated =
-    httpStatus === StatusCodes.UNAUTHORIZED ||
-    httpStatus === StatusCodes.FORBIDDEN ||
-    /unauthorized/i.test(message);
-
   res.status(httpStatus || StatusCodes.BAD_GATEWAY).json({
     status: "error",
     message,
-    linkNotActivated: notActivated || undefined,
+    linkNotActivated: isLinkNotActivated(error) || undefined,
   });
 };
 
@@ -352,7 +323,50 @@ const fetchAllPages = async (path) => {
   return { items, truncated };
 };
 
-const normalizeTopup = (p, local) => ({
+// merchant_reference on a ticket-purchase top-up is our own Payment.transactionId
+// (set in ticketRoutes.js when gift-card routing is enabled) — this recovers
+// the actual buyer's name/phone/event, which Chapa's own Link API never returns.
+const buyerFromPayment = (payment) => {
+  if (!payment) return null;
+  return {
+    name: payment.guestName || payment.ticketDetails?.fullName || null,
+    phone: payment.paymentPhone || payment.contact || null,
+    email: payment.ticketDetails?.email || null,
+    eventTitle: payment.eventId?.title || null,
+    ticketType:
+      payment.ticketDetails?.ticketType ||
+      payment.ticketDetails?.ticketTypeId ||
+      null,
+    quantity:
+      payment.ticketDetails?.ticketCount ||
+      payment.ticketDetails?.quantity ||
+      null,
+  };
+};
+
+// Batch-fetch the Payment records behind a set of merchant_reference values
+// (only ticket-purchase top-ups have one) so history views can show the real
+// buyer instead of just the gift card's owner.
+const fetchBuyersByReference = async (merchantReferences) => {
+  const refs = [...new Set(merchantReferences.filter(Boolean))];
+  if (refs.length === 0) return {};
+  const payments = await Payment.find({
+    transactionId: { $in: refs },
+    provider: "chapa_giftcard",
+  })
+    .select("transactionId guestName contact paymentPhone ticketDetails eventId")
+    .populate("eventId", "title")
+    .lean()
+    .catch((error) => {
+      console.error("[CHAPA-GIFTCARD] buyer lookup failed:", error.message);
+      return [];
+    });
+  const byRef = {};
+  for (const payment of payments) byRef[payment.transactionId] = payment;
+  return byRef;
+};
+
+const normalizeTopup = (p, local, payment) => ({
   kind: "topup",
   direction: "in",
   card_number: p.card_number,
@@ -370,6 +384,7 @@ const normalizeTopup = (p, local) => ({
   completed_at: p.updated_at || null,
   details: local?.details || null,
   initiated_by: local?.initiatedBy || null,
+  buyer: buyerFromPayment(payment),
 });
 
 const normalizePayout = (p, local, perspectiveCard) => {
@@ -428,12 +443,20 @@ const getGiftCardTransactions = async (req, res) => {
       if (activity.kind === "create") ownerInfo = activity.details || null;
     }
 
+    const cardPayments = payments.items.filter((p) => p.card_number === cardNumber);
+    const buyersByRef = await fetchBuyersByReference(
+      cardPayments.map((p) => p.merchant_reference)
+    );
+
     const transactions = [];
 
-    for (const p of payments.items) {
-      if (p.card_number !== cardNumber) continue;
+    for (const p of cardPayments) {
       transactions.push(
-        normalizeTopup(p, activityByRef[p.link_reference] || null)
+        normalizeTopup(
+          p,
+          activityByRef[p.link_reference] || null,
+          buyersByRef[p.merchant_reference] || null
+        )
       );
     }
 
@@ -511,9 +534,17 @@ const getGiftCardFeed = async (req, res) => {
       }
     }
 
+    const buyersByRef = await fetchBuyersByReference(
+      payments.items.map((p) => p.merchant_reference)
+    );
+
     let transactions = [
       ...payments.items.map((p) =>
-        normalizeTopup(p, activityByRef[p.link_reference] || null)
+        normalizeTopup(
+          p,
+          activityByRef[p.link_reference] || null,
+          buyersByRef[p.merchant_reference] || null
+        )
       ),
       ...payouts.items.map((p) =>
         normalizePayout(
@@ -565,6 +596,10 @@ const getGiftCardFeed = async (req, res) => {
           tx.owner?.owner_phone,
           tx.owner?.first_name,
           tx.owner?.last_name,
+          tx.buyer?.name,
+          tx.buyer?.phone,
+          tx.buyer?.email,
+          tx.buyer?.eventTitle,
         ]
           .filter(Boolean)
           .join(" ")
