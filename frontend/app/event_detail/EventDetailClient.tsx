@@ -10,9 +10,6 @@ import {
   UserCheck,
   Download,
   Loader2,
-  Heart,
-  ChevronDown,
-  ChevronUp,
   ImageIcon,
   BookOpen,
   Ticket,
@@ -23,10 +20,13 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import TicketCounter from "@/components/ticket-counter";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import EventHero from "@/components/event-detail/EventHero";
+import AboutSection from "@/components/event-detail/AboutSection";
+import GallerySection from "@/components/event-detail/GallerySection";
+import TicketPanel from "@/components/event-detail/TicketPanel";
+import { type TicketType } from "@/components/event-detail/types";
 
 // Countries list for USD payment - with flags
 const COUNTRIES_FOR_PAYMENT = [
@@ -57,18 +57,6 @@ import {
   buildCanonicalEventUrl,
   extractShortIdFromEventSlug,
 } from "@/lib/event-url";
-
-type TicketType = {
-  _id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  description?: string;
-  available: boolean;
-  startDate?: string;
-  endDate?: string;
-  wave?: string;
-};
 
 type Event = {
   _id: string;
@@ -193,7 +181,6 @@ export default function EventDetailClient() {
   const [waitingTicketId, setWaitingTicketId] = useState<string | null>(null);
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">("ETB");
 
-  const [showFullDescription, setShowFullDescription] = useState(false);
   const { toggleWishlist, isInWishlist, isLoading: isWishlistLoading } =
     useWishlist();
 
@@ -931,40 +918,94 @@ export default function EventDetailClient() {
   // Loading and error states
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D47A1]" />
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-[#0A0A0A]">
+        <div className="rounded-3xl p-8 bg-white/55 dark:bg-white/[0.05] backdrop-blur-2xl border border-white/60 dark:border-white/10 shadow-xl">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0D47A1] dark:border-yellow-400" />
+        </div>
       </div>
     );
   }
 
   if (!event) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-[#0D47A1]">Event not found</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-[#0A0A0A]">
+        <div className="rounded-3xl px-10 py-8 bg-white/55 dark:bg-white/[0.05] backdrop-blur-2xl border border-white/60 dark:border-white/10 shadow-xl">
+          <p className="text-[#0D47A1] dark:text-yellow-400 font-medium">
+            Event not found
+          </p>
+        </div>
       </div>
     );
   }
 
-  const descriptionParagraphs = event.description.split("\n\n").filter(Boolean);
-  const shortDescription = descriptionParagraphs[0] || event.description;
+  const resolveImageUrl = (img: string) =>
+    img.startsWith("http")
+      ? img
+      : `${process.env.NEXT_PUBLIC_API_URL}${img.startsWith("/") ? img : `/${img}`}`;
+
+  const galleryImages = [
+    ...event.coverImages.map((img) => ({ url: resolveImageUrl(img) })),
+    ...(event.eventImages || []).map((img) => ({
+      url: resolveImageUrl(img.url),
+      caption: img.caption,
+    })),
+  ];
+
+  const ageLabel = event.ageRestriction?.hasRestriction
+    ? event.ageRestriction.minAge && !event.ageRestriction.maxAge
+      ? `Ages ${event.ageRestriction.minAge}+`
+      : !event.ageRestriction.minAge && event.ageRestriction.maxAge
+        ? `Up to age ${event.ageRestriction.maxAge}`
+        : event.ageRestriction.minAge && event.ageRestriction.maxAge
+          ? `Ages ${event.ageRestriction.minAge}–${event.ageRestriction.maxAge}`
+          : "Age restricted"
+    : null;
+
+  const ticketPanel = (
+    <TicketPanel
+      tickets={ticketsToDisplay}
+      selectedTicketType={selectedTicketType}
+      onSelectTicketType={setSelectedTicketType}
+      selectedCurrency={selectedCurrency}
+      onSelectCurrency={setSelectedCurrency}
+      availableCurrencies={availableCurrencies}
+      isSoldOut={isEventSoldOut}
+      quantity={ticketQuantity}
+      onQuantityChange={setTicketQuantity}
+      maxQuantity={selectedTicket?.quantity || 10}
+      isQuantityExceeded={isQuantityExceeded}
+      totalPrice={totalPrice}
+      showBuyButton={user?.role !== "admin" && user?.role !== "organizer"}
+      isProcessing={isProcessingPayment}
+      onBuy={handleBuyClick}
+    />
+  );
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0A0A0A] text-gray-900 dark:text-gray-100 -mt-1 transition-colors duration-300">
+    <div className="relative isolate min-h-screen md:min-h-0 bg-gray-50 dark:bg-[#0A0A0A] text-gray-900 dark:text-gray-100 transition-colors duration-300">
+      {/* Ambient color blobs — gives the glass panels something to refract */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden md:hidden" aria-hidden>
+        <div className="absolute -top-40 -left-40 h-[28rem] w-[28rem] rounded-full bg-blue-400/25 dark:bg-blue-600/15 blur-3xl" />
+        <div className="absolute top-1/3 -right-40 h-[26rem] w-[26rem] rounded-full bg-cyan-300/20 dark:bg-yellow-400/[0.07] blur-3xl" />
+        <div className="absolute -bottom-32 left-1/4 h-[26rem] w-[26rem] rounded-full bg-indigo-300/20 dark:bg-purple-600/10 blur-3xl" />
+      </div>
+
+      {/* ── Mobile — original layout, glassified ── */}
       <div className="relative w-full overflow-hidden md:hidden">
-        <div className="block md:hidden px-8 py-4">
+        <div className="px-8 py-4">
           <div className="relative w-full max-w-md mx-auto">
             <Image
               src={coverImageUrl}
               alt={`${event.title} - Event cover`}
               width={600}
               height={300}
-              className="w-full h-auto object-cover rounded-lg shadow-md"
+              className="w-full h-auto object-cover rounded-xl shadow-md"
               priority
             />
           </div>
         </div>
 
-        <div className="block md:hidden px-4 py-4 bg-white dark:bg-[#0A0A0A] transition-colors">
+        <div className="px-4 py-4 transition-colors">
           <div className="flex items-start justify-between gap-3 mb-4">
             <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white leading-tight flex-1">
               {event.title}
@@ -972,16 +1013,15 @@ export default function EventDetailClient() {
             <Button
               variant="outline"
               size="sm"
-              className="text-gray-700 dark:text-gray-300 border-gray-300 dark:border-white/10 bg-transparent hover:bg-gray-50 dark:hover:bg-white/5"
+              className="text-gray-700 dark:text-gray-300 border-white/60 dark:border-white/10 bg-white/40 dark:bg-white/5 backdrop-blur-md hover:bg-white/60 dark:hover:bg-white/10"
               onClick={handleShare}
             >
               <Share2 className="h-4 w-4" />
-              
             </Button>
           </div>
 
           <div className="flex gap-4 items-start">
-            <div className="shrink-0 bg-white dark:bg-[#1A1D24] border border-gray-200 dark:border-white/10 rounded-lg p-3 text-center shadow-sm min-w-[70px]">
+            <div className="shrink-0 bg-white/50 dark:bg-white/[0.06] backdrop-blur-xl border border-white/60 dark:border-white/10 rounded-2xl p-3 text-center shadow-[0_8px_32px_rgba(31,38,135,0.1)] min-w-[70px]">
               <div className="text-xs font-medium text-gray-600 dark:text-yellow-400 uppercase tracking-wide">
                 {getDayName(event.startDate)}
               </div>
@@ -995,7 +1035,7 @@ export default function EventDetailClient() {
 
             <div className="flex-1 space-y-3">
               <div className="flex items-start gap-2 text-gray-700 dark:text-gray-300">
-                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" />
+                <MapPin className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-yellow-400" />
                 <div>
                   <div className="text-sm font-medium text-blue-600 dark:text-blue-400">
                     {event.location.address}
@@ -1025,23 +1065,10 @@ export default function EventDetailClient() {
                   by {event.organizer.name}
                 </div>
               )}
-              {event.ageRestriction?.hasRestriction && (
+              {ageLabel && (
                 <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                   <UserCheck className="h-4 w-4 flex-shrink-0 text-gray-600 dark:text-gray-400" />
-                  <span className="text-xs">
-                    {event.ageRestriction.minAge &&
-                      !event.ageRestriction.maxAge &&
-                      `Ages ${event.ageRestriction.minAge}+`}
-                    {!event.ageRestriction.minAge &&
-                      event.ageRestriction.maxAge &&
-                      `Up to age ${event.ageRestriction.maxAge}`}
-                    {event.ageRestriction.minAge &&
-                      event.ageRestriction.maxAge &&
-                      `Ages ${event.ageRestriction.minAge} - ${event.ageRestriction.maxAge}`}
-                    {!event.ageRestriction.minAge &&
-                      !event.ageRestriction.maxAge &&
-                      "Age restricted"}
-                  </span>
+                  <span className="text-xs">{ageLabel}</span>
                 </div>
               )}
             </div>
@@ -1049,545 +1076,80 @@ export default function EventDetailClient() {
         </div>
       </div>
 
-      {/* ── Hero ── */}
-      <section className="relative bg-gray-300 dark:bg-[#1A1D24] hidden md:block transition-colors">
-        <div className="relative h-[50vh] md:h-[75vh] w-[100%] mx-auto bg-gray-600 dark:bg-[#0A0A0A] overflow-hidden">
-          <div className="absolute"></div>
-          <Image
-            src={coverImageUrl}
-            alt={`${event.title} - Event banner`}
-            fill
-            className="object-cover"
-            priority
-            sizes="100vw"
-            quality={90}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/30 to-transparent dark:from-[#0A0A0A] dark:via-[#0A0A0A]/40" />
-        </div>
-
-        {/* Title + meta overlaid at the bottom of the hero */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 px-5 pb-6 md:px-10 md:pb-10 lg:px-16 lg:pb-14">
-          <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-black dark:text-white leading-tight mb-3">
-            {event.title}
-          </h1>
-          <div className="flex flex-wrap items-center gap-3 md:gap-5 text-black/90 dark:text-white/90 text-sm">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-blue-300 dark:text-blue-400 shrink-0" />
-              {formatDate(event.startDate)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-blue-300 dark:text-blue-400 shrink-0" />
-              {formatTimeRange(event.startTime, event.endTime)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <MapPin className="h-4 w-4 text-blue-300 dark:text-blue-400 shrink-0" />
-              {event.location.address}, {event.location.city}
-            </span>
-            {event.ageRestriction?.hasRestriction && (
-              <span className="flex items-center gap-1.5">
-                <UserCheck className="h-4 w-4 text-blue-300 dark:text-blue-400 shrink-0" />
-                {event.ageRestriction.minAge && !event.ageRestriction.maxAge && `Ages ${event.ageRestriction.minAge}+`}
-                {!event.ageRestriction.minAge && event.ageRestriction.maxAge && `Up to age ${event.ageRestriction.maxAge}`}
-                {event.ageRestriction.minAge && event.ageRestriction.maxAge && `Ages ${event.ageRestriction.minAge}–${event.ageRestriction.maxAge}`}
-                {!event.ageRestriction.minAge && !event.ageRestriction.maxAge && "Age restricted"}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Like + Share — top right */}
-        <div className="absolute top-4 md:top-150 md:bottom-10 right-4 md:right-10 z-10 flex items-center gap-2">
-          <button
-            onClick={() => {
-              void toggleWishlist(event._id);
-            }}
-            className="h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/50 dark:hover:bg-white/10 transition-colors"
-            aria-label="Like event"
-            disabled={isWishlistLoading}
-          >
-            <Heart
-              className={`h-4 w-4 transition-colors ${isInWishlist(event._id)
-                ? "fill-red-500 text-red-500"
-                : "text-white"
-                }`}
-            />
-          </button>
-          <button
-            onClick={handleShare}
-            className="h-9 w-9 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/50 dark:hover:bg-white/10 transition-colors"
-            aria-label="Share event"
-          >
-            <Share2 className="h-4 w-4 text-white" />
-          </button>
-        </div>
-      </section>
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12 md:hidden">
-        <div className="block lg:hidden">
-          <Tabs defaultValue="tickets" className="w-full">
-            <TabsList className="flex md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-[#1A1D24] border-t border-gray-200 dark:border-white/10 w-full justify-around rounded-none h-12 p-0 shadow-t">
-              <TabsTrigger
-                value="tickets"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
-              >
-                <Ticket className="h-4 w-4 mb-0.5" />
-                <span className="text-xs">Tickets</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="about"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
-              >
-                <BookOpen className="h-4 w-4 mb-0.5" />
-                <span className="text-xs">About</span>
-              </TabsTrigger>
-              <TabsTrigger
-                value="images"
-                className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
-              >
-                <ImageIcon className="h-4 w-4 mb-0.5" />
-                <span className="text-xs">Images</span>
-              </TabsTrigger>
-            </TabsList>
-            <div className="pb-16 md:pb-0 mt-0">
-              <TabsContent value="tickets" className="mt-0">
-                <div className="space-y-6">
-                  <div className="bg-white dark:bg-[#1A1D24] rounded-xl border border-gray-200 dark:border-white/10 p-6 shadow-md transition-colors">
-                    <div className="space-y-6">
-                      {/* Currency Selector */}
-                      <div className="flex flex-col gap-3">
-                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Currency:</h3>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant={selectedCurrency === "ETB" ? "default" : "outline"}
-                            onClick={() => setSelectedCurrency("ETB")}
-                            disabled={!availableCurrencies.hasETB}
-                            className={`flex-1 ${selectedCurrency === "ETB" ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400  dark:text-black" : ""}`}
-                          >
-                            Birr (ETB)
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={selectedCurrency === "USD" ? "default" : "outline"}
-                            onClick={() => setSelectedCurrency("USD")}
-                            disabled={!availableCurrencies.hasUSD}
-                            className={`flex-1 ${selectedCurrency === "USD" ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black" : ""}`}
-                          >
-                            Dollar (USD)
-                          </Button>
-                        </div>
-                      </div>
-
-                      {isEventSoldOut ? (
-                        <div className="text-center py-8 bg-gray-50 dark:bg-white/5 rounded-lg border border-gray-200 dark:border-white/10">
-                          <p className="text-red-500 font-bold text-lg mb-2">
-                            Tickets Not Available
-                          </p>
-                          <p className="text-gray-500 dark:text-gray-400 text-sm">
-                            This event is sold out or has ended.
-                          </p>
-                        </div>
-                      ) : (
-                        <>
-                          <RadioGroup
-                            value={selectedTicketType}
-                            onValueChange={setSelectedTicketType}
-                          >
-                            {ticketsToDisplay.map((ticketType) => (
-                              <div
-                                key={ticketType.name}
-                                onClick={() => setSelectedTicketType(ticketType.name)}
-                                className="flex items-center justify-between space-x-2 border border-gray-200 dark:border-white/10 rounded-lg p-4 cursor-pointer hover:border-gray-300 dark:hover:border-white/20 transition-colors"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <RadioGroupItem
-                                    value={ticketType.name}
-                                    id={ticketType.name}
-                                  />
-                                  <div>
-                                    <Label
-                                      htmlFor={ticketType.name}
-                                      className="font-medium text-gray-900 dark:text-white cursor-pointer"
-                                    >
-                                      {ticketType.name}
-                                    </Label>
-                                    {ticketType.description && (
-                                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                                        {ticketType.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="font-bold text-[#0D47A1] dark:text-yellow-400">
-                                  {selectedCurrency === "USD"
-                                    ? `$${(ticketType as any).priceUSD || 0}`
-                                    : `${(ticketType as any).priceETB || (ticketType as any).price || 0} Birr`
-                                  }
-                                </div>
-                              </div>
-                            ))}
-                          </RadioGroup>
-                          {ticketsToDisplay.length === 0 && (
-                            <div className="text-center py-6 text-gray-500 dark:text-gray-400">
-                              No tickets are currently available.
-                            </div>
-                          )}
-                          {ticketsToDisplay.length > 0 && (
-                            <>
-                              <div>
-                                <h3 className="text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
-                                  Number of tickets:
-                                </h3>
-                                <TicketCounter
-                                  value={ticketQuantity}
-                                  onChange={setTicketQuantity}
-                                  max={selectedTicket?.quantity || 10}
-                                />
-                                {isQuantityExceeded && (
-                                  <p className="text-xs text-red-500 mt-1">
-                                    Not enough tickets available
-                                  </p>
-                                )}
-                              </div>
-                              <Separator className="bg-gray-200 dark:bg-white/10" />
-                              <div className="flex justify-between items-center">
-                                <span className="text-lg text-gray-700 dark:text-gray-300">
-                                  Total:
-                                </span>
-                                <span className="text-2xl font-bold text-[#0D47A1] dark:text-yellow-400">
-                                  {selectedCurrency === "USD"
-                                    ? `$${totalPrice}`
-                                    : `${totalPrice} Birr`
-                                  }
-                                </span>
-                              </div>
-                              {user?.role !== "admin" &&
-                                user?.role !== "organizer" && (
-                                  <Button
-                                    onClick={handleBuyClick}
-                                    disabled={isQuantityExceeded || isProcessingPayment}
-                                    className="w-full h-12 text-lg bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 text-white disabled:bg-gray-400 dark:disabled:bg-white/10 dark:disabled:text-gray-500"
-                                  >
-                                    {isProcessingPayment ? (
-                                      <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Processing...
-                                      </>
-                                    ) : (
-                                      "Buy Ticket"
-                                    )}
-                                  </Button>
-                                )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-              <TabsContent value="about" className="mt-0">
-                <div className="space-y-6">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    About The Event
-                  </h2>
-                  <p className="text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-line">
-                    {event.description}
-                  </p>
-                </div>
-              </TabsContent>
-              <TabsContent value="images" className="mt-0">
-                <div className="space-y-6">
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Event Images
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {event.coverImages.map((image, index) => (
-                      <div
-                        key={index}
-                        className="relative aspect-video rounded-lg overflow-hidden"
-                      >
-                        <Image
-                          src={
-                            image.startsWith("http")
-                              ? image
-                              : `${process.env.NEXT_PUBLIC_API_URL}${image.startsWith("/") ? image : `/${image}`
-                              }`
-                          }
-                          alt={`Cover image ${index + 1}`}
-                          fill
-                          className="object-cover hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  {event.eventImages?.length > 0 && (
-                    <div className="space-y-4">
-                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                        Event Gallery
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {event.eventImages.map((image, index) => (
-                          <div
-                            key={index}
-                            className="relative aspect-video rounded-lg overflow-hidden"
-                          >
-                            <Image
-                              src={
-                                image.url.startsWith("http")
-                                  ? image.url
-                                  : `${process.env.NEXT_PUBLIC_API_URL}${image.url.startsWith("/")
-                                    ? image.url
-                                    : `/${image.url}`
-                                  }`
-                              }
-                              alt={image.caption || `Event image ${index + 1}`}
-                              fill
-                              className="object-cover hover:scale-105 transition-transform duration-300"
-                            />
-                            {image.caption && (
-                              <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white p-2 text-sm">
-                                {image.caption}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </TabsContent>
-            </div>
-          </Tabs>
-        </div>
-      </div>
-
-      {/* ── Content ── */}
-      <section className="py-10 md:py-16 hidden md:block">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:gap-14">
-
-            {/* Left column — About + Organizer */}
-            <div className="lg:col-span-2 space-y-12">
-
-              {/* About */}
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">About This Event</h2>
-                <div className="text-gray-600 dark:text-gray-400 leading-relaxed space-y-4">
-                  {showFullDescription
-                    ? descriptionParagraphs.map((p, i) => (
-                        <p key={i} className="whitespace-pre-line">
-                          {p}
-                        </p>
-                      ))
-                    : <p className="whitespace-pre-line">{shortDescription}</p>
-                  }
-                </div>
-                {descriptionParagraphs.length > 1 && (
-                  <button
-                    onClick={() => setShowFullDescription(!showFullDescription)}
-                    className="mt-3 text-[#0D47A1] dark:text-blue-400 text-sm font-medium flex items-center gap-1 hover:underline"
-                  >
-                    {showFullDescription ? "Show less" : "Read more"}
-                    {showFullDescription
-                      ? <ChevronUp className="h-4 w-4" />
-                      : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                )}
-              </div>
-
-              {/* Organizer */}
-              {event.organizer?.name && (
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Organizer</h2>
-                  <div className="border border-gray-200 dark:border-white/10 rounded-2xl p-5 flex items-center gap-4 shadow-sm bg-white dark:bg-[#1A1D24]">
-                    <div className="h-12 w-12 rounded-full bg-[#0D47A1] flex items-center justify-center text-white font-bold text-lg shrink-0">
-                      {event.organizer.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">{event.organizer.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Event Organizer</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-            </div>
-
-            {/* Right column — Ticket selector (sticky) */}
-            <div className="lg:col-span-1">
-              <div className="border border-gray-200 dark:border-white/10 bg-white dark:bg-[#1A1D24] rounded-2xl p-6 shadow-md lg:sticky lg:top-6 transition-colors">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Select Tickets</h2>
-                <div className="space-y-5">
-                  {/* Currency Selector */}
-                  <div className="flex flex-col gap-3">
-                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Currency:</h3>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant={selectedCurrency === "ETB" ? "default" : "outline"}
-                        onClick={() => setSelectedCurrency("ETB")}
-                        disabled={!availableCurrencies.hasETB}
-                        className={`flex-1 ${selectedCurrency === "ETB" ? "bg-[#0D47A1] dark:bg-yellow-400 dark:text-black  hover:bg-[#0D47A1]/90" : ""}`}
-                      >
-                        Birr (ETB)
-                      </Button>
-                      <Button
-                        type="button"
-                        variant={selectedCurrency === "USD" ? "default" : "outline"}
-                        onClick={() => setSelectedCurrency("USD")}
-                        disabled={!availableCurrencies.hasUSD}
-                        className={`flex-1 ${selectedCurrency === "USD" ? "bg-[#0D47A1] dark:bg-yellow-400 dark:text-black  hover:bg-[#0D47A1]/90" : ""}`}
-                      >
-                        Dollar (USD)
-                      </Button>
-                    </div>
-                  </div>
-
-                  {isEventSoldOut ? (
-                    <div className="text-center py-8 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10">
-                      <p className="text-red-500 font-bold text-lg mb-1">Tickets Not Available</p>
-                      <p className="text-gray-500 dark:text-gray-400 text-sm">This event is sold out or has ended.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <RadioGroup
-                        value={selectedTicketType}
-                        onValueChange={setSelectedTicketType}
-                      >
-                        {ticketsToDisplay.map((ticketType) => (
-                          <div
-                            key={ticketType.name}
-                            onClick={() => setSelectedTicketType(ticketType.name)}
-                            className={`flex items-center justify-between gap-3 border rounded-xl p-4 cursor-pointer transition-colors ${selectedTicketType === ticketType.name
-                              ? "border-[#0D47A1]/50 bg-blue-50/60 dark:border-yellow-500/50 dark:bg-yellow-500/10"
-                              : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
-                              }`}
-                          >
-                            <div className="flex items-start gap-3">
-                              <RadioGroupItem
-                                value={ticketType.name}
-                                id={ticketType.name}
-                                className="mt-0.5"
-                              />
-                              <div>
-                                <Label
-                                  htmlFor={ticketType.name}
-                                  className="font-semibold text-gray-900 dark:text-white cursor-pointer"
-                                >
-                                  {ticketType.name}
-                                </Label>
-                                {ticketType.description && (
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ticketType.description}</p>
-                                )}
-                              </div>
-                            </div>
-                            <span className="font-bold text-[#0D47A1] dark:text-yellow-400 whitespace-nowrap text-sm">
-                              {selectedCurrency === "USD"
-                                ? ((ticketType as any).priceUSD === 0 ? "Free" : `$${(ticketType as any).priceUSD || 0}`)
-                                : ((ticketType as any).priceETB === 0 || (ticketType as any).price === 0 ? "Free" : `${(ticketType as any).priceETB || (ticketType as any).price || 0} Birr`)
-                              }
-                            </span>
-                          </div>
-                        ))}
-                      </RadioGroup>
-
-                      {ticketsToDisplay.length === 0 && (
-                        <p className="text-center py-6 text-gray-500 dark:text-gray-400 text-sm">
-                          No tickets are currently available.
-                        </p>
-                      )}
-
-                      {ticketsToDisplay.length > 0 && (
-                        <>
-                          <div>
-                            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Number of tickets:</h3>
-                            <TicketCounter
-                              value={ticketQuantity}
-                              onChange={setTicketQuantity}
-                              max={selectedTicket?.quantity || 10}
-                            />
-                            {isQuantityExceeded && (
-                              <p className="text-xs text-red-500 mt-1">Not enough tickets available</p>
-                            )}
-                          </div>
-
-                          {totalPrice > 0 && (
-                            <>
-                              <Separator className="bg-gray-200 dark:bg-white/10" />
-                              <div className="flex justify-between items-center">
-                                <span className="text-gray-600 dark:text-gray-400 font-medium">Total</span>
-                                <span className="text-2xl font-bold text-[#0D47A1] dark:text-yellow-400">
-                                  {selectedCurrency === "USD"
-                                    ? `$${totalPrice}`
-                                    : `${totalPrice} Birr`
-                                  }
-                                </span>
-                              </div>
-                            </>
-                          )}
-
-                          {user?.role !== "admin" &&
-                            user?.role !== "organizer" && (
-                              <Button
-                                onClick={handleBuyClick}
-                                disabled={isQuantityExceeded || isProcessingPayment || !selectedTicketType}
-                                className="w-full h-12 text-base font-semibold bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400.90 text-white disabled:bg-gray-300 dark:disabled:bg-white/10 dark:disabled:text-gray-500 rounded-xl"
-                              >
-                                {isProcessingPayment ? (
-                                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
-                                ) : selectedTicketType ? (
-                                  `Buy Ticket — ${selectedCurrency === "USD" ? "$" : ""}${totalPrice} ${selectedCurrency === "USD" ? "USD" : "ETB"}`
-                                ) : (
-                                  "Select a Ticket"
-                                )}
-                              </Button>
-                            )}
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* Simple Footer for Event Detail Page */}
-      {/* <footer className="mt-12 border-t border-gray-200 dark:border-white/10 py-8 bg-white dark:bg-[#0A0A0A] transition-colors">
-        <div className="container mx-auto px-4 flex flex-col items-center justify-center gap-4">
-          <div className="relative h-10 w-36 grayscale opacity-70 hover:grayscale-0 hover:opacity-100 transition-all duration-300">
-            <Image
-              src="/logo.png"
-              alt="Pazimo Logo"
-              fill
-              className="object-contain"
-            />
-          </div>
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            &copy; {new Date().getFullYear()} Pazimo. All rights reserved.
-          </p>
-          <div className="flex gap-6 mb-10 md:mb-0">
-            <a
-              href="/privacy"
-              className="text-sm text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 md:hidden">
+        <Tabs defaultValue="tickets" className="w-full">
+          <TabsList className="flex md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/75 dark:bg-black/60 backdrop-blur-2xl border-t border-white/50 dark:border-white/10 w-full justify-around rounded-none h-12 p-0">
+            <TabsTrigger
+              value="tickets"
+              className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50/60 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
             >
-              Privacy Policy
-            </a>
+              <Ticket className="h-4 w-4 mb-0.5" />
+              <span className="text-xs">Tickets</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="about"
+              className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50/60 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
+            >
+              <BookOpen className="h-4 w-4 mb-0.5" />
+              <span className="text-xs">About</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="images"
+              className="flex-1 flex flex-col items-center justify-center rounded-none text-gray-700 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] dark:data-[state=active]:border-yellow-400 data-[state=active]:bg-blue-50/60 dark:data-[state=active]:bg-yellow-400/10 h-12 px-0 text-xs"
+            >
+              <ImageIcon className="h-4 w-4 mb-0.5" />
+              <span className="text-xs">Images</span>
+            </TabsTrigger>
+          </TabsList>
+          <div className="pb-16 mt-0">
+            <TabsContent value="tickets" className="mt-0">
+              {ticketPanel}
+            </TabsContent>
+            <TabsContent value="about" className="mt-0">
+              <AboutSection
+                description={event.description}
+                organizerName={event.organizer?.name}
+              />
+            </TabsContent>
+            <TabsContent value="images" className="mt-0">
+              <GallerySection images={galleryImages} />
+            </TabsContent>
           </div>
-        </div>
-      </footer> */}
+        </Tabs>
+      </div>
 
-      <Dialog
-        open={showTicketModal}
-        onOpenChange={setShowTicketModal}
+      {/* ── Desktop — full-viewport hero, no page scroll ── */}
+      <EventHero
+        title={event.title}
+        coverImageUrl={coverImageUrl}
+        description={event.description}
+        categoryName={event.category?.name}
+        dateLabel={
+          event.endDate && event.endDate !== event.startDate
+            ? `${formatDate(event.startDate)} – ${formatDate(event.endDate)}`
+            : formatDate(event.startDate)
+        }
+        timeLabel={formatTimeRange(event.startTime, event.endTime)}
+        locationLabel={`${event.location.address}, ${event.location.city}`}
+        ageLabel={ageLabel}
+        organizerName={event.organizer?.name}
+        isWishlisted={isInWishlist(event._id)}
+        isWishlistLoading={isWishlistLoading}
+        onToggleWishlist={() => {
+          void toggleWishlist(event._id);
+        }}
+        onShare={handleShare}
       >
-        <DialogContent className="w-full max-w-sm md:max-w-md lg:max-w-lg rounded-xl p-0 overflow-hidden bg-white dark:bg-[#1A1D24] border-none gap-0">
-          <div className="bg-[#0D47A1] p-6 text-white text-center">
+        {ticketPanel}
+      </EventHero>
+
+      <Dialog open={showTicketModal} onOpenChange={setShowTicketModal}>
+        <DialogContent className="w-full max-w-sm md:max-w-md lg:max-w-lg rounded-3xl p-0 overflow-hidden bg-white/90 dark:bg-[#12141A]/90 backdrop-blur-2xl border border-white/40 dark:border-white/10 gap-0">
+          <div className="bg-gradient-to-br from-[#0D47A1] to-blue-600 dark:from-yellow-400 dark:to-amber-500 p-6 text-white dark:text-black text-center">
             <h2 className="text-2xl font-bold mb-1">You&apos;re Going!</h2>
-            <p className="text-blue-100 text-sm">Your ticket is ready</p>
+            <p className="text-blue-100 dark:text-black/70 text-sm">
+              Your ticket is ready
+            </p>
           </div>
           <div className="p-6">
             <div className="text-center mb-6">
@@ -1596,14 +1158,14 @@ export default function EventDetailClient() {
               </h3>
               <div className="flex flex-col gap-1 items-center text-sm text-gray-600 dark:text-gray-400">
                 <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-[#0D47A1]" />
+                  <Calendar className="h-4 w-4 text-[#0D47A1] dark:text-yellow-400" />
                   <span>{formatDate(event.startDate)}</span>
-                  <span className="text-gray-300">|</span>
-                  <Clock className="h-4 w-4 text-[#0D47A1]" />
+                  <span className="text-gray-300 dark:text-gray-600">|</span>
+                  <Clock className="h-4 w-4 text-[#0D47A1] dark:text-yellow-400" />
                   <span>{formatTimeWithAmPm(event.startTime)}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <MapPin className="h-4 w-4 text-[#0D47A1]" />
+                  <MapPin className="h-4 w-4 text-[#0D47A1] dark:text-yellow-400" />
                   <span>{event.location.address}</span>
                 </div>
               </div>
@@ -1615,7 +1177,7 @@ export default function EventDetailClient() {
                   const ticket = purchasedTickets[currentTicketIndex];
                   return (
                     <div className="flex flex-col items-center">
-                      <div className="bg-white dark:bg-white/5 p-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-white/20 mb-5 shadow-sm">
+                      <div className="bg-white/70 dark:bg-white/5 backdrop-blur-md p-3 rounded-2xl border-2 border-dashed border-gray-300 dark:border-white/20 mb-5 shadow-sm">
                         <Image
                           src={ticket.qrCode ?? "/events/sampleqr.png"}
                           alt="Ticket QR"
@@ -1628,7 +1190,7 @@ export default function EventDetailClient() {
                         <div className="flex justify-center">
                           <Badge
                             variant="secondary"
-                            className="text-base px-6 py-1.5 bg-blue-50 dark:bg-blue-500/10 text-[#0D47A1] dark:text-blue-400"
+                            className="text-base px-6 py-1.5 bg-blue-50/80 dark:bg-yellow-400/10 text-[#0D47A1] dark:text-yellow-400 backdrop-blur-md"
                           >
                             Admits: {ticket.ticketCount || 1} Person
                             {(ticket.ticketCount || 1) > 1 ? "s" : ""}
@@ -1637,9 +1199,6 @@ export default function EventDetailClient() {
                         <h4 className="font-bold text-lg text-gray-900 dark:text-white mt-2">
                           {ticket.ticketType}
                         </h4>
-                        {/* <p className="text-sm text-gray-500 mt-1">
-                          Ticket ID: {ticket.ticketId}
-                        </p> */}
                       </div>
                     </div>
                   );
@@ -1651,9 +1210,7 @@ export default function EventDetailClient() {
                       size="icon"
                       className="h-8 w-8 rounded-full"
                       onClick={() =>
-                        setCurrentTicketIndex(
-                          Math.max(0, currentTicketIndex - 1),
-                        )
+                        setCurrentTicketIndex(Math.max(0, currentTicketIndex - 1))
                       }
                       disabled={currentTicketIndex === 0}
                     >
@@ -1663,10 +1220,11 @@ export default function EventDetailClient() {
                       {purchasedTickets.map((_, i) => (
                         <div
                           key={i}
-                          className={`h-2 w-2 rounded-full transition-colors ${i === currentTicketIndex
-                            ? "bg-[#0D47A1]"
-                            : "bg-gray-200"
-                            }`}
+                          className={`h-2 w-2 rounded-full transition-colors ${
+                            i === currentTicketIndex
+                              ? "bg-[#0D47A1] dark:bg-yellow-400"
+                              : "bg-gray-200 dark:bg-white/20"
+                          }`}
                         />
                       ))}
                     </div>
@@ -1682,9 +1240,7 @@ export default function EventDetailClient() {
                           ),
                         )
                       }
-                      disabled={
-                        currentTicketIndex === purchasedTickets.length - 1
-                      }
+                      disabled={currentTicketIndex === purchasedTickets.length - 1}
                     >
                       &gt;
                     </Button>
@@ -1693,23 +1249,19 @@ export default function EventDetailClient() {
               </div>
             )}
           </div>
-          <div className="p-4 bg-gray-50 dark:bg-black/20 border-t dark:border-white/10 flex gap-3">
+          <div className="p-4 bg-gray-50/60 dark:bg-black/20 backdrop-blur-md border-t border-gray-200/60 dark:border-white/10 flex gap-3">
             <Button
-              className="flex-1 bg-white dark:bg-white/5 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10"
+              className="flex-1 bg-white/70 dark:bg-white/5 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 backdrop-blur-md"
               variant="outline"
               onClick={() => {
                 const ticket = purchasedTickets[currentTicketIndex];
-                downloadQRCode(
-                  ticket.qrCode,
-                  ticket.ticketId,
-                  ticket.ticketType,
-                );
+                downloadQRCode(ticket.qrCode, ticket.ticketId, ticket.ticketType);
               }}
             >
               <Download className="mr-2 h-4 w-4" /> Save Image
             </Button>
             <Button
-              className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white shadow-md"
+              className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90 text-white shadow-md"
               onClick={() => setShowTicketModal(false)}
             >
               Done
@@ -1719,7 +1271,7 @@ export default function EventDetailClient() {
       </Dialog>
 
       <Dialog open={showPaymentModal} onOpenChange={setShowPaymentModal}>
-        <DialogContent className="w-[95vw] sm:w-full max-w-xl rounded-xl max-h-[90vh] overflow-y-auto bg-white dark:bg-[#1A1D24] dark:border-white/10">
+        <DialogContent className="w-[95vw] sm:w-full max-w-xl rounded-3xl max-h-[90vh] overflow-y-auto bg-white/90 dark:bg-[#12141A]/90 backdrop-blur-2xl border border-white/40 dark:border-white/10">
           <DialogHeader>
             <DialogTitle className="text-xl font-bold text-center dark:text-white">
               Checkout
@@ -1746,7 +1298,7 @@ export default function EventDetailClient() {
                     }
                     placeholder="Enter your full name"
                     required
-                    className="mt-1 dark:bg-white/5 dark:border-white/10 dark:text-white"
+                    className="mt-1 bg-white/60 dark:bg-white/5 border-white/60 dark:border-white/10 dark:text-white backdrop-blur-md"
                   />
                 </div>
               )}
@@ -1767,7 +1319,7 @@ export default function EventDetailClient() {
                         setPaymentForm({ ...paymentForm, email: e.target.value })
                       }
                       placeholder="Email address"
-                      className="mt-1 dark:bg-white/5 dark:border-white/10 dark:text-white "
+                      className="mt-1 bg-white/60 dark:bg-white/5 border-white/60 dark:border-white/10 dark:text-white backdrop-blur-md"
                     />
                   </div>
                 )}
@@ -1784,9 +1336,12 @@ export default function EventDetailClient() {
                       <select
                         value={paymentForm.countryCode}
                         onChange={(e) =>
-                          setPaymentForm({ ...paymentForm, countryCode: e.target.value })
+                          setPaymentForm({
+                            ...paymentForm,
+                            countryCode: e.target.value,
+                          })
                         }
-                        className="bg-white dark:bg-[#1A1D24] w-full border border-gray-300 dark:border-white/10 rounded-md px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
+                        className="bg-white/60 dark:bg-[#1A1D24]/80 backdrop-blur-md w-full border border-white/60 dark:border-white/10 rounded-md px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white"
                       >
                         {COUNTRIES_FOR_PAYMENT.map((country) => (
                           <option key={country.code} value={country.code}>
@@ -1794,13 +1349,15 @@ export default function EventDetailClient() {
                           </option>
                         ))}
                       </select>
-                      <div className="flex-1 sm:flex-row flex flex-row  w-full items-center border border-gray-300 dark:border-white/10 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
-                        <div className="bg-gray-100 dark:bg-white/5 px-3 py-2 text-gray-500 dark:text-gray-400 border-r dark:border-white/10 text-sm font-medium min-w-fit">
-                          +{COUNTRIES_FOR_PAYMENT.find((c) => c.code === paymentForm.countryCode)?.prefix || "1"}
+                      <div className="flex-1 sm:flex-row flex flex-row w-full items-center border border-white/60 dark:border-white/10 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 bg-white/60 dark:bg-white/5 backdrop-blur-md">
+                        <div className="bg-gray-100/80 dark:bg-white/5 px-3 py-2 text-gray-500 dark:text-gray-400 border-r dark:border-white/10 text-sm font-medium min-w-fit">
+                          +
+                          {COUNTRIES_FOR_PAYMENT.find(
+                            (c) => c.code === paymentForm.countryCode,
+                          )?.prefix || "1"}
                         </div>
                         <Input
                           id="payment_phone"
-
                           type="tel"
                           value={paymentForm.phoneNumber}
                           onChange={(e) => {
@@ -1809,14 +1366,14 @@ export default function EventDetailClient() {
                           }}
                           placeholder="Enter phone number"
                           required
-                          className="border-0 rounded-nonefocus-visible:ring-0 shadow-none flex-1"
+                          className="border-0 rounded-none focus-visible:ring-0 shadow-none flex-1 bg-transparent"
                         />
                       </div>
                     </div>
                   ) : (
                     // Ethiopia +251 for ETB
-                    <div className="flex items-center border border-gray-300 dark:border-white/10 rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-gray-400/20">
-                      <div className="bg-gray-100 dark:bg-white/5 px-3 py-2 text-gray-500 dark:text-gray-400 border-r dark:border-white/10 text-sm font-medium">
+                    <div className="flex items-center border border-white/60 dark:border-white/10 rounded-md overflow-hidden mt-1 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-gray-400/20 bg-white/60 dark:bg-white/5 backdrop-blur-md">
+                      <div className="bg-gray-100/80 dark:bg-white/5 px-3 py-2 text-gray-500 dark:text-gray-400 border-r dark:border-white/10 text-sm font-medium">
                         +251
                       </div>
                       <Input
@@ -1832,7 +1389,7 @@ export default function EventDetailClient() {
                         }}
                         placeholder="9..."
                         required
-                        className="border-0 rounded-none focus-visible:ring-0 shadow-none dark:bg-transparent dark:text-white"
+                        className="border-0 rounded-none focus-visible:ring-0 shadow-none bg-transparent dark:text-white"
                       />
                     </div>
                   )}
@@ -1869,7 +1426,8 @@ export default function EventDetailClient() {
                   !paymentForm.paymentMethod ||
                   // For ETB payments, enforce 9-digit Ethiopian number.
                   // For USD (international card), any non-empty number is accepted.
-                  (selectedCurrency !== "USD" && paymentForm.phoneNumber.length < 9)
+                  (selectedCurrency !== "USD" &&
+                    paymentForm.phoneNumber.length < 9)
                 }
               >
                 {isProcessingPayment ? (
@@ -1887,7 +1445,10 @@ export default function EventDetailClient() {
 
       {/* Loading Dialog for Ticket Verification */}
       <Dialog open={isProcessingPayment} onOpenChange={() => { }}>
-        <DialogContent className="w-[90vw] max-w-sm rounded-xl p-6 text-center bg-white dark:bg-[#1A1D24] dark:border-white/10" onInteractOutside={(e) => e.preventDefault()}>
+        <DialogContent
+          className="w-[90vw] max-w-sm rounded-3xl p-6 text-center bg-white/90 dark:bg-[#12141A]/90 backdrop-blur-2xl border border-white/40 dark:border-white/10"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="text-xl font-bold mb-2 dark:text-white">
               Processing Your Tickets
@@ -1897,7 +1458,7 @@ export default function EventDetailClient() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center py-6 space-y-4">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#0D47A1]" />
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-[#0D47A1] dark:border-yellow-400" />
             <p className="text-sm text-gray-600 dark:text-gray-400 animate-pulse">
               This may take a few moments
             </p>
@@ -1923,9 +1484,11 @@ export default function EventDetailClient() {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ transactionId: currentTxRef }),
-                      }
+                      },
                     );
-                    toast.info("Payment verification cancelled. You can try again.");
+                    toast.info(
+                      "Payment verification cancelled. You can try again.",
+                    );
                   } catch (error) {
                     console.error("Failed to cancel payment:", error);
                   }

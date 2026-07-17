@@ -229,7 +229,7 @@ const Header = () => {
     <>
       {/* Fixed header for mobile, normal for desktop */}
       <header
-        className={`md:relative fixed! bg-white/90 dark:bg-black/95 backdrop-blur-3xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 border-b border-border/40 dark:border-white/10 transition-all duration-300 ease-out
+        className={`md:relative fixed! bg-white/55 dark:bg-black/35 backdrop-blur-2xl top-0 left-0 right-0 z-50 py-2 md:py-2 px-4 sm:px-8 md:px-16 shadow-[0_4px_24px_rgba(31,38,135,0.06)] transition-all duration-300 ease-out
         `}
       >
         <div className="flex items-center justify-between gap-3 md:gap-6">
@@ -253,7 +253,7 @@ const Header = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="p-2 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400"
+                className="p-2 rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 hover:bg-white/60 dark:hover:bg-white/10"
                 onClick={() => {
                   setDialogOpen(true);
                   setMobileMenuOpen(false);
@@ -262,10 +262,12 @@ const Header = () => {
                 <Search className="h-5 w-5" />
               </Button>
 
-              <ThemeToggle />
+              <div className="rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 [&>button]:rounded-full [&>button]:hover:bg-white/60 dark:[&>button]:hover:bg-white/10">
+                <ThemeToggle />
+              </div>
 
               <button
-                className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
+                className="p-2 rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 hover:bg-white/60 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
                 aria-label="Open menu"
                 onClick={toggleMobileMenu}
               >
@@ -290,33 +292,33 @@ const Header = () => {
             </div>
           </Link>
 
-          {/* Desktop: menu */}
-          <div className="hidden md:flex gap-8">
+          {/* Desktop: menu — glass pill */}
+          <div className="hidden md:flex items-center gap-1 rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 p-1 shadow-[0_4px_16px_rgba(31,38,135,0.08)]">
             <button
               type="button"
               onClick={() => scrollToSection("featured")}
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
+              className="px-4 py-1.5 rounded-full text-foreground dark:text-muted-foreground hover:bg-white/60 dark:hover:bg-white/10 hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Featured
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("categories")}
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
+              className="px-4 py-1.5 rounded-full text-foreground dark:text-muted-foreground hover:bg-white/60 dark:hover:bg-white/10 hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Categories
             </button>
             <button
               type="button"
               onClick={() => scrollToSection("trending")}
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
+              className="px-4 py-1.5 rounded-full text-foreground dark:text-muted-foreground hover:bg-white/60 dark:hover:bg-white/10 hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Trending
             </button>
             <Link
               href="/organizer-registration"
               target="_blank"
-              className="text-foreground dark:text-muted-foreground hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
+              className="px-4 py-1.5 rounded-full text-foreground dark:text-muted-foreground hover:bg-white/60 dark:hover:bg-white/10 hover:text-primary dark:hover:text-foreground font-medium transition-all text-sm"
             >
               Create Event
             </Link>
@@ -329,7 +331,7 @@ const Header = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="hidden md:flex p-2 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all duration-200"
+                  className="hidden md:flex p-2 rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 hover:bg-white/60 dark:hover:bg-white/10 transition-all duration-200"
                   onClick={() => setDialogOpen(true)}
                 >
                   <Search className="h-5 w-5" />
@@ -490,7 +492,7 @@ const Header = () => {
             </Dialog>
 
             {/* Theme toggle */}
-            <div className="hidden md:flex items-center mr-2">
+            <div className="hidden md:flex items-center mr-2 rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 [&>button]:rounded-full [&>button]:hover:bg-white/60 dark:[&>button]:hover:bg-white/10">
               <ThemeToggle />
             </div>
 
@@ -501,7 +503,7 @@ const Header = () => {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="text-[#1a2d5a] dark:text-gray-100 font-medium hover:bg-gradient-to-r hover:from-[#ffc107]/10 hover:to-[#ffc107]/20 dark:hover:from-white/10 dark:hover:to-white/5 transition-all duration-200 rounded-xl px-4 py-1 h-auto"
+                      className="text-[#1a2d5a] dark:text-gray-100 font-medium bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 hover:bg-white/60 dark:hover:bg-white/10 transition-all duration-200 rounded-full px-3 py-1 h-auto"
                     >
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
@@ -534,7 +536,7 @@ const Header = () => {
             ) : (
               <div className="hidden md:flex items-center gap-3">
                 <Button
-                  className="bg-[#0D47A1] rounded-sm hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black cursor-pointer text-white border-0 transition-all duration-200  font-medium shadow-lg hover:shadow-xl"
+                  className="bg-[#0D47A1]/85 hover:bg-[#0D47A1] dark:bg-yellow-400/85 dark:hover:bg-yellow-400 dark:text-black cursor-pointer text-white rounded-full backdrop-blur-xl border border-white/25 dark:border-black/10 transition-all duration-200 font-medium shadow-lg hover:shadow-xl"
                   onClick={() => router.push("/sign-in")}
                 >
                   Sign In
@@ -555,7 +557,7 @@ const Header = () => {
             transition={{ duration: 0.2 }}
             className="md:hidden fixed top-16 left-0 right-0 z-40 px-4"
           >
-            <div className="bg-background/95 backdrop-blur-xl border-b border-border shadow-lg rounded-b-2xl p-4 space-y-3">
+            <div className="bg-white/70 dark:bg-black/60 backdrop-blur-2xl border border-white/50 dark:border-white/10 shadow-[0_16px_48px_rgba(31,38,135,0.15)] rounded-2xl p-4 space-y-3">
               <nav className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 <button
                   className="px-3 py-2 rounded-lg cursor:pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
