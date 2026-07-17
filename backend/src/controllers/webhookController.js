@@ -111,6 +111,7 @@ const chapaWebhook = async (req, res) => {
           }
 
           payment.status = "PAID";
+          payment.paidAt = new Date();
           payment.santimPayResponse = data;
           await payment.save();
 
@@ -339,6 +340,7 @@ const chapaGiftCardWebhook = async (req, res) => {
         }
 
         payment.status = "PAID";
+        payment.paidAt = new Date();
         await payment.save();
         const createdTicket = await processSuccessfulPayment(payment);
 

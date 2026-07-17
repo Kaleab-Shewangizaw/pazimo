@@ -77,6 +77,16 @@ const getPaymentStatus = async (reference) => {
   return response.data?.data;
 };
 
+// POST /card/payouts, business destination -> { chapa_reference, ... }
+const payoutToMerchant = async ({ card_number, amount, merchant_id }) => {
+  const response = await linkClient.post("/card/payouts", {
+    card_number,
+    amount,
+    merchant_id,
+  });
+  return response.data?.data;
+};
+
 module.exports = {
   linkClient,
   linkErrorMessage,
@@ -85,4 +95,5 @@ module.exports = {
   topUpHosted,
   topUpDirectCharge,
   getPaymentStatus,
+  payoutToMerchant,
 };

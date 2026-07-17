@@ -69,6 +69,14 @@ const Payment = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  // Set once, at the moment status first flips to PAID — distinct from
+  // createdAt (when the payment was initiated). Daily revenue bucketing
+  // (platform fee ledger) keys off this so a payment confirmed just after
+  // midnight lands in the day it actually completed, not the day it started.
+  paidAt: {
+    type: Date,
+    index: true,
+  },
 });
 
 module.exports = mongoose.model("Payment", Payment);

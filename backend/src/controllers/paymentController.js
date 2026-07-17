@@ -128,6 +128,7 @@ class PaymentController {
                     if (["success", "completed", "paid"].includes(normalizedPaymentStatus)) {
                       console.log(`[CHAPA-VERIFY] ✅ Payment ${txn} is successful, marking as PAID`);
                       payment.status = "PAID";
+                      payment.paidAt = new Date();
                       await payment.save();
                       await processSuccessfulPayment(payment);
                       break;
@@ -207,6 +208,7 @@ class PaymentController {
                     console.error(`[GIFTCARD-VERIFY] Amount mismatch for ${txn}: expected ${payment.price}, got ${remoteAmount}`);
                   } else {
                     payment.status = "PAID";
+                    payment.paidAt = new Date();
                     await payment.save();
                     await processSuccessfulPayment(payment);
                   }
@@ -229,6 +231,7 @@ class PaymentController {
 
             if (remoteStatus === "COMPLETED" || remoteStatus === "SUCCESS") {
               payment.status = "PAID";
+              payment.paidAt = new Date();
               await payment.save();
               await processSuccessfulPayment(payment);
             } else if (

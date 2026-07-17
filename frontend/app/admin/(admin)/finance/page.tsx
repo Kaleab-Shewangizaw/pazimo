@@ -63,6 +63,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftCardsSection from "@/components/admin/GiftCardsSection";
 import GiftCardRouting from "@/components/admin/GiftCardRouting";
 import ChapaV2Section from "@/components/admin/ChapaV2Section";
+import PlatformFeeSection from "@/components/admin/PlatformFeeSection";
 
 interface ChapaBalance {
   currency: string;
@@ -359,6 +360,7 @@ export default function ChapaFinancePage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="giftcards">Gift Cards</TabsTrigger>
+          <TabsTrigger value="platformfee">Platform Fee</TabsTrigger>
           <TabsTrigger value="v2">API v2</TabsTrigger>
         </TabsList>
 
@@ -715,6 +717,10 @@ export default function ChapaFinancePage() {
         <TabsContent value="giftcards" className="mt-4 space-y-4">
           <GiftCardRouting />
           <GiftCardsSection />
+        </TabsContent>
+
+        <TabsContent value="platformfee" className="mt-4">
+          <PlatformFeeSection />
         </TabsContent>
 
         <TabsContent value="v2" className="mt-4">

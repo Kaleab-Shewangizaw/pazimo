@@ -31,6 +31,12 @@ const {
 	getV2Payments,
 	getV2Payouts,
 } = require('../controllers/chapaV2Controller');
+const {
+	getConfig: getPlatformFeeConfig,
+	updateConfig: updatePlatformFeeConfig,
+	getDaily: getPlatformFeeDaily,
+	sendDailyFee,
+} = require('../controllers/platformFeeController');
 
 // Admin dashboard stats
 router.get('/dashboard/stats', authenticateUser, restrictTo('admin'), getDashboardStats);
@@ -63,5 +69,11 @@ router.delete('/finance/chapa/giftcards/:cardNumber', authenticateUser, restrict
 router.post('/finance/chapa/giftcards/:cardNumber/topup', authenticateUser, restrictTo('admin'), topUpGiftCard);
 router.post('/finance/chapa/giftcards/:cardNumber/payouts', authenticateUser, restrictTo('admin'), createGiftCardPayout);
 router.get('/finance/chapa/giftcards/:cardNumber/transactions', authenticateUser, restrictTo('admin'), getGiftCardTransactions);
+
+// Daily 3% platform fee (skimmed off gift-card ticket sales only)
+router.get('/finance/platform-fee/config', authenticateUser, restrictTo('admin'), getPlatformFeeConfig);
+router.patch('/finance/platform-fee/config', authenticateUser, restrictTo('admin'), updatePlatformFeeConfig);
+router.get('/finance/platform-fee/daily', authenticateUser, restrictTo('admin'), getPlatformFeeDaily);
+router.post('/finance/platform-fee/send', authenticateUser, restrictTo('admin'), sendDailyFee);
 
 module.exports = router;

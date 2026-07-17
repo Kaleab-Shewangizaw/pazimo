@@ -1,6 +1,7 @@
 const app = require("./app");
 const connectDB = require("./config/database");
 const { startTicketScheduler } = require("./utils/ticketScheduler");
+const { startPlatformFeeScheduler } = require("./utils/platformFeeScheduler");
 const http = require("http");
 const socketio = require("socket.io");
 require("dotenv").config();
@@ -35,6 +36,7 @@ io.on("connection", (socket) => {
 connectDB().then(() => {
   // Start ticket availability scheduler only after DB connection
   startTicketScheduler();
+  startPlatformFeeScheduler();
 
   const PORT = process.env.PORT || 5000;
 
