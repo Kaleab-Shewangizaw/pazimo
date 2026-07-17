@@ -50,8 +50,11 @@ class PaymentController {
       const { txn } = req.query;
       console.log(`\n[PAYMENT-STATUS] ============================================`);
       console.log(`[PAYMENT-STATUS] Checking status for txn: ${txn}`);
-      
-      if (!txn) {
+
+      // txn feeds straight into a Mongo query below. Express parses
+      // ?txn[$ne]=null into an object, not a string — reject anything that
+      // isn't a plain string so it can never be interpreted as a query operator.
+      if (!txn || typeof txn !== "string") {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
           error: "Transaction ID (txn) is required",
@@ -336,8 +339,11 @@ class PaymentController {
       const { transactionId } = req.body;
       console.log(`\n[PAYMENT-CANCEL] ============================================`);
       console.log(`[PAYMENT-CANCEL] Canceling payment for txn: ${transactionId}`);
-      
-      if (!transactionId) {
+
+      // Same class of issue as checkPaymentStatus: a JSON body can carry an
+      // object ({"transactionId":{"$ne":null}}) that Mongo would treat as an
+      // operator — reject anything that isn't a plain string.
+      if (!transactionId || typeof transactionId !== "string") {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
           error: "Transaction ID is required",

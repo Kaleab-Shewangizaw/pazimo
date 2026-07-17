@@ -59,7 +59,9 @@ const chapaWebhook = async (req, res) => {
       normalizedStatus === "cancelled" ||
       normalizedStatus === "canceled";
 
-    if (!txRef) {
+    // tx_ref feeds Mongo queries below — a non-string (e.g. an object) would
+    // be interpreted as a query operator, so require a plain string.
+    if (!txRef || typeof txRef !== "string") {
       return res.status(400).json({ error: "Missing tx_ref in webhook payload" });
     }
 
@@ -280,7 +282,9 @@ const chapaGiftCardWebhook = async (req, res) => {
     const normalizedStatus = String(status || "").toLowerCase();
     const txRef = merchant_reference;
 
-    if (!txRef) {
+    // merchant_reference feeds a Mongo query below — reject anything that
+    // isn't a plain string so it can't be interpreted as a query operator.
+    if (!txRef || typeof txRef !== "string") {
       return res.status(400).json({ error: "Missing merchant_reference in webhook payload" });
     }
 
