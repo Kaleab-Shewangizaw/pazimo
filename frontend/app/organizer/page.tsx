@@ -524,7 +524,7 @@ export default function OrganizerDashboard() {
           </CardHeader>
           <CardFooter>
             <Button
-              onClick={() => (window.location.href = "/organizer/sign-in")}
+              onClick={() => (window.location.href = "/sign-in")}
               className="w-full"
             >
               Sign In

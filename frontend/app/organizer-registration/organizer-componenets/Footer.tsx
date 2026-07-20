@@ -45,7 +45,7 @@ Serving event organizers across Addis Ababa and Ethiopia 🇪🇹.
               Organizer Access
             </p>
             <div className="flex flex-col gap-3 text-sm text-slate-200/90">
-              <Link href="/organizer/sign-in" className="transition-colors hover:text-white/90">
+              <Link href="/sign-in" className="transition-colors hover:text-white/90">
                 Sign In
               </Link>
               <Link href="/organizer-registration/register" className="transition-colors hover:text-white/90">

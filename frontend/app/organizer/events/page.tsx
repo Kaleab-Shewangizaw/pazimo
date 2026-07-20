@@ -97,7 +97,7 @@ export default function EventsPage() {
     const checkAuth = () => {
       const authState = localStorage.getItem("auth-storage");
       if (!authState) {
-        router.push("/organizer/sign-in");
+        router.push("/sign-in");
         return false;
       }
 
@@ -106,7 +106,7 @@ export default function EventsPage() {
         const { user, token, isAuthenticated } = state;
 
         if (!isAuthenticated || !token || user.role !== "organizer") {
-          router.push("/organizer/sign-in");
+          router.push("/sign-in");
           return false;
         }
 
@@ -117,7 +117,7 @@ export default function EventsPage() {
         return true;
       } catch (error) {
         console.error("Error parsing auth state:", error);
-        router.push("/organizer/sign-in");
+        router.push("/sign-in");
         return false;
       }
     };
@@ -320,7 +320,7 @@ export default function EventsPage() {
           </CardHeader>
           <CardFooter>
             <Button
-              onClick={() => router.push("/organizer/sign-in")}
+              onClick={() => router.push("/sign-in")}
               className="w-full"
             >
               Sign In
@@ -347,7 +347,7 @@ export default function EventsPage() {
             </CardHeader>
             <CardFooter>
               <Button
-                onClick={() => router.push("/organizer/sign-in")}
+                onClick={() => router.push("/sign-in")}
                 className="w-full"
               >
                 Sign In
@@ -370,7 +370,7 @@ export default function EventsPage() {
           </CardHeader>
           <CardFooter>
             <Button
-              onClick={() => router.push("/organizer/sign-in")}
+              onClick={() => router.push("/sign-in")}
               className="w-full"
             >
               Sign In
