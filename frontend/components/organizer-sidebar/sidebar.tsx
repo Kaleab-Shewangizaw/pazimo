@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -15,6 +16,7 @@ import {
   Megaphone,
   ScanLine,
   ClipboardList,
+  Banknote,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
@@ -26,8 +28,22 @@ interface SidebarProps {
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
+  const { user, token, logout } = useAuthStore();
   const router = useRouter();
+  // Non-eligible organizers must not see Pazimo Capital at all — this check
+  // is a UX nicety on top of the real gate, which is the backend's
+  // requireCapitalEligible middleware on every capital endpoint.
+  const [capitalEligible, setCapitalEligible] = useState(false);
+
+  useEffect(() => {
+    if (!token || user?.role !== "organizer") return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/capital/organizer/eligibility`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setCapitalEligible(data?.data?.eligibility === "eligible"))
+      .catch(() => setCapitalEligible(false));
+  }, [token, user?.role]);
 
   const isActive = (path: string) => {
     return pathname === path;
@@ -184,6 +200,22 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 Withdrawals
               </span>
             </Link>
+            {capitalEligible && (
+              <Link
+                href="/organizer/capital"
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                  isActive("/organizer/capital")
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
+                }`}
+              >
+                <Banknote className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">
+                  Pazimo Capital
+                </span>
+              </Link>
+            )}
             <Link
               href="/organizer/account"
               onClick={handleLinkClick}

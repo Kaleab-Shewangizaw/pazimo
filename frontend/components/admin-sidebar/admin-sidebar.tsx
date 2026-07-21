@@ -16,6 +16,7 @@ import {
   CreditCard,
   X,
   ClipboardList,
+  Banknote,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -361,6 +362,22 @@ export default function AdminSidebar({
                   </div>
                 )}
               </div>
+            )}
+
+            {/* Pazimo Capital Section */}
+            {!isPartner && (
+              <Link
+                href="/admin/capital"
+                onClick={onClose}
+                className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-xl transition-all duration-200 group ${
+                  pathname.startsWith("/admin/capital")
+                    ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-900/50"
+                    : "text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-900 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <Banknote className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">Pazimo Capital</span>
+              </Link>
             )}
 
             {/* System Section */}

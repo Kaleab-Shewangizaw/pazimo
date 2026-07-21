@@ -37,6 +37,7 @@ interface WithdrawalData {
   amount: number
   currency?: "ETB" | "USD"
   status: "pending" | "approved" | "rejected" | "completed"
+  source?: "ticket_revenue" | "loan"
   notes: string
   bankDetails?: {
     accountName: string
@@ -234,6 +235,7 @@ export default function WithdrawalsPage() {
                   <TableRow className="border-gray-200 dark:border-gray-800">
                     <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Organizer</TableHead>
                     <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Amount</TableHead>
+                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Source</TableHead>
                     <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Status</TableHead>
                     <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Bank Details</TableHead>
                     <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Created</TableHead>
@@ -244,7 +246,7 @@ export default function WithdrawalsPage() {
                 <TableBody>
                   {filteredWithdrawals.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-gray-500 dark:text-gray-400 py-12">
+                      <TableCell colSpan={8} className="text-center text-gray-500 dark:text-gray-400 py-12">
                         <CreditCard className="h-8 w-8 text-red-400 mx-auto mb-3" />
                         <p className="font-medium">No withdrawal requests found</p>
                         <p className="text-sm">Withdrawal requests for the selected filter will appear here</p>
@@ -263,6 +265,18 @@ export default function WithdrawalsPage() {
                         </TableCell>
                         <TableCell>
                           <span className="font-semibold text-green-600 dark:text-green-400">{withdrawal.amount.toFixed(2)} {withdrawal.currency || currencyFilter}</span>
+                        </TableCell>
+                        <TableCell>
+                          {withdrawal.source === "loan" ? (
+                            <Badge
+                              variant="outline"
+                              className="border-indigo-300 text-indigo-600 bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:bg-indigo-950/30"
+                            >
+                              Borrowed
+                            </Badge>
+                          ) : (
+                            <span className="text-sm text-gray-500 dark:text-gray-400">Ticket sales</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge

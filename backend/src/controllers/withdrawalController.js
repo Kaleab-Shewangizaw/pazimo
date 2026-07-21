@@ -8,9 +8,13 @@ const {
   UnauthorizedError,
 } = require("../errors");
 const Notification = require("../models/Notification");
-const { calculateOrganizerBalance } = require("../services/financeService");
+const {
+  calculateOrganizerBalance,
+  calculateLoanBalance,
+} = require("../services/financeService");
 
-// Get organizer's available balance
+// Get organizer's available balance — ticket revenue and disbursed Pazimo
+// Capital loan principal, kept as two separate pools (see financeService.js).
 const getOrganizerBalance = async (req, res) => {
   try {
     // Organizers may only ever see their own balance; only admins can view another's.
@@ -18,11 +22,14 @@ const getOrganizerBalance = async (req, res) => {
       req.user.role === "organizer" ? req.user.userId : req.params.organizerId;
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
-    const balanceData = await calculateOrganizerBalance(organizerId, currency);
+    const [balanceData, loanBalance] = await Promise.all([
+      calculateOrganizerBalance(organizerId, currency),
+      calculateLoanBalance(organizerId, currency),
+    ]);
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: balanceData,
+      data: { ...balanceData, loanBalance },
     });
   } catch (error) {
     console.error("Error getting organizer balance:", error);
@@ -44,6 +51,7 @@ const createWithdrawal = async (req, res) => {
     let organizerId;
     const { amount, notes, bankDetails } = req.body;
     const currency = req.body.currency === "USD" ? "USD" : "ETB";
+    const source = req.body.source === "loan" ? "loan" : "ticket_revenue";
 
     if (req.user.role === "admin") {
       organizerId = req.body.organizerId;
@@ -60,15 +68,20 @@ const createWithdrawal = async (req, res) => {
       );
     }
 
-    // Get available balance (match the calculation in getOrganizerBalance)
-    const { availableBalance } = await calculateOrganizerBalance(
-      organizerId,
-      currency
-    );
+    // Ticket revenue and borrowed (loan) funds are separate pools — validate
+    // against whichever one this request draws from (match getOrganizerBalance).
+    const { availableBalance } =
+      source === "loan"
+        ? await calculateLoanBalance(organizerId, currency)
+        : await calculateOrganizerBalance(organizerId, currency);
 
     // Validate amount
     if (amount > availableBalance) {
-      throw new BadRequestError("Withdrawal amount exceeds available balance");
+      throw new BadRequestError(
+        source === "loan"
+          ? "Withdrawal amount exceeds your available borrowed-funds balance"
+          : "Withdrawal amount exceeds available balance"
+      );
     }
 
     // Create withdrawal request
@@ -78,6 +91,7 @@ const createWithdrawal = async (req, res) => {
       currency,
       notes,
       bankDetails,
+      source,
       processedBy: req.user.role === "admin" ? req.user.userId : undefined,
       status: "pending",
     });
