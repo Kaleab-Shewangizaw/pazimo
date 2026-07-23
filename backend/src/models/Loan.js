@@ -91,6 +91,14 @@ const LoanSchema = new mongoose.Schema(
       default: 0,
     },
 
+    // How many 10-sale repayment milestones the organizer has already been
+    // notified about, so the automatic "60% of your last 10 ticket sales went
+    // to your advance" message fires once per milestone and never repeats.
+    repaymentMilestone: {
+      type: Number,
+      default: 0,
+    },
+
     cancelledBy: {
       type: mongoose.Schema.Types.ObjectId,
       refPath: "cancelledByModel",

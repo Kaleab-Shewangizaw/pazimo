@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { DollarSign, Wallet, AlertCircle, Banknote } from "lucide-react";
+import { DollarSign, Wallet, AlertCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -34,14 +34,11 @@ import {
 } from "@/components/ui/select";
 import { io, type Socket } from "socket.io-client";
 
-type WithdrawalSource = "ticket_revenue" | "loan";
-
 interface Withdrawal {
   _id: string;
   amount: number;
   currency?: "ETB" | "USD";
   status: "pending" | "approved" | "rejected" | "completed";
-  source?: WithdrawalSource;
   createdAt: string;
   processedAt?: string;
   notes?: string;
@@ -58,12 +55,18 @@ interface Withdrawal {
   };
 }
 
-interface LoanBalance {
+interface LoanInfo {
   currency?: "ETB" | "USD";
-  totalDisbursed: number;
-  pendingWithdrawals: number;
-  approvedWithdrawals: number;
-  availableBalance: number;
+  principalCredited: number;
+  totalRepaidFromTickets: number;
+  outstandingDebt: number;
+  activeLoan?: {
+    _id: string;
+    feeRate?: number;
+    totalRepayable?: number;
+    totalRepaid?: number;
+    outstandingBalance?: number;
+  } | null;
 }
 
 interface BalanceData {
@@ -72,7 +75,7 @@ interface BalanceData {
   pendingWithdrawals: number;
   approvedWithdrawals: number;
   availableBalance: number;
-  loanBalance?: LoanBalance;
+  loan?: LoanInfo;
   revenueBreakdown: Array<{
     eventId: string;
     eventTitle: string;
@@ -97,7 +100,6 @@ export default function WithdrawalsPage() {
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
-  const [withdrawSource, setWithdrawSource] = useState<WithdrawalSource>("ticket_revenue");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawNotes, setWithdrawNotes] = useState("");
   const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState(false);
@@ -268,21 +270,14 @@ export default function WithdrawalsPage() {
   };
 
   const handleWithdraw = async () => {
-    const sourceAvailableBalance =
-      withdrawSource === "loan"
-        ? balance?.loanBalance?.availableBalance ?? 0
-        : balance?.availableBalance ?? 0;
+    const availableBalance = balance?.availableBalance ?? 0;
 
     if (!withdrawAmount || Number.parseFloat(withdrawAmount) <= 0) {
       toast.error("Please enter a valid amount");
       return;
     }
-    if (Number.parseFloat(withdrawAmount) > sourceAvailableBalance || !balance) {
-      toast.error(
-        withdrawSource === "loan"
-          ? "Withdrawal amount cannot exceed your available borrowed-funds balance"
-          : "Withdrawal amount cannot exceed available balance"
-      );
+    if (Number.parseFloat(withdrawAmount) > availableBalance || !balance) {
+      toast.error("Withdrawal amount cannot exceed available balance");
       return;
     }
     if (!bankDetails.bankName) {
@@ -328,7 +323,6 @@ export default function WithdrawalsPage() {
       const requestBody = {
         amount: Number.parseFloat(withdrawAmount),
         currency: selectedCurrency,
-        source: withdrawSource,
         notes: withdrawNotes,
         bankDetails,
       };
@@ -363,7 +357,6 @@ export default function WithdrawalsPage() {
         toast.success("Withdrawal request submitted successfully");
         setWithdrawDialogOpen(false);
         setWithdrawAmount("");
-        setWithdrawSource("ticket_revenue");
         setWithdrawNotes("");
         setBankDetails({
           accountName: "",
@@ -445,7 +438,7 @@ export default function WithdrawalsPage() {
       </div>
 
       {/* Balance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {loading ? (
           <>
             <SkeletonCard />
@@ -511,28 +504,6 @@ export default function WithdrawalsPage() {
               </CardContent>
             </Card>
 
-            {!!balance?.loanBalance && balance.loanBalance.totalDisbursed > 0 && (
-              <Card className="overflow-hidden border-none shadow-md hover:shadow-lg transition-shadow bg-gradient-to-br from-white to-indigo-100 hover:from-indigo-100 hover:to-white dark:from-black dark:to-indigo-950/30 dark:hover:from-indigo-950/40 dark:hover:to-black">
-                <CardContent className="p-4 sm:p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-                        Borrowed Funds Available
-                      </div>
-                      <div className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
-                        {balance.loanBalance.availableBalance.toFixed(2)} {selectedCurrency}
-                      </div>
-                      <div className="text-xs text-muted-foreground dark:text-gray-500 mt-1">
-                        From Pazimo Capital — separate from ticket revenue
-                      </div>
-                    </div>
-                    <div className="p-2 sm:p-3 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 shadow-sm">
-                      <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600 dark:text-indigo-400" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </>
         )}
       </div>
@@ -540,16 +511,8 @@ export default function WithdrawalsPage() {
       {/* Withdrawal Request Button */}
       <div className="mb-6 sm:mb-8">
         <Button
-          onClick={() => {
-            setWithdrawSource(
-              (balance?.availableBalance ?? 0) > 0 ? "ticket_revenue" : "loan"
-            );
-            setWithdrawDialogOpen(true);
-          }}
-          disabled={
-            !balance ||
-            (balance.availableBalance <= 0 && (balance.loanBalance?.availableBalance ?? 0) <= 0)
-          }
+          onClick={() => setWithdrawDialogOpen(true)}
+          disabled={!balance || balance.availableBalance <= 0}
           className="w-full sm:w-auto bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 dark:bg-[#1a2d5a] dark:hover:bg-[#1a2d5a]/80 text-sm sm:text-base py-2 sm:py-2.5 px-4 sm:px-5 text-white"
         >
           <DollarSign className="h-4 w-4 mr-2" />
@@ -582,7 +545,6 @@ export default function WithdrawalsPage() {
                 <TableRow className="border-gray-200 dark:border-gray-800">
                   <TableHead className="text-xs sm:text-sm dark:text-gray-300">Date</TableHead>
                   <TableHead className="text-xs sm:text-sm dark:text-gray-300">Amount</TableHead>
-                  <TableHead className="text-xs sm:text-sm dark:text-gray-300">Source</TableHead>
                   <TableHead className="text-xs sm:text-sm dark:text-gray-300">Status</TableHead>
                   <TableHead className="text-xs sm:text-sm dark:text-gray-300">
                     Transaction ID
@@ -597,7 +559,7 @@ export default function WithdrawalsPage() {
                 {withdrawals.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={7}
+                      colSpan={6}
                       className="text-center text-muted-foreground dark:text-gray-400 text-sm py-8"
                     >
                       No withdrawal requests found
@@ -611,18 +573,6 @@ export default function WithdrawalsPage() {
                       </TableCell>
                       <TableCell className="font-medium text-xs sm:text-sm dark:text-gray-100">
                         {withdrawal.amount.toFixed(2)} {withdrawal.currency || selectedCurrency}
-                      </TableCell>
-                      <TableCell className="text-xs sm:text-sm">
-                        {withdrawal.source === "loan" ? (
-                          <Badge
-                            variant="outline"
-                            className="px-2 py-0.5 sm:px-3 sm:py-1 text-xs border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30"
-                          >
-                            Borrowed
-                          </Badge>
-                        ) : (
-                          <span className="text-gray-500 dark:text-gray-400">Ticket sales</span>
-                        )}
                       </TableCell>
                       <TableCell className="text-xs sm:text-sm">
                         <Badge
@@ -721,30 +671,6 @@ export default function WithdrawalsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {!!balance?.loanBalance && balance.loanBalance.totalDisbursed > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm dark:text-gray-300">Withdraw from</Label>
-                <Select
-                  value={withdrawSource}
-                  onValueChange={(value: WithdrawalSource) => {
-                    setWithdrawSource(value);
-                    setWithdrawAmount("");
-                  }}
-                >
-                  <SelectTrigger className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-200">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="dark:bg-black dark:border-gray-700">
-                    <SelectItem value="ticket_revenue" className="dark:text-gray-200">
-                      Ticket Sales ({(balance?.availableBalance ?? 0).toFixed(2)} {selectedCurrency})
-                    </SelectItem>
-                    <SelectItem value="loan" className="dark:text-gray-200">
-                      Borrowed Funds ({balance.loanBalance.availableBalance.toFixed(2)} {selectedCurrency})
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
             <div className="space-y-2">
               <Label htmlFor="withdraw-amount" className="text-sm dark:text-gray-300">
                 Amount ({selectedCurrency})
@@ -928,16 +854,8 @@ export default function WithdrawalsPage() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground dark:text-gray-400">
                 <AlertCircle className="h-4 w-4" />
                 <span>
-                  {withdrawSource === "loan"
-                    ? "Borrowed Funds Available"
-                    : "Available Balance (After 3% Commission)"}
-                  :{" "}
-                  {(
-                    (withdrawSource === "loan"
-                      ? balance?.loanBalance?.availableBalance
-                      : balance?.availableBalance) ?? 0
-                  ).toFixed(2)}{" "}
-                  {selectedCurrency}
+                  Available Balance:{" "}
+                  {(balance?.availableBalance ?? 0).toFixed(2)} {selectedCurrency}
                 </span>
               </div>
             </div>
@@ -956,10 +874,7 @@ export default function WithdrawalsPage() {
                 !withdrawAmount ||
                 isSubmittingWithdraw ||
                 Number.parseFloat(withdrawAmount) <= 0 ||
-                Number.parseFloat(withdrawAmount) >
-                  ((withdrawSource === "loan"
-                    ? balance?.loanBalance?.availableBalance
-                    : balance?.availableBalance) ?? 0) ||
+                Number.parseFloat(withdrawAmount) > (balance?.availableBalance ?? 0) ||
                 !bankDetails.bankName ||
                 ((bankDetails.bankName === "telebirr" ||
                   bankDetails.bankName === "mpesa") &&

@@ -233,9 +233,7 @@ export default function CapitalDashboardPage() {
                   {metrics ? formatCompactMoney(metrics.borrowingLimit, metrics.currency) : "—"}
                 </div>
                 <div className="text-xs text-muted-foreground dark:text-gray-500 mt-1">
-                  30% of your last {metrics?.limitBasis.length || 0} event
-                  {metrics && metrics.limitBasis.length === 1 ? "" : "s"} (
-                  {metrics ? formatCompactMoney(metrics.lastTwoEventsRevenue, metrics.currency) : "0"} combined revenue)
+                  Set by Pazimo based on your recent events
                 </div>
               </div>
               <div className="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
@@ -280,6 +278,13 @@ export default function CapitalDashboardPage() {
                 </div>
                 {activeLoan.status === "active" && (
                   <>
+                    {activeLoan.feeRate !== undefined && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {(activeLoan.feeRate * 100).toFixed(0)}% fee added — total to repay{" "}
+                        {formatCompactMoney(activeLoan.totalRepayable || 0, activeLoan.currency)}.
+                        Repaid automatically from 60% of your ticket sales.
+                      </p>
+                    )}
                     <Progress value={repaymentPercent} />
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>
@@ -298,7 +303,7 @@ export default function CapitalDashboardPage() {
                 )}
                 {activeLoan.status === "approved" && (
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Approved — funds are being disbursed.
+                    Approved — funds are being added to your withdrawal balance.
                   </p>
                 )}
               </div>
@@ -368,7 +373,10 @@ export default function CapitalDashboardPage() {
           <DialogHeader>
             <DialogTitle className="dark:text-gray-100">Request a loan</DialogTitle>
             <DialogDescription className="dark:text-gray-400">
-              A 15% fee applies to the approved amount. Your available limit is{" "}
+              Pazimo adds a service fee, set when your request is approved — you&apos;ll
+              see the exact percentage and amount then. Repayment is automatic: 60% of
+              each ticket you sell goes toward it until it&apos;s cleared. Your available
+              limit is{" "}
               {metrics ? formatCompactMoney(metrics.borrowingLimit, metrics.currency) : "—"}.
             </DialogDescription>
           </DialogHeader>

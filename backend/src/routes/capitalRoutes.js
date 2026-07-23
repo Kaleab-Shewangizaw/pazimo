@@ -53,18 +53,6 @@ router.patch(
   restrictTo("admin"),
   capitalController.rejectLoan
 );
-router.post(
-  "/admin/loans/:id/disburse",
-  authenticateUser,
-  restrictTo("admin"),
-  capitalController.disburseLoan
-);
-router.post(
-  "/admin/loans/:id/repayments",
-  authenticateUser,
-  restrictTo("admin"),
-  capitalController.recordRepayment
-);
 router.patch(
   "/admin/loans/:id/cancel",
   authenticateUser,

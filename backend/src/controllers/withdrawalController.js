@@ -8,13 +8,13 @@ const {
   UnauthorizedError,
 } = require("../errors");
 const Notification = require("../models/Notification");
-const {
-  calculateOrganizerBalance,
-  calculateLoanBalance,
-} = require("../services/financeService");
+const { calculateOrganizerBalance } = require("../services/financeService");
+const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 
-// Get organizer's available balance — ticket revenue and disbursed Pazimo
-// Capital loan principal, kept as two separate pools (see financeService.js).
+// Get organizer's available balance. Ticket revenue and any borrowed Pazimo
+// Capital principal are now a single pool: the advance is credited straight in
+// and repaid automatically via a 60% cut of post-approval ticket sales (see
+// financeService.calculateOrganizerBalance).
 const getOrganizerBalance = async (req, res) => {
   try {
     // Organizers may only ever see their own balance; only admins can view another's.
@@ -22,14 +22,15 @@ const getOrganizerBalance = async (req, res) => {
       req.user.role === "organizer" ? req.user.userId : req.params.organizerId;
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
-    const [balanceData, loanBalance] = await Promise.all([
-      calculateOrganizerBalance(organizerId, currency),
-      calculateLoanBalance(organizerId, currency),
-    ]);
+    // Bring any active advance up to date with the latest ticket sales before
+    // reading the balance, so repayment progress and notifications stay current.
+    await syncOrganizerLoans(organizerId, req);
+
+    const balanceData = await calculateOrganizerBalance(organizerId, currency);
 
     res.status(StatusCodes.OK).json({
       success: true,
-      data: { ...balanceData, loanBalance },
+      data: balanceData,
     });
   } catch (error) {
     console.error("Error getting organizer balance:", error);
@@ -51,7 +52,6 @@ const createWithdrawal = async (req, res) => {
     let organizerId;
     const { amount, notes, bankDetails } = req.body;
     const currency = req.body.currency === "USD" ? "USD" : "ETB";
-    const source = req.body.source === "loan" ? "loan" : "ticket_revenue";
 
     if (req.user.role === "admin") {
       organizerId = req.body.organizerId;
@@ -68,20 +68,17 @@ const createWithdrawal = async (req, res) => {
       );
     }
 
-    // Ticket revenue and borrowed (loan) funds are separate pools — validate
-    // against whichever one this request draws from (match getOrganizerBalance).
-    const { availableBalance } =
-      source === "loan"
-        ? await calculateLoanBalance(organizerId, currency)
-        : await calculateOrganizerBalance(organizerId, currency);
+    // Ticket revenue and borrowed principal share one balance now — sync any
+    // active advance to the latest ticket sales, then validate against it.
+    await syncOrganizerLoans(organizerId, req);
+    const { availableBalance } = await calculateOrganizerBalance(
+      organizerId,
+      currency
+    );
 
     // Validate amount
     if (amount > availableBalance) {
-      throw new BadRequestError(
-        source === "loan"
-          ? "Withdrawal amount exceeds your available borrowed-funds balance"
-          : "Withdrawal amount exceeds available balance"
-      );
+      throw new BadRequestError("Withdrawal amount exceeds available balance");
     }
 
     // Create withdrawal request
@@ -91,7 +88,6 @@ const createWithdrawal = async (req, res) => {
       currency,
       notes,
       bankDetails,
-      source,
       processedBy: req.user.role === "admin" ? req.user.userId : undefined,
       status: "pending",
     });

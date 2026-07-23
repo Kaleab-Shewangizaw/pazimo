@@ -99,15 +99,6 @@ interface Loan {
   createdAt: string;
 }
 
-interface Repayment {
-  _id: string;
-  amount: number;
-  currency: Currency;
-  note?: string;
-  createdAt: string;
-  recordedBy?: { firstName: string; lastName: string };
-}
-
 const STATUS_STYLES: Record<LoanStatus, string> = {
   pending:
     "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-300 dark:border-yellow-900",
@@ -159,13 +150,9 @@ export default function CapitalPage() {
   // Loan review dialog
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [reviewLoan, setReviewLoan] = useState<Loan | null>(null);
-  const [reviewRepayments, setReviewRepayments] = useState<Repayment[]>([]);
   const [approvedAmount, setApprovedAmount] = useState("");
   const [feeRatePercent, setFeeRatePercent] = useState("15");
   const [rejectReason, setRejectReason] = useState("");
-  const [disbursementReference, setDisbursementReference] = useState("");
-  const [repaymentAmount, setRepaymentAmount] = useState("");
-  const [repaymentNote, setRepaymentNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const fetchOrganizers = useCallback(async () => {
@@ -176,6 +163,8 @@ export default function CapitalPage() {
         limit: "10",
         currency,
         ...(orgSearch ? { search: orgSearch } : {}),
+        // The "Eligible" tab reuses this table, restricted to eligible organizers.
+        ...(tab === "eligible" ? { eligibility: "eligible" } : {}),
       });
       const res = await fetch(`${API_URL}/api/capital/admin/organizers?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -190,7 +179,7 @@ export default function CapitalPage() {
     } finally {
       setOrgLoading(false);
     }
-  }, [orgPage, orgSearch, currency, token]);
+  }, [orgPage, orgSearch, currency, token, tab]);
 
   const fetchLoans = useCallback(async () => {
     try {
@@ -218,7 +207,7 @@ export default function CapitalPage() {
 
   useEffect(() => {
     if (!token) return;
-    if (tab === "organizers") fetchOrganizers();
+    if (tab === "organizers" || tab === "eligible") fetchOrganizers();
   }, [token, tab, fetchOrganizers]);
 
   useEffect(() => {
@@ -269,9 +258,6 @@ export default function CapitalPage() {
     setApprovedAmount(String(loan.approvedAmount ?? loan.requestedAmount));
     setFeeRatePercent(String((loan.feeRate ?? 0.15) * 100));
     setRejectReason("");
-    setDisbursementReference("");
-    setRepaymentAmount("");
-    setRepaymentNote("");
     setReviewDialogOpen(true);
     try {
       const res = await fetch(`${API_URL}/api/capital/admin/loans/${loan._id}`, {
@@ -280,7 +266,6 @@ export default function CapitalPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setReviewLoan(data.data.loan);
-        setReviewRepayments(data.data.repayments || []);
       }
     } catch (error) {
       console.error("Failed to load loan detail", error);
@@ -295,7 +280,6 @@ export default function CapitalPage() {
     const data = await res.json();
     if (res.ok && data.success) {
       setReviewLoan(data.data.loan);
-      setReviewRepayments(data.data.repayments || []);
     }
   };
 
@@ -350,31 +334,6 @@ export default function CapitalPage() {
     );
   };
 
-  const handleDisburse = () =>
-    runAction(
-      `${API_URL}/api/capital/admin/loans/${reviewLoan?._id}/disburse`,
-      "POST",
-      { reference: disbursementReference },
-      "Credited to the organizer's withdrawal balance"
-    );
-
-  const handleRecordRepayment = () => {
-    const amount = Number(repaymentAmount);
-    if (!(amount > 0)) {
-      toast.error("Enter a valid repayment amount");
-      return;
-    }
-    runAction(
-      `${API_URL}/api/capital/admin/loans/${reviewLoan?._id}/repayments`,
-      "POST",
-      { amount, note: repaymentNote },
-      "Repayment recorded"
-    ).then(() => {
-      setRepaymentAmount("");
-      setRepaymentNote("");
-    });
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-black">
       <div className="container mx-auto py-10 p-10 max-w-7xl">
@@ -396,10 +355,19 @@ export default function CapitalPage() {
           </Select>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            setTab(v);
+            setOrgPage(1);
+          }}
+        >
           <TabsList className="mb-6">
             <TabsTrigger value="organizers">
               <Building2 className="h-4 w-4 mr-1.5" /> Organizers
+            </TabsTrigger>
+            <TabsTrigger value="eligible">
+              <ShieldCheck className="h-4 w-4 mr-1.5" /> Eligible
             </TabsTrigger>
             <TabsTrigger value="loans">
               <ListChecks className="h-4 w-4 mr-1.5" /> Loan Requests
@@ -409,8 +377,11 @@ export default function CapitalPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ---------------- Organizers tab ---------------- */}
-          <TabsContent value="organizers">
+          {/* ---------------- Organizers / Eligible tab ----------------
+              One panel serves both tabs: its value tracks whichever of the two
+              is active, so the table renders for "organizers" and "eligible"
+              (the latter fetches with an eligibility=eligible filter). */}
+          <TabsContent value={tab === "eligible" ? "eligible" : "organizers"}>
             <Card className="border border-gray-200 dark:border-gray-700 shadow-lg border-t-4 border-t-emerald-600 dark:bg-gray-800">
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
@@ -808,7 +779,7 @@ export default function CapitalPage() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="dark:text-gray-300">Fee rate (%)</Label>
+                        <Label className="dark:text-gray-300">Interest / fee rate (%)</Label>
                         <Input
                           type="number"
                           value={feeRatePercent}
@@ -817,12 +788,23 @@ export default function CapitalPage() {
                         />
                       </div>
                     </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Approving credits{" "}
+                      {formatCompactMoney(Number(approvedAmount) || 0, reviewLoan.currency)} to the
+                      organizer&apos;s withdrawal balance immediately. With a {feeRatePercent || 0}% fee they
+                      repay{" "}
+                      {formatCompactMoney(
+                        Math.round((Number(approvedAmount) || 0) * (1 + (Number(feeRatePercent) || 0) / 100) * 100) / 100,
+                        reviewLoan.currency
+                      )}
+                      , taken automatically as 60% of their ticket sales — no manual repayment needed.
+                    </p>
                     <Button
                       onClick={handleApprove}
                       disabled={submitting}
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
-                      Approve loan
+                      Approve &amp; credit balance
                     </Button>
                     <div className="space-y-1.5 pt-2 border-t border-gray-200 dark:border-gray-700">
                       <Label className="dark:text-gray-300">Rejection reason</Label>
@@ -844,93 +826,11 @@ export default function CapitalPage() {
                   </div>
                 )}
 
-                {!isPartner && reviewLoan.status === "approved" && (
-                  <div className="space-y-3 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">
-                      Credit to withdrawal balance
-                    </h4>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      This adds {formatCompactMoney(reviewLoan.approvedAmount || 0, reviewLoan.currency)} to the
-                      organizer&apos;s <strong>Borrowed Funds</strong> balance on the Withdrawals page, kept
-                      separate from their ticket revenue. They&apos;ll request an actual payout from there.
-                    </p>
-                    <div className="space-y-1.5">
-                      <Label className="dark:text-gray-300">Internal note (optional)</Label>
-                      <Input
-                        value={disbursementReference}
-                        onChange={(e) => setDisbursementReference(e.target.value)}
-                        placeholder="e.g. approved per finance review"
-                        className="dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                      />
-                    </div>
-                    <Button
-                      onClick={handleDisburse}
-                      disabled={submitting}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      Credit withdrawal balance
-                    </Button>
-                  </div>
-                )}
-
-                {!isPartner && reviewLoan.status === "active" && (
-                  <div className="space-y-3 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100">Record a repayment</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <Label className="dark:text-gray-300">Amount ({reviewLoan.currency})</Label>
-                        <Input
-                          type="number"
-                          value={repaymentAmount}
-                          onChange={(e) => setRepaymentAmount(e.target.value)}
-                          className="dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="dark:text-gray-300">Note (optional)</Label>
-                        <Input
-                          value={repaymentNote}
-                          onChange={(e) => setRepaymentNote(e.target.value)}
-                          className="dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
-                        />
-                      </div>
-                    </div>
-                    <Button
-                      onClick={handleRecordRepayment}
-                      disabled={submitting}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                      Record repayment
-                    </Button>
-                  </div>
-                )}
-
-                {reviewRepayments.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Repayment history</h4>
-                    <div className="space-y-2">
-                      {reviewRepayments.map((r) => (
-                        <div
-                          key={r._id}
-                          className="flex justify-between items-center text-sm p-2.5 bg-gray-50 dark:bg-gray-900/50 rounded-lg"
-                        >
-                          <div>
-                            <p className="text-gray-900 dark:text-gray-100">
-                              {formatCompactMoney(r.amount, r.currency)}
-                              {r.note ? <span className="text-gray-500 dark:text-gray-400"> — {r.note}</span> : null}
-                            </p>
-                            {r.recordedBy && (
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                by {r.recordedBy.firstName} {r.recordedBy.lastName}
-                              </p>
-                            )}
-                          </div>
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {new Date(r.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                {(reviewLoan.status === "active" || reviewLoan.status === "repaid") && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400">
+                    Repayment is automatic — 60% of every ticket this organizer sells goes
+                    toward the advance until it&apos;s cleared. The outstanding balance above
+                    updates as their sales come in; there&apos;s nothing to record manually.
                   </div>
                 )}
               </div>

@@ -41,20 +41,17 @@ const WithdrawalSchema = new mongoose.Schema(
     transactionId: {
       type: String,
     },
-    // Which balance this draws down. Ticket-sale revenue and disbursed loan
-    // principal are tracked as separate pools (see financeService.js) so a
-    // loan payout never gets counted as ordinary ticket revenue or vice
-    // versa. Missing/undefined is treated as 'ticket_revenue' throughout for
-    // backward compatibility with withdrawals created before this field.
+    // Legacy field. Borrowed Pazimo Capital principal is now credited into the
+    // single ticket-revenue balance (see financeService.calculateOrganizerBalance),
+    // so every withdrawal draws that one pool regardless of source. Kept only so
+    // older 'loan'-sourced rows still validate; new rows default to
+    // 'ticket_revenue' and the value no longer affects balance math.
     source: {
       type: String,
       enum: ['ticket_revenue', 'loan'],
       default: 'ticket_revenue',
     },
-    // Best-effort reference to the loan this withdrawal drew from, when
-    // source is 'loan'. Not the source of truth for balance math (that's
-    // the aggregation in financeService.calculateLoanBalance) — just lets
-    // admins trace a specific withdrawal back to the loan that funded it.
+    // Optional back-reference to a loan, retained for tracing older rows.
     loan: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Loan',

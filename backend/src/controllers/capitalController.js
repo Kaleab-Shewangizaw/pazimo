@@ -15,6 +15,7 @@ const {
   calculateOrganizerCapitalMetrics,
   getBlockingLoan,
 } = require("../services/capitalService");
+const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 
 const EPSILON = 0.01;
 
@@ -56,7 +57,7 @@ const getOrCreateProfile = async (organizerId) => {
 
 const listOrganizersForCapital = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, currency } = req.query;
+    const { page = 1, limit = 10, search, currency, eligibility } = req.query;
     const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
     const skip = (page - 1) * limit;
 
@@ -64,6 +65,17 @@ const listOrganizersForCapital = async (req, res) => {
     if (search) {
       const regex = new RegExp(search, "i");
       query.$or = [{ firstName: regex }, { lastName: regex }, { email: regex }];
+    }
+
+    // "Eligible organizers" tab: restrict to organizers whose capital profile is
+    // marked eligible. Only eligible organizers ever have such a profile, so an
+    // $in on their ids is enough (organizers with no profile default to
+    // not_eligible and are correctly excluded).
+    if (eligibility === "eligible" || eligibility === "not_eligible") {
+      const profiles = await OrganizerCapitalProfile.find({ eligibility }).select(
+        "organizer"
+      );
+      query._id = { $in: profiles.map((p) => p.organizer) };
     }
 
     const [organizers, total] = await Promise.all([
@@ -78,6 +90,8 @@ const listOrganizersForCapital = async (req, res) => {
 
     const enriched = await Promise.all(
       organizers.map(async (organizer) => {
+        // Bring any active advance up to date with ticket sales before reading.
+        await syncOrganizerLoans(organizer._id, req);
         const [profile, metrics, activeLoan] = await Promise.all([
           getOrCreateProfile(organizer._id),
           calculateOrganizerCapitalMetrics(organizer._id, normalizedCurrency),
@@ -119,6 +133,8 @@ const getOrganizerCapitalDetail = async (req, res) => {
       "firstName lastName email phoneNumber createdAt"
     );
     if (!organizer) throw new NotFoundError("Organizer not found");
+
+    await syncOrganizerLoans(id, req);
 
     const [profile, metrics, loans] = await Promise.all([
       getOrCreateProfile(id),
@@ -173,6 +189,14 @@ const listLoans = async (req, res) => {
     if (status && status !== "all") query.status = status;
     if (organizerId) query.organizer = organizerId;
 
+    // Sync active advances (distinct organizers) to the latest ticket sales so
+    // the list reflects current repayment progress and active→repaid transitions.
+    const activeOrganizerIds = await Loan.find({ ...query, status: "active" })
+      .distinct("organizer");
+    for (const orgId of activeOrganizerIds) {
+      await syncOrganizerLoans(orgId, req);
+    }
+
     const [loans, total, statsRows] = await Promise.all([
       Loan.find(query)
         .populate("organizer", "firstName lastName email")
@@ -217,6 +241,10 @@ const listLoans = async (req, res) => {
 
 const getLoan = async (req, res) => {
   try {
+    const existing = await Loan.findById(req.params.id).select("organizer");
+    if (!existing) throw new NotFoundError("Loan not found");
+    await syncOrganizerLoans(existing.organizer, req);
+
     const loan = await Loan.findById(req.params.id)
       .populate("organizer", "firstName lastName email phoneNumber")
       .populate("reviewedBy", "firstName lastName email");
@@ -257,23 +285,40 @@ const approveLoan = async (req, res) => {
     }
 
     const feeRate = req.body.feeRate !== undefined ? Number(req.body.feeRate) : loan.feeRate;
+    if (!(feeRate >= 0)) {
+      throw new BadRequestError("feeRate must be a non-negative number");
+    }
     const feeAmount = Math.round(requestedApprovedAmount * feeRate * 100) / 100;
     const totalRepayable = Math.round((requestedApprovedAmount + feeAmount) * 100) / 100;
 
+    const now = new Date();
     loan.approvedAmount = requestedApprovedAmount;
     loan.feeRate = feeRate;
     loan.feeAmount = feeAmount;
     loan.totalRepayable = totalRepayable;
     loan.outstandingBalance = totalRepayable;
-    loan.status = "approved";
+    loan.totalRepaid = 0;
+    loan.repaymentMilestone = 0;
+    // Approval credits the money immediately — there's no separate manual
+    // disburse step. Status goes straight to "active": the principal shows up
+    // in the organizer's withdrawal balance and repayment starts accruing from
+    // ticket sales made from this moment on (disbursedAt is the repayment
+    // start; see loanRepaymentService).
+    loan.status = "active";
     loan.reviewedBy = req.user.userId;
-    loan.reviewedAt = new Date();
+    loan.reviewedAt = now;
+    loan.disbursedAt = now;
     await loan.save();
+
+    await OrganizerCapitalProfile.updateOne(
+      { organizer: loan.organizer },
+      { hasActiveLoan: true }
+    );
 
     await notifyOrganizer(
       req,
       loan,
-      `Your loan request has been approved for ${requestedApprovedAmount} ${loan.currency}. It will be disbursed shortly.`
+      `Your Pazimo Capital request for ${requestedApprovedAmount} ${loan.currency} is approved and added to your withdrawal balance. A ${(feeRate * 100).toFixed(0)}% fee applies (repay ${totalRepayable} ${loan.currency}), taken automatically as 60% of your ticket sales.`
     );
 
     res.status(StatusCodes.OK).json({ success: true, data: loan });
@@ -312,102 +357,6 @@ const rejectLoan = async (req, res) => {
     res.status(StatusCodes.OK).json({ success: true, data: loan });
   } catch (error) {
     console.error("Error rejecting loan:", error);
-    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
-    res.status(status).json({ success: false, message: error.message });
-  }
-};
-
-const disburseLoan = async (req, res) => {
-  try {
-    const { reference } = req.body;
-    const loan = await Loan.findById(req.params.id);
-    if (!loan) throw new NotFoundError("Loan not found");
-    if (loan.status !== "approved") {
-      throw new BadRequestError(`Cannot disburse a loan with status '${loan.status}'`);
-    }
-
-    loan.status = "active";
-    loan.disbursedAt = new Date();
-    loan.disbursementReference = reference;
-    await loan.save();
-
-    await OrganizerCapitalProfile.updateOne(
-      { organizer: loan.organizer },
-      { hasActiveLoan: true }
-    );
-
-    // No balance write happens here on purpose — financeService.calculateLoanBalance
-    // derives the withdrawable loan balance live from Loan.status/approvedAmount,
-    // same "compute fresh, never a stored counter" pattern as ticket revenue.
-    // Flipping status to "active" is what makes it show up.
-    await notifyOrganizer(
-      req,
-      loan,
-      `Your loan of ${loan.approvedAmount} ${loan.currency} has been added to your withdrawal balance. Request a withdrawal to receive it.`
-    );
-
-    res.status(StatusCodes.OK).json({ success: true, data: loan });
-  } catch (error) {
-    console.error("Error disbursing loan:", error);
-    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
-    res.status(status).json({ success: false, message: error.message });
-  }
-};
-
-const recordRepayment = async (req, res) => {
-  try {
-    const { note } = req.body;
-    const requestedAmount = Number(req.body.amount);
-    if (!(requestedAmount > 0)) throw new BadRequestError("amount must be greater than 0");
-
-    const loan = await Loan.findById(req.params.id);
-    if (!loan) throw new NotFoundError("Loan not found");
-    if (loan.status !== "active") {
-      throw new BadRequestError(`Cannot record a repayment against a loan with status '${loan.status}'`);
-    }
-
-    // Cap at the outstanding balance — an overshoot becomes ordinary
-    // withdrawable revenue for the organizer, not credit toward a future loan.
-    const appliedAmount = Math.min(requestedAmount, loan.outstandingBalance);
-    const newOutstanding = Math.round((loan.outstandingBalance - appliedAmount) * 100) / 100;
-
-    const repayment = await LoanRepayment.create({
-      loan: loan._id,
-      organizer: loan.organizer,
-      amount: appliedAmount,
-      currency: loan.currency,
-      recordedBy: req.user.userId,
-      outstandingBalanceAfter: newOutstanding,
-      note,
-    });
-
-    loan.outstandingBalance = newOutstanding;
-    loan.totalRepaid = Math.round((loan.totalRepaid + appliedAmount) * 100) / 100;
-    if (newOutstanding <= EPSILON) {
-      loan.outstandingBalance = 0;
-      loan.status = "repaid";
-      loan.blocksNewRequests = false;
-      await OrganizerCapitalProfile.updateOne(
-        { organizer: loan.organizer },
-        { hasActiveLoan: false }
-      );
-    }
-    await loan.save();
-
-    await notifyOrganizer(
-      req,
-      loan,
-      loan.status === "repaid"
-        ? `Your loan has been fully repaid.`
-        : `A repayment of ${appliedAmount} ${loan.currency} was recorded. Outstanding balance: ${newOutstanding} ${loan.currency}.`
-    );
-
-    res.status(StatusCodes.CREATED).json({
-      success: true,
-      data: { loan, repayment, cappedFrom: requestedAmount !== appliedAmount ? requestedAmount : undefined },
-    });
-  } catch (error) {
-    console.error("Error recording repayment:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
   }
@@ -469,6 +418,8 @@ const getMySummary = async (req, res) => {
   try {
     const organizerId = req.user.userId;
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
+
+    await syncOrganizerLoans(organizerId, req);
 
     const [metrics, activeLoan] = await Promise.all([
       calculateOrganizerCapitalMetrics(organizerId, currency),
@@ -545,6 +496,8 @@ const listMyLoans = async (req, res) => {
     const skip = (page - 1) * limit;
     const query = { organizer: req.user.userId };
 
+    await syncOrganizerLoans(req.user.userId, req);
+
     const [loans, total] = await Promise.all([
       Loan.find(query).sort("-createdAt").skip(skip).limit(Number(limit)),
       Loan.countDocuments(query),
@@ -566,6 +519,8 @@ const listMyLoans = async (req, res) => {
 
 const getMyLoan = async (req, res) => {
   try {
+    await syncOrganizerLoans(req.user.userId, req);
+
     const loan = await Loan.findById(req.params.id);
     if (!loan) throw new NotFoundError("Loan not found");
     if (loan.organizer.toString() !== req.user.userId) {
@@ -622,8 +577,6 @@ module.exports = {
   getLoan,
   approveLoan,
   rejectLoan,
-  disburseLoan,
-  recordRepayment,
   adminCancelLoan,
   getMyEligibility,
   getMySummary,
