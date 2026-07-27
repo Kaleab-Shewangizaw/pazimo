@@ -1,7 +1,9 @@
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
+const Loan = require("../models/Loan");
 const mongoose = require("mongoose");
+const { getOrganizerLoanFinance } = require("./loanRepaymentService");
 
 const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
@@ -115,6 +117,9 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
       ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
       : { currency: normalizedCurrency };
 
+  // Borrowed Pazimo Capital principal is now credited straight into this one
+  // available balance (no separate "Borrowed Funds" pool), so every withdrawal
+  // — whatever its historical `source` — draws this single balance down.
   const withdrawalStats = await Withdrawal.aggregate([
     {
       $match: {
@@ -155,8 +160,20 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const pendingAmount = withdrawalData.pendingAmount;
   const approvedAmount = withdrawalData.approvedAmount;
 
+  // Pazimo Capital position. Borrowed principal is added to the withdrawable
+  // balance (the organizer spends it like their own money); repayment is then
+  // taken automatically as 60% of gross ticket sales made after the advance
+  // was approved. That 60% cut is exactly `totalRepaidFromTickets`, so
+  // subtracting it here leaves the organizer with 40% of those sales (less the
+  // 3% commission already baked into organizerRevenue) — matching the spec.
+  const loanFinance = await getOrganizerLoanFinance(organizerId, normalizedCurrency);
+
   // Calculate available balance
-  const availableBalance = organizerRevenue - (pendingAmount + approvedAmount);
+  const availableBalance =
+    organizerRevenue +
+    loanFinance.principalCredited -
+    loanFinance.totalRepaidFromTickets -
+    (pendingAmount + approvedAmount);
 
   // Format status breakdown
   const statusBreakdown = {};
@@ -196,6 +213,16 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     pendingWithdrawals: pendingAmount,
     approvedWithdrawals: approvedAmount,
     availableBalance,
+    // Pazimo Capital summary, exposed for display only (the numbers above
+    // already reflect it). outstandingDebt is what the organizer still owes,
+    // being repaid automatically from their ticket sales.
+    loan: {
+      currency: loanFinance.currency,
+      principalCredited: loanFinance.principalCredited,
+      totalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
+      outstandingDebt: loanFinance.outstandingDebt,
+      activeLoan: loanFinance.activeLoan,
+    },
     revenueBreakdown,
     statusBreakdown,
     summary: {

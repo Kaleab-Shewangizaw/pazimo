@@ -1,5 +1,6 @@
 "use client"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { User, Menu, Bell, CheckCircle, XCircle, Info, DollarSign, CalendarCheck } from "lucide-react"
 import { useAuthStore } from "@/store/authStore"
@@ -204,10 +205,24 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
     <>
       <header className="md:relative dark:bg-black fixed top-0 left-0 right-0 z-50 py-4 px-4 sm:px-8 md:px-16 border-b dark:border-gray-600 border-gray-200 bg-white/95 md:bg-white backdrop-blur-sm transition-all duration-300 ease-out">
         <div className="flex flex-row items-center justify-between md:flex-row md:items-center md:justify-between gap-4 md:gap-6">
-          {/* Logo */}
-        
+          {/* Logo for mobile */}
+          <Link
+            href="/organizer"
+            className="flex md:hidden items-center"
+            aria-label="Pazimo — organizer dashboard"
+          >
+            <Image
+              src="/logo2.png"
+              alt="Pazimo"
+              width={120}
+              height={80}
+              priority
+              className="h-8 w-auto object-contain"
+            />
+          </Link>
+
           {/* Hamburger for mobile - now only triggers external sidebar */}
-          <div className="flex md:hidden items-center gap-1">
+          <div className="flex md:hidden items-center gap-1 ml-auto">
             <ThemeToggle />
             <button
               className="p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-[#115db1] dark:hover:text-blue-400 focus:outline-none focus:ring-2 focus:ring-[#115db1] transition-colors"
