@@ -580,7 +580,7 @@ export default function OrganizersPage() {
 
         const organizer = organizers.find((o) => o._id === organizerId);
         if (organizer && organizer.events && organizer.events.length > 0) {
-          const enhancedBreakdown = balanceData.revenueBreakdown.map(
+          const enhancedBreakdown = (balanceData.revenueBreakdown || []).map(
             (eventBreakdown) => {
               const event = organizer.events.find(
                 (e) => e._id === eventBreakdown.eventId
@@ -1367,7 +1367,7 @@ export default function OrganizersPage() {
                         Total Tickets Sold
                       </div>
                       <div className="text-lg font-bold text-indigo-600 dark:text-indigo-400 mt-1">
-                        {organizerBalance.summary.totalTicketsSold}
+                        {organizerBalance.summary?.totalTicketsSold ?? 0}
                       </div>
                     </CardContent>
                   </Card>
@@ -1378,7 +1378,7 @@ export default function OrganizersPage() {
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Event Breakdown
                   </h3>
-                  {organizerBalance.revenueBreakdown.map((event) => (
+                  {(organizerBalance.revenueBreakdown || []).map((event) => (
                     <Card
                       key={event.eventId}
                       className="border border-gray-200 dark:border-gray-700 shadow-md dark:bg-gray-800"
@@ -1435,7 +1435,7 @@ export default function OrganizersPage() {
                             Ticket Type Breakdown
                           </h5>
                           <div className="space-y-2">
-                            {event.ticketTypeBreakdown.map((type, idx) => (
+                            {(event.ticketTypeBreakdown || []).map((type, idx) => (
                               <div
                                 key={`${type.ticketType}-${type.isOnDoor}-${type.pricePerTicket}-${idx}`}
                                 className="flex justify-between items-center text-sm"

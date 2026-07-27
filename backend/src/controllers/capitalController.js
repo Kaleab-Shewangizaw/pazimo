@@ -92,9 +92,9 @@ const listOrganizersForCapital = async (req, res) => {
       organizers.map(async (organizer) => {
         // Bring any active advance up to date with ticket sales before reading.
         await syncOrganizerLoans(organizer._id, req);
-        const [profile, metrics, activeLoan] = await Promise.all([
-          getOrCreateProfile(organizer._id),
-          calculateOrganizerCapitalMetrics(organizer._id, normalizedCurrency),
+        const profile = await getOrCreateProfile(organizer._id);
+        const [metrics, activeLoan] = await Promise.all([
+          calculateOrganizerCapitalMetrics(organizer._id, normalizedCurrency, { profile }),
           getBlockingLoan(organizer._id),
         ]);
 
@@ -136,9 +136,9 @@ const getOrganizerCapitalDetail = async (req, res) => {
 
     await syncOrganizerLoans(id, req);
 
-    const [profile, metrics, loans] = await Promise.all([
-      getOrCreateProfile(id),
-      calculateOrganizerCapitalMetrics(id, currency),
+    const profile = await getOrCreateProfile(id);
+    const [metrics, loans] = await Promise.all([
+      calculateOrganizerCapitalMetrics(id, currency, { profile }),
       Loan.find({ organizer: id }).sort("-createdAt").populate("reviewedBy", "firstName lastName email"),
     ]);
 
@@ -175,6 +175,42 @@ const setEligibility = async (req, res) => {
     res.status(StatusCodes.OK).json({ success: true, data: profile });
   } catch (error) {
     console.error("Error setting eligibility:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const setBorrowingLimitOverride = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { borrowingLimitOverride, note } = req.body;
+
+    const organizer = await User.findOne({ _id: id, role: "organizer" });
+    if (!organizer) throw new NotFoundError("Organizer not found");
+
+    const profile = await getOrCreateProfile(id);
+
+    // null/undefined clears the override and falls back to the
+    // auto-calculated 30%-of-average figure.
+    if (borrowingLimitOverride === null || borrowingLimitOverride === undefined) {
+      profile.borrowingLimitOverride = undefined;
+    } else {
+      const value = Number(borrowingLimitOverride);
+      if (!(value >= 0)) {
+        throw new BadRequestError("borrowingLimitOverride must be a non-negative number");
+      }
+      profile.borrowingLimitOverride = value;
+    }
+    profile.borrowingLimitOverrideSetBy = req.user.userId;
+    profile.borrowingLimitOverrideSetAt = new Date();
+    if (note !== undefined) profile.borrowingLimitOverrideNote = note;
+    await profile.save();
+
+    const metrics = await calculateOrganizerCapitalMetrics(id, req.body.currency, { profile });
+
+    res.status(StatusCodes.OK).json({ success: true, data: { profile, metrics } });
+  } catch (error) {
+    console.error("Error setting borrowing limit override:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
   }
@@ -437,7 +473,7 @@ const getMySummary = async (req, res) => {
     await syncOrganizerLoans(organizerId, req);
 
     const [metrics, activeLoan] = await Promise.all([
-      calculateOrganizerCapitalMetrics(organizerId, currency),
+      calculateOrganizerCapitalMetrics(organizerId, currency, { profile: req.capitalProfile }),
       getBlockingLoan(organizerId),
     ]);
 
@@ -476,7 +512,9 @@ const createLoanRequest = async (req, res) => {
     // v1 is ETB-only — tickets/withdrawals track ETB and USD separately and
     // blending them into one limit isn't well-defined yet (see spec §02).
     const currency = "ETB";
-    const metrics = await calculateOrganizerCapitalMetrics(organizerId, currency);
+    const metrics = await calculateOrganizerCapitalMetrics(organizerId, currency, {
+      profile: req.capitalProfile,
+    });
 
     if (requestedAmount > metrics.borrowingLimit + EPSILON) {
       throw new BadRequestError(
@@ -588,6 +626,7 @@ module.exports = {
   listOrganizersForCapital,
   getOrganizerCapitalDetail,
   setEligibility,
+  setBorrowingLimitOverride,
   listLoans,
   getLoan,
   approveLoan,

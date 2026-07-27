@@ -97,6 +97,20 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
             }
           }
         ],
+        typeBreakdown: [
+          {
+            $group: {
+              _id: {
+                eventId: "$eventData._id",
+                ticketType: "$ticketType",
+                isOnDoor: { $eq: ["$isOnDoor", true] }
+              },
+              totalSold: { $sum: "$ticketQuantity" },
+              totalRevenue: { $sum: "$price" },
+              eventTicketTypes: { $first: "$eventData.ticketTypes" }
+            }
+          }
+        ],
         eventCount: [
           {
             $group: {
@@ -181,6 +195,35 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     statusBreakdown[item._id] = item.revenue;
   });
 
+  // Group per-ticket-type totals by event. Tickets store ticketType as either
+  // the type's name or its _id, so resolve to the display name when possible.
+  const resolveTicketTypeName = (rawType, eventTicketTypes) => {
+    if (!rawType) return "Unknown";
+    const raw = String(rawType);
+    const match = (eventTicketTypes || []).find(
+      (tt) =>
+        tt.name === raw ||
+        (tt._id && tt._id.toString() === raw) ||
+        (tt.name && tt.name.toLowerCase() === raw.toLowerCase())
+    );
+    return match ? match.name : raw;
+  };
+
+  const typeBreakdownByEvent = new Map();
+  (balanceData[0]?.typeBreakdown || []).forEach(item => {
+    const eventKey = item._id.eventId.toString();
+    if (!typeBreakdownByEvent.has(eventKey)) {
+      typeBreakdownByEvent.set(eventKey, []);
+    }
+    typeBreakdownByEvent.get(eventKey).push({
+      ticketType: resolveTicketTypeName(item._id.ticketType, item.eventTicketTypes),
+      isOnDoor: item._id.isOnDoor,
+      totalSold: item.totalSold,
+      totalRevenue: item.totalRevenue,
+      pricePerTicket: item.totalSold > 0 ? item.totalRevenue / item.totalSold : 0
+    });
+  });
+
   // Format revenue breakdown by event
   const revenueBreakdown = (balanceData[0]?.eventBreakdown || []).map(item => ({
     eventId: item._id.eventId,
@@ -190,7 +233,8 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     onDoorRevenue: item.onDoorRevenue,
     onDoorTicketsSold: item.onDoorTickets,
     onlineRevenue: item.onlineRevenue,
-    onlineTicketsSold: item.onlineTickets
+    onlineTicketsSold: item.onlineTickets,
+    ticketTypeBreakdown: typeBreakdownByEvent.get(item._id.eventId.toString()) || []
   }));
 
   const totalEvents = balanceData[0]?.eventCount[0]?.total || 0;

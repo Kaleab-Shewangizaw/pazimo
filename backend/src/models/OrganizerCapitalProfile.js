@@ -33,6 +33,26 @@ const OrganizerCapitalProfileSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Manual override of the auto-calculated limit (30% of the average of
+    // the organizer's last 1-2 events). undefined/null means "use the
+    // calculated value" — this is not itself the effective limit, see
+    // capitalService.calculateOrganizerCapitalMetrics for how the two combine.
+    borrowingLimitOverride: {
+      type: Number,
+      min: 0,
+    },
+    borrowingLimitOverrideSetBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+    },
+    borrowingLimitOverrideSetAt: {
+      type: Date,
+    },
+    borrowingLimitOverrideNote: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );

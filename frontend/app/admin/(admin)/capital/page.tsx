@@ -44,6 +44,8 @@ import {
   ListChecks,
   ShieldCheck,
   ShieldOff,
+  SlidersHorizontal,
+  RotateCcw,
 } from "lucide-react";
 
 type Currency = "ETB" | "USD";
@@ -56,7 +58,10 @@ interface CapitalMetrics {
   totalRevenue: number;
   lastEventRevenue: number;
   lastTwoEventsRevenue: number;
+  averageRecentEventRevenue: number;
+  calculatedBorrowingLimit: number;
   borrowingLimit: number;
+  isLimitOverridden: boolean;
   limitBasis: { eventId: string; eventTitle: string; eventDate: string; revenue: number }[];
 }
 
@@ -139,6 +144,13 @@ export default function CapitalPage() {
   const [eligibilityChoice, setEligibilityChoice] = useState<Eligibility>("eligible");
   const [eligibilityNotes, setEligibilityNotes] = useState("");
   const [savingEligibility, setSavingEligibility] = useState(false);
+
+  // Borrowing limit override dialog
+  const [limitDialogOpen, setLimitDialogOpen] = useState(false);
+  const [limitTarget, setLimitTarget] = useState<OrganizerCapitalRow | null>(null);
+  const [limitValue, setLimitValue] = useState("");
+  const [limitNote, setLimitNote] = useState("");
+  const [savingLimit, setSavingLimit] = useState(false);
 
   // Loans tab state
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -255,6 +267,57 @@ export default function CapitalPage() {
       setSavingEligibility(false);
     }
   };
+
+  const openLimitDialog = (organizer: OrganizerCapitalRow) => {
+    setLimitTarget(organizer);
+    setLimitValue(String(organizer.metrics.borrowingLimit));
+    setLimitNote("");
+    setLimitDialogOpen(true);
+  };
+
+  const saveBorrowingLimit = async (value: number | null) => {
+    if (!limitTarget) return;
+    try {
+      setSavingLimit(true);
+      const res = await fetch(
+        `${API_URL}/api/capital/admin/organizers/${limitTarget._id}/borrowing-limit`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            borrowingLimitOverride: value,
+            note: limitNote,
+            currency,
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to update borrowing limit");
+      toast.success(
+        value === null ? "Reverted to the calculated limit" : "Custom borrowing limit saved"
+      );
+      setLimitDialogOpen(false);
+      fetchOrganizers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update borrowing limit");
+    } finally {
+      setSavingLimit(false);
+    }
+  };
+
+  const handleSaveLimit = () => {
+    const value = Number(limitValue);
+    if (!(value >= 0)) {
+      toast.error("Enter a valid, non-negative limit");
+      return;
+    }
+    saveBorrowingLimit(value);
+  };
+
+  const handleResetLimit = () => saveBorrowingLimit(null);
 
   const openReviewDialog = async (loan: Loan) => {
     setReviewLoan(loan);
@@ -413,7 +476,7 @@ export default function CapitalPage() {
                         <TableHead className="dark:text-gray-300 text-right">Events</TableHead>
                         <TableHead className="dark:text-gray-300 text-right">Total Revenue</TableHead>
                         <TableHead className="dark:text-gray-300 text-right">Last Event</TableHead>
-                        <TableHead className="dark:text-gray-300 text-right">Last 2 Events</TableHead>
+                        <TableHead className="dark:text-gray-300 text-right">Avg (Last 2)</TableHead>
                         <TableHead className="dark:text-gray-300 text-right">Borrowing Limit</TableHead>
                         <TableHead className="dark:text-gray-300">Eligibility</TableHead>
                         <TableHead className="dark:text-gray-300">Active Loan</TableHead>
@@ -453,10 +516,22 @@ export default function CapitalPage() {
                               {formatCompactMoney(org.metrics.lastEventRevenue, org.metrics.currency)}
                             </TableCell>
                             <TableCell className="text-right text-gray-700 dark:text-gray-300">
-                              {formatCompactMoney(org.metrics.lastTwoEventsRevenue, org.metrics.currency)}
+                              {formatCompactMoney(org.metrics.averageRecentEventRevenue, org.metrics.currency)}
                             </TableCell>
-                            <TableCell className="text-right font-semibold text-emerald-700 dark:text-emerald-400">
-                              {formatCompactMoney(org.metrics.borrowingLimit, org.metrics.currency)}
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                  {formatCompactMoney(org.metrics.borrowingLimit, org.metrics.currency)}
+                                </span>
+                                {org.metrics.isLimitOverridden && (
+                                  <Badge
+                                    variant="outline"
+                                    className="border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 text-[10px] px-1.5 py-0"
+                                  >
+                                    Custom
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell>
                               <Badge
@@ -478,23 +553,34 @@ export default function CapitalPage() {
                             </TableCell>
                             <TableCell className="text-right">
                               {!isPartner && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => openEligibilityDialog(org)}
-                                  className={
-                                    org.eligibility === "eligible"
-                                      ? "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
-                                      : "border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
-                                  }
-                                >
-                                  {org.eligibility === "eligible" ? (
-                                    <ShieldOff className="h-4 w-4 mr-1" />
-                                  ) : (
-                                    <ShieldCheck className="h-4 w-4 mr-1" />
-                                  )}
-                                  {org.eligibility === "eligible" ? "Revoke" : "Mark eligible"}
-                                </Button>
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openLimitDialog(org)}
+                                    className="border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+                                  >
+                                    <SlidersHorizontal className="h-4 w-4 mr-1" />
+                                    Limit
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openEligibilityDialog(org)}
+                                    className={
+                                      org.eligibility === "eligible"
+                                        ? "border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-900"
+                                        : "border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                                    }
+                                  >
+                                    {org.eligibility === "eligible" ? (
+                                      <ShieldOff className="h-4 w-4 mr-1" />
+                                    ) : (
+                                      <ShieldCheck className="h-4 w-4 mr-1" />
+                                    )}
+                                    {org.eligibility === "eligible" ? "Revoke" : "Mark eligible"}
+                                  </Button>
+                                </div>
                               )}
                             </TableCell>
                           </TableRow>
@@ -712,6 +798,131 @@ export default function CapitalPage() {
               >
                 {savingEligibility ? "Saving..." : "Confirm"}
               </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Borrowing Limit Dialog */}
+        <Dialog open={limitDialogOpen} onOpenChange={setLimitDialogOpen}>
+          <DialogContent className="sm:max-w-lg dark:bg-gray-800 dark:border-gray-700">
+            <DialogHeader>
+              <DialogTitle className="dark:text-gray-100">Borrowing limit</DialogTitle>
+              <DialogDescription className="dark:text-gray-400">
+                {limitTarget?.firstName} {limitTarget?.lastName}
+              </DialogDescription>
+            </DialogHeader>
+
+            {limitTarget && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+                    Last 2 events used for this calculation
+                  </p>
+                  {limitTarget.metrics.limitBasis.length > 0 ? (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-gray-200 dark:border-gray-700">
+                            <TableHead className="dark:text-gray-300">Event</TableHead>
+                            <TableHead className="dark:text-gray-300">Date</TableHead>
+                            <TableHead className="dark:text-gray-300 text-right">Revenue</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {limitTarget.metrics.limitBasis.map((event) => (
+                            <TableRow key={event.eventId} className="border-gray-100 dark:border-gray-700">
+                              <TableCell className="text-gray-900 dark:text-gray-100">
+                                {event.eventTitle}
+                              </TableCell>
+                              <TableCell className="text-gray-600 dark:text-gray-400">
+                                {new Date(event.eventDate).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell className="text-right text-gray-900 dark:text-gray-100">
+                                {formatCompactMoney(event.revenue, limitTarget.metrics.currency)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      No past events yet — nothing to base a limit on.
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 p-3 text-sm">
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Average revenue</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">
+                      {formatCompactMoney(limitTarget.metrics.averageRecentEventRevenue, limitTarget.metrics.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Calculated limit (30%)</p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100">
+                      {formatCompactMoney(limitTarget.metrics.calculatedBorrowingLimit, limitTarget.metrics.currency)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="dark:text-gray-300">
+                    Effective limit ({limitTarget.metrics.currency})
+                  </Label>
+                  <Input
+                    type="number"
+                    value={limitValue}
+                    onChange={(e) => setLimitValue(e.target.value)}
+                    className="dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                  />
+                  {limitTarget.metrics.isLimitOverridden && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      This organizer currently has a custom limit set by an admin.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="dark:text-gray-300">Note (optional)</Label>
+                  <Textarea
+                    value={limitNote}
+                    onChange={(e) => setLimitNote(e.target.value)}
+                    placeholder="Reason for a custom limit, e.g. upcoming event looks strong"
+                    rows={2}
+                    className="dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                  />
+                </div>
+              </div>
+            )}
+
+            <DialogFooter className="sm:justify-between">
+              {limitTarget?.metrics.isLimitOverridden ? (
+                <Button
+                  variant="outline"
+                  onClick={handleResetLimit}
+                  disabled={savingLimit}
+                  className="border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-300"
+                >
+                  <RotateCcw className="h-4 w-4 mr-1.5" />
+                  Reset to calculated
+                </Button>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setLimitDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveLimit}
+                  disabled={savingLimit}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {savingLimit ? "Saving..." : "Save limit"}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>

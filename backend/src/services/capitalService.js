@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Loan = require("../models/Loan");
+const OrganizerCapitalProfile = require("../models/OrganizerCapitalProfile");
 
 const BORROW_RATE = 0.3; // 30% of the trailing revenue basis
 
@@ -56,10 +57,19 @@ const getRevenueByEvent = async (eventIds, currency) => {
   return new Map(rows.map((r) => [r._id.toString(), r.revenue]));
 };
 
-// Core underwriting number: 30% of the combined revenue from the organizer's
-// most recent one or two past events (whichever are available). Computed
-// fresh every call — never read a cached value when the result gates money.
-const calculateOrganizerCapitalMetrics = async (organizerId, currency = "ETB") => {
+// Core underwriting number: 30% of the *average* revenue across the
+// organizer's most recent one or two past events (whichever are available) —
+// not the sum, so a single big event doesn't inflate the limit as much as
+// two consistently good ones. Computed fresh every call — never read a
+// cached value when the result gates money. An admin can override the
+// resulting figure per organizer (OrganizerCapitalProfile.borrowingLimitOverride);
+// pass a pre-fetched `profile` via options to avoid a redundant lookup when
+// the caller already has one, otherwise it's fetched here.
+const calculateOrganizerCapitalMetrics = async (
+  organizerId,
+  currency = "ETB",
+  options = {}
+) => {
   const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
 
   const [pastEvents, allEvents] = await Promise.all([
@@ -81,7 +91,22 @@ const calculateOrganizerCapitalMetrics = async (organizerId, currency = "ETB") =
 
   const lastEventRevenue = recentTwo[0]?.revenue || 0;
   const lastTwoEventsRevenue = recentTwo.reduce((sum, e) => sum + e.revenue, 0);
-  const borrowingLimit = Math.round(lastTwoEventsRevenue * BORROW_RATE * 100) / 100;
+  const averageRecentEventRevenue =
+    recentTwo.length > 0
+      ? Math.round((lastTwoEventsRevenue / recentTwo.length) * 100) / 100
+      : 0;
+  const calculatedBorrowingLimit =
+    Math.round(averageRecentEventRevenue * BORROW_RATE * 100) / 100;
+
+  const profile =
+    options.profile !== undefined
+      ? options.profile
+      : await OrganizerCapitalProfile.findOne({ organizer: organizerId });
+  const isLimitOverridden =
+    !!profile && typeof profile.borrowingLimitOverride === "number";
+  const borrowingLimit = isLimitOverridden
+    ? profile.borrowingLimitOverride
+    : calculatedBorrowingLimit;
 
   const totalRevenueRows = await Ticket.aggregate([
     {
@@ -108,7 +133,10 @@ const calculateOrganizerCapitalMetrics = async (organizerId, currency = "ETB") =
     totalRevenue: totalRevenueRows[0]?.totalRevenue || 0,
     lastEventRevenue,
     lastTwoEventsRevenue,
+    averageRecentEventRevenue,
+    calculatedBorrowingLimit,
     borrowingLimit,
+    isLimitOverridden,
     limitBasis: recentTwo,
   };
 };

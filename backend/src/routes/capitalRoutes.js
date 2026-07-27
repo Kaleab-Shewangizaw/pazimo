@@ -28,6 +28,12 @@ router.patch(
   restrictTo("admin"),
   capitalController.setEligibility
 );
+router.patch(
+  "/admin/organizers/:id/borrowing-limit",
+  authenticateUser,
+  restrictTo("admin"),
+  capitalController.setBorrowingLimitOverride
+);
 
 router.get(
   "/admin/loans",
