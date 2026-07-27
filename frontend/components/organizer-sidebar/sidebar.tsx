@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Home,
@@ -68,30 +69,44 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         } h-screen overflow-hidden lg:relative lg:top-0 lg:h-screen shadow-lg lg:shadow-md border-r border-gray-200 dark:border-gray-800 flex-shrink-0`}
       >
         <div className="flex flex-col h-full">
-          {/* Profile / Header Section */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-700 flex items-center justify-center shadow-sm">
-                  <User className="h-6 w-6 text-gray-500 dark:text-gray-400" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-lg text-gray-900 dark:text-gray-100">
-                    {user?.firstName} {user?.lastName}
-                  </h2>
-                  {/* <p className="text-sm text-gray-500 dark:text-gray-400">{user?.email}</p> */}
-                </div>
+          {/* Brand Header */}
+          <div className="relative overflow-hidden border-b border-gray-200 dark:border-gray-800 bg-gradient-to-br from-slate-950 via-[#0c1a3a] to-indigo-950">
+            {/* Ambient glows behind the wordmark */}
+            <div className="pointer-events-none absolute -top-12 -right-8 h-36 w-36 rounded-full bg-amber-400/15 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-[#115db1]/30 blur-3xl" />
+            <div className="relative px-5 pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <Link
+                  href="/organizer"
+                  onClick={handleLinkClick}
+                  className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 rounded-md"
+                  aria-label="Pazimo — organizer dashboard"
+                >
+                  <Image
+                    src="/logo2.png"
+                    alt="Pazimo"
+                    width={168}
+                    height={112}
+                    priority
+                    className="h-14 w-auto object-contain drop-shadow-[0_2px_10px_rgba(251,191,36,0.25)]"
+                  />
+                </Link>
+                {/* Close button for mobile */}
+                <button
+                  onClick={onClose}
+                  className="lg:hidden p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Close menu"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              {/* Close button for mobile */}
-              <button
-                onClick={onClose}
-                className="lg:hidden p-1.5 rounded-md hover:bg-white/50 dark:hover:bg-gray-700/50 transition-colors"
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </button>
+              <div className="mt-3 flex items-center gap-3">
+                <span className="h-px flex-1 bg-gradient-to-r from-amber-300/60 via-amber-200/20 to-transparent" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-100/70">
+                  Organizer Studio
+                </span>
+              </div>
             </div>
-            <div className="mt-4 text-sm font-medium text-gray-700 dark:text-gray-300">Menu</div>
           </div>
 
           {/* Navigation */}
@@ -162,6 +177,27 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 Customers
               </span>
             </Link>
+            {capitalEligible && (
+              <Link
+                href="/organizer/capital"
+                onClick={handleLinkClick}
+                className={`relative flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                  isActive("/organizer/capital")
+                    ? "bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/10 text-amber-800 dark:text-amber-400 shadow-sm border border-amber-200 dark:border-amber-800/40"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gradient-to-r hover:from-amber-50 hover:to-yellow-50 dark:hover:from-amber-900/10 dark:hover:to-yellow-900/5 hover:text-amber-800 dark:hover:text-amber-400"
+                }`}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-yellow-500 shadow-sm shadow-amber-500/30">
+                  <Banknote className="h-4 w-4 text-white" />
+                </span>
+                <span className="font-medium text-sm sm:text-base flex-1">
+                  Pazimo Capital
+                </span>
+                <span className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                  New
+                </span>
+              </Link>
+            )}
             <Link
               href="/organizer/campaign"
               onClick={handleLinkClick}
@@ -200,22 +236,6 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 Withdrawals
               </span>
             </Link>
-            {capitalEligible && (
-              <Link
-                href="/organizer/capital"
-                onClick={handleLinkClick}
-                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                  isActive("/organizer/capital")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                <Banknote className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">
-                  Pazimo Capital
-                </span>
-              </Link>
-            )}
             <Link
               href="/organizer/account"
               onClick={handleLinkClick}

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -25,7 +24,9 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
-import { Banknote, Landmark, Lock, ShieldAlert, TrendingUp } from "lucide-react";
+import { Banknote, Landmark, Lock, Repeat, ShieldAlert, TrendingUp } from "lucide-react";
+
+const STANDARD_FEE_RATE = 0.15;
 
 type LoanStatus = "pending" | "approved" | "rejected" | "active" | "repaid" | "cancelled";
 
@@ -196,7 +197,7 @@ export default function CapitalDashboardPage() {
               Pazimo Capital isn&apos;t available yet
             </h2>
             <p className="text-gray-600 dark:text-gray-400 text-sm">
-              Organizers are made eligible for cash advances by the Pazimo team based on their
+              Organizers are made eligible for loans by the Pazimo team based on their
               event history. Keep running successful events — you&apos;ll be notified if you become
               eligible.
             </p>
@@ -211,12 +212,24 @@ export default function CapitalDashboardPage() {
       ? Math.min(100, Math.round(((activeLoan.totalRepaid || 0) / activeLoan.totalRepayable) * 100))
       : 0;
 
+  const requestedAmountNumber = Number(requestAmount) || 0;
+  const overLimit = !!metrics && requestedAmountNumber > metrics.borrowingLimit;
+  const estimatedFee = Math.round(requestedAmountNumber * STANDARD_FEE_RATE * 100) / 100;
+  const estimatedTotalRepayable = Math.round((requestedAmountNumber + estimatedFee) * 100) / 100;
+  const quickPicks =
+    metrics && metrics.borrowingLimit > 0
+      ? [25, 50, 75, 100].map((pct) => ({
+          label: pct === 100 ? "Max" : `${pct}%`,
+          value: Math.max(0, Math.floor(metrics.borrowingLimit * (pct / 100))),
+        }))
+      : [];
+
   return (
     <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-white dark:bg-black min-h-screen">
       <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl sm:text-3xl font-bold dark:text-gray-100">Pazimo Capital</h1>
         <p className="text-muted-foreground dark:text-gray-400 text-sm sm:text-base mt-1">
-          Cash advances against your ticket sales
+          Loans against your ticket sales
         </p>
       </div>
 
@@ -250,7 +263,7 @@ export default function CapitalDashboardPage() {
                 ? "You have a loan in progress"
                 : metrics && metrics.borrowingLimit <= 0
                   ? "No borrowing limit yet"
-                  : "Request a loan"}
+                  : "Request a Loan"}
             </Button>
           </CardContent>
         </Card>
@@ -277,14 +290,28 @@ export default function CapitalDashboardPage() {
                   </span>
                 </div>
                 {activeLoan.status === "active" && (
-                  <>
-                    {activeLoan.feeRate !== undefined && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {(activeLoan.feeRate * 100).toFixed(0)}% fee added — total to repay{" "}
-                        {formatCompactMoney(activeLoan.totalRepayable || 0, activeLoan.currency)}.
-                        Repaid automatically from 60% of your ticket sales.
-                      </p>
-                    )}
+                  <div className="space-y-3 pt-1">
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Fee rate
+                        </p>
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          {activeLoan.feeRate !== undefined
+                            ? `${(activeLoan.feeRate * 100).toFixed(0)}%`
+                            : "—"}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                          Total to repay
+                        </p>
+                        <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          {formatCompactMoney(activeLoan.totalRepayable || 0, activeLoan.currency)}
+                        </p>
+                      </div>
+                    </div>
+
                     <Progress value={repaymentPercent} />
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>
@@ -294,17 +321,31 @@ export default function CapitalDashboardPage() {
                         Outstanding {formatCompactMoney(activeLoan.outstandingBalance || 0, activeLoan.currency)}
                       </span>
                     </div>
-                  </>
+
+                    <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-2.5">
+                      <Repeat className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" />
+                      <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
+                        60% of every ticket you sell is applied to this loan automatically until
+                        it&apos;s fully repaid.
+                      </p>
+                    </div>
+                  </div>
                 )}
                 {activeLoan.status === "pending" && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Waiting for Pazimo to review your request.
-                  </p>
+                  <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 p-2.5 mt-1">
+                    <Lock className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                    <p className="text-[11px] leading-relaxed text-amber-700 dark:text-amber-400">
+                      Waiting for Pazimo to review your request.
+                    </p>
+                  </div>
                 )}
                 {activeLoan.status === "approved" && (
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Approved — funds are being added to your withdrawal balance.
-                  </p>
+                  <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-2.5 mt-1">
+                    <Landmark className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" />
+                    <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
+                      Approved — funds are being added to your withdrawal balance.
+                    </p>
+                  </div>
                 )}
               </div>
             ) : (
@@ -368,40 +409,142 @@ export default function CapitalDashboardPage() {
       </Card>
 
       {/* Request dialog */}
-      <Dialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] dark:bg-black dark:border-gray-800">
-          <DialogHeader>
-            <DialogTitle className="dark:text-gray-100">Request a loan</DialogTitle>
-            <DialogDescription className="dark:text-gray-400">
-              Pazimo adds a service fee, set when your request is approved — you&apos;ll
-              see the exact percentage and amount then. Repayment is automatic: 60% of
-              each ticket you sell goes toward it until it&apos;s cleared. Your available
-              limit is{" "}
-              {metrics ? formatCompactMoney(metrics.borrowingLimit, metrics.currency) : "—"}.
+      <Dialog
+        open={requestDialogOpen}
+        onOpenChange={(open) => {
+          setRequestDialogOpen(open);
+          if (!open) setRequestAmount("");
+        }}
+      >
+        <DialogContent className="sm:max-w-lg dark:bg-black dark:border-gray-800">
+          <DialogHeader className="sr-only">
+            <DialogTitle>Request a Loan</DialogTitle>
+            <DialogDescription>
+              Request a Pazimo Capital loan against your recent ticket revenue.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label className="dark:text-gray-300">Amount ({metrics?.currency || "ETB"})</Label>
-            <Input
-              type="number"
-              value={requestAmount}
-              onChange={(e) => setRequestAmount(e.target.value)}
-              placeholder="Enter amount"
-              min="0"
-              max={metrics?.borrowingLimit}
-              className="dark:bg-black dark:border-gray-700 dark:text-gray-100"
-            />
+
+          {/* Hero banner */}
+          <div className="relative -mt-1 overflow-hidden rounded-xl bg-gradient-to-br from-[#1a2d5a] to-[#0f1c3d] p-5">
+            <div className="pointer-events-none absolute -right-6 -top-10 h-28 w-28 rounded-full bg-amber-400/10" />
+            <div className="pointer-events-none absolute -right-10 -bottom-6 h-20 w-20 rounded-full bg-white/5" />
+            <div className="relative flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/20">
+                <Landmark className="h-5 w-5 text-amber-300" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-white">Request a Loan</h3>
+                <p className="text-xs text-white/60">Funded against your ticket revenue</p>
+              </div>
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestDialogOpen(false)}>
+
+          <div className="space-y-5 pt-3">
+            {/* Amount input */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Amount requested
+                </Label>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  Limit{" "}
+                  {metrics ? formatCompactMoney(metrics.borrowingLimit, metrics.currency) : "—"}
+                </span>
+              </div>
+              <div
+                className={`flex items-center gap-2 rounded-xl border-2 bg-gray-50 px-4 py-3 transition-colors dark:bg-gray-900/50 ${
+                  overLimit
+                    ? "border-red-300 dark:border-red-900"
+                    : "border-gray-200 focus-within:border-[#1a2d5a] dark:border-gray-800 dark:focus-within:border-amber-600"
+                }`}
+              >
+                <span className="text-2xl font-semibold text-gray-400 dark:text-gray-600">
+                  {metrics?.currency || "ETB"}
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={requestAmount}
+                  onChange={(e) => setRequestAmount(e.target.value)}
+                  placeholder="0"
+                  className="w-full min-w-0 flex-1 bg-transparent text-3xl font-bold text-gray-900 outline-none placeholder:text-gray-300 dark:text-white dark:placeholder:text-gray-700"
+                />
+              </div>
+              {overLimit ? (
+                <p className="mt-1.5 text-xs font-medium text-red-500">
+                  Exceeds your borrowing limit of{" "}
+                  {formatCompactMoney(metrics?.borrowingLimit || 0, metrics?.currency)}
+                </p>
+              ) : requestedAmountNumber > 0 ? (
+                <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">
+                  {requestedAmountNumber.toLocaleString()} {metrics?.currency}
+                </p>
+              ) : null}
+            </div>
+
+            {/* Quick picks */}
+            {quickPicks.length > 0 && (
+              <div className="grid grid-cols-4 gap-2">
+                {quickPicks.map((qp) => (
+                  <button
+                    key={qp.label}
+                    type="button"
+                    onClick={() => setRequestAmount(String(qp.value))}
+                    className="rounded-lg border border-gray-200 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:border-[#1a2d5a] hover:text-[#1a2d5a] dark:border-gray-800 dark:text-gray-300 dark:hover:border-amber-600 dark:hover:text-amber-400"
+                  >
+                    {qp.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Breakdown */}
+            <div className="space-y-2 rounded-xl border border-amber-200/70 bg-amber-50/70 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">You&apos;ll receive</span>
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  {formatCompactMoney(requestedAmountNumber, metrics?.currency)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  Est. service fee ({(STANDARD_FEE_RATE * 100).toFixed(0)}%)
+                </span>
+                <span className="font-medium text-gray-700 dark:text-gray-300">
+                  {formatCompactMoney(estimatedFee, metrics?.currency)}
+                </span>
+              </div>
+              <div className="h-px bg-amber-200/70 dark:bg-amber-900/40" />
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Est. total repayable
+                </span>
+                <span className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  {formatCompactMoney(estimatedTotalRepayable, metrics?.currency)}
+                </span>
+              </div>
+              <p className="pt-1 text-[11px] leading-relaxed text-amber-800/80 dark:text-amber-400/70">
+                Pazimo confirms the final rate when your request is approved. Once active, 60% of
+                every ticket you sell is applied automatically until it&apos;s fully repaid — no
+                manual transfers.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setRequestDialogOpen(false)}
+              className="dark:border-gray-700 dark:text-gray-300"
+            >
               Cancel
             </Button>
             <Button
               onClick={handleRequestLoan}
-              disabled={submitting}
+              disabled={submitting || !(requestedAmountNumber > 0) || overLimit}
               className="bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white"
             >
-              {submitting ? "Submitting..." : "Submit request"}
+              {submitting ? "Submitting..." : "Submit Request"}
             </Button>
           </DialogFooter>
         </DialogContent>
