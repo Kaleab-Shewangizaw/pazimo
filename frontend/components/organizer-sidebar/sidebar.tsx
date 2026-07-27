@@ -85,10 +85,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="flex flex-col h-full">
           {/* Brand Header */}
-          <div className="relative overflow-hidden bg-white dark:bg-gradient-to-br dark:from-slate-950 dark:via-[#0c1a3a] dark:to-indigo-950">
-            {/* Ambient glows behind the wordmark */}
-            <div className="pointer-events-none absolute -top-12 -right-8 h-36 w-36 rounded-full bg-amber-400/10 dark:bg-amber-400/15 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-[#115db1]/10 dark:bg-[#115db1]/30 blur-3xl" />
+          <div className="relative overflow-hidden bg-white dark:bg-black">
+            
+            
+            
 
             {/* Close button for mobile — absolute so it doesn't disturb centering */}
             <button
@@ -99,11 +99,11 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <X className="h-5 w-5" />
             </button>
 
-            <div className="relative px-5 pt-6 pb-5 flex flex-col items-center gap-2.5">
+            <div className="relative px-5 pt-[4px]  flex flex-col items-center gap-2.5">
               <Link
                 href="/organizer"
                 onClick={handleLinkClick}
-                className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 rounded-md"
+                
                 aria-label="Pazimo — organizer dashboard"
               >
                 <Image
@@ -115,9 +115,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   className="h-20 w-auto object-contain dark:drop-shadow-[0_2px_10px_rgba(251,191,36,0.25)]"
                 />
               </Link>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-gray-500 dark:text-amber-100/70">
-                Organizer Studio
-              </span>
+             
             </div>
 
             {/* Full-width divider */}
@@ -196,19 +194,19 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <Link
                 href="/organizer/capital"
                 onClick={handleLinkClick}
-                className={`relative flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                  isActive("/organizer/capital")
-                    ? "bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/10 text-amber-800 dark:text-amber-400 shadow-sm border border-amber-200 dark:border-amber-800/40"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gradient-to-r hover:from-amber-50 hover:to-yellow-50 dark:hover:from-amber-900/10 dark:hover:to-yellow-900/5 hover:text-amber-800 dark:hover:text-amber-400"
-                }`}
+                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                isActive("/organizer/capital")
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
+                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
+              }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-yellow-500 shadow-sm shadow-amber-500/30">
-                  <Banknote className="h-4 w-4 text-white" />
-                </span>
+                
+                  <Banknote className="h-5 w-5  dark:text-white" />
+                
                 <span className="font-medium text-sm sm:text-base flex-1">
                   Pazimo Capital
                 </span>
-                <span className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                <span className="rounded-full bg-blue-200 border border-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide  dark:bg-yellow-500/60 dark:text-white dark:border-yellow-500 shadow-sm">
                   New
                 </span>
               </Link>
