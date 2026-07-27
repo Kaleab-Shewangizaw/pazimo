@@ -22,7 +22,6 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -869,6 +868,41 @@ export default function EventDetailClient() {
       : `${process.env.NEXT_PUBLIC_API_URL}${img.startsWith("/") ? img : `/${img}`}`;
   }, [event]);
 
+  // Captures the whole rendered ticket card (shape, image, QR) as one PNG.
+  const ticketCardRef = useRef<HTMLDivElement | null>(null);
+  const [downloadingTicket, setDownloadingTicket] = useState(false);
+
+  const handleDownloadTicket = useCallback(async () => {
+    const node = ticketCardRef.current;
+    const ticket = purchasedTickets[currentTicketIndex];
+    if (!node || !ticket) return;
+    setDownloadingTicket(true);
+    try {
+      const { toPng } = await import("html-to-image");
+      const dataUrl = await toPng(node, {
+        pixelRatio: 2,
+        // Notches are transparent — keep them transparent in the PNG too.
+        backgroundColor: "transparent",
+      });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `pazimo-ticket-${ticket.ticketId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("Ticket downloaded!");
+    } catch {
+      // If DOM capture fails (e.g. an image blocks it), still give them the QR.
+      downloadHighQualityQR(
+        ticket.qrCode,
+        `ticket-${ticket.ticketId}-${ticket.ticketType}.png`
+      );
+      toast.success("Ticket QR downloaded!");
+    } finally {
+      setDownloadingTicket(false);
+    }
+  }, [purchasedTickets, currentTicketIndex]);
+
   // Utility functions - memoized with useCallback
   const downloadQRCode = useCallback((
     qrCodeDataUrl: string,
@@ -1584,137 +1618,188 @@ export default function EventDetailClient() {
         open={showTicketModal}
         onOpenChange={setShowTicketModal}
       >
-        <DialogContent className="w-full max-w-sm md:max-w-md lg:max-w-lg rounded-xl p-0 overflow-hidden bg-white dark:bg-[#1A1D24] border-none gap-0">
-          <div className="bg-[#0D47A1] p-6 text-white text-center">
-            <h2 className="text-2xl font-bold mb-1">You&apos;re Going!</h2>
-            <p className="text-blue-100 text-sm">Your ticket is ready</p>
-          </div>
-          <div className="p-6">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                {event.title}
-              </h3>
-              <div className="flex flex-col gap-1 items-center text-sm text-gray-600 dark:text-gray-400">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-[#0D47A1]" />
-                  <span>{formatDate(event.startDate)}</span>
-                  <span className="text-gray-300">|</span>
-                  <Clock className="h-4 w-4 text-[#0D47A1]" />
-                  <span>{formatTimeWithAmPm(event.startTime)}</span>
-                </div>
-                <div className="flex items-center gap-2 mt-1">
-                  <MapPin className="h-4 w-4 text-[#0D47A1]" />
-                  <span>{event.location.address}</span>
-                </div>
-              </div>
-            </div>
-            <Separator className="my-6 dark:bg-white/10" />
-            {purchasedTickets.length > 0 && (
-              <div className="space-y-6">
-                {(() => {
-                  const ticket = purchasedTickets[currentTicketIndex];
-                  return (
-                    <div className="flex flex-col items-center">
-                      <div className="bg-white dark:bg-white/5 p-3 rounded-xl border-2 border-dashed border-gray-300 dark:border-white/20 mb-5 shadow-sm">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-sm max-h-[92vh] overflow-y-auto rounded-none p-1 border-0 gap-0 bg-transparent shadow-none [&>button]:text-white [&>button]:opacity-80 [&>button]:z-20">
+          {purchasedTickets.length > 0 &&
+            (() => {
+              const ticket = purchasedTickets[currentTicketIndex];
+              const watermark = event.title.split(" ")[0]?.toUpperCase() || "";
+              const orderId = (ticket.ticketId || "").slice(-6).toUpperCase();
+              const attendee = (
+                user
+                  ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+                  : paymentForm.fullName || "Guest"
+              ).toUpperCase();
+              const quantity = ticket.ticketCount || 1;
+              return (
+                <div>
+                  {/* The ticket itself — everything inside this ref is what gets downloaded */}
+                  <div ref={ticketCardRef} className="drop-shadow-2xl">
+                    {/* Top half: banner + details */}
+                    <div className="relative overflow-hidden rounded-t-[28px] bg-gradient-to-b from-[#06283D] to-[#0E3A5A]">
+                      <div className="relative h-36">
                         <Image
-                          src={ticket.qrCode ?? "/events/sampleqr.png"}
-                          alt="Ticket QR"
-                          width={220}
-                          height={220}
-                          className="rounded-lg"
+                          src={coverImageUrl}
+                          alt={event.title}
+                          fill
+                          className="object-cover"
                         />
-                      </div>
-                      <div className="text-center space-y-2 w-full">
-                        <div className="flex justify-center">
-                          <Badge
-                            variant="secondary"
-                            className="text-base px-6 py-1.5 bg-blue-50 dark:bg-blue-500/10 text-[#0D47A1] dark:text-blue-400"
-                          >
-                            Admits: {ticket.ticketCount || 1} Person
-                            {(ticket.ticketCount || 1) > 1 ? "s" : ""}
-                          </Badge>
+                        <div className="absolute inset-0 bg-gradient-to-b from-[#06283D]/70 via-[#06283D]/25 to-[#06283D]" />
+                        <div className="absolute inset-x-0 bottom-3 px-6 text-center">
+                          <h2 className="text-2xl font-extrabold text-white drop-shadow-md">
+                            You&apos;re Going!
+                          </h2>
+                          <p className="text-sm text-white/80">Your ticket is ready</p>
                         </div>
-                        <h4 className="font-bold text-lg text-gray-900 dark:text-white mt-2">
-                          {ticket.ticketType}
-                        </h4>
-                        {/* <p className="text-sm text-gray-500 mt-1">
-                          Ticket ID: {ticket.ticketId}
-                        </p> */}
+                      </div>
+
+                      <div className="relative px-7 pb-7 pt-3">
+                        <span className="pointer-events-none absolute -bottom-4 right-5 select-none whitespace-nowrap text-6xl font-black tracking-tight text-white/10">
+                          {watermark}
+                        </span>
+
+                        <div className="relative flex items-start justify-between gap-3">
+                          <h3 className="text-lg font-extrabold leading-tight text-white">
+                            {event.title}
+                          </h3>
+                          <span className="shrink-0 whitespace-nowrap rounded-full border border-white/50 px-3 py-1 text-[10px] font-bold tracking-wider text-white">
+                            OFFICIAL PASS
+                          </span>
+                        </div>
+
+                        <div className="relative mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
+                          <div>
+                            <p className="text-[10px] tracking-wider text-white/65">DATE &amp; TIME</p>
+                            <p className="text-sm font-bold text-white">
+                              {formatDate(event.startDate)}
+                              {event.startTime ? `, ${formatTimeWithAmPm(event.startTime)}` : ""}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] tracking-wider text-white/65">VENUE</p>
+                            <p className="break-words text-sm font-bold text-white">
+                              {(event.location.address || event.location.city || "See map").toUpperCase()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] tracking-wider text-white/65">TICKET TYPE</p>
+                            <p className="text-sm font-bold text-white">{ticket.ticketType}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] tracking-wider text-white/65">QUANTITY</p>
+                            <p className="text-sm font-bold text-white">
+                              {quantity.toString().padStart(2, "0")} {quantity > 1 ? "PASSES" : "PASS"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] tracking-wider text-white/65">ORDER ID</p>
+                            <p className="text-sm font-bold text-white">{orderId}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] tracking-wider text-white/65">ATTENDEE</p>
+                            <p className="break-words text-sm font-bold text-white">{attendee}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  );
-                })()}
-                {purchasedTickets.length > 1 && (
-                  <div className="flex items-center justify-center gap-4 pt-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full"
-                      onClick={() =>
-                        setCurrentTicketIndex(
-                          Math.max(0, currentTicketIndex - 1),
-                        )
-                      }
-                      disabled={currentTicketIndex === 0}
+
+                    {/* Die-cut perforation: real transparent notches punched into each side */}
+                    <div
+                      className="relative h-5 bg-[#0E3A5A]"
+                      style={{
+                        WebkitMaskImage:
+                          "radial-gradient(circle 10px at 0 50%, transparent 9.5px, black 10px), radial-gradient(circle 10px at 100% 50%, transparent 9.5px, black 10px)",
+                        WebkitMaskComposite: "source-in",
+                        maskImage:
+                          "radial-gradient(circle 10px at 0 50%, transparent 9.5px, black 10px), radial-gradient(circle 10px at 100% 50%, transparent 9.5px, black 10px)",
+                        maskComposite: "intersect",
+                      }}
                     >
-                      &lt;
-                    </Button>
-                    <div className="flex gap-1.5">
-                      {purchasedTickets.map((_, i) => (
-                        <div
-                          key={i}
-                          className={`h-2 w-2 rounded-full transition-colors ${i === currentTicketIndex
-                            ? "bg-[#0D47A1]"
-                            : "bg-gray-200"
-                            }`}
-                        />
-                      ))}
+                      <div className="absolute left-6 right-6 top-1/2 border-t-2 border-dashed border-white/25" />
                     </div>
+
+                    {/* Bottom stub: QR on the navy gradient */}
+                    <div className="relative overflow-hidden rounded-b-[28px] bg-gradient-to-b from-[#0E3A5A] to-[#1A5D8C]">
+                      <div className="relative flex flex-col items-center gap-3 px-7 pb-7 pt-5">
+                        <div className="rounded-2xl bg-white p-2.5 shadow-xl ring-1 ring-white/40">
+                          <Image
+                            src={ticket.qrCode ?? "/events/sampleqr.png"}
+                            alt="Ticket QR Code"
+                            width={256}
+                            height={256}
+                            className="h-36 w-36 rounded-lg"
+                          />
+                        </div>
+                        <p className="text-[11px] font-bold tracking-[0.2em] text-white/70">
+                          &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Controls live outside the ticket so they never end up in the PNG */}
+                  {purchasedTickets.length > 1 && (
+                    <div className="mt-4 flex items-center justify-center gap-4">
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/20 transition-colors hover:bg-white/20 disabled:opacity-40"
+                        onClick={() =>
+                          setCurrentTicketIndex(Math.max(0, currentTicketIndex - 1))
+                        }
+                        disabled={currentTicketIndex === 0}
+                        aria-label="Previous ticket"
+                      >
+                        &lt;
+                      </button>
+                      <div className="flex gap-1.5">
+                        {purchasedTickets.map((_, i) => (
+                          <div
+                            key={i}
+                            className={`h-2 w-2 rounded-full transition-colors ${
+                              i === currentTicketIndex ? "bg-white" : "bg-white/30"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/20 transition-colors hover:bg-white/20 disabled:opacity-40"
+                        onClick={() =>
+                          setCurrentTicketIndex(
+                            Math.min(purchasedTickets.length - 1, currentTicketIndex + 1),
+                          )
+                        }
+                        disabled={currentTicketIndex === purchasedTickets.length - 1}
+                        aria-label="Next ticket"
+                      >
+                        &gt;
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex w-full gap-3">
                     <Button
+                      className="flex-1 border-0 bg-white/10 text-white ring-1 ring-white/25 backdrop-blur-sm hover:bg-white/20 hover:text-white"
                       variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full"
-                      onClick={() =>
-                        setCurrentTicketIndex(
-                          Math.min(
-                            purchasedTickets.length - 1,
-                            currentTicketIndex + 1,
-                          ),
-                        )
-                      }
-                      disabled={
-                        currentTicketIndex === purchasedTickets.length - 1
-                      }
+                      onClick={handleDownloadTicket}
+                      disabled={downloadingTicket}
                     >
-                      &gt;
+                      {downloadingTicket ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      Download Ticket
+                    </Button>
+                    <Button
+                      className="flex-1 bg-white font-semibold text-[#06283D] hover:bg-white/90"
+                      onClick={() => setShowTicketModal(false)}
+                    >
+                      Done
                     </Button>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="p-4 bg-gray-50 dark:bg-black/20 border-t dark:border-white/10 flex gap-3">
-            <Button
-              className="flex-1 bg-white dark:bg-white/5 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10"
-              variant="outline"
-              onClick={() => {
-                const ticket = purchasedTickets[currentTicketIndex];
-                downloadQRCode(
-                  ticket.qrCode,
-                  ticket.ticketId,
-                  ticket.ticketType,
-                );
-              }}
-            >
-              <Download className="mr-2 h-4 w-4" /> Save Image
-            </Button>
-            <Button
-              className="flex-1 bg-[#0D47A1] hover:bg-[#0D47A1]/90 text-white shadow-md"
-              onClick={() => setShowTicketModal(false)}
-            >
-              Done
-            </Button>
-          </div>
+                </div>
+              );
+            })()}
         </DialogContent>
       </Dialog>
 
