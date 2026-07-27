@@ -983,7 +983,7 @@ export default function EventDetailClient() {
   const shortDescription = descriptionParagraphs[0] || event.description;
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0A0A0A] text-gray-900 dark:text-gray-100 -mt-1 transition-colors duration-300">
+    <div className="min-h-screen bg-white dark:bg-[#0A0A0A] text-gray-900 dark:text-gray-100 -mt-1 md:-mt-12 transition-colors duration-300">
       <div className="relative w-full overflow-hidden md:hidden">
         <div className="block md:hidden px-8 py-4">
           <div className="relative w-full max-w-md mx-auto">
