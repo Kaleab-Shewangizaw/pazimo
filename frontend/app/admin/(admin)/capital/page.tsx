@@ -80,6 +80,7 @@ interface OrganizerCapitalRow {
 
 interface Loan {
   _id: string;
+  referenceNumber?: string;
   organizer: { _id: string; firstName: string; lastName: string; email: string };
   requestedAmount: number;
   approvedAmount?: number;
@@ -143,6 +144,7 @@ export default function CapitalPage() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loansLoading, setLoansLoading] = useState(true);
   const [loanStatusFilter, setLoanStatusFilter] = useState<string>("pending");
+  const [loanSearch, setLoanSearch] = useState("");
   const [loanPage, setLoanPage] = useState(1);
   const [loanTotalPages, setLoanTotalPages] = useState(1);
   const [loanStats, setLoanStats] = useState<Record<string, { count: number; amount: number }>>({});
@@ -188,6 +190,7 @@ export default function CapitalPage() {
         page: String(loanPage),
         limit: "10",
         ...(loanStatusFilter !== "all" ? { status: loanStatusFilter } : {}),
+        ...(loanSearch ? { search: loanSearch } : {}),
       });
       const res = await fetch(`${API_URL}/api/capital/admin/loans?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -203,7 +206,7 @@ export default function CapitalPage() {
     } finally {
       setLoansLoading(false);
     }
-  }, [loanPage, loanStatusFilter, token]);
+  }, [loanPage, loanStatusFilter, loanSearch, token]);
 
   useEffect(() => {
     if (!token) return;
@@ -533,26 +536,40 @@ export default function CapitalPage() {
             <Card className="border border-gray-200 dark:border-gray-700 shadow-lg border-t-4 border-t-blue-600 dark:bg-gray-800">
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-                  <Select
-                    value={loanStatusFilter}
-                    onValueChange={(v) => {
-                      setLoanStatusFilter(v);
-                      setLoanPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-full sm:w-[200px] dark:bg-gray-900 dark:border-gray-700 dark:text-gray-200">
-                      <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
-                      <SelectItem value="all">All statuses</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="approved">Approved</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="repaid">Repaid</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-[220px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
+                      <Input
+                        placeholder="Search by reference..."
+                        value={loanSearch}
+                        onChange={(e) => {
+                          setLoanSearch(e.target.value);
+                          setLoanPage(1);
+                        }}
+                        className="pl-10 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-200"
+                      />
+                    </div>
+                    <Select
+                      value={loanStatusFilter}
+                      onValueChange={(v) => {
+                        setLoanStatusFilter(v);
+                        setLoanPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full sm:w-[200px] dark:bg-gray-900 dark:border-gray-700 dark:text-gray-200">
+                        <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="approved">Approved</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="repaid">Repaid</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Button onClick={fetchLoans} className="bg-blue-600 hover:bg-blue-700 text-white">
                     <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                   </Button>
@@ -562,6 +579,7 @@ export default function CapitalPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-gray-200 dark:border-gray-700">
+                        <TableHead className="dark:text-gray-300">Reference</TableHead>
                         <TableHead className="dark:text-gray-300">Organizer</TableHead>
                         <TableHead className="dark:text-gray-300 text-right">Requested</TableHead>
                         <TableHead className="dark:text-gray-300 text-right">Limit at Request</TableHead>
@@ -573,13 +591,13 @@ export default function CapitalPage() {
                     <TableBody>
                       {loansLoading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-12 text-gray-500 dark:text-gray-400">
+                          <TableCell colSpan={7} className="text-center py-12 text-gray-500 dark:text-gray-400">
                             Loading loan requests...
                           </TableCell>
                         </TableRow>
                       ) : loans.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-12 text-gray-500 dark:text-gray-400">
+                          <TableCell colSpan={7} className="text-center py-12 text-gray-500 dark:text-gray-400">
                             <Banknote className="h-8 w-8 text-blue-400 mx-auto mb-3" />
                             No loan requests found
                           </TableCell>
@@ -587,6 +605,11 @@ export default function CapitalPage() {
                       ) : (
                         loans.map((loan) => (
                           <TableRow key={loan._id} className="border-gray-100 dark:border-gray-700">
+                            <TableCell>
+                              <span className="font-mono text-xs font-medium text-gray-700 dark:text-gray-300">
+                                {loan.referenceNumber || "—"}
+                              </span>
+                            </TableCell>
                             <TableCell>
                               <p className="font-medium text-gray-900 dark:text-gray-100">
                                 {loan.organizer.firstName} {loan.organizer.lastName}
@@ -701,7 +724,10 @@ export default function CapitalPage() {
                 Loan Request — {reviewLoan?.organizer.firstName} {reviewLoan?.organizer.lastName}
               </DialogTitle>
               {reviewLoan && (
-                <DialogDescription className="dark:text-gray-400">
+                <DialogDescription className="flex items-center gap-2 dark:text-gray-400">
+                  <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
+                    {reviewLoan.referenceNumber || "—"}
+                  </span>
                   <StatusBadge status={reviewLoan.status} />
                 </DialogDescription>
               )}
@@ -826,13 +852,7 @@ export default function CapitalPage() {
                   </div>
                 )}
 
-                {(reviewLoan.status === "active" || reviewLoan.status === "repaid") && (
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-sm text-gray-500 dark:text-gray-400">
-                    Repayment is automatic — 60% of every ticket this organizer sells goes
-                    toward the advance until it&apos;s cleared. The outstanding balance above
-                    updates as their sales come in; there&apos;s nothing to record manually.
-                  </div>
-                )}
+               
               </div>
             )}
           </DialogContent>

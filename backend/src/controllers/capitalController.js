@@ -182,12 +182,27 @@ const setEligibility = async (req, res) => {
 
 const listLoans = async (req, res) => {
   try {
-    const { status, organizerId, page = 1, limit = 10 } = req.query;
+    const { status, organizerId, search, page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
     const query = {};
     if (status && status !== "all") query.status = status;
     if (organizerId) query.organizer = organizerId;
+
+    // Search matches the loan's own reference number, or the name/email of
+    // the organizer it belongs to — the two things a support conversation
+    // usually starts from.
+    if (search) {
+      const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+      const matchingOrganizers = await User.find({
+        role: "organizer",
+        $or: [{ firstName: regex }, { lastName: regex }, { email: regex }],
+      }).select("_id");
+      query.$or = [
+        { referenceNumber: regex },
+        { organizer: { $in: matchingOrganizers.map((o) => o._id) } },
+      ];
+    }
 
     // Sync active advances (distinct organizers) to the latest ticket sales so
     // the list reflects current repayment progress and active→repaid transitions.

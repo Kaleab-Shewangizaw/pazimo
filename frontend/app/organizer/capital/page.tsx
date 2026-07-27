@@ -42,6 +42,7 @@ interface CapitalMetrics {
 
 interface Loan {
   _id: string;
+  referenceNumber?: string;
   requestedAmount: number;
   approvedAmount?: number;
   currency: "ETB" | "USD";
@@ -280,6 +281,11 @@ export default function CapitalDashboardPage() {
             </div>
             {activeLoan ? (
               <div className="space-y-2">
+                {activeLoan.referenceNumber && (
+                  <p className="font-mono text-[11px] text-gray-400 dark:text-gray-500">
+                    {activeLoan.referenceNumber}
+                  </p>
+                )}
                 <div className="flex items-center gap-2">
                   <Badge className={STATUS_STYLES[activeLoan.status]}>{activeLoan.status}</Badge>
                   <span className="text-lg font-bold text-gray-800 dark:text-gray-100">
@@ -365,6 +371,7 @@ export default function CapitalDashboardPage() {
             <Table>
               <TableHeader>
                 <TableRow className="border-gray-200 dark:border-gray-800">
+                  <TableHead className="dark:text-gray-300">Reference</TableHead>
                   <TableHead className="dark:text-gray-300">Date</TableHead>
                   <TableHead className="dark:text-gray-300">Amount</TableHead>
                   <TableHead className="dark:text-gray-300">Status</TableHead>
@@ -375,13 +382,16 @@ export default function CapitalDashboardPage() {
               <TableBody>
                 {history.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground dark:text-gray-400 py-8">
+                    <TableCell colSpan={6} className="text-center text-muted-foreground dark:text-gray-400 py-8">
                       No loan requests yet
                     </TableCell>
                   </TableRow>
                 ) : (
                   history.map((loan) => (
                     <TableRow key={loan._id} className="border-gray-100 dark:border-gray-800">
+                      <TableCell className="font-mono text-xs text-gray-500 dark:text-gray-400">
+                        {loan.referenceNumber || "—"}
+                      </TableCell>
                       <TableCell className="text-sm dark:text-gray-300">
                         {new Date(loan.requestedAt || loan.createdAt).toLocaleDateString()}
                       </TableCell>

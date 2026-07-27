@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { getNextSequence } = require("./Counter");
 
 // "An organizer can only have one active loan at a time" is a race condition,
 // not just a UI rule, so it's enforced with a DB-level partial unique index
@@ -7,6 +8,13 @@ const mongoose = require("mongoose");
 // this carries a derived boolean instead of indexing `status` directly.
 const LoanSchema = new mongoose.Schema(
   {
+    // Human-facing tracking number, e.g. "PZC-LN-000042" — assigned once via
+    // the pre-validate hook below and never reassigned. sparse rather than a
+    // plain unique index so it doesn't break on loans that existed before
+    // this field was introduced.
+    referenceNumber: {
+      type: String,
+    },
     organizer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -121,5 +129,19 @@ LoanSchema.index(
 );
 LoanSchema.index({ organizer: 1, status: 1 });
 LoanSchema.index({ status: 1, createdAt: -1 });
+LoanSchema.index({ referenceNumber: 1 }, { unique: true, sparse: true });
+
+// Runs on pre-validate (not pre-save) so the value exists before Mongoose
+// enforces schema validation on a brand-new document.
+LoanSchema.pre("validate", async function assignReferenceNumber(next) {
+  if (this.referenceNumber) return next();
+  try {
+    const seq = await getNextSequence("loan");
+    this.referenceNumber = `PZC-LN-${String(seq).padStart(6, "0")}`;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
 
 module.exports = mongoose.model("Loan", LoanSchema);
