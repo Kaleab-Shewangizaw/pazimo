@@ -22,6 +22,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { Button } from "../ui/button";
 
 interface SidebarProps {
   open: boolean;
@@ -50,6 +51,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   // is a UX nicety on top of the real gate, which is the backend's
   // requireCapitalEligible middleware on every capital endpoint.
   const [capitalEligible, setCapitalEligible] = useState(false);
+
+   const handleUserClick = () => {
+    router.push("/organizer")
+  }
 
   useEffect(() => {
     if (!token || user?.role !== "organizer") return;
@@ -99,24 +104,21 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               <X className="h-5 w-5" />
             </button>
 
-            <div className="relative px-5 pt-[4px]  flex flex-col items-center gap-2.5">
-              <Link
-                href="/organizer"
-                onClick={handleLinkClick}
-                
-                aria-label="Pazimo — organizer dashboard"
+             <Button
+                variant="ghost"
+                className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r h-auto pt-6 pb-3"
+                onClick={handleUserClick}
               >
-                <Image
-                  src={logoSrc}
-                  alt="Pazimo"
-                  width={168}
-                  height={112}
-                  priority
-                  className="h-20 w-auto object-contain dark:drop-shadow-[0_2px_10px_rgba(251,191,36,0.25)]"
-                />
-              </Link>
-             
-            </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
+                    <User className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <span className="text-sm dark:text-gray-300">{user?.firstName || "Organizer"}</span>
+                    <span className="text-xs text-[#ffc107] font-medium">Organizer</span>
+                  </div>
+                </div>
+              </Button>
 
             {/* Full-width divider */}
             <div className="h-px w-full bg-gradient-to-r from-transparent via-blue-300/70 dark:via-amber-300/50 to-transparent" />

@@ -244,7 +244,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                   className="relative p-2 h-auto w-auto text-gray-700 dark:text-gray-300 hover:text-[#115db1] hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-all duration-200 rounded-full"
                   onClick={handleNotificationClick}
                 >
-                  <Bell className="h-5 w-5" />
+                  <Bell className="hidden md:flex items-center mr-2 rounded-full bg-white/40 dark:bg-white/[0.06] backdrop-blur-xl border border-white/50 dark:border-white/10 shadow-[0_4px_16px_rgba(31,38,135,0.08)] dark:shadow-none [&>button]:rounded-full [&>button]:hover:bg-white/60 dark:[&>button]:hover:bg-white/10"/>
                   {unreadCount > 0 && (
                     <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold animate-pulse">
                       {unreadCount > 99 ? '99+' : unreadCount}
@@ -341,21 +341,7 @@ const OrganizerHeader = ({ onMenuClick }: OrganizerHeaderProps) => {
                 )}
               </div>
 
-              <Button
-                variant="ghost"
-                className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r h-auto"
-                onClick={handleUserClick}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-white" />
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-sm dark:text-gray-300">{user?.firstName || "Organizer"}</span>
-                    <span className="text-xs text-[#ffc107] font-medium">Organizer</span>
-                  </div>
-                </div>
-              </Button>
+             
             </div>
           </div>
         </div>
