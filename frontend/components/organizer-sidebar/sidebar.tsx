@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 
 interface SidebarProps {
   open: boolean;
@@ -31,6 +32,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, token, logout } = useAuthStore();
   const router = useRouter();
+  const { theme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Matches the main site header's convention: blue wordmark on light
+  // backgrounds, gold on dark — the brand block below now actually switches
+  // background between the two, so the logo needs to switch with it.
+  const logoSrc =
+    mounted && (theme === "dark" || resolvedTheme === "dark")
+      ? "/logo4.png"
+      : "/logo3.png";
   // Non-eligible organizers must not see Pazimo Capital at all — this check
   // is a UX nicety on top of the real gate, which is the backend's
   // requireCapitalEligible middleware on every capital endpoint.
@@ -70,43 +85,43 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       >
         <div className="flex flex-col h-full">
           {/* Brand Header */}
-          <div className="relative overflow-hidden border-b border-gray-200 dark:border-gray-800 bg-gradient-to-br from-slate-950 via-[#0c1a3a] to-indigo-950">
+          <div className="relative overflow-hidden bg-white dark:bg-gradient-to-br dark:from-slate-950 dark:via-[#0c1a3a] dark:to-indigo-950">
             {/* Ambient glows behind the wordmark */}
-            <div className="pointer-events-none absolute -top-12 -right-8 h-36 w-36 rounded-full bg-amber-400/15 blur-3xl" />
-            <div className="pointer-events-none absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-[#115db1]/30 blur-3xl" />
-            <div className="relative px-5 pt-5 pb-4">
-              <div className="flex items-start justify-between">
-                <Link
-                  href="/organizer"
-                  onClick={handleLinkClick}
-                  className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 rounded-md"
-                  aria-label="Pazimo — organizer dashboard"
-                >
-                  <Image
-                    src="/logo2.png"
-                    alt="Pazimo"
-                    width={168}
-                    height={112}
-                    priority
-                    className="h-14 w-auto object-contain drop-shadow-[0_2px_10px_rgba(251,191,36,0.25)]"
-                  />
-                </Link>
-                {/* Close button for mobile */}
-                <button
-                  onClick={onClose}
-                  className="lg:hidden p-1.5 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Close menu"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="mt-3 flex items-center gap-3">
-                <span className="h-px flex-1 bg-gradient-to-r from-amber-300/60 via-amber-200/20 to-transparent" />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-amber-100/70">
-                  Organizer Studio
-                </span>
-              </div>
+            <div className="pointer-events-none absolute -top-12 -right-8 h-36 w-36 rounded-full bg-amber-400/10 dark:bg-amber-400/15 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-[#115db1]/10 dark:bg-[#115db1]/30 blur-3xl" />
+
+            {/* Close button for mobile — absolute so it doesn't disturb centering */}
+            <button
+              onClick={onClose}
+              className="lg:hidden absolute top-3 right-3 z-10 p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-white/70 dark:hover:text-white dark:hover:bg-white/10 transition-colors"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="relative px-5 pt-6 pb-5 flex flex-col items-center gap-2.5">
+              <Link
+                href="/organizer"
+                onClick={handleLinkClick}
+                className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/60 rounded-md"
+                aria-label="Pazimo — organizer dashboard"
+              >
+                <Image
+                  src={logoSrc}
+                  alt="Pazimo"
+                  width={168}
+                  height={112}
+                  priority
+                  className="h-20 w-auto object-contain dark:drop-shadow-[0_2px_10px_rgba(251,191,36,0.25)]"
+                />
+              </Link>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-gray-500 dark:text-amber-100/70">
+                Organizer Studio
+              </span>
             </div>
+
+            {/* Full-width divider */}
+            <div className="h-px w-full bg-gradient-to-r from-transparent via-blue-300/70 dark:via-amber-300/50 to-transparent" />
           </div>
 
           {/* Navigation */}
