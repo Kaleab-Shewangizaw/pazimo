@@ -36,12 +36,12 @@ export default function LayoutWrapper({
 
   // The ticket view is a single-screen card and must never grow the document's
   // scroll height — Header stays in flow, main is capped to the leftover space.
+  // No Footer here: its floating button would sit on top of the ticket.
   if (isTicketPage) {
     return (
       <div className="flex h-screen flex-col overflow-hidden">
         {!hideGlobalHeaderFooter && !isSignIn && <Header />}
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
-        {!hideGlobalHeaderFooter && !isSignIn && <Footer />}
       </div>
     );
   }

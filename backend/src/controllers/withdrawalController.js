@@ -9,14 +9,22 @@ const {
 } = require("../errors");
 const Notification = require("../models/Notification");
 const { calculateOrganizerBalance } = require("../services/financeService");
+const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 
-// Get organizer's available balance
+// Get organizer's available balance. Ticket revenue and any borrowed Pazimo
+// Capital principal are now a single pool: the advance is credited straight in
+// and repaid automatically via a 60% cut of post-approval ticket sales (see
+// financeService.calculateOrganizerBalance).
 const getOrganizerBalance = async (req, res) => {
   try {
     // Organizers may only ever see their own balance; only admins can view another's.
     const organizerId =
       req.user.role === "organizer" ? req.user.userId : req.params.organizerId;
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
+
+    // Bring any active advance up to date with the latest ticket sales before
+    // reading the balance, so repayment progress and notifications stay current.
+    await syncOrganizerLoans(organizerId, req);
 
     const balanceData = await calculateOrganizerBalance(organizerId, currency);
 
@@ -60,7 +68,9 @@ const createWithdrawal = async (req, res) => {
       );
     }
 
-    // Get available balance (match the calculation in getOrganizerBalance)
+    // Ticket revenue and borrowed principal share one balance now — sync any
+    // active advance to the latest ticket sales, then validate against it.
+    await syncOrganizerLoans(organizerId, req);
     const { availableBalance } = await calculateOrganizerBalance(
       organizerId,
       currency

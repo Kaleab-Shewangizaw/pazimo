@@ -55,12 +55,27 @@ interface Withdrawal {
   };
 }
 
+interface LoanInfo {
+  currency?: "ETB" | "USD";
+  principalCredited: number;
+  totalRepaidFromTickets: number;
+  outstandingDebt: number;
+  activeLoan?: {
+    _id: string;
+    feeRate?: number;
+    totalRepayable?: number;
+    totalRepaid?: number;
+    outstandingBalance?: number;
+  } | null;
+}
+
 interface BalanceData {
   currency?: "ETB" | "USD";
   totalRevenue: number;
   pendingWithdrawals: number;
   approvedWithdrawals: number;
   availableBalance: number;
+  loan?: LoanInfo;
   revenueBreakdown: Array<{
     eventId: string;
     eventTitle: string;
@@ -255,14 +270,13 @@ export default function WithdrawalsPage() {
   };
 
   const handleWithdraw = async () => {
+    const availableBalance = balance?.availableBalance ?? 0;
+
     if (!withdrawAmount || Number.parseFloat(withdrawAmount) <= 0) {
       toast.error("Please enter a valid amount");
       return;
     }
-    if (
-      Number.parseFloat(withdrawAmount) > (balance?.availableBalance ?? 0) ||
-      !balance
-    ) {
+    if (Number.parseFloat(withdrawAmount) > availableBalance || !balance) {
       toast.error("Withdrawal amount cannot exceed available balance");
       return;
     }
@@ -489,6 +503,7 @@ export default function WithdrawalsPage() {
                 </div>
               </CardContent>
             </Card>
+
           </>
         )}
       </div>
@@ -544,7 +559,7 @@ export default function WithdrawalsPage() {
                 {withdrawals.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={6}
                       className="text-center text-muted-foreground dark:text-gray-400 text-sm py-8"
                     >
                       No withdrawal requests found
@@ -839,7 +854,7 @@ export default function WithdrawalsPage() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground dark:text-gray-400">
                 <AlertCircle className="h-4 w-4" />
                 <span>
-                  Available Balance (After 3% Commission):{" "}
+                  Available Balance:{" "}
                   {(balance?.availableBalance ?? 0).toFixed(2)} {selectedCurrency}
                 </span>
               </div>
@@ -859,8 +874,7 @@ export default function WithdrawalsPage() {
                 !withdrawAmount ||
                 isSubmittingWithdraw ||
                 Number.parseFloat(withdrawAmount) <= 0 ||
-                Number.parseFloat(withdrawAmount) >
-                  (balance?.availableBalance ?? 0) ||
+                Number.parseFloat(withdrawAmount) > (balance?.availableBalance ?? 0) ||
                 !bankDetails.bankName ||
                 ((bankDetails.bankName === "telebirr" ||
                   bankDetails.bankName === "mpesa") &&

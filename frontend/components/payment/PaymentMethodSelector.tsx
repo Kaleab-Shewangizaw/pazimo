@@ -63,11 +63,11 @@ const CHAPA_METHODS = [
     name: "Awash Bank",
     image: "/Awash-Bank.png",
   },
-  {
-    id: "boa_ussd",
-    name: "Bank of Abyssinia",
-    image: "/abissinia.png",
-  },
+  // {
+  //   id: "boa_ussd",
+  //   name: "Bank of Abyssinia",
+  //   image: "/abissinia.png",
+  // },
   // {
   //   id: "yaya",
   //   name: "Yaya Wallet",
@@ -129,13 +129,12 @@ export default function PaymentMethodSelector({
       onValueChange={onSelect}
       className="w-full"
     >
-      <div className="relative w-full overflow-x-auto overflow-y-hidden pb-2 pr-6 scrollbar-hide [scrollbar-width:none] [-ms-overflow-style:none]">
-        <div className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-white via-white/85 to-transparent dark:from-[#0f1115] dark:via-[#0f1115]/85" />
-        <div className="flex w-full flex-nowrap gap-2.5 snap-x snap-mandatory">
+      <div className="relative w-full pb-2">
+        <div className="flex w-full flex-nowrap gap-2.5">
           {methods.map((method) => {
             const disabled = isDisabled(method.id);
             return (
-              <div key={method.id} className="relative w-[calc((100%-2.5rem)/4.25)] md:w-[6.4rem] flex-none snap-start">
+              <div key={method.id} className="relative flex-1 basis-0 min-w-0">
                 <RadioGroupItem
                   value={method.id}
                   id={`payment-${method.id}`}

@@ -258,11 +258,37 @@ const isAdmin = async (req, res, next) => {
   }
 };
 
+// Gates the Pazimo Capital organizer surface. Checked against the database on
+// every request rather than any claim on the JWT — same reasoning as
+// findAccountByPayload above: eligibility is mutable admin-granted state, and
+// a token issued before it was revoked must not keep working.
+const requireCapitalEligible = async (req, res, next) => {
+  try {
+    const OrganizerCapitalProfile = require("../models/OrganizerCapitalProfile");
+    const profile = await OrganizerCapitalProfile.findOne({
+      organizer: req.user.userId,
+    });
+
+    if (!profile || profile.eligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not eligible for Pazimo Capital.",
+      });
+    }
+
+    req.capitalProfile = profile;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
 module.exports = {
   protect,
   authenticateUser,
   optionalAuth,
   restrictTo,
   isAdmin,
+  requireCapitalEligible,
   protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };
