@@ -687,6 +687,83 @@ const listGiftCardPayouts = async (req, res) => {
   }
 };
 
+// GET /api/admin/finance/chapa/giftcards/summary?from_date=YYYY-MM-DD&to_date=YYYY-MM-DD
+// Gift-card-only financial overview: current balances held inside gift cards,
+// plus top-up/payout volume in the period. Deliberately separate from the
+// general Chapa merchant overview (chapaFinanceController) — this money
+// lives inside gift cards, not the main Chapa account balance.
+const getGiftCardSummary = async (req, res) => {
+  try {
+    const fromDate = req.query.from_date || null;
+    const toDate = req.query.to_date || null;
+    const fromTime = fromDate ? new Date(`${fromDate}T00:00:00.000Z`).getTime() : -Infinity;
+    const toTime = toDate ? new Date(`${toDate}T23:59:59.999Z`).getTime() : Infinity;
+    const inRange = (iso) => {
+      const t = new Date(iso).getTime();
+      return t >= fromTime && t <= toTime;
+    };
+
+    const [cardsResult, paymentsResult, payoutsResult] = await Promise.all([
+      fetchAllPages("/card"),
+      fetchAllPages("/card/payments"),
+      fetchAllPages("/card/payouts"),
+    ]);
+
+    const balancesByCurrency = {};
+    for (const card of cardsResult.items) {
+      if (card.status !== 1) continue; // active cards only
+      const currency = card.currency;
+      if (!balancesByCurrency[currency]) {
+        balancesByCurrency[currency] = { currency, totalAvailable: 0, cardCount: 0 };
+      }
+      balancesByCurrency[currency].totalAvailable += (Number(card.available_amount) || 0) / 100;
+      balancesByCurrency[currency].cardCount += 1;
+    }
+
+    const topupByCurrency = {};
+    const daily = {};
+    let topupTotalCount = 0;
+    for (const p of paymentsResult.items) {
+      if ((p.status || "").toLowerCase() !== "success") continue;
+      if (!inRange(p.created_at)) continue;
+      const currency = p.currency;
+      const amount = (Number(p.amount) || 0) / 100;
+      if (!topupByCurrency[currency]) topupByCurrency[currency] = { count: 0, amount: 0 };
+      topupByCurrency[currency].count += 1;
+      topupByCurrency[currency].amount += amount;
+      topupTotalCount += 1;
+
+      const day = String(p.created_at).slice(0, 10);
+      if (!daily[day]) daily[day] = {};
+      daily[day][currency] = (daily[day][currency] || 0) + amount;
+    }
+
+    const payoutByCurrency = {};
+    for (const p of payoutsResult.items) {
+      if ((p.status || "").toLowerCase() !== "success") continue;
+      if (!inRange(p.created_at)) continue;
+      const currency = p.currency;
+      const amount = (Number(p.amount) || 0) / 100;
+      if (!payoutByCurrency[currency]) payoutByCurrency[currency] = { count: 0, amount: 0 };
+      payoutByCurrency[currency].count += 1;
+      payoutByCurrency[currency].amount += amount;
+    }
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: {
+        period: { from: fromDate, to: toDate },
+        truncated: cardsResult.truncated || paymentsResult.truncated || payoutsResult.truncated,
+        balances: Object.values(balancesByCurrency),
+        topups: { totalCount: topupTotalCount, byCurrency: topupByCurrency, daily },
+        payouts: { byCurrency: payoutByCurrency },
+      },
+    });
+  } catch (error) {
+    handleLinkError(res, error, "getGiftCardSummary");
+  }
+};
+
 module.exports = {
   listGiftCards,
   createGiftCard,
@@ -700,4 +777,5 @@ module.exports = {
   getGiftCardTransactions,
   getGiftCardFeed,
   getPayoutBanks,
+  getGiftCardSummary,
 };

@@ -26,6 +26,7 @@ const {
 	getGiftCardTransactions,
 	getGiftCardFeed,
 	getPayoutBanks,
+	getGiftCardSummary,
 } = require('../controllers/chapaGiftCardController');
 const {
 	getV2Payments,
@@ -57,6 +58,7 @@ router.get('/finance/chapa/v2/payments', authenticateUser, restrictTo('admin'), 
 router.get('/finance/chapa/v2/payouts', authenticateUser, restrictTo('admin'), getV2Payouts);
 
 // Chapa Link gift cards (static paths before /:cardNumber so they don't get captured)
+router.get('/finance/chapa/giftcards/summary', authenticateUser, restrictTo('admin'), getGiftCardSummary);
 router.get('/finance/chapa/giftcards/feed', authenticateUser, restrictTo('admin'), getGiftCardFeed);
 router.get('/finance/chapa/giftcards/banks', authenticateUser, restrictTo('admin'), getPayoutBanks);
 router.get('/finance/chapa/giftcards/payouts', authenticateUser, restrictTo('admin'), listGiftCardPayouts);
