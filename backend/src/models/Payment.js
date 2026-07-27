@@ -13,8 +13,15 @@ const Payment = new mongoose.Schema({
   method: String, // "email" or "sms"
   provider: {
     type: String,
-    enum: ["santim", "chapa"],
+    enum: ["santim", "chapa", "chapa_giftcard"],
     default: "santim",
+  },
+  // Populated only when provider === "chapa_giftcard": which card received
+  // the funds, and the Chapa Link reference used to verify/poll status.
+  giftCardNumber: String,
+  giftCardLinkReference: {
+    type: String,
+    index: true,
   },
   invitationType: {
     type: String, // "guest" or "paid"
@@ -61,6 +68,14 @@ const Payment = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now,
+  },
+  // Set once, at the moment status first flips to PAID — distinct from
+  // createdAt (when the payment was initiated). Daily revenue bucketing
+  // (platform fee ledger) keys off this so a payment confirmed just after
+  // midnight lands in the day it actually completed, not the day it started.
+  paidAt: {
+    type: Date,
+    index: true,
   },
 });
 

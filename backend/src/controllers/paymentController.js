@@ -6,6 +6,8 @@ const SantimPayService = require("../services/santimPayService");
 const { processSuccessfulPayment } = require("./ticketController");
 
 const ChapaService = require("../services/chapaService");
+const ChapaGiftCardService = require("../services/chapaGiftCardService");
+const { amountsMatch } = require("../utils/pricing");
 
 // For web-checkout (card/redirect) payments: allow a short grace period before
 // treating a "failed" status as terminal, since the user may still be in-flight.
@@ -48,8 +50,11 @@ class PaymentController {
       const { txn } = req.query;
       console.log(`\n[PAYMENT-STATUS] ============================================`);
       console.log(`[PAYMENT-STATUS] Checking status for txn: ${txn}`);
-      
-      if (!txn) {
+
+      // txn feeds straight into a Mongo query below. Express parses
+      // ?txn[$ne]=null into an object, not a string — reject anything that
+      // isn't a plain string so it can never be interpreted as a query operator.
+      if (!txn || typeof txn !== "string") {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
           error: "Transaction ID (txn) is required",
@@ -123,6 +128,7 @@ class PaymentController {
                     if (["success", "completed", "paid"].includes(normalizedPaymentStatus)) {
                       console.log(`[CHAPA-VERIFY] ✅ Payment ${txn} is successful, marking as PAID`);
                       payment.status = "PAID";
+                      payment.paidAt = new Date();
                       await payment.save();
                       await processSuccessfulPayment(payment);
                       break;
@@ -181,6 +187,40 @@ class PaymentController {
                 }
               }
             }
+          } else if (payment.provider === "chapa_giftcard") {
+            // Chapa Link gift-card top-up — verified against the Link API's own
+            // status endpoint (never trust client polling alone), keyed by the
+            // link_reference saved at initiation time.
+            if (!payment.giftCardLinkReference) {
+              console.error(`[GIFTCARD-VERIFY] Payment ${txn} has no giftCardLinkReference`);
+            } else {
+              try {
+                const statusData = await ChapaGiftCardService.getPaymentStatus(
+                  payment.giftCardLinkReference
+                );
+                const remoteStatus = String(statusData?.status || "").toLowerCase();
+                const remoteAmount = Number(statusData?.amount) / 100; // cents -> major unit
+
+                console.log(`[GIFTCARD-VERIFY] ${txn} -> status: ${remoteStatus}, amount: ${remoteAmount}`);
+
+                if (remoteStatus === "success") {
+                  if (!amountsMatch(remoteAmount, payment.price)) {
+                    console.error(`[GIFTCARD-VERIFY] Amount mismatch for ${txn}: expected ${payment.price}, got ${remoteAmount}`);
+                  } else {
+                    payment.status = "PAID";
+                    payment.paidAt = new Date();
+                    await payment.save();
+                    await processSuccessfulPayment(payment);
+                  }
+                } else if (remoteStatus === "failed" || remoteStatus === "cancelled") {
+                  payment.status = remoteStatus === "cancelled" ? "CANCELLED" : "FAILED";
+                  await payment.save();
+                }
+                // "pending" — leave as-is, frontend will poll again
+              } catch (err) {
+                console.error(`[GIFTCARD-VERIFY] Status check failed for ${txn}:`, err.message);
+              }
+            }
           } else {
             // SantimPay
             const statusData = await SantimPayService.checkTransactionStatus(txn);
@@ -191,6 +231,7 @@ class PaymentController {
 
             if (remoteStatus === "COMPLETED" || remoteStatus === "SUCCESS") {
               payment.status = "PAID";
+              payment.paidAt = new Date();
               await payment.save();
               await processSuccessfulPayment(payment);
             } else if (
@@ -301,8 +342,11 @@ class PaymentController {
       const { transactionId } = req.body;
       console.log(`\n[PAYMENT-CANCEL] ============================================`);
       console.log(`[PAYMENT-CANCEL] Canceling payment for txn: ${transactionId}`);
-      
-      if (!transactionId) {
+
+      // Same class of issue as checkPaymentStatus: a JSON body can carry an
+      // object ({"transactionId":{"$ne":null}}) that Mongo would treat as an
+      // operator — reject anything that isn't a plain string.
+      if (!transactionId || typeof transactionId !== "string") {
         return res.status(StatusCodes.BAD_REQUEST).json({
           success: false,
           error: "Transaction ID is required",

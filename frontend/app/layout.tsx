@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   title: "Pazimo",
   description: "Pazimo is your ultimate platform to discover, create, and manage events. Buy tickets, RSVP, and organize unforgettable experiences.",
   keywords: ["events", "tickets", "rsvp", "ethiopia events", "concerts", "festivals", "pazimo"],
-  authors: [{ name: "Pazimo Team" }],
+  authors: [{ name: "Pazimo" }],
   openGraph: {
     title: "Pazimo",
     description: "Your ultimate platform for events. Buy tickets, RSVP, and organize.",

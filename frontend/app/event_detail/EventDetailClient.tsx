@@ -390,7 +390,7 @@ export default function EventDetailClient() {
               setIsProcessingPayment(false);
               setShowTicketModal(true);
               router.replace(eventUrl);
-              toast.success("🎉 Payment confirmed! Your ticket is ready.");
+              toast.success("Payment confirmed! Your ticket is ready.");
               return true;
             }
           }

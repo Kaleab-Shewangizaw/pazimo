@@ -96,7 +96,7 @@
 import type React from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Shield, Menu, CreditCard } from "lucide-react";
+import { Search, Shield, Menu, CreditCard, Gift } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -117,6 +117,8 @@ export default function AdminHeader({
     "CHAPA"
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [giftCardMode, setGiftCardMode] = useState(false);
+  const [giftCardLoading, setGiftCardLoading] = useState(false);
 
   useEffect(() => {
     fetchActiveProvider();
@@ -130,6 +132,7 @@ export default function AdminHeader({
       if (response.ok) {
         const data = await response.json();
         setActiveProvider(data.data.activeProvider);
+        setGiftCardMode(!!data.data.giftCardMode);
       }
     } catch (error) {
       console.error("Failed to fetch active provider:", error);
@@ -163,6 +166,41 @@ export default function AdminHeader({
       toast.error("Failed to update payment provider");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const toggleGiftCardMode = async (checked: boolean) => {
+    setGiftCardLoading(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/giftcard-mode`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ enabled: checked }),
+        }
+      );
+      const data = await response.json();
+      if (response.ok) {
+        setGiftCardMode(checked);
+        toast.success(
+          checked
+            ? "Ticket payments now settle into gift cards"
+            : "Ticket payments now settle directly to the merchant"
+        );
+      } else {
+        throw new Error(data.message || "Failed to update gift card mode");
+      }
+    } catch (error: any) {
+      console.error("Error updating gift card mode:", error);
+      toast.error(
+        error.message || "Failed to update gift card mode"
+      );
+    } finally {
+      setGiftCardLoading(false);
     }
   };
 
@@ -216,6 +254,19 @@ export default function AdminHeader({
                 className="data-[state=checked]:bg-green-600 scale-75 origin-right"
               />
             </div>
+            {activeProvider === "CHAPA" && (
+              <div className="flex items-center gap-1 mr-1">
+                <span className="hidden sm:inline text-xs font-medium text-gray-700 dark:text-white">
+                  {giftCardMode ? "Gift card" : "Merchant"}
+                </span>
+                <Switch
+                  checked={giftCardMode}
+                  onCheckedChange={toggleGiftCardMode}
+                  disabled={giftCardLoading}
+                  className="data-[state=checked]:bg-purple-600 scale-75 origin-right"
+                />
+              </div>
+            )}
             <ThemeToggle />
 
             <button
@@ -247,6 +298,25 @@ export default function AdminHeader({
                 className="data-[state=checked]:bg-green-600"
               />
             </div>
+
+            {activeProvider === "CHAPA" && (
+              <div className="flex items-center gap-2 bg-gray-50 px-3 dark:bg-black py-2 rounded-lg">
+                <Gift className="h-4 w-4 text-gray-500" />
+                <Label
+                  htmlFor="giftcard-switch"
+                  className="text-sm font-medium text-gray-700 dark:text-white"
+                >
+                  {giftCardMode ? "Gift card" : "Direct merchant"}
+                </Label>
+                <Switch
+                  id="giftcard-switch"
+                  checked={giftCardMode}
+                  onCheckedChange={toggleGiftCardMode}
+                  disabled={giftCardLoading}
+                  className="data-[state=checked]:bg-purple-600"
+                />
+              </div>
+            )}
 
             <div>
               <ThemeToggle />

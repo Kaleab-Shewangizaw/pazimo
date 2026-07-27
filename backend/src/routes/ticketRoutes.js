@@ -28,9 +28,11 @@ const {
 
 const SantimPayService = require("../services/santimPayService");
 const ChapaService = require("../services/chapaService");
+const ChapaGiftCardService = require("../services/chapaGiftCardService");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const Payment = require("../models/Payment");
+const PaymentConfig = require("../models/PaymentConfig");
 const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 
@@ -482,6 +484,20 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       orderId ||
       `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+    // Gift-card routing: when enabled, ticket payments settle into a Chapa
+    // Link gift card (selected per currency) instead of the merchant balance.
+    const paymentConfig = await PaymentConfig.findOne();
+    const giftCardTarget = paymentConfig?.giftCardMode
+      ? paymentConfig.giftCardRouting?.[currency]
+      : null;
+
+    if (paymentConfig?.giftCardMode && !giftCardTarget) {
+      return res.status(400).json({
+        success: false,
+        error: `Gift card routing is enabled but no ${currency} gift card is configured. Set one in Admin → Finance.`,
+      });
+    }
+
     // Chapa specific URLs
     const webhookBaseUrl = resolveWebhookBaseUrl(req);
     const chapaCallbackUrl = `${webhookBaseUrl}/api/webhooks/chapa`;
@@ -545,8 +561,43 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
 
     // Call Chapa - use web checkout for card payments or direct charge for mobile money
     let response;
+    let giftCardLinkReference = null;
     try {
-      if (useWebCheckout) {
+      if (giftCardTarget) {
+        // Gift-card mode: settle into the configured Chapa Link card instead
+        // of the merchant balance. The Link API stores amounts in cents.
+        const cents = Math.round(verifiedAmount * 100);
+        console.log(
+          `[CHAPA-INIT] Routing ticket payment into gift card ${giftCardTarget} (${currency}, ${cents} cents)`
+        );
+
+        if (useWebCheckout) {
+          const result = await ChapaGiftCardService.topUpHosted({
+            card_number: giftCardTarget,
+            amount: cents,
+            merchant_reference: transactionId,
+          });
+          giftCardLinkReference = result?.link_reference || null;
+          response = {
+            status: "success",
+            data: { checkout_url: result?.checkout_url || null },
+          };
+        } else {
+          let chapaMobile = phoneNumber.replace(/^\+/, "");
+          if (chapaMobile.startsWith("251")) {
+            chapaMobile = "0" + chapaMobile.substring(3);
+          }
+          const result = await ChapaGiftCardService.topUpDirectCharge({
+            card_number: giftCardTarget,
+            amount: cents,
+            phone_number: chapaMobile,
+            payment_method: chapaType,
+            merchant_reference: transactionId,
+          });
+          giftCardLinkReference = result?.link_reference || null;
+          response = { status: "success", data: {} };
+        }
+      } else if (useWebCheckout) {
         // Web checkout for Visa/Mastercard
         const txRef = transactionId;
         console.log(`[CHAPA-INIT] Using WEB CHECKOUT for card payment. Currency: ${currency}`);
@@ -697,7 +748,9 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber,
       paymentPhone: phoneNumber,
       method: method,
-      provider: "chapa",
+      provider: giftCardTarget ? "chapa_giftcard" : "chapa",
+      giftCardNumber: giftCardTarget || undefined,
+      giftCardLinkReference: giftCardLinkReference || undefined,
       price: verifiedAmount,
       currency: currency, // Store currency in payment record
       eventId: selectedEventId,
