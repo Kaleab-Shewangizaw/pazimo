@@ -37,6 +37,7 @@ const WithdrawalSchema = new mongoose.Schema(
       accountName: String,
       accountNumber: String,
       bankName: String,
+      accountHolderName: String,
     },
     transactionId: {
       type: String,

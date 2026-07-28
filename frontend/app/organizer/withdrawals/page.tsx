@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   DollarSign,
@@ -72,6 +71,7 @@ interface Withdrawal {
     accountName: string;
     accountNumber: string;
     bankName: string;
+    accountHolderName?: string;
   };
   transactionId?: string;
   processedBy?: {
@@ -127,7 +127,6 @@ export default function WithdrawalsPage() {
   const [balance, setBalance] = useState<BalanceData | null>(null);
   const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
-  const [withdrawNotes, setWithdrawNotes] = useState("");
   const [isSubmittingWithdraw, setIsSubmittingWithdraw] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -138,6 +137,7 @@ export default function WithdrawalsPage() {
     accountName: "",
     accountNumber: "",
     bankName: "",
+    accountHolderName: "",
   });
   const socketRef = useRef<Socket | null>(null);
 
@@ -310,6 +310,10 @@ export default function WithdrawalsPage() {
       toast.error("Please select a payment method");
       return;
     }
+    if (!bankDetails.accountHolderName.trim()) {
+      toast.error("Please enter the full name of the account holder");
+      return;
+    }
     if (
       (bankDetails.bankName === "telebirr" ||
         bankDetails.bankName === "mpesa") &&
@@ -349,7 +353,6 @@ export default function WithdrawalsPage() {
       const requestBody = {
         amount: Number.parseFloat(withdrawAmount),
         currency: selectedCurrency,
-        notes: withdrawNotes,
         bankDetails,
       };
 
@@ -383,11 +386,11 @@ export default function WithdrawalsPage() {
         toast.success("Withdrawal request submitted successfully");
         setWithdrawDialogOpen(false);
         setWithdrawAmount("");
-        setWithdrawNotes("");
         setBankDetails({
           accountName: "",
           accountNumber: "",
           bankName: "",
+          accountHolderName: "",
         });
         fetchWithdrawals();
         fetchBalance();
@@ -407,6 +410,13 @@ export default function WithdrawalsPage() {
       setIsSubmittingWithdraw(false);
     }
   };
+
+  const TELEBIRR_FEE_RATE = 0.02;
+  const parsedWithdrawAmount = Number.parseFloat(withdrawAmount || "0");
+  const telebirrNetAmount =
+    parsedWithdrawAmount > 0
+      ? parsedWithdrawAmount * (1 - TELEBIRR_FEE_RATE)
+      : 0;
 
   const SkeletonCard = () => (
     <Card className="overflow-hidden border-none shadow-md bg-white dark:bg-black relative">
@@ -819,9 +829,20 @@ export default function WithdrawalsPage() {
                 <Alert className="rounded-lg border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 px-3.5 py-3">
                   <Info className="h-4 w-4 text-amber-700 dark:text-amber-400" />
                   <AlertDescription className="text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
-                    Telebirr deducts a transaction fee from withdrawals. Choose{" "}
-                    <span className="font-medium">Bank</span> instead to
-                    receive the full amount without extra cuts.
+                    Telebirr charges a 2% fee on withdrawals, which will be
+                    deducted from this request.
+                    {parsedWithdrawAmount > 0 && (
+                      <>
+                        {" "}
+                        You&apos;ll receive{" "}
+                        <span className="font-semibold">
+                          {formatAmount(telebirrNetAmount)} {selectedCurrency}
+                        </span>{" "}
+                        after the fee.
+                      </>
+                    )}{" "}
+                    Choose <span className="font-medium">Bank</span> to avoid
+                    this deduction and receive the full amount.
                   </AlertDescription>
                 </Alert>
               )}
@@ -835,6 +856,23 @@ export default function WithdrawalsPage() {
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Payout Details
                 </p>
+                <div className="space-y-2">
+                  <Label htmlFor="account-holder-name" className="text-sm dark:text-gray-300">
+                    Full Name of the Account Holder
+                  </Label>
+                  <Input
+                    id="account-holder-name"
+                    value={bankDetails.accountHolderName}
+                    onChange={(e) =>
+                      setBankDetails((prev) => ({
+                        ...prev,
+                        accountHolderName: e.target.value,
+                      }))
+                    }
+                    placeholder="Enter the full name as it appears on the account"
+                    className="text-sm bg-white dark:bg-black dark:border-gray-700 dark:text-gray-100"
+                  />
+                </div>
                 {bankDetails.bankName === "telebirr" && (
                   <div className="space-y-2">
                     <Label htmlFor="telebirr-phone" className="text-sm dark:text-gray-300">
@@ -901,45 +939,7 @@ export default function WithdrawalsPage() {
                           </SelectItem>
                           <SelectItem value="Dashen Bank" className="dark:text-gray-200">Dashen Bank</SelectItem>
                           <SelectItem value="Hibret Bank" className="dark:text-gray-200">Hibret Bank</SelectItem>
-                          <SelectItem value="Nib International Bank" className="dark:text-gray-200">
-                            Nib International Bank
-                          </SelectItem>
-                          <SelectItem value="Cooperative Bank of Oromia" className="dark:text-gray-200">
-                            Cooperative Bank of Oromia
-                          </SelectItem>
-                          <SelectItem value="Lion International Bank" className="dark:text-gray-200">
-                            Lion International Bank
-                          </SelectItem>
-                          <SelectItem value="Wegagen Bank" className="dark:text-gray-200">Wegagen Bank</SelectItem>
                           <SelectItem value="Zemen Bank" className="dark:text-gray-200">Zemen Bank</SelectItem>
-                          <SelectItem value="Oromia International Bank" className="dark:text-gray-200">
-                            Oromia International Bank
-                          </SelectItem>
-                          <SelectItem value="Global Bank Ethiopia" className="dark:text-gray-200">
-                            Global Bank Ethiopia
-                          </SelectItem>
-                          <SelectItem value="Enat Bank" className="dark:text-gray-200">Enat Bank</SelectItem>
-                          <SelectItem value="Addis International Bank" className="dark:text-gray-200">
-                            Addis International Bank
-                          </SelectItem>
-                          <SelectItem value="Abay Bank" className="dark:text-gray-200">Abay Bank</SelectItem>
-                          <SelectItem value="Berhan International Bank" className="dark:text-gray-200">
-                            Berhan International Bank
-                          </SelectItem>
-                          <SelectItem value="Bunna International Bank" className="dark:text-gray-200">
-                            Bunna International Bank
-                          </SelectItem>
-                          <SelectItem value="ZamZam Bank" className="dark:text-gray-200">ZamZam Bank</SelectItem>
-                          <SelectItem value="Shabelle Bank" className="dark:text-gray-200">Shabelle Bank</SelectItem>
-                          <SelectItem value="Hijra Bank" className="dark:text-gray-200">Hijra Bank</SelectItem>
-                          <SelectItem value="Siinqee Bank" className="dark:text-gray-200">Siinqee Bank</SelectItem>
-                          <SelectItem value="Ahadu Bank" className="dark:text-gray-200">Ahadu Bank</SelectItem>
-                          <SelectItem value="Goh Betoch Bank" className="dark:text-gray-200">Goh Betoch Bank</SelectItem>
-                          <SelectItem value="Tsedey Bank" className="dark:text-gray-200">Tsedey Bank</SelectItem>
-                          <SelectItem value="Tsehay Bank" className="dark:text-gray-200">Tsehay Bank</SelectItem>
-                          <SelectItem value="Gadaa Bank" className="dark:text-gray-200">Gadaa Bank</SelectItem>
-                          <SelectItem value="Amhara Bank" className="dark:text-gray-200">Amhara Bank</SelectItem>
-                          <SelectItem value="Rammis Bank" className="dark:text-gray-200">Rammis Bank</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -962,23 +962,6 @@ export default function WithdrawalsPage() {
               </div>
             )}
 
-            {/* Notes */}
-            <div className="space-y-1.5">
-              <Label htmlFor="notes" className="text-sm dark:text-gray-300">
-                Notes{" "}
-                <span className="text-gray-400 dark:text-gray-500 font-normal">
-                  (optional)
-                </span>
-              </Label>
-              <Textarea
-                id="notes"
-                value={withdrawNotes}
-                onChange={(e) => setWithdrawNotes(e.target.value)}
-                placeholder="Add any notes about this withdrawal request"
-                rows={2}
-                className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500"
-              />
-            </div>
           </div>
 
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-2 px-5 sm:px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30">
@@ -997,6 +980,7 @@ export default function WithdrawalsPage() {
                 Number.parseFloat(withdrawAmount) <= 0 ||
                 Number.parseFloat(withdrawAmount) > (balance?.availableBalance ?? 0) ||
                 !bankDetails.bankName ||
+                !bankDetails.accountHolderName.trim() ||
                 ((bankDetails.bankName === "telebirr" ||
                   bankDetails.bankName === "mpesa") &&
                   !bankDetails.accountNumber) ||

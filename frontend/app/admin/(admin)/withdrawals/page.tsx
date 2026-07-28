@@ -43,6 +43,7 @@ interface WithdrawalData {
     accountName: string
     accountNumber: string
     bankName: string
+    accountHolderName?: string
   }
   processedBy?: {
     firstName: string
@@ -146,12 +147,18 @@ export default function WithdrawalsPage() {
     const bankName = withdrawal.bankDetails?.bankName || "N/A"
     const accountName = withdrawal.bankDetails?.accountName || "N/A"
     const accountNumber = withdrawal.bankDetails?.accountNumber || "N/A"
+    const accountHolderName = withdrawal.bankDetails?.accountHolderName
 
     return (
       <div className="text-sm">
         <div className="font-medium">{bankName}</div>
         <div>{accountName}</div>
         <div className="text-gray-500 dark:text-gray-400">{accountNumber}</div>
+        {accountHolderName && (
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            Holder: {accountHolderName}
+          </div>
+        )}
       </div>
     )
   }
