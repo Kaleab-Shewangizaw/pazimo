@@ -81,6 +81,15 @@ const createWithdrawal = async (req, res) => {
       throw new BadRequestError("Withdrawal amount exceeds available balance");
     }
 
+    // Telebirr takes a 2% cut on withdrawal payouts; that cost is now passed
+    // through to the organizer rather than absorbed by the platform, so the
+    // requested amount stays as the balance deduction while the payout the
+    // organizer actually receives is reduced by the fee.
+    const TELEBIRR_FEE_RATE = 0.02;
+    const feeAmount =
+      bankDetails?.bankName === "telebirr" ? amount * TELEBIRR_FEE_RATE : 0;
+    const netAmount = amount - feeAmount;
+
     // Create withdrawal request
     const withdrawal = await Withdrawal.create({
       organizer: organizerId,
@@ -88,6 +97,8 @@ const createWithdrawal = async (req, res) => {
       currency,
       notes,
       bankDetails,
+      feeAmount,
+      netAmount,
       processedBy: req.user.role === "admin" ? req.user.userId : undefined,
       status: "pending",
     });

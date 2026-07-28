@@ -39,6 +39,17 @@ const WithdrawalSchema = new mongoose.Schema(
       bankName: String,
       accountHolderName: String,
     },
+    // Provider cut deducted from the requested amount (e.g. Telebirr's 2%
+    // withdrawal fee). 0 for methods that don't charge one, like bank transfer.
+    feeAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // amount - feeAmount: what the organizer actually receives.
+    netAmount: {
+      type: Number,
+    },
     transactionId: {
       type: String,
     },

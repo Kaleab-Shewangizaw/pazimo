@@ -35,6 +35,8 @@ interface WithdrawalData {
     email: string
   }
   amount: number
+  feeAmount?: number
+  netAmount?: number
   currency?: "ETB" | "USD"
   status: "pending" | "approved" | "rejected" | "completed"
   source?: "ticket_revenue" | "loan"
@@ -272,6 +274,12 @@ export default function WithdrawalsPage() {
                         </TableCell>
                         <TableCell>
                           <span className="font-semibold text-green-600 dark:text-green-400">{withdrawal.amount.toFixed(2)} {withdrawal.currency || currencyFilter}</span>
+                          {!!withdrawal.feeAmount && withdrawal.feeAmount > 0 && (
+                            <div className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
+                              -{withdrawal.feeAmount.toFixed(2)} Telebirr fee &middot; pay out{" "}
+                              {(withdrawal.netAmount ?? withdrawal.amount - withdrawal.feeAmount).toFixed(2)}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           {withdrawal.source === "loan" ? (
@@ -368,10 +376,22 @@ export default function WithdrawalsPage() {
               <DialogTitle className="text-gray-900 dark:text-gray-100">Update Withdrawal Status</DialogTitle>
               <DialogDescription>
                 Update the status for {selectedWithdrawal?.organizer.firstName}{" "}
-                {selectedWithdrawal?.organizer.lastName}'s request of {selectedWithdrawal?.amount.toFixed(2)} {selectedWithdrawal?.currency || currencyFilter}.
+                {selectedWithdrawal?.organizer.lastName}&apos;s request of {selectedWithdrawal?.amount.toFixed(2)} {selectedWithdrawal?.currency || currencyFilter}.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {!!selectedWithdrawal?.feeAmount && selectedWithdrawal.feeAmount > 0 && (
+                <div className="rounded-md border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                  Telebirr fee of {selectedWithdrawal.feeAmount.toFixed(2)}{" "}
+                  {selectedWithdrawal.currency || currencyFilter} is deducted from
+                  this request — pay out{" "}
+                  <span className="font-semibold">
+                    {(selectedWithdrawal.netAmount ?? selectedWithdrawal.amount - selectedWithdrawal.feeAmount).toFixed(2)}{" "}
+                    {selectedWithdrawal.currency || currencyFilter}
+                  </span>
+                  .
+                </div>
+              )}
               <div className="space-y-2">
                 <Label className="text-gray-700 dark:text-gray-300">Status</Label>
                 <Select

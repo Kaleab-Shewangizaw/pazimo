@@ -62,6 +62,8 @@ const formatAmount = (value: number) =>
 interface Withdrawal {
   _id: string;
   amount: number;
+  feeAmount?: number;
+  netAmount?: number;
   currency?: "ETB" | "USD";
   status: "pending" | "approved" | "rejected" | "completed";
   createdAt: string;
@@ -608,7 +610,15 @@ export default function WithdrawalsPage() {
                         {new Date(withdrawal.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="font-medium text-xs sm:text-sm dark:text-gray-100">
-                        {withdrawal.amount.toFixed(2)} {withdrawal.currency || selectedCurrency}
+                        <div>
+                          {withdrawal.amount.toFixed(2)} {withdrawal.currency || selectedCurrency}
+                        </div>
+                        {!!withdrawal.feeAmount && withdrawal.feeAmount > 0 && (
+                          <div className="text-[11px] font-normal text-amber-600 dark:text-amber-400 mt-0.5">
+                            -{withdrawal.feeAmount.toFixed(2)} fee &middot; you get{" "}
+                            {(withdrawal.netAmount ?? withdrawal.amount - withdrawal.feeAmount).toFixed(2)}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs sm:text-sm">
                         <Badge
