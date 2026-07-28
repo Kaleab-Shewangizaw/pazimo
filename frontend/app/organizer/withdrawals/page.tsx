@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { DollarSign, Wallet, AlertCircle } from "lucide-react";
+import {
+  DollarSign,
+  Wallet,
+  AlertCircle,
+  Smartphone,
+  Landmark,
+  Info,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +24,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Table,
   TableBody,
@@ -33,6 +42,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { io, type Socket } from "socket.io-client";
+import { cn } from "@/lib/utils";
+
+const PAYOUT_METHODS: {
+  id: "telebirr" | "mpesa" | "bank";
+  label: string;
+  icon: typeof Smartphone;
+}[] = [
+  { id: "telebirr", label: "Telebirr", icon: Smartphone },
+  { id: "mpesa", label: "M-Pesa", icon: Smartphone },
+  { id: "bank", label: "Bank", icon: Landmark },
+];
+
+const formatAmount = (value: number) =>
+  value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 interface Withdrawal {
   _id: string;
@@ -661,36 +687,80 @@ export default function WithdrawalsPage() {
 
       {/* Withdrawal Request Dialog */}
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-        <DialogContent className="sm:max-w-[425px] p-4 sm:p-6 dark:bg-black dark:border-gray-800">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl dark:text-gray-100">
-              Request Withdrawal
-            </DialogTitle>
-            <DialogDescription className="text-sm sm:text-base dark:text-gray-400">
-              Enter the amount you wish to withdraw from your available balance.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="withdraw-amount" className="text-sm dark:text-gray-300">
-                Amount ({selectedCurrency})
-              </Label>
-              <Input
-                id="withdraw-amount"
-                type="number"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder="Enter amount"
-                min="0"
-                step="0.01"
-                className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100"
-              />
+        <DialogContent className="sm:max-w-[480px] p-0 gap-0 dark:bg-black dark:border-gray-800 max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="p-5 sm:p-6 pb-4 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1a2d5a]/10 dark:bg-blue-500/10">
+                <Wallet className="h-5 w-5 text-[#1a2d5a] dark:text-blue-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg dark:text-gray-100">
+                  Request Withdrawal
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm dark:text-gray-400 mt-0.5">
+                  Funds are sent to the payout account you specify below.
+                </DialogDescription>
+              </div>
             </div>
+          </DialogHeader>
+
+          <div className="px-5 sm:px-6 py-5 space-y-5">
+            {/* Available balance */}
+            <div className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40 px-3.5 py-2.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Available Balance
+              </span>
+              <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-gray-100">
+                {formatAmount(balance?.availableBalance ?? 0)} {selectedCurrency}
+              </span>
+            </div>
+
+            {/* Amount */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="withdraw-amount" className="text-sm dark:text-gray-300">
+                  Amount to withdraw
+                </Label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setWithdrawAmount(
+                      (balance?.availableBalance ?? 0).toFixed(2)
+                    )
+                  }
+                  className="text-xs font-medium text-[#1a2d5a] dark:text-blue-400 hover:underline"
+                >
+                  Withdraw max
+                </button>
+              </div>
+              <div className="relative">
+                <Input
+                  id="withdraw-amount"
+                  type="number"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="0.01"
+                  className="h-12 pr-16 text-xl font-semibold tabular-nums dark:bg-black dark:border-gray-700 dark:text-gray-100"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-400 dark:text-gray-500">
+                  {selectedCurrency}
+                </span>
+              </div>
+              {Number.parseFloat(withdrawAmount || "0") >
+                (balance?.availableBalance ?? 0) && (
+                <p className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  Amount exceeds your available balance
+                </p>
+              )}
+            </div>
+
+            {/* Payout method */}
             <div className="space-y-2">
-              <Label htmlFor="payment-method" className="text-sm dark:text-gray-300">
-                Payment Method
-              </Label>
-              <Select
+              <Label className="text-sm dark:text-gray-300">Payout Method</Label>
+              <RadioGroup
                 value={bankDetails.bankName}
                 onValueChange={(value) =>
                   setBankDetails((prev) => ({
@@ -700,167 +770,218 @@ export default function WithdrawalsPage() {
                     accountNumber: "",
                   }))
                 }
+                className="grid grid-cols-3 gap-2"
               >
-                <SelectTrigger id="payment-method" className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-200">
-                  <SelectValue placeholder="Select payment method" />
-                </SelectTrigger>
-                <SelectContent className="dark:bg-black dark:border-gray-700">
-                  <SelectItem value="telebirr" className="dark:text-gray-200">Telebirr</SelectItem>
-                  <SelectItem value="mpesa" className="dark:text-gray-200">M-Pesa</SelectItem>
-                  <SelectItem value="bank" className="dark:text-gray-200">Bank Transfer</SelectItem>
-                </SelectContent>
-              </Select>
+                {PAYOUT_METHODS.map((method) => {
+                  const checked = bankDetails.bankName === method.id;
+                  const Icon = method.icon;
+                  return (
+                    <div key={method.id} className="relative">
+                      <RadioGroupItem
+                        value={method.id}
+                        id={`payout-${method.id}`}
+                        className="peer sr-only"
+                      />
+                      <Label
+                        htmlFor={`payout-${method.id}`}
+                        className={cn(
+                          "flex flex-col items-center justify-center gap-1 rounded-lg border px-2 py-3 text-center cursor-pointer transition-colors",
+                          checked
+                            ? "border-[#1a2d5a] bg-[#1a2d5a]/5 ring-1 ring-[#1a2d5a] dark:border-blue-500 dark:bg-blue-500/10 dark:ring-blue-500"
+                            : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:bg-gray-900/40"
+                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            "h-5 w-5",
+                            checked
+                              ? "text-[#1a2d5a] dark:text-blue-400"
+                              : "text-gray-500 dark:text-gray-400"
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-xs font-medium",
+                            checked
+                              ? "text-[#1a2d5a] dark:text-blue-300"
+                              : "text-gray-700 dark:text-gray-300"
+                          )}
+                        >
+                          {method.label}
+                        </span>
+                      </Label>
+                    </div>
+                  );
+                })}
+              </RadioGroup>
+
+              {bankDetails.bankName === "telebirr" && (
+                <Alert className="rounded-lg border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 px-3.5 py-3">
+                  <Info className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                  <AlertDescription className="text-amber-900 dark:text-amber-200 text-xs leading-relaxed">
+                    Telebirr deducts a transaction fee from withdrawals. Choose{" "}
+                    <span className="font-medium">Bank</span> instead to
+                    receive the full amount without extra cuts.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
-            {bankDetails.bankName === "telebirr" && (
-              <div className="space-y-2">
-                <Label htmlFor="telebirr-phone" className="text-sm dark:text-gray-300">
-                  Telebirr Phone Number
-                </Label>
-                <Input
-                  id="telebirr-phone"
-                  value={bankDetails.accountNumber}
-                  onChange={(e) =>
-                    setBankDetails((prev) => ({
-                      ...prev,
-                      accountNumber: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter Telebirr phone number"
-                  className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100"
-                />
-              </div>
-            )}
-            {bankDetails.bankName === "mpesa" && (
-              <div className="space-y-2">
-                <Label htmlFor="mpesa-phone" className="text-sm dark:text-gray-300">
-                  M-Pesa Phone Number
-                </Label>
-                <Input
-                  id="mpesa-phone"
-                  value={bankDetails.accountNumber}
-                  onChange={(e) =>
-                    setBankDetails((prev) => ({
-                      ...prev,
-                      accountNumber: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter M-Pesa phone number"
-                  className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100"
-                />
+
+            {/* Method-specific account details */}
+            {(bankDetails.bankName === "telebirr" ||
+              bankDetails.bankName === "mpesa" ||
+              bankDetails.bankName === "bank") && (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30 p-4 space-y-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Payout Details
+                </p>
+                {bankDetails.bankName === "telebirr" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="telebirr-phone" className="text-sm dark:text-gray-300">
+                      Telebirr Phone Number
+                    </Label>
+                    <Input
+                      id="telebirr-phone"
+                      value={bankDetails.accountNumber}
+                      onChange={(e) =>
+                        setBankDetails((prev) => ({
+                          ...prev,
+                          accountNumber: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter Telebirr phone number"
+                      className="text-sm bg-white dark:bg-black dark:border-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+                )}
+                {bankDetails.bankName === "mpesa" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="mpesa-phone" className="text-sm dark:text-gray-300">
+                      M-Pesa Phone Number
+                    </Label>
+                    <Input
+                      id="mpesa-phone"
+                      value={bankDetails.accountNumber}
+                      onChange={(e) =>
+                        setBankDetails((prev) => ({
+                          ...prev,
+                          accountNumber: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter M-Pesa phone number"
+                      className="text-sm bg-white dark:bg-black dark:border-gray-700 dark:text-gray-100"
+                    />
+                  </div>
+                )}
+                {bankDetails.bankName === "bank" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-gray-700 dark:text-gray-300">Bank Name</Label>
+                      <Select
+                        value={bankDetails.accountName}
+                        onValueChange={(value) =>
+                          setBankDetails((prev) => ({
+                            ...prev,
+                            accountName: value,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="text-sm bg-white border-gray-300 dark:border-gray-700 dark:bg-black dark:text-gray-200">
+                          <SelectValue placeholder="Select bank" />
+                        </SelectTrigger>
+                        <SelectContent className="dark:bg-black dark:border-gray-700">
+                          <SelectItem value="Commercial Bank of Ethiopia" className="dark:text-gray-200">
+                            Commercial Bank of Ethiopia
+                          </SelectItem>
+                          <SelectItem value="Awash International Bank" className="dark:text-gray-200">
+                            Awash International Bank
+                          </SelectItem>
+                          <SelectItem value="Bank of Abyssinia" className="dark:text-gray-200">
+                            Bank of Abyssinia
+                          </SelectItem>
+                          <SelectItem value="Dashen Bank" className="dark:text-gray-200">Dashen Bank</SelectItem>
+                          <SelectItem value="Hibret Bank" className="dark:text-gray-200">Hibret Bank</SelectItem>
+                          <SelectItem value="Nib International Bank" className="dark:text-gray-200">
+                            Nib International Bank
+                          </SelectItem>
+                          <SelectItem value="Cooperative Bank of Oromia" className="dark:text-gray-200">
+                            Cooperative Bank of Oromia
+                          </SelectItem>
+                          <SelectItem value="Lion International Bank" className="dark:text-gray-200">
+                            Lion International Bank
+                          </SelectItem>
+                          <SelectItem value="Wegagen Bank" className="dark:text-gray-200">Wegagen Bank</SelectItem>
+                          <SelectItem value="Zemen Bank" className="dark:text-gray-200">Zemen Bank</SelectItem>
+                          <SelectItem value="Oromia International Bank" className="dark:text-gray-200">
+                            Oromia International Bank
+                          </SelectItem>
+                          <SelectItem value="Global Bank Ethiopia" className="dark:text-gray-200">
+                            Global Bank Ethiopia
+                          </SelectItem>
+                          <SelectItem value="Enat Bank" className="dark:text-gray-200">Enat Bank</SelectItem>
+                          <SelectItem value="Addis International Bank" className="dark:text-gray-200">
+                            Addis International Bank
+                          </SelectItem>
+                          <SelectItem value="Abay Bank" className="dark:text-gray-200">Abay Bank</SelectItem>
+                          <SelectItem value="Berhan International Bank" className="dark:text-gray-200">
+                            Berhan International Bank
+                          </SelectItem>
+                          <SelectItem value="Bunna International Bank" className="dark:text-gray-200">
+                            Bunna International Bank
+                          </SelectItem>
+                          <SelectItem value="ZamZam Bank" className="dark:text-gray-200">ZamZam Bank</SelectItem>
+                          <SelectItem value="Shabelle Bank" className="dark:text-gray-200">Shabelle Bank</SelectItem>
+                          <SelectItem value="Hijra Bank" className="dark:text-gray-200">Hijra Bank</SelectItem>
+                          <SelectItem value="Siinqee Bank" className="dark:text-gray-200">Siinqee Bank</SelectItem>
+                          <SelectItem value="Ahadu Bank" className="dark:text-gray-200">Ahadu Bank</SelectItem>
+                          <SelectItem value="Goh Betoch Bank" className="dark:text-gray-200">Goh Betoch Bank</SelectItem>
+                          <SelectItem value="Tsedey Bank" className="dark:text-gray-200">Tsedey Bank</SelectItem>
+                          <SelectItem value="Tsehay Bank" className="dark:text-gray-200">Tsehay Bank</SelectItem>
+                          <SelectItem value="Gadaa Bank" className="dark:text-gray-200">Gadaa Bank</SelectItem>
+                          <SelectItem value="Amhara Bank" className="dark:text-gray-200">Amhara Bank</SelectItem>
+                          <SelectItem value="Rammis Bank" className="dark:text-gray-200">Rammis Bank</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-gray-700 dark:text-gray-300">Bank Account Number</Label>
+                      <Input
+                        value={bankDetails.accountNumber}
+                        onChange={(e) =>
+                          setBankDetails((prev) => ({
+                            ...prev,
+                            accountNumber: e.target.value,
+                          }))
+                        }
+                        placeholder="Enter account number"
+                        className="text-sm bg-white border-gray-300 dark:border-gray-700 dark:bg-black dark:text-gray-100"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
-            {bankDetails.bankName === "bank" && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-gray-700 dark:text-gray-300">Bank Name</Label>
-                  <Select
-                    value={bankDetails.accountName}
-                    onValueChange={(value) =>
-                      setBankDetails((prev) => ({
-                        ...prev,
-                        accountName: value,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="border-gray-300 dark:border-gray-700 dark:bg-black dark:text-gray-200">
-                      <SelectValue placeholder="Select bank" />
-                    </SelectTrigger>
-                    <SelectContent className="dark:bg-black dark:border-gray-700">
-                      <SelectItem value="Commercial Bank of Ethiopia" className="dark:text-gray-200">
-                        Commercial Bank of Ethiopia
-                      </SelectItem>
-                      <SelectItem value="Awash International Bank" className="dark:text-gray-200">
-                        Awash International Bank
-                      </SelectItem>
-                      <SelectItem value="Bank of Abyssinia" className="dark:text-gray-200">
-                        Bank of Abyssinia
-                      </SelectItem>
-                      <SelectItem value="Dashen Bank" className="dark:text-gray-200">Dashen Bank</SelectItem>
-                      <SelectItem value="Hibret Bank" className="dark:text-gray-200">Hibret Bank</SelectItem>
-                      <SelectItem value="Nib International Bank" className="dark:text-gray-200">
-                        Nib International Bank
-                      </SelectItem>
-                      <SelectItem value="Cooperative Bank of Oromia" className="dark:text-gray-200">
-                        Cooperative Bank of Oromia
-                      </SelectItem>
-                      <SelectItem value="Lion International Bank" className="dark:text-gray-200">
-                        Lion International Bank
-                      </SelectItem>
-                      <SelectItem value="Wegagen Bank" className="dark:text-gray-200">Wegagen Bank</SelectItem>
-                      <SelectItem value="Zemen Bank" className="dark:text-gray-200">Zemen Bank</SelectItem>
-                      <SelectItem value="Oromia International Bank" className="dark:text-gray-200">
-                        Oromia International Bank
-                      </SelectItem>
-                      <SelectItem value="Global Bank Ethiopia" className="dark:text-gray-200">
-                        Global Bank Ethiopia
-                      </SelectItem>
-                      <SelectItem value="Enat Bank" className="dark:text-gray-200">Enat Bank</SelectItem>
-                      <SelectItem value="Addis International Bank" className="dark:text-gray-200">
-                        Addis International Bank
-                      </SelectItem>
-                      <SelectItem value="Abay Bank" className="dark:text-gray-200">Abay Bank</SelectItem>
-                      <SelectItem value="Berhan International Bank" className="dark:text-gray-200">
-                        Berhan International Bank
-                      </SelectItem>
-                      <SelectItem value="Bunna International Bank" className="dark:text-gray-200">
-                        Bunna International Bank
-                      </SelectItem>
-                      <SelectItem value="ZamZam Bank" className="dark:text-gray-200">ZamZam Bank</SelectItem>
-                      <SelectItem value="Shabelle Bank" className="dark:text-gray-200">Shabelle Bank</SelectItem>
-                      <SelectItem value="Hijra Bank" className="dark:text-gray-200">Hijra Bank</SelectItem>
-                      <SelectItem value="Siinqee Bank" className="dark:text-gray-200">Siinqee Bank</SelectItem>
-                      <SelectItem value="Ahadu Bank" className="dark:text-gray-200">Ahadu Bank</SelectItem>
-                      <SelectItem value="Goh Betoch Bank" className="dark:text-gray-200">Goh Betoch Bank</SelectItem>
-                      <SelectItem value="Tsedey Bank" className="dark:text-gray-200">Tsedey Bank</SelectItem>
-                      <SelectItem value="Tsehay Bank" className="dark:text-gray-200">Tsehay Bank</SelectItem>
-                      <SelectItem value="Gadaa Bank" className="dark:text-gray-200">Gadaa Bank</SelectItem>
-                      <SelectItem value="Amhara Bank" className="dark:text-gray-200">Amhara Bank</SelectItem>
-                      <SelectItem value="Rammis Bank" className="dark:text-gray-200">Rammis Bank</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-700 dark:text-gray-300">Bank Account Number</Label>
-                  <Input
-                    value={bankDetails.accountNumber}
-                    onChange={(e) =>
-                      setBankDetails((prev) => ({
-                        ...prev,
-                        accountNumber: e.target.value,
-                      }))
-                    }
-                    placeholder="Enter account number"
-                    className="border-gray-300 dark:border-gray-700 dark:bg-black dark:text-gray-100"
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="space-y-2">
+            {/* Notes */}
+            <div className="space-y-1.5">
               <Label htmlFor="notes" className="text-sm dark:text-gray-300">
-                Notes (optional)
+                Notes{" "}
+                <span className="text-gray-400 dark:text-gray-500 font-normal">
+                  (optional)
+                </span>
               </Label>
               <Textarea
                 id="notes"
                 value={withdrawNotes}
                 onChange={(e) => setWithdrawNotes(e.target.value)}
                 placeholder="Add any notes about this withdrawal request"
-                rows={3}
+                rows={2}
                 className="text-sm dark:bg-black dark:border-gray-700 dark:text-gray-100 dark:placeholder-gray-500"
               />
             </div>
-            <div className="p-3 bg-muted/50 dark:bg-gray-900/50 rounded-lg space-y-2">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground dark:text-gray-400">
-                <AlertCircle className="h-4 w-4" />
-                <span>
-                  Available Balance:{" "}
-                  {(balance?.availableBalance ?? 0).toFixed(2)} {selectedCurrency}
-                </span>
-              </div>
-            </div>
           </div>
-          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-0">
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-2 px-5 sm:px-6 py-4 border-t border-gray-100 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/30">
             <Button
               variant="outline"
               onClick={() => setWithdrawDialogOpen(false)}

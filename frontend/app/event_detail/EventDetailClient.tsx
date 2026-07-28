@@ -878,20 +878,45 @@ export default function EventDetailClient() {
     if (!node || !ticket) return;
     setDownloadingTicket(true);
     try {
-      const { toPng } = await import("html-to-image");
-      const dataUrl = await toPng(node, {
+      const { toBlob } = await import("html-to-image");
+      const blob = await toBlob(node, {
         pixelRatio: 2,
-        // Notches are transparent — keep them transparent in the PNG too.
-        backgroundColor: "transparent",
+        // The card now has its own solid gradient background, so this is only
+        // a fallback for any edge pixel a browser fails to rasterize.
+        backgroundColor: "#0B2038",
       });
+      if (!blob) throw new Error("Ticket render failed");
+
+      const filename = `pazimo-ticket-${ticket.ticketId}.png`;
+      const file = new File([blob], filename, { type: "image/png" });
+
+      // On phones, a plain <a download> often just opens the image in a tab
+      // instead of saving it. Where the native share sheet is available, it's
+      // the reliable way to let someone save straight to Photos.
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.canShare?.({ files: [file] })
+      ) {
+        await navigator.share({
+          files: [file],
+          title: `${event?.title ?? "Pazimo"} — Ticket`,
+        });
+        toast.success("Ticket ready to save!");
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `pazimo-ticket-${ticket.ticketId}.png`;
+      link.href = url;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      URL.revokeObjectURL(url);
       toast.success("Ticket downloaded!");
-    } catch {
+    } catch (err) {
+      // A user cancelling the share sheet also lands here — don't treat that as a failure.
+      if (err instanceof Error && err.name === "AbortError") return;
       // If DOM capture fails (e.g. an image blocks it), still give them the QR.
       downloadHighQualityQR(
         ticket.qrCode,
@@ -901,7 +926,7 @@ export default function EventDetailClient() {
     } finally {
       setDownloadingTicket(false);
     }
-  }, [purchasedTickets, currentTicketIndex]);
+  }, [purchasedTickets, currentTicketIndex, event?.title]);
 
   // Utility functions - memoized with useCallback
   const downloadQRCode = useCallback((
@@ -1632,109 +1657,139 @@ export default function EventDetailClient() {
               const quantity = ticket.ticketCount || 1;
               return (
                 <div>
-                  {/* The ticket itself — everything inside this ref is what gets downloaded */}
-                  <div ref={ticketCardRef} className="drop-shadow-2xl">
-                    {/* Top half: banner + details */}
-                    <div className="relative overflow-hidden rounded-t-[28px] bg-gradient-to-b from-[#06283D] to-[#0E3A5A]">
-                      <div className="relative h-36">
-                        <Image
-                          src={coverImageUrl}
-                          alt={event.title}
-                          fill
-                          className="object-cover"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-b from-[#06283D]/70 via-[#06283D]/25 to-[#06283D]" />
-                        <div className="absolute inset-x-0 bottom-3 px-6 text-center">
-                          <h2 className="text-2xl font-extrabold text-white drop-shadow-md">
-                            You&apos;re Going!
-                          </h2>
-                          <p className="text-sm text-white/80">Your ticket is ready</p>
+                  {(() => {
+                    // Shared ticket markup, rendered twice: once visible on screen
+                    // (no backdrop, no border — floats on the dialog itself), and
+                    // once off-screen purely as the capture target, which is the
+                    // only place the background frame gets added.
+                    const ticketFace = (
+                      <div className="relative overflow-hidden rounded-[18px] shadow-[0_18px_40px_-12px_rgba(0,0,0,0.65)]">
+                        {/* Top half: banner + details */}
+                        <div className="bg-gradient-to-b from-[#06283D] to-[#0E3A5A]">
+                          <div className="relative h-36">
+                            <Image
+                              src={coverImageUrl}
+                              alt={event.title}
+                              fill
+                              className="object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-b from-[#06283D]/70 via-[#06283D]/25 to-[#06283D]" />
+                            <div className="absolute inset-x-0 bottom-3 px-6 text-center">
+                              <h2 className="text-2xl font-extrabold text-white drop-shadow-md">
+                                You&apos;re Going!
+                              </h2>
+                              <p className="text-sm text-white/80">Your ticket is ready</p>
+                            </div>
+                          </div>
+
+                          <div className="relative px-7 pb-7 pt-3">
+                            <span className="pointer-events-none absolute -bottom-4 right-5 select-none whitespace-nowrap text-6xl font-black tracking-tight text-white/10">
+                              {watermark}
+                            </span>
+
+                            <div className="relative flex items-start justify-between gap-3">
+                              <h3 className="text-lg font-extrabold leading-tight text-white">
+                                {event.title}
+                              </h3>
+                              <span className="shrink-0 whitespace-nowrap rounded-full border border-white/50 px-3 py-1 text-[10px] font-bold tracking-wider text-white">
+                                OFFICIAL PASS
+                              </span>
+                            </div>
+
+                            <div className="relative mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
+                              <div>
+                                <p className="text-[10px] tracking-wider text-white/65">DATE &amp; TIME</p>
+                                <p className="text-sm font-bold text-white">
+                                  {formatDate(event.startDate)}
+                                  {event.startTime ? `, ${formatTimeWithAmPm(event.startTime)}` : ""}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] tracking-wider text-white/65">VENUE</p>
+                                <p className="break-words text-sm font-bold text-white">
+                                  {(event.location.address || event.location.city || "See map").toUpperCase()}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] tracking-wider text-white/65">TICKET TYPE</p>
+                                <p className="text-sm font-bold text-white">{ticket.ticketType}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] tracking-wider text-white/65">QUANTITY</p>
+                                <p className="text-sm font-bold text-white">
+                                  {quantity.toString().padStart(2, "0")} {quantity > 1 ? "PASSES" : "PASS"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] tracking-wider text-white/65">ORDER ID</p>
+                                <p className="text-sm font-bold text-white">{orderId}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] tracking-wider text-white/65">ATTENDEE</p>
+                                <p className="break-words text-sm font-bold text-white">{attendee}</p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="relative px-7 pb-7 pt-3">
-                        <span className="pointer-events-none absolute -bottom-4 right-5 select-none whitespace-nowrap text-6xl font-black tracking-tight text-white/10">
-                          {watermark}
-                        </span>
-
-                        <div className="relative flex items-start justify-between gap-3">
-                          <h3 className="text-lg font-extrabold leading-tight text-white">
-                            {event.title}
-                          </h3>
-                          <span className="shrink-0 whitespace-nowrap rounded-full border border-white/50 px-3 py-1 text-[10px] font-bold tracking-wider text-white">
-                            OFFICIAL PASS
-                          </span>
+                        {/* Die-cut perforation: transparent notches punched into each side */}
+                        <div
+                          className="relative h-5 bg-[#0E3A5A]"
+                          style={{
+                            WebkitMaskImage:
+                              "radial-gradient(circle 10px at 0 50%, transparent 9.5px, black 10px), radial-gradient(circle 10px at 100% 50%, transparent 9.5px, black 10px)",
+                            WebkitMaskComposite: "source-in",
+                            maskImage:
+                              "radial-gradient(circle 10px at 0 50%, transparent 9.5px, black 10px), radial-gradient(circle 10px at 100% 50%, transparent 9.5px, black 10px)",
+                            maskComposite: "intersect",
+                          }}
+                        >
+                          <div className="absolute left-6 right-6 top-1/2 border-t-2 border-dashed border-white/25" />
                         </div>
 
-                        <div className="relative mt-4 grid grid-cols-2 gap-x-3 gap-y-3">
-                          <div>
-                            <p className="text-[10px] tracking-wider text-white/65">DATE &amp; TIME</p>
-                            <p className="text-sm font-bold text-white">
-                              {formatDate(event.startDate)}
-                              {event.startTime ? `, ${formatTimeWithAmPm(event.startTime)}` : ""}
+                        {/* Bottom stub: QR on the navy gradient */}
+                        <div className="bg-gradient-to-b from-[#0E3A5A] to-[#1A5D8C]">
+                          <div className="relative flex flex-col items-center gap-3 px-7 pb-7 pt-5">
+                            <div className="rounded-2xl bg-white p-2.5 shadow-xl ring-1 ring-white/40">
+                              <Image
+                                src={ticket.qrCode ?? "/events/sampleqr.png"}
+                                alt="Ticket QR Code"
+                                width={256}
+                                height={256}
+                                className="h-36 w-36 rounded-lg"
+                              />
+                            </div>
+                            <p className="text-[11px] font-bold tracking-[0.2em] text-white/70">
+                              &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-[10px] tracking-wider text-white/65">VENUE</p>
-                            <p className="break-words text-sm font-bold text-white">
-                              {(event.location.address || event.location.city || "See map").toUpperCase()}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] tracking-wider text-white/65">TICKET TYPE</p>
-                            <p className="text-sm font-bold text-white">{ticket.ticketType}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] tracking-wider text-white/65">QUANTITY</p>
-                            <p className="text-sm font-bold text-white">
-                              {quantity.toString().padStart(2, "0")} {quantity > 1 ? "PASSES" : "PASS"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] tracking-wider text-white/65">ORDER ID</p>
-                            <p className="text-sm font-bold text-white">{orderId}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] tracking-wider text-white/65">ATTENDEE</p>
-                            <p className="break-words text-sm font-bold text-white">{attendee}</p>
-                          </div>
                         </div>
                       </div>
-                    </div>
+                    );
 
-                    {/* Die-cut perforation: real transparent notches punched into each side */}
-                    <div
-                      className="relative h-5 bg-[#0E3A5A]"
-                      style={{
-                        WebkitMaskImage:
-                          "radial-gradient(circle 10px at 0 50%, transparent 9.5px, black 10px), radial-gradient(circle 10px at 100% 50%, transparent 9.5px, black 10px)",
-                        WebkitMaskComposite: "source-in",
-                        maskImage:
-                          "radial-gradient(circle 10px at 0 50%, transparent 9.5px, black 10px), radial-gradient(circle 10px at 100% 50%, transparent 9.5px, black 10px)",
-                        maskComposite: "intersect",
-                      }}
-                    >
-                      <div className="absolute left-6 right-6 top-1/2 border-t-2 border-dashed border-white/25" />
-                    </div>
+                    return (
+                      <>
+                        {/* Visible on screen — no backdrop, sits directly on the dialog */}
+                        {ticketFace}
 
-                    {/* Bottom stub: QR on the navy gradient */}
-                    <div className="relative overflow-hidden rounded-b-[28px] bg-gradient-to-b from-[#0E3A5A] to-[#1A5D8C]">
-                      <div className="relative flex flex-col items-center gap-3 px-7 pb-7 pt-5">
-                        <div className="rounded-2xl bg-white p-2.5 shadow-xl ring-1 ring-white/40">
-                          <Image
-                            src={ticket.qrCode ?? "/events/sampleqr.png"}
-                            alt="Ticket QR Code"
-                            width={256}
-                            height={256}
-                            className="h-36 w-36 rounded-lg"
-                          />
+                        {/* Off-screen capture target — same ticket, wrapped in the
+                            download-only background frame. Never shown to the user. */}
+                        <div
+                          aria-hidden="true"
+                          className="pointer-events-none fixed left-[-9999px] top-0 -z-10"
+                        >
+                          <div
+                            ref={ticketCardRef}
+                            className="relative w-[340px] overflow-hidden bg-gradient-to-br from-[#050B18] via-[#0B2038] to-[#123456] p-4"
+                          >
+                            <div className="pointer-events-none absolute -top-16 -left-14 h-52 w-52 rounded-full bg-[#1A5D8C]/40 blur-3xl" />
+                            <div className="pointer-events-none absolute -bottom-20 -right-10 h-56 w-56 rounded-full bg-amber-400/10 blur-3xl" />
+                            {ticketFace}
+                          </div>
                         </div>
-                        <p className="text-[11px] font-bold tracking-[0.2em] text-white/70">
-                          &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                      </>
+                    );
+                  })()}
 
                   {/* Controls live outside the ticket so they never end up in the PNG */}
                   {purchasedTickets.length > 1 && (
