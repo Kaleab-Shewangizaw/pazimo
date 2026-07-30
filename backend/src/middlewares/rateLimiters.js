@@ -52,6 +52,18 @@ const adminLoginLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many login attempts. Please wait a few minutes and try again."),
 });
 
+// Developer login is a high-value target (server internals access) and is
+// kept separate from adminLoginLimiter so a burst of failed attempts against
+// one role's login can't also lock out that IP's attempts on the other.
+const developerLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: jsonRateLimitHandler("Too many login attempts. Please wait a few minutes and try again."),
+});
+
 // Guards public account creation from being used to spam-create accounts.
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
@@ -86,6 +98,7 @@ module.exports = {
   rsvpPublicReadLimiter,
   loginLimiter,
   adminLoginLimiter,
+  developerLoginLimiter,
   registerLimiter,
   otpLimiter,
   unifiedAuthLimiter,

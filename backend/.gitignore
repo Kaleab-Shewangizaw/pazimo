@@ -35,3 +35,7 @@ uploads/
 # Local-only admin seeding scripts - never push these
 scripts/seed-admin.js
 scripts/seed-admin-production.js
+
+# Local-only developer seeding scripts - never push these
+scripts/seed-developer.js
+scripts/seed-developer-production.js

@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const { UnauthorizedError, ForbiddenError } = require("../errors");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
+const Developer = require("../models/Developer");
 
 // A banned account needs to reach the client as a distinct, stable signal
 // (not folded into a generic "invalid token" 401) so the frontend can show a
@@ -21,6 +22,9 @@ const bannedAccountError = (account) => {
 const findAccountByPayload = (payload) => {
   if (payload.role === "admin") {
     return Admin.findById(payload.id);
+  }
+  if (payload.role === "developer") {
+    return Developer.findById(payload.id);
   }
   return User.findById(payload.id);
 };

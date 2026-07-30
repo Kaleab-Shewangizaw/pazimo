@@ -8,6 +8,7 @@ const { protect } = require('../middlewares/auth');
 const {
   loginLimiter,
   adminLoginLimiter,
+  developerLoginLimiter,
   registerLimiter,
   otpLimiter,
   unifiedAuthLimiter,
@@ -40,5 +41,9 @@ router.delete('/delete-account', protect, authController.deleteAccount);
 // Admin routes
 router.post('/admin/login', adminLoginLimiter, authController.adminLogin);
 router.get('/admin/me', protect, authController.getMe);
+
+// Developer routes
+router.post('/developer/login', developerLoginLimiter, authController.developerLogin);
+router.get('/developer/me', protect, authController.getMe);
 
 module.exports = router;

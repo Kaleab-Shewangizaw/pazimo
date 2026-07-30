@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
+const Developer = require("../models/Developer");
 const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
 const { isPhoneBanned } = require("../utils/fraudGuard");
@@ -444,7 +445,12 @@ const getMe = async (req, res) => {
     if (!req.user || !req.user._id) {
       throw new UnauthorizedError("User not authenticated");
     }
-    const Model = req.user.role === "admin" ? Admin : User;
+    const Model =
+      req.user.role === "admin"
+        ? Admin
+        : req.user.role === "developer"
+        ? Developer
+        : User;
     const user = await Model.findById(req.user._id).select("-password");
     res.status(StatusCodes.OK).json({
       status: "success",
@@ -734,6 +740,57 @@ const adminLogin = async (req, res) => {
   }
 };
 
+// Developers live exclusively in the Developer collection - there is no API
+// that creates one (only the gitignored seed scripts), and unlike adminLogin
+// there is no secondary-collection fallback: a miss here is just a plain 401.
+const developerLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        status: "error",
+        message: "Please provide email and password",
+      });
+    }
+
+    const developer = await Developer.findOne({ email }).select("+password");
+    if (!developer || !(await developer.comparePassword(password))) {
+      return res.status(401).json({
+        status: "error",
+        message: "Incorrect email or password",
+      });
+    }
+
+    if (!developer.isActive) {
+      // Developers have no fraud-ban concept (no isBanned/banReason on the
+      // Developer model) — a deactivated developer is just deactivated.
+      return res.status(403).json({
+        status: "error",
+        message: "Access denied. Account is not active.",
+      });
+    }
+
+    developer.lastLogin = Date.now();
+    await developer.save({ validateBeforeSave: false });
+
+    const token = signToken(developer._id, developer.role);
+    developer.password = undefined;
+
+    return res.status(200).json({
+      status: "success",
+      token,
+      data: { user: developer },
+    });
+  } catch (error) {
+    console.error("Developer login error:", error);
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
 // ... keep all existing functions (register, login, getMe, etc.)
 // isAdmin middleware lives in ../middlewares/auth.js - not duplicated here.
 
@@ -959,6 +1016,7 @@ module.exports = {
   updatePhoneNumber,
   verifyPhoneNumber,
   adminLogin,
+  developerLogin,
   forgotPassword,
   resetPassword,
   sendOtp,
