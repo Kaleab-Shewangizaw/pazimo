@@ -53,6 +53,7 @@ import {
   Loader2,
   Ban,
   CheckCircle2,
+  Beer,
 } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
@@ -80,6 +81,29 @@ export default function EventsPage() {
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [qrEvent, setQrEvent] = useState<any>(null);
+  // Organizers who were never granted beverage selling should not see the
+  // button at all. This is presentation only — every line-up endpoint is
+  // gated by requireBeverageEligible on the server.
+  const [beverageEligible, setBeverageEligible] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("auth-storage");
+    if (!stored) return;
+    let token = "";
+    try {
+      token = JSON.parse(stored)?.state?.token || "";
+    } catch {
+      return;
+    }
+    if (!token) return;
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/beverages/organizer/eligibility`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setBeverageEligible(data?.data?.eligibility === "eligible"))
+      .catch(() => setBeverageEligible(false));
+  }, []);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -543,6 +567,20 @@ export default function EventsPage() {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        {beverageEligible && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/organizer/events/${event._id}/beverages`);
+                            }}
+                            className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 dark:border-gray-700"
+                            title="Beverage sales"
+                          >
+                            <Beer className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"

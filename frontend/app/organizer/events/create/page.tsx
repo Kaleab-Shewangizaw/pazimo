@@ -12,6 +12,10 @@ import { CreateEventPageShell } from "./_components/create-event-page-shell";
 import { CreateEventSidebar } from "./_components/create-event-sidebar";
 import { EventImagesSection } from "./_components/event-images-section";
 import { TicketTypesSection } from "./_components/ticket-types-section";
+import {
+  BeveragesSection,
+  type BeverageSelection,
+} from "./_components/beverages-section";
 import { WaveTicketDialog } from "./_components/wave-ticket-dialog";
 import type {
   Category,
@@ -139,6 +143,20 @@ const getTicketPriceValidationError = (ticketTypes: TicketType[]) => {
 export default function CreateEventPage() {
   const router = useRouter();
   const { token, user } = useAuthStore();
+  // Drinks chosen while the event is still being created. They can only be
+  // attached once the event has an id, so they are posted after it is created.
+  const [beverageSelections, setBeverageSelections] = useState<BeverageSelection[]>([]);
+  const [beverageEligible, setBeverageEligible] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/beverages/organizer/eligibility`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setBeverageEligible(data?.data?.eligibility === "eligible"))
+      .catch(() => setBeverageEligible(false));
+  }, [token]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -680,6 +698,14 @@ export default function CreateEventPage() {
         return;
       }
 
+      const unpricedBeverage = beverageSelections.find(
+        (selection) => !(Number(selection.price) > 0),
+      );
+      if (unpricedBeverage) {
+        toast.error(`Set a price greater than 0 for ${unpricedBeverage.name}`);
+        return;
+      }
+
       if (
         !formData.startDate ||
         !formData.endDate ||
@@ -877,6 +903,41 @@ export default function CreateEventPage() {
         throw new Error(errorMessage);
       }
 
+      // The event exists now, so the chosen drinks can be attached to it. A
+      // failure here must not read as "the event failed" — it didn't — so each
+      // one is reported by name and the rest still go through.
+      const createdEventId = (await response.json())?.data?.event?._id;
+      if (createdEventId && beverageSelections.length > 0) {
+        const failed: string[] = [];
+        for (const selection of beverageSelections) {
+          try {
+            const beverageResponse = await fetch(
+              `${process.env.NEXT_PUBLIC_API_URL}/api/beverages/organizer/events/${createdEventId}/beverages`,
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  beverageId: selection.beverageId,
+                  price: selection.price,
+                }),
+              },
+            );
+            if (!beverageResponse.ok) failed.push(selection.name);
+          } catch {
+            failed.push(selection.name);
+          }
+        }
+
+        if (failed.length > 0) {
+          toast.error(
+            `Event created, but these drinks weren't added: ${failed.join(", ")}. Add them from the event's beverage sales page.`,
+          );
+        }
+      }
+
       toast.success("Event created successfully");
       router.push("/organizer/events");
     } catch (error) {
@@ -954,6 +1015,14 @@ export default function CreateEventPage() {
               onOpenWaveDialog={openWaveCreationDialog}
               getWaveChildren={getWaveChildren}
             />
+
+            {beverageEligible && (
+              <BeveragesSection
+                token={token || ""}
+                selections={beverageSelections}
+                onChange={setBeverageSelections}
+              />
+            )}
 
             <EventImagesSection
               coverImages={formData.coverImages}

@@ -33,6 +33,41 @@ router.patch(
   beverageController.setBlockedBeverages
 );
 
+// An event's beverage line-up, from the admin side. Same handlers as the
+// organizer routes below — they resolve the event's owner and apply that
+// organizer's permissions, so an admin editing an event cannot create a
+// line-up the organizer would not be allowed to sell.
+router.get(
+  "/admin/events/:eventId/beverages",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.listEventBeverages
+);
+router.get(
+  "/admin/events/:eventId/catalog",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.listEventSellableCatalog
+);
+router.post(
+  "/admin/events/:eventId/beverages",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.addEventBeverage
+);
+router.patch(
+  "/admin/events/:eventId/beverages/:id",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.updateEventBeverage
+);
+router.delete(
+  "/admin/events/:eventId/beverages/:id",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.removeEventBeverage
+);
+
 // Beverage catalogue
 router.get(
   "/admin",
@@ -88,6 +123,38 @@ router.get(
   restrictTo("organizer"),
   requireBeverageEligible,
   beverageController.listActiveBeverages
+);
+
+// An event's beverage line-up. Every one of these re-checks that the event
+// belongs to the caller, so eligibility alone never grants access to someone
+// else's event.
+router.get(
+  "/organizer/events/:eventId/beverages",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.listEventBeverages
+);
+router.post(
+  "/organizer/events/:eventId/beverages",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.addEventBeverage
+);
+router.patch(
+  "/organizer/events/:eventId/beverages/:id",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.updateEventBeverage
+);
+router.delete(
+  "/organizer/events/:eventId/beverages/:id",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.removeEventBeverage
 );
 
 module.exports = router;

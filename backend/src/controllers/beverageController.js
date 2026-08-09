@@ -5,6 +5,8 @@ const { StatusCodes } = require("http-status-codes");
 const Beverage = require("../models/Beverage");
 const OrganizerBeverageProfile = require("../models/OrganizerBeverageProfile");
 const User = require("../models/User");
+const Event = require("../models/Event");
+const EventBeverage = require("../models/EventBeverage");
 const { BadRequestError, NotFoundError } = require("../errors");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
@@ -48,6 +50,15 @@ const removeUploadedImage = (imagePath) => {
 
 const duplicateNameError = (error) =>
   error?.code === 11000 ? new BadRequestError("A beverage with this name already exists") : error;
+
+// The set of drinks a given profile may sell. Empty blocks means the whole
+// active catalogue — see OrganizerBeverageProfile.
+const sellableQuery = (profile) => {
+  const blocked = profile?.blockedBeverages || [];
+  const query = { isActive: true };
+  if (blocked.length > 0) query._id = { $nin: blocked };
+  return query;
+};
 
 const getOrCreateProfile = async (organizerId) => {
   let profile = await OrganizerBeverageProfile.findOne({ organizer: organizerId });
@@ -392,17 +403,10 @@ const getMyEligibility = async (req, res) => {
   }
 };
 
-// The catalogue an eligible organizer may pick from. Read-only: attaching a
-// beverage to an event and pricing it is the next step's work.
+// The catalogue an eligible organizer may pick from.
 const listActiveBeverages = async (req, res) => {
   try {
-    // This is where the per-organizer selection is enforced. Empty means the
-    // admin never blocked anything, so they get the whole active catalogue.
-    const blocked = req.beverageProfile?.blockedBeverages || [];
-    const query = { isActive: true };
-    if (blocked.length > 0) query._id = { $nin: blocked };
-
-    const beverages = await Beverage.find(query)
+    const beverages = await Beverage.find(sellableQuery(req.beverageProfile))
       .select("name image")
       .sort("name")
       .lean();
@@ -414,6 +418,222 @@ const listActiveBeverages = async (req, res) => {
       success: false,
       message: "Failed to list beverages",
     });
+  }
+};
+
+
+// ---------------------------------------------------------------------------
+// An event's beverage line-up — reached by the owning organizer and by admins
+// ---------------------------------------------------------------------------
+
+// Resolves the event and the permissions that apply to it. Admins reach any
+// event and carry the *organizer's* profile, so the same permission rules are
+// applied no matter who is editing; an organizer only ever reaches their own.
+//
+// A missing event and someone else's event are deliberately answered the same
+// way for organizers: probing ids should not reveal which events exist.
+const resolveEventContext = async (req) => {
+  const { eventId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(eventId)) {
+    throw new NotFoundError("Event not found");
+  }
+
+  if (req.user.role === "admin") {
+    const event = await Event.findById(eventId).select(
+      "_id title startDate status organizer"
+    );
+    if (!event) throw new NotFoundError("Event not found");
+    const profile = await OrganizerBeverageProfile.findOne({ organizer: event.organizer });
+    return { event, profile };
+  }
+
+  const event = await Event.findOne({ _id: eventId, organizer: req.user.userId }).select(
+    "_id title startDate status organizer"
+  );
+  if (!event) throw new NotFoundError("Event not found");
+  return { event, profile: req.beverageProfile };
+};
+
+// Re-checks the drink against this organizer's permissions on the server. The
+// UI already filters the picker, but the block list is the real gate and a
+// request can be crafted by hand.
+const findSellableBeverage = async (beverageId, profile) => {
+  if (!mongoose.Types.ObjectId.isValid(beverageId)) {
+    throw new BadRequestError("A valid beverageId is required");
+  }
+  const beverage = await Beverage.findById(beverageId);
+  if (!beverage) throw new NotFoundError("Beverage not found");
+  if (!beverage.isActive) {
+    throw new BadRequestError("That beverage is not available to sell");
+  }
+  const blocked = (profile?.blockedBeverages || []).map(String);
+  if (blocked.includes(beverage._id.toString())) {
+    throw new BadRequestError("You are not permitted to sell that beverage");
+  }
+  return beverage;
+};
+
+const parsePrice = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new BadRequestError("price must be a number greater than 0");
+  }
+  return Math.round(parsed * 100) / 100;
+};
+
+const listEventBeverages = async (req, res) => {
+  try {
+    const { event, profile } = await resolveEventContext(req);
+
+    const rows = await EventBeverage.find({ event: event._id })
+      .populate("beverage", "name image isActive")
+      .sort("createdAt")
+      .lean();
+
+    // A drink can be deactivated or blocked after it was added. The row stays,
+    // but the organizer needs to see that it will not be sold, so each one
+    // carries why it is currently unsellable rather than silently disappearing.
+    const blocked = (profile?.blockedBeverages || []).map(String);
+    const data = rows.map((row) => ({
+      ...row,
+      unavailableReason: !row.beverage
+        ? "removed"
+        : !row.beverage.isActive
+        ? "inactive"
+        : blocked.includes(row.beverage._id.toString())
+        ? "blocked"
+        : null,
+    }));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data,
+      event: { _id: event._id, title: event.title, startDate: event.startDate, status: event.status },
+      // Admins edit events belonging to organizers whose approval can be
+      // revoked independently; the UI needs to say so rather than just
+      // failing on save.
+      organizerEligibility: profile?.eligibility || "not_eligible",
+    });
+  } catch (error) {
+    console.error("Error listing event beverages:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+// The drinks an admin can add to this particular event: the active catalogue
+// minus whatever its organizer is blocked from. Keeps the admin's picker
+// identical to the organizer's rather than reimplementing the rules client-side.
+const listEventSellableCatalog = async (req, res) => {
+  try {
+    const { profile } = await resolveEventContext(req);
+
+    const beverages = await Beverage.find(sellableQuery(profile))
+      .select("name image")
+      .sort("name")
+      .lean();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: beverages,
+      organizerEligibility: profile?.eligibility || "not_eligible",
+    });
+  } catch (error) {
+    console.error("Error listing sellable catalogue:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const addEventBeverage = async (req, res) => {
+  try {
+    const { event, profile } = await resolveEventContext(req);
+
+    // Organizer routes are already behind requireBeverageEligible; this catches
+    // the admin path, so an admin can never set up sales for an organizer who
+    // was never approved (or whose approval they just revoked).
+    if (!profile || profile.eligibility !== "eligible") {
+      throw new BadRequestError(
+        "This organizer is not approved to sell beverages. Grant approval first."
+      );
+    }
+
+    const beverage = await findSellableBeverage(req.body.beverageId, profile);
+    const price = parsePrice(req.body.price);
+
+    const row = await EventBeverage.create({
+      event: event._id,
+      // Always the event's owner, never the caller: an admin adding a drink is
+      // acting on the organizer's behalf.
+      organizer: event.organizer,
+      beverage: beverage._id,
+      price,
+    });
+
+    const populated = await EventBeverage.findById(row._id).populate(
+      "beverage",
+      "name image isActive"
+    );
+
+    res.status(StatusCodes.CREATED).json({ success: true, data: populated });
+  } catch (error) {
+    console.error("Error adding event beverage:", error);
+    const normalized =
+      error?.code === 11000
+        ? new BadRequestError("That beverage is already on this event")
+        : error;
+    const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: normalized.message });
+  }
+};
+
+const updateEventBeverage = async (req, res) => {
+  try {
+    const { event } = await resolveEventContext(req);
+
+    // Scoped to the event from the URL so an id belonging to another event
+    // cannot be edited through this route.
+    const row = await EventBeverage.findOne({ _id: req.params.id, event: event._id });
+    if (!row) throw new NotFoundError("That beverage is not on this event");
+
+    if (req.body.price !== undefined) row.price = parsePrice(req.body.price);
+    if (req.body.isAvailable !== undefined) {
+      const isAvailable = parseBoolean(req.body.isAvailable, undefined);
+      if (isAvailable === undefined) {
+        throw new BadRequestError("isAvailable must be true or false");
+      }
+      row.isAvailable = isAvailable;
+    }
+    await row.save();
+
+    const populated = await EventBeverage.findById(row._id).populate(
+      "beverage",
+      "name image isActive"
+    );
+
+    res.status(StatusCodes.OK).json({ success: true, data: populated });
+  } catch (error) {
+    console.error("Error updating event beverage:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const removeEventBeverage = async (req, res) => {
+  try {
+    const { event } = await resolveEventContext(req);
+
+    const row = await EventBeverage.findOneAndDelete({
+      _id: req.params.id,
+      event: event._id,
+    });
+    if (!row) throw new NotFoundError("That beverage is not on this event");
+
+    res.status(StatusCodes.OK).json({ success: true, message: "Beverage removed from the event" });
+  } catch (error) {
+    console.error("Error removing event beverage:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
   }
 };
 
@@ -429,4 +649,9 @@ module.exports = {
   setBlockedBeverages,
   getMyEligibility,
   listActiveBeverages,
+  listEventBeverages,
+  listEventSellableCatalog,
+  addEventBeverage,
+  updateEventBeverage,
+  removeEventBeverage,
 };
