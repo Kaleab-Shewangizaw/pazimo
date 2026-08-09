@@ -27,11 +27,13 @@ import {
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
 import { Beer, Plus, Pencil, Trash2, Power, AlertTriangle } from "lucide-react";
+import { getBeverageColorVars } from "@/lib/beverage-color";
 
 export interface CatalogBeverage {
   _id: string;
   name: string;
   image?: string | null;
+  color?: string | null;
 }
 
 export interface LineupRow {
@@ -286,9 +288,10 @@ export function EventBeverageManager({
             return (
               <div
                 key={row._id}
-                className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900"
+                style={getBeverageColorVars(row.beverage?.color)}
+                className="flex flex-col overflow-hidden rounded-2xl border border-[var(--bev-border)] bg-white shadow-sm dark:border-[var(--bev-border-dark)] dark:bg-gray-900"
               >
-                <div className="relative aspect-square shrink-0 overflow-hidden bg-gradient-to-b from-amber-50 to-amber-100/70 dark:from-amber-500/10 dark:to-amber-900/5">
+                <div className="relative aspect-square shrink-0 overflow-hidden bg-gradient-to-b from-[var(--bev-panel)] to-[var(--bev-panel-2)] dark:from-[var(--bev-panel-dark)] dark:to-[var(--bev-panel-2-dark)]">
                   {buildBeverageImageUrl(row.beverage?.image) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -412,8 +415,11 @@ export function EventBeverageManager({
                         className="h-10 w-10 rounded-md object-contain"
                       />
                     ) : (
-                      <div className="flex h-10 w-10 items-center justify-center rounded-md bg-gray-100 dark:bg-gray-800">
-                        <Beer className="h-4 w-4 text-gray-400" />
+                      <div
+                        style={getBeverageColorVars(beverage.color)}
+                        className="flex h-10 w-10 items-center justify-center rounded-md bg-[var(--bev-panel)] dark:bg-[var(--bev-panel-dark)]"
+                      >
+                        <Beer className="h-4 w-4 text-[var(--bev-ink)] dark:text-[var(--bev-ink-dark)]" />
                       </div>
                     )}
                     <span className="flex-1 text-sm font-medium">{beverage.name}</span>

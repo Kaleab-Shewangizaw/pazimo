@@ -15,11 +15,13 @@ import {
 import { toast } from "sonner";
 import { Beer, Plus, Trash2 } from "lucide-react";
 import { EventFormSection } from "./event-form-section";
+import { getBeverageColorVars } from "@/lib/beverage-color";
 
 export interface BeverageSelection {
   beverageId: string;
   name: string;
   image?: string | null;
+  color?: string | null;
   price: string;
 }
 
@@ -27,6 +29,7 @@ interface CatalogBeverage {
   _id: string;
   name: string;
   image?: string | null;
+  color?: string | null;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -66,7 +69,13 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
   const addBeverage = (beverage: CatalogBeverage) => {
     onChange([
       ...selections,
-      { beverageId: beverage._id, name: beverage.name, image: beverage.image, price: "" },
+      {
+        beverageId: beverage._id,
+        name: beverage.name,
+        image: beverage.image,
+        color: beverage.color,
+        price: "",
+      },
     ]);
     setPickerOpen(false);
   };
@@ -129,18 +138,19 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
           {selections.map((selection) => (
             <div
               key={selection.beverageId}
-              className="flex items-center gap-3 rounded-[20px] border border-slate-200 p-3 dark:border-slate-700"
+              style={getBeverageColorVars(selection.color)}
+              className="flex items-center gap-3 rounded-[20px] border border-[var(--bev-border)] p-3 dark:border-[var(--bev-border-dark)]"
             >
               {buildImageUrl(selection.image) ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={buildImageUrl(selection.image)!}
                   alt={selection.name}
-                  className="h-12 w-12 rounded-md object-contain"
+                  className="h-12 w-12 rounded-md bg-[var(--bev-panel)] object-contain p-1 dark:bg-[var(--bev-panel-dark)]"
                 />
               ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800">
-                  <Beer className="h-5 w-5 text-slate-400" />
+                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-[var(--bev-panel)] dark:bg-[var(--bev-panel-dark)]">
+                  <Beer className="h-5 w-5 text-[var(--bev-ink)] dark:text-[var(--bev-ink-dark)]" />
                 </div>
               )}
               <span className="flex-1 text-sm font-medium text-slate-900 dark:text-slate-100">
@@ -198,8 +208,11 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
                     className="h-10 w-10 rounded-md object-contain"
                   />
                 ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800">
-                    <Beer className="h-4 w-4 text-slate-400" />
+                  <div
+                    style={getBeverageColorVars(beverage.color)}
+                    className="flex h-10 w-10 items-center justify-center rounded-md bg-[var(--bev-panel)] dark:bg-[var(--bev-panel-dark)]"
+                  >
+                    <Beer className="h-4 w-4 text-[var(--bev-ink)] dark:text-[var(--bev-ink-dark)]" />
                   </div>
                 )}
                 <span className="flex-1 text-sm font-medium">{beverage.name}</span>

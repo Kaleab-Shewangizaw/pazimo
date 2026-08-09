@@ -47,6 +47,13 @@ import {
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
 import {
+  getBeverageColorVars,
+  getBeverageSwatch,
+  isValidHexColor,
+  BEVERAGE_COLOR_PRESETS,
+  DEFAULT_BEVERAGE_COLOR,
+} from "@/lib/beverage-color";
+import {
   Beer,
   Search,
   RefreshCw,
@@ -70,6 +77,7 @@ interface Beverage {
   _id: string;
   name: string;
   image?: string | null;
+  color?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -158,6 +166,7 @@ export default function BeveragesPage() {
   const [editing, setEditing] = useState<Beverage | null>(null);
   const [formName, setFormName] = useState("");
   const [formActive, setFormActive] = useState(true);
+  const [formColor, setFormColor] = useState(DEFAULT_BEVERAGE_COLOR);
   const [formImage, setFormImage] = useState<File | null>(null);
   const [formImagePreview, setFormImagePreview] = useState<string | null>(null);
   const [savingBeverage, setSavingBeverage] = useState(false);
@@ -254,6 +263,7 @@ export default function BeveragesPage() {
     setEditing(null);
     setFormName("");
     setFormActive(true);
+    setFormColor(DEFAULT_BEVERAGE_COLOR);
     setFormImage(null);
     setFormImagePreview(null);
     setFormOpen(true);
@@ -263,6 +273,7 @@ export default function BeveragesPage() {
     setEditing(beverage);
     setFormName(beverage.name);
     setFormActive(beverage.isActive);
+    setFormColor(getBeverageSwatch(beverage.color));
     setFormImage(null);
     setFormImagePreview(buildImageUrl(beverage.image));
     setFormOpen(true);
@@ -286,6 +297,7 @@ export default function BeveragesPage() {
       setSavingBeverage(true);
       const body = new FormData();
       body.append("name", formName.trim());
+      body.append("color", formColor);
       body.append("isActive", String(formActive));
       if (formImage) body.append("image", formImage);
 
@@ -600,7 +612,8 @@ export default function BeveragesPage() {
                   {beverages.map((beverage) => (
                     <div
                       key={beverage._id}
-                      className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-gray-800"
+                      style={getBeverageColorVars(beverage.color)}
+                      className="flex flex-col overflow-hidden rounded-2xl border border-[var(--bev-border)] bg-white shadow-sm transition-shadow hover:shadow-md dark:border-[var(--bev-border-dark)] dark:bg-gray-800"
                     >
                       {/* Bottles are tall and often shot on their own background,
                           so the image is contained on a tinted shelf rather than
@@ -608,7 +621,7 @@ export default function BeveragesPage() {
                           the panel is shrink-0: a flex item's min-height:auto
                           would otherwise let a tall bottle stretch the panel and
                           break the grid's alignment. */}
-                      <div className="relative aspect-square shrink-0 overflow-hidden bg-gradient-to-b from-amber-50 to-amber-100/70 dark:from-amber-500/10 dark:to-amber-900/5">
+                      <div className="relative aspect-square shrink-0 overflow-hidden bg-gradient-to-b from-[var(--bev-panel)] to-[var(--bev-panel-2)] dark:from-[var(--bev-panel-dark)] dark:to-[var(--bev-panel-2-dark)]">
                         {buildImageUrl(beverage.image) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -899,14 +912,72 @@ export default function BeveragesPage() {
                   onChange={handleImageChange}
                   className="dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
                 />
-                {formImagePreview && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={formImagePreview}
-                    alt="Beverage preview"
-                    className="mt-2 w-28 h-28 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
+              </div>
+
+              {/* Colour, previewed on the real card rather than as an abstract
+                  swatch — the tint is the thing being chosen, and only the hue
+                  of this pick survives into it. */}
+              <div className="space-y-2">
+                <Label className="dark:text-gray-300">Colour</Label>
+                <div className="flex flex-wrap gap-2">
+                  {BEVERAGE_COLOR_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setFormColor(preset.value)}
+                      title={preset.name}
+                      aria-label={preset.name}
+                      aria-pressed={formColor.toLowerCase() === preset.value}
+                      className={`h-7 w-7 rounded-full border transition-transform hover:scale-110 ${
+                        formColor.toLowerCase() === preset.value
+                          ? "border-gray-900 ring-2 ring-gray-900/20 dark:border-white dark:ring-white/30"
+                          : "border-black/10 dark:border-white/20"
+                      }`}
+                      style={{ backgroundColor: preset.value }}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    aria-label="Custom colour"
+                    value={isValidHexColor(formColor) ? formColor : DEFAULT_BEVERAGE_COLOR}
+                    onChange={(e) => setFormColor(e.target.value)}
+                    className="h-9 w-12 cursor-pointer rounded border border-gray-200 bg-transparent p-1 dark:border-gray-700"
                   />
-                )}
+                  <Input
+                    value={formColor}
+                    onChange={(e) => setFormColor(e.target.value)}
+                    placeholder="#1f7a3f"
+                    aria-invalid={!isValidHexColor(formColor)}
+                    className="w-32 font-mono text-sm dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100"
+                  />
+                 
+                </div>
+
+                <div
+                  style={getBeverageColorVars(isValidHexColor(formColor) ? formColor : null)}
+                  className="mt-1 w-36 overflow-hidden rounded-2xl border border-[var(--bev-border)] bg-white dark:border-[var(--bev-border-dark)] dark:bg-gray-800"
+                >
+                  <div className="relative aspect-square bg-gradient-to-b from-[var(--bev-panel)] to-[var(--bev-panel-2)] dark:from-[var(--bev-panel-dark)] dark:to-[var(--bev-panel-2-dark)]">
+                    {formImagePreview ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={formImagePreview}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-contain p-4"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <Beer className="h-8 w-8 text-[var(--bev-ink)] opacity-40 dark:text-[var(--bev-ink-dark)]" />
+                      </div>
+                    )}
+                  </div>
+                  <p className="truncate p-2.5 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {formName.trim() || "Preview"}
+                  </p>
+                </div>
               </div>
 
               <div className="flex items-center gap-3 pt-1">

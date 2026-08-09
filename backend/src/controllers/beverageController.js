@@ -48,6 +48,18 @@ const removeUploadedImage = (imagePath) => {
   });
 };
 
+// Returns undefined for "not supplied" and null for "explicitly cleared", so an
+// update can tell the two apart. Normalised to lowercase because the schema's
+// match is lowercase-only and a picker may hand back #1F7A3F.
+const parseColor = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "" || value === "null") return null;
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value.trim())) {
+    throw new BadRequestError("color must be a hex value like #1f7a3f");
+  }
+  return value.trim().toLowerCase();
+};
+
 const duplicateNameError = (error) =>
   error?.code === 11000 ? new BadRequestError("A beverage with this name already exists") : error;
 
@@ -128,6 +140,7 @@ const createBeverage = async (req, res) => {
     const beverage = await Beverage.create({
       name,
       image: req.file ? `/uploads/${req.file.filename}` : null,
+      color: parseColor(req.body.color) ?? null,
       isActive: parseBoolean(req.body.isActive, true),
       createdBy: req.user.userId,
       updatedBy: req.user.userId,
@@ -157,6 +170,9 @@ const updateBeverage = async (req, res) => {
     if (name) beverage.name = name;
 
     beverage.isActive = parseBoolean(req.body.isActive, beverage.isActive);
+
+    const color = parseColor(req.body.color);
+    if (color !== undefined) beverage.color = color;
 
     const previousImage = beverage.image;
     if (req.file) beverage.image = `/uploads/${req.file.filename}`;
@@ -407,7 +423,7 @@ const getMyEligibility = async (req, res) => {
 const listActiveBeverages = async (req, res) => {
   try {
     const beverages = await Beverage.find(sellableQuery(req.beverageProfile))
-      .select("name image")
+      .select("name image color")
       .sort("name")
       .lean();
 
@@ -486,7 +502,7 @@ const listEventBeverages = async (req, res) => {
     const { event, profile } = await resolveEventContext(req);
 
     const rows = await EventBeverage.find({ event: event._id })
-      .populate("beverage", "name image isActive")
+      .populate("beverage", "name image color isActive")
       .sort("createdAt")
       .lean();
 
@@ -529,7 +545,7 @@ const listEventSellableCatalog = async (req, res) => {
     const { profile } = await resolveEventContext(req);
 
     const beverages = await Beverage.find(sellableQuery(profile))
-      .select("name image")
+      .select("name image color")
       .sort("name")
       .lean();
 
@@ -572,7 +588,7 @@ const addEventBeverage = async (req, res) => {
 
     const populated = await EventBeverage.findById(row._id).populate(
       "beverage",
-      "name image isActive"
+      "name image color isActive"
     );
 
     res.status(StatusCodes.CREATED).json({ success: true, data: populated });
@@ -608,7 +624,7 @@ const updateEventBeverage = async (req, res) => {
 
     const populated = await EventBeverage.findById(row._id).populate(
       "beverage",
-      "name image isActive"
+      "name image color isActive"
     );
 
     res.status(StatusCodes.OK).json({ success: true, data: populated });

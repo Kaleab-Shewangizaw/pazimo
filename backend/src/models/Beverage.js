@@ -24,6 +24,15 @@ const BeverageSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // Brand colour, as #rrggbb. Only the hue is really used: the UI derives a
+    // fixed set of shades from it in OKLCH so every card sits at the same
+    // perceived lightness whatever colour is chosen (see lib/beverage-color).
+    // Null means the UI falls back to its default amber.
+    color: {
+      type: String,
+      default: null,
+      match: [/^#[0-9a-f]{6}$/, "Colour must be a hex value like #1f7a3f"],
+    },
     // Inactive beverages stay in the catalogue (and on any past selection)
     // but are hidden from the list organizers pick from.
     isActive: {
