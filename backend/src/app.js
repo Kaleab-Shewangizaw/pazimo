@@ -28,6 +28,7 @@ const qrTicketRoutes = require("./routes/tickets");
 const santimPayRoutes = require("./routes/santimPayRoutes");
 const paymentConfigRoutes = require("./routes/paymentConfigRoutes");
 const capitalRoutes = require("./routes/capitalRoutes");
+const beverageRoutes = require("./routes/beverageRoutes");
 const { sendInvitationEmail } = require("./controllers/invitationEmailController");
 const { sendSMS } = require("./utils/sms");
 
@@ -151,6 +152,7 @@ app.use("/api/short", shortUrlRoutes);
 app.use("/api/rsvp", rsvpRoutes);
 app.use("/api/config/payment", paymentConfigRoutes);
 app.use("/api/capital", capitalRoutes);
+app.use("/api/beverages", beverageRoutes);
 app.use("/api/qr-tickets", qrTicketRoutes);
 app.use("/", santimPayRoutes);
 

@@ -283,6 +283,31 @@ const requireCapitalEligible = async (req, res, next) => {
   }
 };
 
+// Gates the beverage-selling organizer surface. Same contract (and same
+// reasoning) as requireCapitalEligible above: eligibility is mutable
+// admin-granted state, so it is read from the database on every request and
+// never taken from the JWT.
+const requireBeverageEligible = async (req, res, next) => {
+  try {
+    const OrganizerBeverageProfile = require("../models/OrganizerBeverageProfile");
+    const profile = await OrganizerBeverageProfile.findOne({
+      organizer: req.user.userId,
+    });
+
+    if (!profile || profile.eligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not eligible to sell beverages at your events.",
+      });
+    }
+
+    req.beverageProfile = profile;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
 module.exports = {
   protect,
   authenticateUser,
@@ -290,5 +315,6 @@ module.exports = {
   restrictTo,
   isAdmin,
   requireCapitalEligible,
+  requireBeverageEligible,
   protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };
