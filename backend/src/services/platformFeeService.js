@@ -5,12 +5,24 @@ const PlatformFeeLedger = require("../models/PlatformFeeLedger");
 const GiftCardActivity = require("../models/GiftCardActivity");
 const ChapaGiftCardService = require("./chapaGiftCardService");
 const { linkErrorMessage } = require("./chapaGiftCardService");
+const { VAT_RATE } = require("../config/rates");
 
 // Africa/Addis_Ababa is a fixed UTC+3 offset year-round (no DST) — safe to
 // hardcode rather than pull in a timezone library for this one conversion.
 const EAT_OFFSET_MS = 3 * 60 * 60 * 1000;
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+// A swept fee is commission plus the VAT charged on that commission, so VAT is
+// VAT_RATE/(1 + VAT_RATE) of the total — 15/115ths, not 15%. Getting this
+// backwards is the classic VAT-inclusive/exclusive mistake, so it lives in one
+// named place. vatAmount is subtracted rather than rounded independently so
+// the two parts always add back to feeAmount exactly.
+const splitFee = (feeAmount) => {
+  const total = round2(feeAmount);
+  const vatAmount = round2((total * VAT_RATE) / (1 + VAT_RATE));
+  return { commissionAmount: round2(total - vatAmount), vatAmount };
+};
 
 // "YYYY-MM-DD" for the EAT calendar day containing `when`
 const eatDateKey = (when = new Date()) =>
@@ -74,6 +86,14 @@ const ensureLedger = async (dateKey, currency) => {
   const { totalSales, paymentCount } = await computeDailyTotal(dateKey, currency);
   const feeAmount = round2(totalSales * (config.feePercentage / 100));
 
+  // The configured percentage is commission + VAT-on-commission as one number
+  // (3.45% by default). Split it back out proportionally so the VAT actually
+  // owed to the government is recorded per payout, rather than having to be
+  // reverse-engineered from a lump sum at filing time. Deriving the split from
+  // the configured rate rather than hardcoding it keeps this correct if an
+  // admin sets a non-standard percentage.
+  const { commissionAmount, vatAmount } = splitFee(feeAmount);
+
   if (!ledger) {
     ledger = await PlatformFeeLedger.create({
       date: dateKey,
@@ -82,6 +102,8 @@ const ensureLedger = async (dateKey, currency) => {
       paymentCount,
       feePercentage: config.feePercentage,
       feeAmount,
+      commissionAmount,
+      vatAmount,
       status: "PENDING",
     });
   } else {
@@ -89,6 +111,8 @@ const ensureLedger = async (dateKey, currency) => {
     ledger.paymentCount = paymentCount;
     ledger.feePercentage = config.feePercentage;
     ledger.feeAmount = feeAmount;
+    ledger.commissionAmount = commissionAmount;
+    ledger.vatAmount = vatAmount;
     await ledger.save();
   }
   return ledger;
@@ -153,6 +177,8 @@ const sendFee = async (dateKey, currency, initiatedBy) => {
         date: dateKey,
         currency,
         feePercentage: ledger.feePercentage,
+        commissionAmount: ledger.commissionAmount,
+        vatAmount: ledger.vatAmount,
       },
       initiatedBy,
     }).catch((error) =>
@@ -199,6 +225,7 @@ const runAutoSendForYesterday = async () => {
 };
 
 module.exports = {
+  splitFee,
   eatDateKey,
   eatDayBounds,
   shiftDateKey,

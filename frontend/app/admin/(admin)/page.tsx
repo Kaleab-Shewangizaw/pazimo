@@ -24,10 +24,22 @@ import {
   Eye,
   Plus,
   Clock,
+  Receipt,
+  Landmark,
+  Wallet,
+  PiggyBank,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
+import {
+  COMMISSION_PERCENT,
+  DEBT_CUT_PERCENT,
+  ORGANIZER_SHARE_PERCENT,
+  TOTAL_CUT_PERCENT,
+  VAT_PERCENT,
+  VAT_EXPLAINER,
+} from "@/lib/rates";
 import {
   Table,
   TableBody,
@@ -106,6 +118,22 @@ interface WithdrawalRequest {
   reason?: string;
 }
 
+// Platform-wide Pazimo Capital position, from
+// loanRepaymentService.getPlatformCapitalPosition.
+interface CapitalPosition {
+  currency: string;
+  totalDisbursed: number;
+  totalRepayable: number;
+  totalRecovered: number;
+  totalOutstanding: number;
+  expectedFeeIncome: number;
+  recoveryRate: number;
+  activeLoans: number;
+  repaidLoans: number;
+  pendingLoans: number;
+  pendingAmount: number;
+}
+
 interface DashboardStats {
   totalUsers: number;
   totalEvents: number;
@@ -113,11 +141,14 @@ interface DashboardStats {
   totalRevenue: number;
   organizerRevenue: number;
   pazimoCommission: number;
+  vatOnCommission: number;
+  totalDeduction: number;
   totalWithdrawn: number;
   availableBalance: number;
   activeOrganizers: number;
   activeEvents: number;
   pendingWithdrawals: number;
+  capital?: CapitalPosition;
 }
 
 interface RevenueData {
@@ -145,6 +176,8 @@ export default function AdminDashboardPage() {
     totalRevenue: 0,
     organizerRevenue: 0,
     pazimoCommission: 0,
+    vatOnCommission: 0,
+    totalDeduction: 0,
     totalWithdrawn: 0,
     availableBalance: 0,
     activeOrganizers: 0,
@@ -404,7 +437,7 @@ export default function AdminDashboardPage() {
       borderColor: "border-l-green-600",
     },
     {
-      title: "Organizer Revenue (97%)",
+      title: `Organizer Revenue (${ORGANIZER_SHARE_PERCENT}%)`,
       value: formatCompactMoney(stats.organizerRevenue || 0, selectedCurrency),
       icon: DollarSign,
       iconBg: "bg-purple-100",
@@ -413,12 +446,20 @@ export default function AdminDashboardPage() {
       trendUp: true,
     },
     {
-      title: "Pazimo Commission (3%)",
+      title: `Pazimo Commission (${COMMISSION_PERCENT}%)`,
       value: formatCompactMoney(stats.pazimoCommission || 0, selectedCurrency),
       icon: DollarSign,
       iconBg: "bg-red-100",
       iconColor: "text-red-600",
       borderColor: "border-l-red-600",
+    },
+    {
+      title: `VAT on Commission (${VAT_PERCENT}%)`,
+      value: formatCompactMoney(stats.vatOnCommission || 0, selectedCurrency),
+      icon: Receipt,
+      iconBg: "bg-rose-100",
+      iconColor: "text-rose-600",
+      borderColor: "border-l-rose-600",
     },
     {
       title: "Total Withdrawn",
@@ -515,6 +556,153 @@ export default function AdminDashboardPage() {
             </Card>
           ))}
         </div>
+
+        <p className="-mt-6 mb-8 flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+          <Receipt className="h-3.5 w-3.5 shrink-0" />
+          Organizers are deducted {TOTAL_CUT_PERCENT}% of gross ticket sales
+          &mdash; {VAT_EXPLAINER}. They keep {ORGANIZER_SHARE_PERCENT}%.
+        </p>
+
+        {/* Pazimo Capital — platform-wide lending position. Figures come from
+            loanRepaymentService.getPlatformCapitalPosition; "recovered" is the
+            automatic 60% cut of post-advance ticket sales, not manual repayment. */}
+        <Card className="border border-gray-200 shadow-lg dark:border-gray-600 mb-8">
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
+                  <Landmark className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Pazimo Capital</CardTitle>
+                  <CardDescription className="text-xs">
+                    Advances outstanding across all organizers, repaid
+                    automatically from {DEBT_CUT_PERCENT}% of ticket sales
+                  </CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/admin/capital")}
+              >
+                Manage
+                <ArrowUpRight className="h-3.5 w-3.5 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Wallet className="h-3.5 w-3.5 text-gray-400" />
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    Outstanding
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {formatCompactMoney(
+                    stats.capital?.totalOutstanding || 0,
+                    selectedCurrency
+                  )}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  {stats.capital?.activeLoans || 0} active advance
+                  {stats.capital?.activeLoans === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <ArrowUpRight className="h-3.5 w-3.5 text-gray-400" />
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    Disbursed
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {formatCompactMoney(
+                    stats.capital?.totalDisbursed || 0,
+                    selectedCurrency
+                  )}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  lifetime
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <ArrowDownRight className="h-3.5 w-3.5 text-gray-400" />
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    Recovered
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatCompactMoney(
+                    stats.capital?.totalRecovered || 0,
+                    selectedCurrency
+                  )}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  {stats.capital?.repaidLoans || 0} fully repaid
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <PiggyBank className="h-3.5 w-3.5 text-gray-400" />
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    Expected fee income
+                  </p>
+                </div>
+                <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  {formatCompactMoney(
+                    stats.capital?.expectedFeeIncome || 0,
+                    selectedCurrency
+                  )}
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                  on advances handed out
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="text-gray-600 dark:text-gray-400">
+                Recovery across all advances
+              </span>
+              <span className="font-semibold text-gray-900 dark:text-white">
+                {(stats.capital?.recoveryRate || 0).toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+              <div
+                className="h-full rounded-full bg-indigo-600 dark:bg-indigo-500 transition-all"
+                style={{
+                  width: `${Math.min(100, Math.max(0, stats.capital?.recoveryRate || 0))}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+              {formatCompactMoney(stats.capital?.totalRecovered || 0, selectedCurrency)}{" "}
+              of{" "}
+              {formatCompactMoney(stats.capital?.totalRepayable || 0, selectedCurrency)}{" "}
+              repayable collected
+            </p>
+
+            {!!stats.capital?.pendingLoans && (
+              <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
+                <Clock className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  {stats.capital.pendingLoans} request
+                  {stats.capital.pendingLoans === 1 ? "" : "s"} awaiting review,
+                  worth{" "}
+                  {formatCompactMoney(
+                    stats.capital.pendingAmount,
+                    selectedCurrency
+                  )}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">

@@ -14,6 +14,7 @@ import {
   Smartphone,
   Landmark,
   Info,
+  Receipt,
 } from "lucide-react";
 import {
   Dialog,
@@ -41,7 +42,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { io, type Socket } from "socket.io-client";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  COMMISSION_PERCENT,
+  DEBT_CUT_PERCENT,
+  ORGANIZER_SHARE_PERCENT,
+  ORGANIZER_SHARE_WITH_ACTIVE_LOAN_PERCENT,
+  TOTAL_CUT_PERCENT,
+  VAT_PERCENT,
+} from "@/lib/rates";
 
 const PAYOUT_METHODS: {
   id: "telebirr" | "mpesa" | "bank";
@@ -100,6 +110,10 @@ interface LoanInfo {
 interface BalanceData {
   currency?: "ETB" | "USD";
   totalRevenue: number;
+  organizerRevenue?: number;
+  pazimoCommission?: number;
+  vatOnCommission?: number;
+  totalDeduction?: number;
   pendingWithdrawals: number;
   approvedWithdrawals: number;
   availableBalance: number;
@@ -124,6 +138,7 @@ interface BalanceData {
 }
 
 export default function WithdrawalsPage() {
+  const router = useRouter();
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [loading, setLoading] = useState(true);
   const [balance, setBalance] = useState<BalanceData | null>(null);
@@ -413,6 +428,22 @@ export default function WithdrawalsPage() {
     }
   };
 
+  // An advance only affects the balance while it is still being repaid; a
+  // fully-repaid one leaves outstandingDebt at 0 and should stop showing up as
+  // a deduction on this screen.
+  const hasActiveLoan = !!balance?.loan?.activeLoan;
+  const loanRepayable = balance?.loan?.activeLoan?.totalRepayable ?? 0;
+  const loanRepaymentPercent =
+    loanRepayable > 0
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            ((balance?.loan?.totalRepaidFromTickets ?? 0) / loanRepayable) * 100
+          )
+        )
+      : 0;
+
   const TELEBIRR_FEE_RATE = 0.02;
   const parsedWithdrawAmount = Number.parseFloat(withdrawAmount || "0");
   const telebirrNetAmount =
@@ -496,7 +527,10 @@ export default function WithdrawalsPage() {
                       {balance?.availableBalance.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
                     <div className="text-xs text-muted-foreground dark:text-gray-500 mt-1">
-                      After 3% commission
+                      After {TOTAL_CUT_PERCENT}% deduction
+                      {hasActiveLoan
+                        ? ` and ${DEBT_CUT_PERCENT}% loan repayment`
+                        : ""}
                     </div>
                   </div>
                   <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 shadow-sm">
@@ -545,6 +579,179 @@ export default function WithdrawalsPage() {
           </>
         )}
       </div>
+
+      {/* Where the money went. The available balance is net of Pazimo's cut and
+          — while an advance is outstanding — the automatic loan repayment, and
+          previously neither was explained anywhere on this screen. */}
+      {!loading && balance && (
+        <Card className="mb-6 sm:mb-8 dark:bg-black dark:border-gray-800">
+          <CardContent className="p-4 sm:p-6">
+            <h2 className="text-base sm:text-lg font-semibold dark:text-gray-100 mb-3">
+              How your balance is calculated
+            </h2>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-400">
+                  Gross ticket sales
+                </span>
+                <span className="font-medium text-gray-900 dark:text-gray-100">
+                  {formatAmount(balance.totalRevenue)} {selectedCurrency}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-400">
+                  Pazimo commission ({COMMISSION_PERCENT}%)
+                </span>
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  −{formatAmount(balance.pazimoCommission ?? 0)} {selectedCurrency}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-400">
+                  Government VAT ({VAT_PERCENT}% of the commission)
+                </span>
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  −{formatAmount(balance.vatOnCommission ?? 0)} {selectedCurrency}
+                </span>
+              </div>
+
+              {hasActiveLoan && (
+                <>
+                  <div className="flex items-center justify-between gap-3 pt-1">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Pazimo Capital advance credited
+                    </span>
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                      +{formatAmount(balance.loan?.principalCredited ?? 0)}{" "}
+                      {selectedCurrency}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Loan repayment ({DEBT_CUT_PERCENT}% of sales since the
+                      advance)
+                    </span>
+                    <span className="font-medium text-red-600 dark:text-red-400">
+                      −{formatAmount(balance.loan?.totalRepaidFromTickets ?? 0)}{" "}
+                      {selectedCurrency}
+                    </span>
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-gray-600 dark:text-gray-400">
+                  Withdrawn &amp; pending
+                </span>
+                <span className="font-medium text-red-600 dark:text-red-400">
+                  −
+                  {formatAmount(
+                    balance.pendingWithdrawals + balance.approvedWithdrawals
+                  )}{" "}
+                  {selectedCurrency}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-gray-200 dark:border-gray-800 pt-2.5 mt-2.5">
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  Available to withdraw
+                </span>
+                <span className="font-bold text-gray-900 dark:text-gray-100">
+                  {formatAmount(balance.availableBalance)} {selectedCurrency}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-3">
+              <Receipt className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
+              <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
+                Pazimo&apos;s fee is {COMMISSION_PERCENT}% of your ticket sales.
+                The government charges {VAT_PERCENT}% VAT on that fee, which is
+                added to it — so {TOTAL_CUT_PERCENT}% of gross sales is deducted
+                in total and you keep {ORGANIZER_SHARE_PERCENT}%.
+                {hasActiveLoan
+                  ? ` While your advance is outstanding, a further ${DEBT_CUT_PERCENT}% goes to repaying it, leaving ${ORGANIZER_SHARE_WITH_ACTIVE_LOAN_PERCENT}% of each sale in your balance.`
+                  : ""}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Pazimo Capital advance */}
+      {!loading && hasActiveLoan && (
+        <Card className="mb-6 sm:mb-8 dark:bg-black dark:border-gray-800">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <Landmark className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-semibold dark:text-gray-100">
+                    Pazimo Capital advance
+                  </h2>
+                  <p className="text-xs text-muted-foreground dark:text-gray-400">
+                    Repaying automatically from your ticket sales
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push("/organizer/capital")}
+              >
+                View details
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  Total to repay
+                </p>
+                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                  {formatAmount(balance?.loan?.activeLoan?.totalRepayable ?? 0)}{" "}
+                  {selectedCurrency}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  Repaid so far
+                </p>
+                <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatAmount(balance?.loan?.totalRepaidFromTickets ?? 0)}{" "}
+                  {selectedCurrency}
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-800/50 p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                  Still owed
+                </p>
+                <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                  {formatAmount(balance?.loan?.outstandingDebt ?? 0)}{" "}
+                  {selectedCurrency}
+                </p>
+              </div>
+            </div>
+
+            <div className="mb-1.5 flex items-center justify-between text-xs">
+              <span className="text-gray-600 dark:text-gray-400">
+                Repayment progress
+              </span>
+              <span className="font-semibold text-gray-900 dark:text-gray-100">
+                {loanRepaymentPercent.toFixed(0)}%
+              </span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+              <div
+                className="h-full rounded-full bg-blue-600 dark:bg-blue-500 transition-all"
+                style={{ width: `${loanRepaymentPercent}%` }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Withdrawal Request Button */}
       <div className="mb-6 sm:mb-8">

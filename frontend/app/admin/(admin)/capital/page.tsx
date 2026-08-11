@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DEBT_CUT_PERCENT } from "@/lib/rates";
 import {
   Table,
   TableBody,
@@ -1034,7 +1035,8 @@ export default function CapitalPage() {
                         Math.round((Number(approvedAmount) || 0) * (1 + (Number(feeRatePercent) || 0) / 100) * 100) / 100,
                         reviewLoan.currency
                       )}
-                      , taken automatically as 60% of their ticket sales — no manual repayment needed.
+                      , taken automatically as {DEBT_CUT_PERCENT}% of their ticket sales — no
+                      manual repayment needed.
                     </p>
                     <Button
                       onClick={handleApprove}

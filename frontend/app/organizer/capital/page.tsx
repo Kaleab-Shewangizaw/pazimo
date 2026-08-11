@@ -25,6 +25,11 @@ import {
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
 import { Banknote, Landmark, Lock, Repeat, ShieldAlert, TrendingUp } from "lucide-react";
+import {
+  DEBT_CUT_PERCENT,
+  ORGANIZER_SHARE_WITH_ACTIVE_LOAN_PERCENT,
+  TOTAL_CUT_PERCENT,
+} from "@/lib/rates";
 
 const STANDARD_FEE_RATE = 0.15;
 
@@ -331,8 +336,11 @@ export default function CapitalDashboardPage() {
                     <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-2.5">
                       <Repeat className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" />
                       <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
-                        60% of every ticket you sell is applied to this loan automatically until
-                        it&apos;s fully repaid.
+                        {DEBT_CUT_PERCENT}% of every ticket you sell is applied to this loan
+                        automatically until it&apos;s fully repaid. With the{" "}
+                        {TOTAL_CUT_PERCENT}% commission and VAT on top of that, {" "}
+                        {ORGANIZER_SHARE_WITH_ACTIVE_LOAN_PERCENT}% of each sale reaches your
+                        available balance meanwhile.
                       </p>
                     </div>
                   </div>

@@ -43,6 +43,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { formatCompactMoney } from "@/lib/utils";
+import { DEBT_CUT_PERCENT, TOTAL_CUT_PERCENT } from "@/lib/rates";
 import {
   Table,
   TableBody,
@@ -680,8 +681,10 @@ export default function OrganizerDashboard() {
     (sum, t: any) => sum + (t.price || 0),
     0
   );
-  const organizerRevenue = totalRevenue * 0.97;
-  const pazimoCommission = totalRevenue * 0.03;
+  // The dashboard shows availableBalance straight from the API rather than
+  // deriving a share client-side — the API figure is the one that also nets
+  // off VAT, Pazimo Capital repayment and withdrawals.
+  const hasActiveLoan = !!balance?.loan?.activeLoan;
 
   const totalWithdrawn = withdrawals
     .filter((w: any) => ["approved", "completed"].includes(w.status))
@@ -777,7 +780,17 @@ export default function OrganizerDashboard() {
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5);
 
-  const statCards = [
+  const statCards: {
+    id: string;
+    title: string;
+    value: number;
+    subtitle?: string;
+    icon: typeof DollarSign;
+    iconBg: string;
+    iconColor: string;
+    borderColor: string;
+    isMoney?: boolean;
+  }[] = [
     {
       id: "revenue",
       title:
@@ -795,6 +808,9 @@ export default function OrganizerDashboard() {
       id: "organizer-revenue",
       title: "Available balance",
       value: availableBalance,
+      subtitle: hasActiveLoan
+        ? `After ${TOTAL_CUT_PERCENT}% fee + VAT and ${DEBT_CUT_PERCENT}% loan repayment`
+        : `After ${TOTAL_CUT_PERCENT}% fee + VAT`,
       icon: DollarSign,
       iconBg: "bg-emerald-100 dark:bg-emerald-900/30",
       iconColor: "text-emerald-600 dark:text-emerald-400",
@@ -1092,6 +1108,11 @@ export default function OrganizerDashboard() {
                               </p>
                             )}
                           </div>
+                          {stat.subtitle ? (
+                            <p className="mt-0.5 text-[10px] leading-tight text-gray-400 dark:text-gray-500">
+                              {stat.subtitle}
+                            </p>
+                          ) : null}
                         </div>
                         <div
                           className={`${stat.iconBg} p-1.5 sm:p-2 rounded-lg shadow-sm flex-shrink-0`}

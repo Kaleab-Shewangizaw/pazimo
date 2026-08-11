@@ -15,7 +15,10 @@ const {
   calculateOrganizerCapitalMetrics,
   getBlockingLoan,
 } = require("../services/capitalService");
-const { syncOrganizerLoans } = require("../services/loanRepaymentService");
+const {
+  syncOrganizerLoans,
+  DEBT_CUT_RATE,
+} = require("../services/loanRepaymentService");
 
 const EPSILON = 0.01;
 
@@ -363,13 +366,14 @@ const approveLoan = async (req, res) => {
 
     await OrganizerCapitalProfile.updateOne(
       { organizer: loan.organizer },
-      { hasActiveLoan: true }
+      { hasActiveLoan: true },
+      { upsert: true }
     );
 
     await notifyOrganizer(
       req,
       loan,
-      `Your Pazimo Capital request for ${requestedApprovedAmount} ${loan.currency} is approved and added to your withdrawal balance. A ${(feeRate * 100).toFixed(0)}% fee applies (repay ${totalRepayable} ${loan.currency}), taken automatically as 60% of your ticket sales.`
+      `Your Pazimo Capital request for ${requestedApprovedAmount} ${loan.currency} is approved and added to your withdrawal balance. A ${(feeRate * 100).toFixed(0)}% fee applies (repay ${totalRepayable} ${loan.currency}), taken automatically as ${Math.round(DEBT_CUT_RATE * 100)}% of your ticket sales.`
     );
 
     res.status(StatusCodes.OK).json({ success: true, data: loan });
@@ -400,7 +404,8 @@ const rejectLoan = async (req, res) => {
 
     await OrganizerCapitalProfile.updateOne(
       { organizer: loan.organizer },
-      { hasActiveLoan: false }
+      { hasActiveLoan: false },
+      { upsert: true }
     );
 
     await notifyOrganizer(req, loan, `Your loan request was rejected: ${reason}`);
@@ -432,7 +437,8 @@ const adminCancelLoan = async (req, res) => {
 
     await OrganizerCapitalProfile.updateOne(
       { organizer: loan.organizer },
-      { hasActiveLoan: false }
+      { hasActiveLoan: false },
+      { upsert: true }
     );
 
     await notifyOrganizer(req, loan, `Your loan request has been cancelled by Pazimo.`);
@@ -532,7 +538,8 @@ const createLoanRequest = async (req, res) => {
 
     await OrganizerCapitalProfile.updateOne(
       { organizer: organizerId },
-      { hasActiveLoan: true }
+      { hasActiveLoan: true },
+      { upsert: true }
     );
 
     res.status(StatusCodes.CREATED).json({ success: true, data: loan });
@@ -611,7 +618,8 @@ const cancelMyLoan = async (req, res) => {
 
     await OrganizerCapitalProfile.updateOne(
       { organizer: loan.organizer },
-      { hasActiveLoan: false }
+      { hasActiveLoan: false },
+      { upsert: true }
     );
 
     res.status(StatusCodes.OK).json({ success: true, data: loan });

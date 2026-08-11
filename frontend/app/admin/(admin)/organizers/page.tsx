@@ -17,6 +17,12 @@ import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
 import {
+  COMMISSION_PERCENT,
+  COMMISSION_RATE,
+  ORGANIZER_SHARE_PERCENT,
+  ORGANIZER_SHARE_RATE,
+} from "@/lib/rates";
+import {
   Table,
   TableBody,
   TableCell,
@@ -444,7 +450,7 @@ export default function OrganizersPage() {
       );
       const pazimoCommission = organizersWithRevenue.reduce(
         (sum: number, org: OrganizerData) =>
-          sum + (org.pazimoCommission || (org.totalRevenue || 0) * 0.03),
+          sum + (org.pazimoCommission || (org.totalRevenue || 0) * COMMISSION_RATE),
         0
       );
 
@@ -844,7 +850,7 @@ export default function OrganizersPage() {
             <CardContent className="p-4">
               <div className="flex flex-col">
                 <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Organizer Revenue (97%)
+                  {`Organizer Revenue (${ORGANIZER_SHARE_PERCENT}%)`}
                 </p>
                 <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
                   {formatCompactMoney(stats.organizerRevenue || 0, selectedCurrency)}
@@ -857,7 +863,7 @@ export default function OrganizersPage() {
             <CardContent className="p-4">
               <div className="flex flex-col">
                 <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Pazimo Commission (3%)
+                  {`Pazimo Commission (${COMMISSION_PERCENT}%)`}
                 </p>
                 <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
                   {formatCompactMoney(stats.pazimoCommission || 0, selectedCurrency)}
@@ -1088,7 +1094,7 @@ export default function OrganizersPage() {
                     </p>
                   </div>
                   <div>
-                    <p className="text-gray-600 dark:text-gray-400">Organizer Revenue (97%)</p>
+                    <p className="text-gray-600 dark:text-gray-400">{`Organizer Revenue (${ORGANIZER_SHARE_PERCENT}%)`}</p>
                     <p className="font-semibold text-purple-600 dark:text-purple-400">
                       {formatCompactMoney(selectedOrganizer.organizerRevenue || 0, selectedCurrency)}
                     </p>
@@ -1315,12 +1321,12 @@ export default function OrganizersPage() {
                   <Card className="border border-gray-200 dark:border-gray-700 shadow-md dark:bg-gray-800">
                     <CardContent className="p-4">
                       <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                        Organizer Revenue (97%)
+                        {`Organizer Revenue (${ORGANIZER_SHARE_PERCENT}%)`}
                       </div>
                       <div className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-1">
                         {(
                           organizerBalance.organizerRevenue ||
-                          organizerBalance.totalRevenue * 0.97
+                          organizerBalance.totalRevenue * ORGANIZER_SHARE_RATE
                         ).toFixed(2)}{" "}
                         {selectedCurrency}
                       </div>
@@ -1329,12 +1335,12 @@ export default function OrganizersPage() {
                   <Card className="border border-gray-200 dark:border-gray-700 shadow-md dark:bg-gray-800">
                     <CardContent className="p-4">
                       <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                        Pazimo Commission (3%)
+                        {`Pazimo Commission (${COMMISSION_PERCENT}%)`}
                       </div>
                       <div className="text-lg font-bold text-red-600 dark:text-red-400 mt-1">
                         {(
                           organizerBalance.pazimoCommission ||
-                          organizerBalance.totalRevenue * 0.03
+                          organizerBalance.totalRevenue * COMMISSION_RATE
                         ).toFixed(2)}{" "}
                         {selectedCurrency}
                       </div>

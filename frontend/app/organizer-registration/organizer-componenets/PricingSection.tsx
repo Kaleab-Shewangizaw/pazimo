@@ -2,6 +2,12 @@
 
 import { motion } from "framer-motion";
 import { Check, Percent, ShieldCheck, Zap } from "lucide-react";
+import {
+  COMMISSION_PERCENT,
+  ORGANIZER_SHARE_PERCENT,
+  TOTAL_CUT_PERCENT,
+  VAT_PERCENT,
+} from "@/lib/rates";
 
 const benefits = [
   "No monthly subscription fees",
@@ -49,9 +55,23 @@ const PricingSection = () => {
               </div>
 
               <div className="mb-2">
-                <span className="text-6xl font-display font-bold text-foreground md:text-7xl">3%</span>
+                <span className="text-6xl font-display font-bold text-foreground md:text-7xl">
+                  {COMMISSION_PERCENT}%
+                </span>
               </div>
-              <p className="mb-8 text-lg text-muted-foreground">of ticket sales. That&apos;s it.</p>
+              <p className="mb-3 text-lg text-muted-foreground">of ticket sales. That&apos;s it.</p>
+              {/* The VAT is stated up front rather than buried: it is a real
+                  deduction from the organizer's payout, so promising a flat 3%
+                  and then taking 3.45% would be the hidden fee this section
+                  claims not to have. */}
+              <p className="mb-8 text-sm text-muted-foreground">
+                Plus {VAT_PERCENT}% government VAT on that fee &mdash;{" "}
+                <span className="font-semibold text-foreground">
+                  {TOTAL_CUT_PERCENT}%
+                </span>{" "}
+                deducted in total, so you keep {ORGANIZER_SHARE_PERCENT}% of
+                every ticket.
+              </p>
 
               <div className="mb-10 flex items-center justify-center gap-6">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">

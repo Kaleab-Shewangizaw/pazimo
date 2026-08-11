@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { ArrowRight, Ticket, Mail, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TOTAL_CUT_PERCENT } from "@/lib/rates";
 
 const HeroSection = () => {
   return (
@@ -107,7 +108,7 @@ const HeroSection = () => {
             <span className="hidden sm:block h-1 w-1 rounded-full bg-border" />
             <div className="hidden sm:flex items-center gap-1.5">
               <Sparkles className="h-4 w-4 text-primary" />
-              <span>3% flat fee</span>
+              <span>{TOTAL_CUT_PERCENT}% flat fee, VAT included</span>
             </div>
           </motion.div>
         </div>

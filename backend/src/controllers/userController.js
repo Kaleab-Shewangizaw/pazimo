@@ -3,6 +3,11 @@ const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const Withdrawal = require('../models/Withdrawal');
 const mongoose = require('mongoose');
+const {
+  COMMISSION_RATE,
+  VAT_ON_COMMISSION_RATE,
+  ORGANIZER_SHARE_RATE
+} = require('../config/rates');
 
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -163,6 +168,33 @@ exports.getOrganizersWithStats = async (req, res) => {
           as: 'withdrawals'
         }
       },
+      // Lookup Pazimo Capital advances. Borrowed principal is credited into
+      // the same balance and repaid from a 60% cut of ticket sales, so a
+      // balance computed without them overstates what the organizer can
+      // actually withdraw.
+      {
+        $lookup: {
+          from: 'loans',
+          let: { organizerId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$organizer', '$$organizerId'] },
+                status: { $in: ['active', 'repaid'] }
+              }
+            },
+            {
+              $project: {
+                approvedAmount: 1,
+                totalRepaid: 1,
+                outstandingBalance: 1,
+                status: 1
+              }
+            }
+          ],
+          as: 'loans'
+        }
+      },
       // Calculate stats
       {
         $addFields: {
@@ -178,8 +210,15 @@ exports.getOrganizersWithStats = async (req, res) => {
           },
           // Calculate revenues
           totalRevenue: { $sum: '$tickets.price' },
-          organizerRevenue: { $multiply: [{ $sum: '$tickets.price' }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: '$tickets.price' }, 0.03] },
+          organizerRevenue: {
+            $multiply: [{ $sum: '$tickets.price' }, ORGANIZER_SHARE_RATE]
+          },
+          pazimoCommission: {
+            $multiply: [{ $sum: '$tickets.price' }, COMMISSION_RATE]
+          },
+          vatOnCommission: {
+            $multiply: [{ $sum: '$tickets.price' }, VAT_ON_COMMISSION_RATE]
+          },
           // Calculate total tickets sold (with quantities)
           totalTicketsSold: {
             $sum: {
@@ -232,10 +271,39 @@ exports.getOrganizersWithStats = async (req, res) => {
       // Calculate available balance
       {
         $addFields: {
+          loanPrincipalCredited: { $sum: '$loans.approvedAmount' },
+          loanRepaidFromTickets: { $sum: '$loans.totalRepaid' },
+          loanOutstanding: {
+            $sum: {
+              $map: {
+                input: {
+                  $filter: {
+                    input: '$loans',
+                    as: 'l',
+                    cond: { $eq: ['$$l.status', 'active'] }
+                  }
+                },
+                as: 'loan',
+                in: { $ifNull: ['$$loan.outstandingBalance', 0] }
+              }
+            }
+          }
+        }
+      },
+      {
+        $addFields: {
           availableBalance: {
             $subtract: [
-              '$organizerRevenue',
-              { $add: ['$totalWithdrawn', '$pendingWithdrawals'] }
+              {
+                $add: ['$organizerRevenue', '$loanPrincipalCredited']
+              },
+              {
+                $add: [
+                  '$loanRepaidFromTickets',
+                  '$totalWithdrawn',
+                  '$pendingWithdrawals'
+                ]
+              }
             ]
           }
         }
@@ -245,7 +313,8 @@ exports.getOrganizersWithStats = async (req, res) => {
         $project: {
           password: 0,
           withdrawals: 0,
-          tickets: 0
+          tickets: 0,
+          loans: 0
         }
       }
     ]);
@@ -257,6 +326,7 @@ exports.getOrganizersWithStats = async (req, res) => {
       activeEvents: organizers.reduce((sum, org) => sum + org.activeEvents, 0),
       totalRevenue: organizers.reduce((sum, org) => sum + (org.totalRevenue || 0), 0),
       organizerRevenue: organizers.reduce((sum, org) => sum + (org.organizerRevenue || 0), 0),
+      vatOnCommission: organizers.reduce((sum, org) => sum + (org.vatOnCommission || 0), 0),
       pazimoCommission: organizers.reduce((sum, org) => sum + (org.pazimoCommission || 0), 0),
       totalTicketsSold: organizers.reduce((sum, org) => sum + (org.totalTicketsSold || 0), 0)
     };

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { TOTAL_CUT_PERCENT } = require("../config/rates");
 
 // One row per (calendar day, currency) — the daily platform-fee record.
 // PENDING rows are recomputed from live Payment data on every read (to pick
@@ -28,11 +29,23 @@ const PlatformFeeLedgerSchema = new mongoose.Schema(
     feePercentage: {
       type: Number,
       required: true,
-      default: 3,
+      default: TOTAL_CUT_PERCENT,
     },
     feeAmount: {
       type: Number,
       required: true,
+      default: 0,
+    },
+    // How feeAmount splits between Pazimo's own commission and the VAT levied
+    // on it. Stored rather than derived so a historical SENT row still shows
+    // the correct split if the rates change later — the VAT figure is what
+    // gets filed, so it must be frozen alongside the payout it came from.
+    commissionAmount: {
+      type: Number,
+      default: 0,
+    },
+    vatAmount: {
+      type: Number,
       default: 0,
     },
     status: {

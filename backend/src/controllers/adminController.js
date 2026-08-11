@@ -3,6 +3,10 @@ const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const { StatusCodes } = require("http-status-codes");
+const { splitTicketRevenue } = require("../config/rates");
+const {
+  getPlatformCapitalPosition,
+} = require("../services/loanRepaymentService");
 
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
@@ -148,14 +152,29 @@ const getDashboardStats = async (req, res) => {
       withdrawalStats[0]?.pending[0]?.amount || 0;
     const pendingWithdrawals = withdrawalStats[0]?.pending[0]?.count || 0;
 
-    // Calculate breakdown based on Gross Revenue
+    // Calculate breakdown based on Gross Revenue. Pazimo's 3% commission and
+    // the 15% VAT charged on it are both deducted from the organizer side —
+    // see config/rates.
+    const {
+      pazimoCommission,
+      vatOnCommission,
+      totalDeduction,
+      organizerRevenue,
+    } = splitTicketRevenue(grossRevenue);
     const totalRevenue = grossRevenue;
-    const organizerRevenue = grossRevenue * 0.97;
-    const pazimoCommission = grossRevenue * 0.03;
+
+    // Platform-wide Pazimo Capital position, so the global available balance
+    // reflects credited principal and the 60% repayment cut the same way each
+    // organizer's own balance does.
+    const capital = await getPlatformCapitalPosition(currency);
 
     // Calculate available balance (Global)
     const availableBalance =
-      organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount;
+      organizerRevenue +
+      capital.totalDisbursed -
+      capital.totalRecovered -
+      totalWithdrawn -
+      pendingWithdrawalsAmount;
 
     res.status(StatusCodes.OK).json({
       status: "success",
@@ -166,12 +185,15 @@ const getDashboardStats = async (req, res) => {
         totalRevenue,
         organizerRevenue,
         pazimoCommission,
+        vatOnCommission,
+        totalDeduction,
         totalTicketsSold,
         activeOrganizers,
         activeEvents,
         pendingWithdrawals,
         totalWithdrawn,
         availableBalance,
+        capital,
       },
     });
   } catch (error) {
