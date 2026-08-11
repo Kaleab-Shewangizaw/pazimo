@@ -41,6 +41,9 @@ export interface LineupRow {
   price: number;
   currency: string;
   isAvailable: boolean;
+  stockTotal: number;
+  sold: number;
+  remaining: number;
   beverage: CatalogBeverage & { isActive: boolean };
   // Set by the API when a drink is no longer sellable — paused centrally,
   // blocked for this organizer, or deleted from the catalogue.
@@ -91,10 +94,12 @@ export function EventBeverageManager({
   const [addOpen, setAddOpen] = useState(false);
   const [addBeverageId, setAddBeverageId] = useState("");
   const [addPrice, setAddPrice] = useState("");
+  const [addStock, setAddStock] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [editRow, setEditRow] = useState<LineupRow | null>(null);
   const [editPrice, setEditPrice] = useState("");
+  const [editStock, setEditStock] = useState("");
   const [removeTarget, setRemoveTarget] = useState<LineupRow | null>(null);
   const [busyRow, setBusyRow] = useState<string | null>(null);
 
@@ -147,6 +152,7 @@ export function EventBeverageManager({
   const openAdd = async () => {
     setAddBeverageId("");
     setAddPrice("");
+    setAddStock("");
     setAddOpen(true);
     try {
       const data = await request(catalogUrl, "GET");
@@ -165,9 +171,17 @@ export function EventBeverageManager({
       toast.error("Enter a price greater than 0");
       return;
     }
+    if (!Number.isInteger(Number(addStock)) || Number(addStock) < 1) {
+      toast.error("Enter how many bottles are for sale");
+      return;
+    }
     try {
       setSaving(true);
-      await request(lineupUrl, "POST", { beverageId: addBeverageId, price: addPrice });
+      await request(lineupUrl, "POST", {
+        beverageId: addBeverageId,
+        price: addPrice,
+        stockTotal: addStock,
+      });
       toast.success("Drink added to this event");
       setAddOpen(false);
       fetchLineup();
@@ -184,10 +198,23 @@ export function EventBeverageManager({
       toast.error("Enter a price greater than 0");
       return;
     }
+    if (!Number.isInteger(Number(editStock)) || Number(editStock) < 1) {
+      toast.error("Enter how many bottles are for sale");
+      return;
+    }
+    // Caught here as well as on the server so the message names the number the
+    // organizer is actually up against.
+    if (Number(editStock) < editRow.sold) {
+      toast.error(`${editRow.sold} already sold — stock can't go below that`);
+      return;
+    }
     try {
       setSaving(true);
-      await request(`${lineupUrl}/${editRow._id}`, "PATCH", { price: editPrice });
-      toast.success("Price updated");
+      await request(`${lineupUrl}/${editRow._id}`, "PATCH", {
+        price: editPrice,
+        stockTotal: editStock,
+      });
+      toast.success("Drink updated");
       setEditRow(null);
       fetchLineup();
     } catch (error) {
@@ -317,13 +344,54 @@ export function EventBeverageManager({
                   <h3 className="line-clamp-2 font-semibold leading-tight text-gray-900 dark:text-gray-100">
                     {row.beverage?.name || "Removed drink"}
                   </h3>
-                  <div className="mt-auto flex items-baseline justify-between gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-                    <span className="text-xs uppercase tracking-wide text-gray-500">
-                      {isAdmin ? "Organizer's price" : "Your price"}
-                    </span>
-                    <span className="font-semibold text-gray-900 dark:text-gray-100">
-                      {formatCompactMoney(row.price, row.currency)}
-                    </span>
+                  <div className="mt-auto space-y-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs uppercase tracking-wide text-gray-500">
+                        {isAdmin ? "Organizer's price" : "Your price"}
+                      </span>
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">
+                        {formatCompactMoney(row.price, row.currency)}
+                      </span>
+                    </div>
+
+                    {/* Stock as a bar rather than a bare number: how close a
+                        drink is to selling out is the thing worth seeing. */}
+                    <div>
+                      <div className="flex items-baseline justify-between gap-2 text-xs">
+                        <span className="uppercase tracking-wide text-gray-500">Stock</span>
+                        <span className="text-gray-700 dark:text-gray-300">
+                          <span className="font-semibold text-gray-900 dark:text-gray-100">
+                            {row.sold ?? 0}
+                          </span>
+                          {" of "}
+                          {row.stockTotal ?? 0} sold
+                        </span>
+                      </div>
+                      <div
+                        className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"
+                        role="progressbar"
+                        aria-valuenow={row.sold ?? 0}
+                        aria-valuemin={0}
+                        aria-valuemax={row.stockTotal ?? 0}
+                        aria-label={`${row.sold ?? 0} of ${row.stockTotal ?? 0} sold`}
+                      >
+                        <div
+                          className="h-full rounded-full bg-[var(--bev-ink)] dark:bg-[var(--bev-ink-dark)]"
+                          style={{
+                            width: `${
+                              row.stockTotal > 0
+                                ? Math.min((row.sold / row.stockTotal) * 100, 100)
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
+                      {row.remaining === 0 && row.stockTotal > 0 && (
+                        <p className="mt-1.5 text-xs font-medium text-[var(--bev-ink)] dark:text-[var(--bev-ink-dark)]">
+                          Sold out
+                        </p>
+                      )}
+                    </div>
                   </div>
                   {stoppedCentrally && (
                     <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
@@ -353,6 +421,7 @@ export function EventBeverageManager({
                     onClick={() => {
                       setEditRow(row);
                       setEditPrice(String(row.price));
+                      setEditStock(String(row.stockTotal ?? 0));
                     }}
                   >
                     <Pencil className="h-4 w-4" />
@@ -427,17 +496,31 @@ export function EventBeverageManager({
                 ))}
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="add-price">Price (ETB)</Label>
-                <Input
-                  id="add-price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={addPrice}
-                  onChange={(e) => setAddPrice(e.target.value)}
-                  placeholder="e.g. 90"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="add-price">Price (ETB)</Label>
+                  <Input
+                    id="add-price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={addPrice}
+                    onChange={(e) => setAddPrice(e.target.value)}
+                    placeholder="e.g. 90"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="add-stock">Bottles for sale</Label>
+                  <Input
+                    id="add-stock"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={addStock}
+                    onChange={(e) => setAddStock(e.target.value)}
+                    placeholder="e.g. 200"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -462,19 +545,37 @@ export function EventBeverageManager({
       <Dialog open={editRow !== null} onOpenChange={(open) => !open && setEditRow(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Change price</DialogTitle>
+            <DialogTitle>Price and stock</DialogTitle>
             <DialogDescription>{editRow?.beverage?.name}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-price">Price (ETB)</Label>
-            <Input
-              id="edit-price"
-              type="number"
-              min="0"
-              step="0.01"
-              value={editPrice}
-              onChange={(e) => setEditPrice(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-price">Price (ETB)</Label>
+              <Input
+                id="edit-price"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editPrice}
+                onChange={(e) => setEditPrice(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-stock">Bottles for sale</Label>
+              <Input
+                id="edit-stock"
+                type="number"
+                min="1"
+                step="1"
+                value={editStock}
+                onChange={(e) => setEditStock(e.target.value)}
+              />
+              {(editRow?.sold ?? 0) > 0 && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {editRow?.sold} already sold
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditRow(null)}>
@@ -486,7 +587,7 @@ export function EventBeverageManager({
               disabled={saving}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {saving ? "Saving..." : "Save price"}
+              {saving ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -500,14 +601,16 @@ export function EventBeverageManager({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove {removeTarget?.beverage?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              It comes off this event entirely. To pause sales without losing the price, use
-              &quot;Stop selling&quot; instead.
+              {(removeTarget?.sold ?? 0) > 0
+                ? `${removeTarget?.sold} bottles have already sold, so this can't be removed — the record of what people paid has to stay. Use "Stop selling" instead.`
+                : "It comes off this event entirely. To pause sales without losing the price and stock, use \"Stop selling\" instead."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleRemove}
+              disabled={(removeTarget?.sold ?? 0) > 0}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               Remove

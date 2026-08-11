@@ -489,6 +489,14 @@ const findSellableBeverage = async (beverageId, profile) => {
   return beverage;
 };
 
+const parseStock = (value) => {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new BadRequestError("stockTotal must be a whole number of at least 1");
+  }
+  return parsed;
+};
+
 const parsePrice = (value) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -512,6 +520,7 @@ const listEventBeverages = async (req, res) => {
     const blocked = (profile?.blockedBeverages || []).map(String);
     const data = rows.map((row) => ({
       ...row,
+      remaining: Math.max((row.stockTotal || 0) - (row.sold || 0), 0),
       unavailableReason: !row.beverage
         ? "removed"
         : !row.beverage.isActive
@@ -576,8 +585,10 @@ const addEventBeverage = async (req, res) => {
 
     const beverage = await findSellableBeverage(req.body.beverageId, profile);
     const price = parsePrice(req.body.price);
+    const stockTotal = parseStock(req.body.stockTotal);
 
     const row = await EventBeverage.create({
+      stockTotal,
       event: event._id,
       // Always the event's owner, never the caller: an admin adding a drink is
       // acting on the organizer's behalf.
@@ -613,6 +624,19 @@ const updateEventBeverage = async (req, res) => {
     if (!row) throw new NotFoundError("That beverage is not on this event");
 
     if (req.body.price !== undefined) row.price = parsePrice(req.body.price);
+
+    if (req.body.stockTotal !== undefined) {
+      const stockTotal = parseStock(req.body.stockTotal);
+      // Stock can be topped up or trimmed, but never below what has already
+      // been sold — that would make remaining stock negative and imply bottles
+      // that were paid for do not exist.
+      if (stockTotal < row.sold) {
+        throw new BadRequestError(
+          `${row.sold} already sold, so stock cannot be set below ${row.sold}`
+        );
+      }
+      row.stockTotal = stockTotal;
+    }
     if (req.body.isAvailable !== undefined) {
       const isAvailable = parseBoolean(req.body.isAvailable, undefined);
       if (isAvailable === undefined) {
@@ -638,6 +662,18 @@ const updateEventBeverage = async (req, res) => {
 const removeEventBeverage = async (req, res) => {
   try {
     const { event } = await resolveEventContext(req);
+
+    const existing = await EventBeverage.findOne({ _id: req.params.id, event: event._id });
+    if (!existing) throw new NotFoundError("That beverage is not on this event");
+
+    // Deleting a row that has sales behind it would orphan the ledger and lose
+    // the record of what people paid for. Withdrawing it from sale is the
+    // reversible action; deletion is only for a line that never sold.
+    if (existing.sold > 0) {
+      throw new BadRequestError(
+        `${existing.sold} already sold, so this drink can't be removed. Use "Stop selling" instead.`
+      );
+    }
 
     const row = await EventBeverage.findOneAndDelete({
       _id: req.params.id,

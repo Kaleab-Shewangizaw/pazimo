@@ -90,17 +90,33 @@ export const getBeverageSwatch = (color?: string | null) => {
   return hex;
 };
 
+// The colour a chart mark should use for this drink. Deliberately the same ink
+// token the cards use: pinning lightness keeps every bar at one weight (so bar
+// colour never doubles as a value ramp) and lifts contrast against the surface,
+// which the raw brand colours — amber especially — do not clear on their own.
+export const getBeverageInk = (color: string | null | undefined, isDark: boolean) =>
+  getBeverageColorVars(color)[isDark ? "--bev-ink-dark" : "--bev-ink"];
+
 // A starting palette for the admin picker: recognisable drink-brand hues,
-// spread around the wheel so the presets don't all collapse into one family.
+// spread around the wheel so the presets don't collapse into one family.
+//
+// Checked with the dataviz palette validator (adjacent pairs, light surface):
+// passes the lightness band, chroma floor, CVD separation and normal-vision
+// floor. Two earlier entries were dropped because the tool caught what the eye
+// did not — "Lager gold" sat ΔE 5.4 from Amber in normal vision and 1.4 under
+// protanopia (two swatches, one apparent colour), and "Slate" fell under the
+// chroma floor and simply read grey.
+//
+// Amber and Citrus carry a sub-3:1 contrast warning against a light surface,
+// which is why anywhere these appear as chart marks is direct-labelled and
+// backed by a table rather than relying on the colour alone.
 export const BEVERAGE_COLOR_PRESETS: { name: string; value: string }[] = [
   { name: "Amber", value: "#f59e0b" },
-  { name: "Lager gold", value: "#d4a017" },
-  { name: "Bottle green", value: "#1f7a3f" },
-  { name: "Cola red", value: "#c8102e" },
   { name: "Deep blue", value: "#1d4ed8" },
+  { name: "Cola red", value: "#c8102e" },
   { name: "Ice teal", value: "#0d9488" },
   { name: "Berry", value: "#9d174d" },
-  { name: "Grape", value: "#6d28d9" },
   { name: "Citrus", value: "#84cc16" },
-  { name: "Slate", value: "#475569" },
+  { name: "Grape", value: "#6d28d9" },
+  { name: "Bottle green", value: "#1f7a3f" },
 ];

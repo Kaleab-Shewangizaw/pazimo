@@ -18,6 +18,7 @@ import {
   ScanLine,
   ClipboardList,
   Banknote,
+  Beer,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
@@ -51,6 +52,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   // is a UX nicety on top of the real gate, which is the backend's
   // requireCapitalEligible middleware on every capital endpoint.
   const [capitalEligible, setCapitalEligible] = useState(false);
+  // Same reasoning as capital above: hidden unless approved, on top of the
+  // backend's requireBeverageEligible gate.
+  const [beverageEligible, setBeverageEligible] = useState(false);
 
    const handleUserClick = () => {
     router.push("/organizer")
@@ -64,6 +68,13 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => setCapitalEligible(data?.data?.eligibility === "eligible"))
       .catch(() => setCapitalEligible(false));
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/beverages/organizer/eligibility`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setBeverageEligible(data?.data?.eligibility === "eligible"))
+      .catch(() => setBeverageEligible(false));
   }, [token, user?.role]);
 
   const isActive = (path: string) => {
@@ -209,6 +220,25 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                   Pazimo Capital
                 </span>
                 <span className="rounded-full bg-blue-200 border border-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide  dark:bg-yellow-500/60 dark:text-white dark:border-yellow-500 shadow-sm">
+                  New
+                </span>
+              </Link>
+            )}
+            {beverageEligible && (
+              <Link
+                href="/organizer/beverages"
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                  isActive("/organizer/beverages")
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
+                }`}
+              >
+                <Beer className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base flex-1">
+                  Beverage sales
+                </span>
+                <span className="rounded-full bg-blue-200 border border-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide dark:bg-yellow-500/60 dark:text-white dark:border-yellow-500 shadow-sm">
                   New
                 </span>
               </Link>

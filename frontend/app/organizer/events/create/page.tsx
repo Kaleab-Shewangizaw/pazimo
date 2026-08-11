@@ -706,6 +706,18 @@ export default function CreateEventPage() {
         return;
       }
 
+      const unstockedBeverage = beverageSelections.find(
+        (selection) =>
+          !Number.isInteger(Number(selection.stockTotal)) ||
+          Number(selection.stockTotal) < 1,
+      );
+      if (unstockedBeverage) {
+        toast.error(
+          `Set how many bottles of ${unstockedBeverage.name} you're selling`,
+        );
+        return;
+      }
+
       if (
         !formData.startDate ||
         !formData.endDate ||
@@ -922,6 +934,7 @@ export default function CreateEventPage() {
                 body: JSON.stringify({
                   beverageId: selection.beverageId,
                   price: selection.price,
+                  stockTotal: selection.stockTotal,
                 }),
               },
             );

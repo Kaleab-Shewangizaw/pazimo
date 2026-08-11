@@ -23,6 +23,8 @@ export interface BeverageSelection {
   image?: string | null;
   color?: string | null;
   price: string;
+  // How many bottles are being put up for sale at this event.
+  stockTotal: string;
 }
 
 interface CatalogBeverage {
@@ -75,15 +77,20 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
         image: beverage.image,
         color: beverage.color,
         price: "",
+        stockTotal: "",
       },
     ]);
     setPickerOpen(false);
   };
 
-  const setPrice = (beverageId: string, price: string) => {
+  const setField = (
+    beverageId: string,
+    field: "price" | "stockTotal",
+    value: string
+  ) => {
     onChange(
       selections.map((selection) =>
-        selection.beverageId === beverageId ? { ...selection, price } : selection
+        selection.beverageId === beverageId ? { ...selection, [field]: value } : selection
       )
     );
   };
@@ -100,8 +107,8 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
             Beverage sales
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Optional. Guests buy drinks ahead of the event, so price below what they&apos;d pay at
-            the door.
+            Optional. Set a price and how many bottles you&apos;re selling. Guests buy ahead of
+            the event, so price below what they&apos;d pay at the door.
           </p>
         </div>
         <Button
@@ -156,7 +163,7 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
               <span className="flex-1 text-sm font-medium text-slate-900 dark:text-slate-100">
                 {selection.name}
               </span>
-              <div className="w-32">
+              <div className="w-28">
                 <Label htmlFor={`price-${selection.beverageId}`} className="sr-only">
                   Price for {selection.name} in ETB
                 </Label>
@@ -167,7 +174,21 @@ export function BeveragesSection({ token, selections, onChange }: BeveragesSecti
                   step="0.01"
                   placeholder="Price (ETB)"
                   value={selection.price}
-                  onChange={(e) => setPrice(selection.beverageId, e.target.value)}
+                  onChange={(e) => setField(selection.beverageId, "price", e.target.value)}
+                />
+              </div>
+              <div className="w-28">
+                <Label htmlFor={`stock-${selection.beverageId}`} className="sr-only">
+                  Bottles of {selection.name} for sale
+                </Label>
+                <Input
+                  id={`stock-${selection.beverageId}`}
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Bottles"
+                  value={selection.stockTotal}
+                  onChange={(e) => setField(selection.beverageId, "stockTotal", e.target.value)}
                 />
               </div>
               <Button

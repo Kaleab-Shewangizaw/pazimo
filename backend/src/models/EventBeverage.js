@@ -42,6 +42,26 @@ const EventBeverageSchema = new mongoose.Schema(
       enum: ["ETB"],
       default: "ETB",
     },
+    // How many bottles the organizer put up for sale at this event.
+    //
+    // Defaults to 0 rather than being schema-required so that rows created
+    // before stock existed still save; the controller requires a positive
+    // number on every new line-up entry.
+    stockTotal: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Bottles sold so far. Denormalised from the BeverageSale ledger, which
+    // stays the source of truth for money and history. This counter exists so
+    // that "is there stock left?" can be answered and decremented in a single
+    // atomic update — checking the ledger and then writing would let two
+    // concurrent purchases oversell the same last bottle.
+    sold: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     // Lets an organizer stop selling a drink without deleting the row, which
     // has to survive for any purchases already made against it.
     isAvailable: {

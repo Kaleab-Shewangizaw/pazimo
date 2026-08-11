@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const beverageController = require("../controllers/beverageController");
+const beverageSalesController = require("../controllers/beverageSalesController");
 const upload = require("../middlewares/upload");
 const {
   authenticateUser,
@@ -66,6 +67,63 @@ router.delete(
   authenticateUser,
   restrictTo("admin"),
   beverageController.removeEventBeverage
+);
+
+// --- Sales & dashboards ----------------------------------------------------
+router.get(
+  "/admin/dashboard",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageSalesController.getAdminDashboard
+);
+router.get(
+  "/admin/sales",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageSalesController.listSales
+);
+router.patch(
+  "/admin/sales/:id/refund",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageSalesController.refund
+);
+router.get(
+  "/admin/events/:eventId/sales",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageSalesController.getEventSalesBreakdown
+);
+
+router.get(
+  "/organizer/dashboard",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageSalesController.getOrganizerDashboard
+);
+router.get(
+  "/organizer/sales",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageSalesController.listSales
+);
+router.get(
+  "/organizer/events/:eventId/sales",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageSalesController.getEventSalesBreakdown
+);
+
+// Recording a sale by hand. Restricted to admins and the owning organizer —
+// see the controller for why this is not open to customers yet.
+router.post(
+  "/sales",
+  authenticateUser,
+  restrictTo("admin", "organizer"),
+  beverageSalesController.createSale
 );
 
 // Beverage catalogue

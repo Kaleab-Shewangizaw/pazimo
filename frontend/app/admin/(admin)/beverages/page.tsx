@@ -45,6 +45,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { BeverageDashboard } from "@/components/beverages/beverage-dashboard";
 import { toast } from "sonner";
 import {
   getBeverageColorVars,
@@ -69,6 +70,7 @@ import {
   RotateCcw,
   Check,
   Minus,
+  LayoutDashboard,
 } from "lucide-react";
 
 type Eligibility = "eligible" | "not_eligible";
@@ -150,7 +152,7 @@ export default function BeveragesPage() {
   const { token, admin } = useAdminAuthStore();
   const isPartner = admin?.role === "partner";
 
-  const [tab, setTab] = useState("beverages");
+  const [tab, setTab] = useState("dashboard");
 
   // Beverage catalogue state
   const [beverages, setBeverages] = useState<Beverage[]>([]);
@@ -500,6 +502,9 @@ export default function BeveragesPage() {
           }}
         >
           <TabsList className="mb-6">
+            <TabsTrigger value="dashboard">
+              <LayoutDashboard className="h-4 w-4 mr-1.5" /> Dashboard
+            </TabsTrigger>
             <TabsTrigger value="beverages">
               <Beer className="h-4 w-4 mr-1.5" /> Beverages
               {beverageStats.total ? (
@@ -516,6 +521,10 @@ export default function BeveragesPage() {
               ) : null}
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard">
+            <BeverageDashboard scope="admin" token={token || ""} />
+          </TabsContent>
 
           {/* ---------------- Beverage catalogue tab ----------------
               A grid of product cards rather than a table: a drink is
