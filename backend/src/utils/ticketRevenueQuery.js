@@ -1,4 +1,5 @@
 const Event = require("../models/Event");
+const { DEFAULT_COMMISSION_RATE, VAT_RATE } = require("../config/rates");
 
 // One definition of "what counts as real ticket revenue", and one correct way to
 // scope it to an organizer. financeService, loanRepaymentService and
@@ -83,7 +84,50 @@ const TICKET_QUANTITY_EXPR = {
   ],
 };
 
+// Commission is per event and snapshotted per ticket, so it can no longer be a
+// single multiplication applied to a summed total. It has to be summed per
+// ticket at the rate that ticket was sold under.
+//
+// Tickets sold before per-event rates existed have no snapshot; they fall back
+// to the 3% that was in force at the time, which is what they were actually
+// charged.
+const COMMISSION_RATE_EXPR = {
+  $ifNull: ["$commissionRate", DEFAULT_COMMISSION_RATE],
+};
+
+/** Pazimo's fee on this ticket. */
+const COMMISSION_EXPR = { $multiply: ["$price", COMMISSION_RATE_EXPR] };
+
+/** Government VAT on that fee — 15% of the commission, not of the price. */
+const VAT_EXPR = {
+  $multiply: ["$price", COMMISSION_RATE_EXPR, VAT_RATE],
+};
+
+/** What the organizer keeps: price minus commission minus VAT on it. */
+const ORGANIZER_SHARE_EXPR = {
+  $subtract: [
+    "$price",
+    { $multiply: ["$price", COMMISSION_RATE_EXPR, 1 + VAT_RATE] },
+  ],
+};
+
+/**
+ * The three figures every revenue screen needs, summed per ticket so a mix of
+ * commission rates across events adds up correctly. Drop into any $group.
+ */
+const revenueAccumulators = () => ({
+  grossRevenue: { $sum: "$price" },
+  pazimoCommission: { $sum: COMMISSION_EXPR },
+  vatOnCommission: { $sum: VAT_EXPR },
+  organizerRevenue: { $sum: ORGANIZER_SHARE_EXPR },
+});
+
 module.exports = {
+  COMMISSION_RATE_EXPR,
+  COMMISSION_EXPR,
+  VAT_EXPR,
+  ORGANIZER_SHARE_EXPR,
+  revenueAccumulators,
   EXCLUDED_TICKET_STATUS,
   EXCLUDED_PAYMENT_STATUS,
   validTicketMatch,

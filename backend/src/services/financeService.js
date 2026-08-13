@@ -8,7 +8,9 @@ const {
   getOrganizerEvents,
   organizerTicketMatch,
   TICKET_QUANTITY_EXPR,
+  revenueAccumulators,
 } = require("../utils/ticketRevenueQuery");
+const { round2 } = require("../config/rates");
 
 const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
@@ -39,8 +41,11 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
               {
                 $group: {
                   _id: null,
-                  totalRevenue: { $sum: "$price" },
                   totalTickets: { $sum: "$ticketQuantity" },
+                  // Commission varies per event and is snapshotted per ticket,
+                  // so these are summed row by row rather than derived from
+                  // totalRevenue with a single rate.
+                  ...revenueAccumulators(),
                 },
               },
             ],
@@ -121,13 +126,18 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   ]);
 
   // Extract results
-  const revenueData = balanceData[0]?.revenue[0] || { totalRevenue: 0, totalTickets: 0 };
-  const totalRevenue = revenueData.totalRevenue;
-  const totalTicketsSold = revenueData.totalTickets;
+  const revenueData = balanceData[0]?.revenue[0] || {};
+  const totalRevenue = revenueData.grossRevenue || 0;
+  const totalTicketsSold = revenueData.totalTickets || 0;
 
-  // Calculate commission and organizer revenue
-  const pazimoCommission = totalRevenue * 0.03;
-  const organizerRevenue = totalRevenue * 0.97;
+  // Per-event commission plus the 15% VAT charged on it, both accumulated per
+  // ticket at the rate that ticket was sold under.
+  const pazimoCommission = round2(revenueData.pazimoCommission || 0);
+  const vatOnCommission = round2(revenueData.vatOnCommission || 0);
+  const totalDeduction = round2(pazimoCommission + vatOnCommission);
+  const organizerRevenue = round2(revenueData.organizerRevenue || 0);
+  const effectiveCommissionRate =
+    totalRevenue > 0 ? pazimoCommission / totalRevenue : 0;
 
   // Get withdrawal amounts
   const withdrawalData = withdrawalStats[0] || { pendingAmount: 0, approvedAmount: 0 };
@@ -215,6 +225,10 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     totalRevenue,
     organizerRevenue,
     pazimoCommission,
+    vatOnCommission,
+    totalDeduction,
+    // Blended rate across this organizer's events, for display.
+    effectiveCommissionRate,
     pendingWithdrawals: pendingAmount,
     approvedWithdrawals: approvedAmount,
     availableBalance,
@@ -440,6 +454,10 @@ const calculateOrganizerBalanceLegacy = async (organizerId) => {
     totalRevenue,
     organizerRevenue,
     pazimoCommission,
+    vatOnCommission,
+    totalDeduction,
+    // Blended rate across this organizer's events, for display.
+    effectiveCommissionRate,
     pendingWithdrawals: pendingAmount,
     approvedWithdrawals: approvedAmount,
     availableBalance,

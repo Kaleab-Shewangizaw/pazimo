@@ -1,4 +1,9 @@
 const mongoose = require("mongoose");
+const {
+  DEFAULT_COMMISSION_RATE,
+  MIN_COMMISSION_RATE,
+  MAX_COMMISSION_RATE,
+} = require("../config/rates");
 const { generateShortId, slugify } = require("../utils/eventUrl");
 
 const createUniqueShortId = async (EventModel) => {
@@ -169,6 +174,22 @@ const EventSchema = new mongoose.Schema(
       type: String,
       enum: ["draft", "published", "cancelled", "completed"],
       default: "draft",
+    },
+
+    // Pazimo's commission on this event's ticket sales. Most events run at the
+    // 3% default; individual events can be negotiated up or down.
+    //
+    // This governs FUTURE sales only. Each ticket snapshots the rate it was
+    // actually sold under (Ticket.commissionRate), so changing this never
+    // revalues revenue that has already been counted or paid out.
+    //
+    // Government VAT is charged on top of whatever this is, at 15% OF the
+    // commission — see config/rates.js.
+    commissionRate: {
+      type: Number,
+      default: DEFAULT_COMMISSION_RATE,
+      min: MIN_COMMISSION_RATE,
+      max: MAX_COMMISSION_RATE,
     },
     bannerStatus: {
       type: Boolean,

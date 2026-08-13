@@ -56,12 +56,20 @@ interface OrganizerData {
   lastName: string;
   email: string;
   phoneNumber: string;
-  events: EventData[];
+  // Only populated for the organizer whose detail dialog is open — the list
+  // itself no longer downloads events or tickets.
+  events?: EventData[];
   createdAt: string;
+  totalEvents?: number;
+  activeEvents?: number;
+  totalTicketsSold?: number;
   totalRevenue?: number;
   organizerRevenue?: number;
   availableBalance?: number;
   pazimoCommission?: number;
+  pendingWithdrawals?: number;
+  approvedWithdrawals?: number;
+  loanOutstanding?: number;
 }
 
 interface EventData {
@@ -330,11 +338,22 @@ export default function OrganizersPage() {
     fetchOrganizers();
   }, [organizerPage, organizerItemsPerPage, selectedCurrency]);
 
+  // One request. The admin list used to build this in the browser: a page of
+  // organizers, then per organizer their events, then per event every ticket
+  // in a paginated loop, then per organizer a balance call — hundreds of round
+  // trips, dragging down the ~43 KB QR blob on every ticket, to render an event
+  // count and a few totals. The server now joins it in five queries.
   const fetchOrganizers = async () => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({
+        page: String(organizerPage),
+        limit: String(organizerItemsPerPage),
+        currency: selectedCurrency,
+      });
+
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/users?role=organizer&page=${organizerPage}&limit=${organizerItemsPerPage}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/admin/organizers/overview?${params}`,
         {
           headers: {
             Accept: "application/json",
@@ -348,121 +367,20 @@ export default function OrganizersPage() {
         throw new Error("Failed to fetch organizers");
       }
 
-      const data = await response.json();
-      const organizersArray = data.data?.users || [];
-
-      const organizersWithEvents = await Promise.all(
-        organizersArray.map(async (organizer: OrganizerData) => {
-          const eventsResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/events/organizer/${organizer._id}`,
-            {
-              headers: {
-                Accept: "application/json",
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (eventsResponse.ok) {
-            const eventsData = await eventsResponse.json();
-            const events = eventsData.events || [];
-
-            const eventsWithTickets = await Promise.all(
-              events.map(async (event: EventData) => {
-                const tickets = await fetchEventTickets(event._id);
-                return {
-                  ...event,
-                  tickets: tickets || [],
-                };
-              })
-            );
-
-            return {
-              ...organizer,
-              events: eventsWithTickets,
-            };
-          }
-          return organizer;
-        })
-      );
-
-      const organizersWithRevenue = await Promise.all(
-        organizersWithEvents.map(async (organizer: OrganizerData) => {
-          try {
-            const balanceResponse = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${organizer._id}/balance?currency=${selectedCurrency}`,
-              {
-                headers: {
-                  Accept: "application/json",
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-              }
-            );
-
-            if (balanceResponse.ok) {
-              const balanceData = await balanceResponse.json();
-              return {
-                ...organizer,
-                totalRevenue: balanceData.data?.totalRevenue || 0,
-                organizerRevenue: balanceData.data?.organizerRevenue || 0,
-                availableBalance: balanceData.data?.availableBalance || 0,
-                pazimoCommission: balanceData.data?.pazimoCommission || 0,
-              };
-            }
-            return organizer;
-          } catch (error) {
-            console.error(
-              `Error fetching revenue for organizer ${organizer._id}:`,
-              error
-            );
-            return organizer;
-          }
-        })
-      );
-
-      const totalEvents = organizersWithRevenue.reduce(
-        (sum: number, org: OrganizerData) => sum + (org.events?.length || 0),
-        0
-      );
-      const activeEvents = organizersWithRevenue.reduce(
-        (sum: number, org: OrganizerData) =>
-          sum +
-          (org.events?.filter(
-            (event: EventData) => event.status === "published"
-          )?.length || 0),
-        0
-      );
-      const totalRevenue = organizersWithRevenue.reduce(
-        (sum: number, org: OrganizerData) => sum + (org.totalRevenue || 0),
-        0
-      );
-      const organizerRevenue = organizersWithRevenue.reduce(
-        (sum: number, org: OrganizerData) => sum + (org.organizerRevenue || 0),
-        0
-      );
-      const pazimoCommission = organizersWithRevenue.reduce(
-        (sum: number, org: OrganizerData) =>
-          sum + (org.pazimoCommission || (org.totalRevenue || 0) * 0.03),
-        0
-      );
+      const payload = await response.json();
+      const rows: OrganizerData[] = payload.data || [];
 
       setStats({
-        totalOrganizers: data.data?.total || 0,
-        totalEvents,
-        totalRevenue,
-        organizerRevenue,
-        pazimoCommission,
-        activeEvents,
+        totalOrganizers: payload.pagination?.total || 0,
+        totalEvents: rows.reduce((sum, o) => sum + (o.totalEvents || 0), 0),
+        activeEvents: rows.reduce((sum, o) => sum + (o.activeEvents || 0), 0),
+        totalRevenue: rows.reduce((sum, o) => sum + (o.totalRevenue || 0), 0),
+        organizerRevenue: rows.reduce((sum, o) => sum + (o.organizerRevenue || 0), 0),
+        pazimoCommission: rows.reduce((sum, o) => sum + (o.pazimoCommission || 0), 0),
       });
 
-      setOrganizers(organizersWithRevenue);
-      if (data.data?.total) {
-        setOrganizerTotalPages(
-          Math.ceil(data.data.total / organizerItemsPerPage)
-        );
-      }
+      setOrganizers(rows);
+      setOrganizerTotalPages(payload.pagination?.pages || 1);
     } catch (error) {
       console.error("Error fetching organizers:", error);
       toast.error("Failed to fetch organizers");
@@ -926,10 +844,7 @@ export default function OrganizersPage() {
                     </TableRow>
                   ) : (
                     filteredOrganizers.map((organizer) => {
-                      const activeEvents =
-                        organizer.events?.filter(
-                          (event: EventData) => event.status === "published"
-                        )?.length || 0;
+                      const activeEvents = organizer.activeEvents || 0;
 
                       return (
                         <TableRow
@@ -950,7 +865,7 @@ export default function OrganizersPage() {
                               variant="outline"
                               className="border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30"
                             >
-                              {organizer.events?.length || 0} Events
+                              {organizer.totalEvents || 0} Events
                             </Badge>
                           </TableCell>
                           <TableCell>

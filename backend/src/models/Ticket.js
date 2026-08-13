@@ -4,6 +4,10 @@ const User = require("./User");
 const fs = require("fs");
 const path = require("path");
 
+const {
+  DEFAULT_COMMISSION_RATE,
+  normalizeCommissionRate,
+} = require("../config/rates");
 function generateShortId() {
   const chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -74,6 +78,19 @@ const TicketSchema = new mongoose.Schema(
     price: {
       type: Number,
       required: true,
+      min: 0,
+    },
+
+    // The commission rate this ticket was actually sold under, copied from the
+    // event at creation time and never updated afterwards.
+    //
+    // Snapshotted for the same reason BeverageSale snapshots prices: an admin
+    // renegotiating an event's rate must not retroactively revalue sales that
+    // have already been counted, reported, and in many cases paid out. Absent
+    // on tickets sold before per-event rates existed; readers fall back to the
+    // 3% default (see utils/ticketRevenueQuery.COMMISSION_RATE_EXPR).
+    commissionRate: {
+      type: Number,
       min: 0,
     },
 
@@ -175,6 +192,35 @@ TicketSchema.index({ guestPhone: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
 TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
+
+// Snapshot the commission rate this ticket is being sold under.
+//
+// Done here rather than at each of the nine places that create tickets, so a
+// new creation path cannot forget it. Runs once, on insert only: an existing
+// ticket's rate is never rewritten, which is the whole point of the snapshot.
+TicketSchema.pre("validate", async function snapshotCommissionRate(next) {
+  if (!this.isNew) return next();
+  if (typeof this.commissionRate === "number") return next();
+  if (!this.event) return next();
+
+  try {
+    // Required lazily to avoid a require cycle through the model registry.
+    const EventModel = require("./Event");
+    const event = await EventModel.findById(this.event)
+      .select("commissionRate")
+      .lean();
+    this.commissionRate = normalizeCommissionRate(
+      event?.commissionRate ?? DEFAULT_COMMISSION_RATE
+    );
+    next();
+  } catch (error) {
+    // A pricing lookup must never block a paid ticket from being issued. Fall
+    // back to the default rate — the same figure the reader would have used.
+    console.error("Commission rate snapshot failed, using default:", error.message);
+    this.commissionRate = DEFAULT_COMMISSION_RATE;
+    next();
+  }
+});
 
 // QR images are no longer generated or stored here.
 //

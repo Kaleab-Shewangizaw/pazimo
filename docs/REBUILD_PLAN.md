@@ -107,6 +107,31 @@ composite ran per request and blocked the event loop — now **67 ms** by cachin
 logo-on-white-circle backdrop, which is identical for every ticket. Same lesson as the bug
 being fixed: build the shared part once.
 
+**Production numbers (read-only check, 2026-08-13):** 12,073 tickets, **495.5 MB of QR
+base64 out of a 500.3 MB collection — 99.0%**. Average 43,039 bytes per ticket.
+At 1M tickets that is **40.1 GB**. Re-render verified on production tickets:
+**0 mismatches** — every code that could be decoded carries the correct ticket id.
+
+### ⚠ Pre-existing issue found while verifying (not caused by this change)
+
+Stored QR codes come in **two formats**, because three different code paths generated them:
+
+| format | count | payload |
+|---|---|---|
+| SVG (Ticket pre-save hook) | 9,038 | compact `{tid,nm,tp,tip,qty}` |
+| PNG (`QRCode.toDataURL` in on-door + routes/tickets.js) | 3,035 | legacy fat `{_id,ticketId,eventId,userId,ticketType,price,purchaseDate,status,paymentReference,…}` |
+
+**Of a 60-ticket sample of the PNG ones, 22 (37%) could not be decoded by jsQR even after
+4× upscaling**, at a normal 256 px. All the SVG ones decoded fine. Cause not established —
+it may be decoder tolerance rather than genuinely broken codes, since phone scanners use
+more forgiving decoders.
+
+- [ ] **Test a handful of PNG-format tickets with the real scanner app before the next event.**
+      If they fail there too, ~3,035 attendees are holding codes that may not scan.
+
+The on-demand renderer produces the compact payload at 400 px+, so it should be strictly
+easier to scan than the fat legacy PNGs — this change likely *improves* the situation.
+
 ### 1.2 Rewrite the `$lookup`-first aggregations — **DONE**
 - [x] New shared `backend/src/utils/ticketRevenueQuery.js` — one definition of "counts as revenue"
 - [x] `services/financeService.js` — `calculateOrganizerBalance`
@@ -122,6 +147,29 @@ being fixed: build the shared part once.
 | `calculateOrganizerBalance` | 826 ms | **15.1 ms** | 55× |
 | `getGrossRevenueSince` | 1,648 ms | **11 ms** | 150× |
 | `getAllUsers` (10/page) | 1,348 ms | **25 ms** | 54× |
+
+**Confirmed against production (read-only, 2026-08-13, 12,073 tickets).**
+`explain("executionStats")` on the worst-case organizer (15 events):
+
+| | old | new |
+|---|---|---|
+| server execution time | 1,221 ms | **21 ms** |
+| documents examined | **12,073** (whole collection) | **114** |
+| index keys examined | 0 | 126 |
+| plan | `COLLSCAN` | `IXSCAN` |
+
+The old query examined **every document in the collection regardless of how small the
+organizer was** — its cost grows with total business volume, so at 1M tickets it would
+examine 1M documents (~100 s). The new one examines only that organizer's tickets and
+does not care how large the collection gets.
+
+Wall-clock over the network was only 2.1× (1,041 ms → 502 ms) because round-trip latency
+to Atlas dominates both. The 58× is the real server-side improvement.
+
+**Correctness confirmed on production data:** 2 differences in 40 calls, both ETB, each
+exactly equal to that organizer's USD revenue, zero unexplained — including
+`717,249 → 717,229`, the organizer whose −19.40 ETB overdraft the live audit traced to
+this same currency mixing.
 
 ### 🐛 Correctness bug found and fixed in the same pass
 
@@ -147,14 +195,34 @@ ETB balance, and it would have grown.
 before/after output for every organizer — reusable for Phase 2 and worth promoting into
 the real test suite.
 
-### 1.3 Collapse the admin request storm
-- [ ] One endpoint returning organizers + revenue + balance pre-joined
-- [ ] Remove the per-organizer / per-event fetch loops in
-      `frontend/app/admin/(admin)/organizers/page.tsx:354-410`
+### 1.3 Collapse the admin request storm — **DONE**
+- [x] New `GET /api/admin/organizers/overview` (`controllers/organizerOverviewController.js`)
+- [x] Frontend `fetchOrganizers` reduced to a single request; the three nested loops are gone
+- [x] Row counts read from the response instead of measuring a downloaded events array
 
-**Why:** one page load currently fires hundreds of HTTP requests (organizers → per
-organizer events → per event tickets in a `while (hasMore)` loop → per organizer
-balance), and every balance call triggers 1.2.
+**Measured on production data (read-only), one load of page 1 (10 organizers):**
+
+| | old | new |
+|---|---|---|
+| HTTP requests | ~31 | **1** |
+| tickets downloaded to the browser | 525 | **0** |
+| payload | **27.3 MB** | **~4 KB** |
+
+27 MB to render an event count and a few totals — because tickets were fetched whole,
+each dragging its ~43 KB base64 QR blob. Page 1 holds the *newest* organizers, who have
+the fewest events; established organizers are far worse.
+
+Server side it is five queries regardless of page size (organizers → their events →
+one ticket aggregation → one withdrawal aggregation → one loan aggregation), instead of
+per-organizer and per-event round trips.
+
+**Correctness:** the list's `totalRevenue` / `availableBalance` / `pazimoCommission` were
+checked against `financeService.calculateOrganizerBalance` for 60 organizer+currency
+combinations — **60/60 agree**. The list and the balance screen cannot drift.
+
+- [ ] Follow-up: the organizer detail dialog still enriches its breakdown from
+      `organizer.events[].tickets`, which the list no longer loads. It should fetch that
+      organizer's tickets lazily when opened.
 
 ### 1.4 Index hygiene
 - [ ] Audit the 16 `Ticket` indexes, drop duplicates — each one costs write throughput
