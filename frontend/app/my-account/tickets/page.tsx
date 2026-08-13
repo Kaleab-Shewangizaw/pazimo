@@ -17,7 +17,7 @@ import {
 // import { QRCodeSVG } from "qrcode.react"
 import { toast } from "sonner";
 import { Event, TicketType } from "@/types/event";
-import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { downloadTicketQr, ticketQrUrl } from "@/lib/ticketQr";
 
 export default function TicketsPage() {
   const [visibleTickets, setVisibleTickets] = useState(2);
@@ -136,14 +136,14 @@ export default function TicketsPage() {
 
   // Download QR code function
   const downloadQRCode = (
-    qrCodeDataUrl: string,
     ticketId: string,
     ticketType: string,
     eventTitle: string
   ) => {
     const filename = `ticket-${ticketId}-${eventTitle}-${ticketType}.png`;
-    downloadHighQualityQR(qrCodeDataUrl, filename);
-    toast.success(`QR code for ${eventTitle} downloaded!`);
+    downloadTicketQr(ticketId, filename)
+      .then(() => toast.success(`QR code for ${eventTitle} downloaded!`))
+      .catch(() => toast.error("Could not download the QR code"));
   };
 
   // Download all QR codes for an event
@@ -154,7 +154,6 @@ export default function TicketsPage() {
       group.tickets.forEach((ticket: TicketType, index: number) => {
         setTimeout(() => {
           downloadQRCode(
-            ticket.qrCode,
             ticket.ticketId,
             ticket.ticketType || "ticket",
             group.event.title
@@ -589,10 +588,11 @@ export default function TicketsPage() {
                                     <div className="flex justify-center mb-4 relative">
                                       <Image
                                         src={
-                                          selectedGroup.tickets[
-                                            currentTicketIndex
-                                          ].qrCode || "/placeholder.svg"
+                                          selectedGroup.tickets[currentTicketIndex].ticketId
+                                            ? ticketQrUrl(selectedGroup.tickets[currentTicketIndex].ticketId)
+                                            : "/placeholder.svg"
                                         }
+                                        unoptimized
                                         alt="Ticket QR Code"
                                         width={280}
                                         height={280}
@@ -623,9 +623,6 @@ export default function TicketsPage() {
                                       <Button
                                         onClick={() =>
                                           downloadQRCode(
-                                            selectedGroup.tickets[
-                                              currentTicketIndex
-                                            ].qrCode,
                                             selectedGroup.tickets[
                                               currentTicketIndex
                                             ].ticketId,

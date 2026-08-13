@@ -117,26 +117,27 @@ exports.getOrganizersWithStats = async (req, res) => {
           as: 'events'
         }
       },
-      // Lookup tickets for revenue calculation
+      // Lookup tickets for revenue calculation.
+      //
+      // This used to nest a second $lookup inside: for every user on the page it
+      // joined the ENTIRE tickets collection to events, $unwind-ed it, and only
+      // then filtered on eventData.organizer — a full collection scan plus one
+      // event lookup per ticket, repeated per user. Ten users per page meant ten
+      // full scans.
+      //
+      // The organizer's events were already fetched by the $lookup above, so we
+      // join on their ids directly. localField/foreignField uses the `event`
+      // index on tickets, and (MongoDB 5.0+) can be combined with `pipeline` so
+      // the filtering and projection still happen inside the join — the
+      // projection matters, since it keeps the 50 KB qrCode blobs out of memory.
       {
         $lookup: {
           from: 'tickets',
-          let: { organizerId: '$_id' },
+          localField: 'events._id',
+          foreignField: 'event',
           pipeline: [
             {
-              $lookup: {
-                from: 'events',
-                localField: 'event',
-                foreignField: '_id',
-                as: 'eventData'
-              }
-            },
-            {
-              $unwind: '$eventData'
-            },
-            {
               $match: {
-                $expr: { $eq: ['$eventData.organizer', '$$organizerId'] },
                 price: { $gt: 0 },
                 status: { $nin: ['cancelled', 'failed', 'expired'] }
               }

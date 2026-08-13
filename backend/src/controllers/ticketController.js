@@ -16,6 +16,10 @@ const {
 } = require("./invitationEmailController");
 const { sendSMS } = require("../utils/sms");
 const {
+  renderTicketQrSvg,
+  renderTicketQrPng,
+} = require("../utils/qrRenderer");
+const {
   sendTicketConfirmationEmail,
   isPlaceholderEmail,
 } = require("../utils/ticketConfirmationEmail");
@@ -2426,8 +2430,68 @@ const createOnDoorTicket = async (req, res) => {
   }
 };
 
+// Serve a ticket's QR image, rendered fresh from the ticket's own fields.
+//
+// These used to live on the document as a base64 data URI averaging 54 KB —
+// 99% of the ticket, almost all of it the same logo repeated per row. Rendering
+// costs a few milliseconds and stores nothing.
+//
+// The payload is unchanged from what the old pre-save hook produced, so images
+// re-rendered for existing tickets scan exactly as before. (The one field that
+// can drift is the holder's display name if they renamed themselves since
+// purchase; the scanner reads only `tid` and re-fetches the ticket, so that is
+// cosmetic.)
+const getTicketQr = async (req, res) => {
+  try {
+    const { ticketId, ext } = req.params;
+
+    const ticket = await Ticket.findOne({ ticketId }).select(
+      "ticketId ticketType purchaseQuantity isInvitation guestName user"
+    );
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    // A ticket's QR never changes, so let the browser and any proxy in front of
+    // us keep it. `private` because the URL is a capability — we don't want it
+    // sitting in a shared cache.
+    res.set("Cache-Control", "private, max-age=86400, immutable");
+
+    if (ext === "png") {
+      // Clamped: the width drives a bitmap allocation, so an unbounded value
+      // from the query string is a trivial way to burn memory and CPU.
+      const requested = parseInt(req.query.w, 10);
+      const width = Number.isFinite(requested)
+        ? Math.min(2048, Math.max(200, requested))
+        : 400;
+
+      const png = await renderTicketQrPng(ticket, width);
+      res.type("image/png");
+      res.set(
+        "Content-Disposition",
+        `inline; filename="ticket-${ticketId}.png"`
+      );
+      return res.send(png);
+    }
+
+    const svg = await renderTicketQrSvg(ticket);
+    res.type("image/svg+xml");
+    return res.send(svg);
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status === StatusCodes.INTERNAL_SERVER_ERROR) {
+      console.error("Error rendering ticket QR:", error);
+    }
+    res.status(status).json({
+      success: false,
+      message: error.message || "Failed to render QR code",
+    });
+  }
+};
+
 module.exports = {
   createTicket,
+  getTicketQr,
   createInvitationTicket,
   getUserTickets,
   getEventTickets,

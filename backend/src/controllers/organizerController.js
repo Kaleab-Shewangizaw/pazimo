@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const Event = require("../models/Event");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { getOrganizerEventIds } = require("../utils/ticketRevenueQuery");
 
 // Sign up organizer
 exports.signUp = async (req, res) => {
@@ -485,21 +486,23 @@ exports.getTopCustomers = async (req, res) => {
       });
     }
 
+    // Resolve the organizer's events first so the ticket scan is bounded.
+    //
+    // This pipeline used to join every ticket in the collection to its event,
+    // $unwind it, and only then filter on eventDetails.organizer — an unindexed
+    // filter after a join, so it walked the whole collection every time the
+    // organizer dashboard loaded. Matching on `event: { $in: [...] }` uses the
+    // ticket indexes that lead with `event`.
+    const organizerEventIds = await getOrganizerEventIds(organizerId);
+    if (organizerEventIds.length === 0) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
     const topCustomers = await Ticket.aggregate([
-      // 1. Lookup events to filter by organizer
-      {
-        $lookup: {
-          from: "events",
-          localField: "event",
-          foreignField: "_id",
-          as: "eventDetails",
-        },
-      },
-      { $unwind: "$eventDetails" },
-      // 2. Filter tickets for this organizer's events and ensure they are active/used (excluding invitation tickets)
+      // 1. Only this organizer's tickets, active/used, excluding invitations
       {
         $match: {
-          "eventDetails.organizer": new mongoose.Types.ObjectId(organizerId),
+          event: { $in: organizerEventIds },
           status: { $in: ["active", "used", "confirmed"] },
           isInvitation: { $ne: true },
         },

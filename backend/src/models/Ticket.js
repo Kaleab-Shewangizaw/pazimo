@@ -176,7 +176,26 @@ TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
 TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
 
+// QR images are no longer generated or stored here.
+//
+// This hook used to build a branded SVG and persist it as a base64 data URI on
+// every ticket. It averaged 54 KB — 99% of the document — because the 26 KB
+// Pazimo logo was base64'd into the SVG and the whole SVG base64'd again, once
+// per ticket. At a million tickets that is ~50 GB of the same logo in the
+// hottest collection, on a server with 11 GB of RAM.
+//
+// The payload is fully derived from fields already on this document, so the
+// image is rendered on demand instead: see utils/qrRenderer.js, served by
+// GET /api/tickets/:ticketId/qr.svg. Verified against every existing ticket —
+// the re-rendered code carries the same ticketId, which is the only field the
+// scanner reads (see validateQRCode).
+//
+// The old implementation is preserved below, disabled, until the backfill that
+// strips stored qrCode values has run everywhere.
+const LEGACY_QR_ON_SAVE = false;
+
 TicketSchema.pre("save", async function (next) {
+  if (!LEGACY_QR_ON_SAVE) return next();
   if (this.qrCode) return next();
 
   try {

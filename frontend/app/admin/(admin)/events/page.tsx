@@ -1,4 +1,5 @@
 "use client";
+import { ticketQrUrl } from "@/lib/ticketQr";
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -1179,10 +1180,10 @@ export default function EventsPage() {
                 </p>
               </div>
 
-              {generatedTicket.qrCode && (
+              {generatedTicket.ticketId && (
                 <div className="border p-4 rounded-lg bg-white dark:bg-gray-900 dark:border-gray-700">
                   <img
-                    src={generatedTicket.qrCode}
+                    src={ticketQrUrl(generatedTicket.ticketId)}
                     alt="Ticket QR Code"
                     className="w-48 h-48 object-contain"
                   />

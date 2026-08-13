@@ -24,6 +24,7 @@ const {
   createOnDoorTicket,
   getOrganizerTickets,
   deleteTicket,
+  getTicketQr,
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
@@ -799,6 +800,15 @@ router.get("/invitation/:ticketId", getInvitationTicket);
 router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
 router.get("/public/details/:id", getPublicTicketDetails);
+
+// Ticket QR image, rendered on demand rather than stored on the document.
+//
+// Public on purpose: it sits alongside /public/details/:id and the public
+// /ticket/[ticketId] page, and follows the same capability-URL model — the
+// ticketId is an unguessable UUID and is the only thing protecting it. The
+// image carries no more than that page already shows.
+router.get("/:ticketId/qr.:ext(svg|png)", getTicketQr);
+
 router.post("/payment/cancel", cancelPaymentIntent);
 router.patch(
   "/:ticketId/check-in",

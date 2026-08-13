@@ -1,4 +1,5 @@
 "use client";
+import { ticketQrUrl } from "@/lib/ticketQr";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -7,7 +8,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
-import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { downloadTicketQr } from "@/lib/ticketQr";
 
 type Ticket = {
   _id: string;
@@ -123,8 +124,10 @@ export default function TicketSuccessPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user, token, searchParams]);
 
-  const downloadQRCode = (qrCodeUrl: string, ticketId: string) => {
-    downloadHighQualityQR(qrCodeUrl, `ticket-${ticketId}.png`);
+  const downloadQRCode = (ticketId: string) => {
+    downloadTicketQr(ticketId, `ticket-${ticketId}.png`).catch(() =>
+      toast.error("Could not download the QR code")
+    );
   };
 
   if (loading) {
@@ -166,7 +169,8 @@ export default function TicketSuccessPage() {
 
                 <div className="bg-white p-4 rounded-lg border inline-block mb-4">
                   <Image
-                    src={ticket.qrCode || "/events/sampleqr.png"}
+                    src={ticket.ticketId ? ticketQrUrl(ticket.ticketId) : "/events/sampleqr.png"}
+                    unoptimized
                     alt={`Ticket ${ticket.ticketId}`}
                     width={150}
                     height={150}
@@ -188,7 +192,7 @@ export default function TicketSuccessPage() {
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  onClick={() => downloadQRCode(ticket.qrCode, ticket.ticketId)}
+                  onClick={() => downloadQRCode(ticket.ticketId)}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download QR

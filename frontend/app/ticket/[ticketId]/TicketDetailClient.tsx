@@ -4,7 +4,8 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { Loader2, Download } from "lucide-react";
 import Image from "next/image";
-import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { ticketQrUrl, downloadTicketQr } from "@/lib/ticketQr";
+import { toast } from "sonner";
 
 interface TicketDetails {
   _id: string;
@@ -106,8 +107,10 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
   }
 
   const handleDownload = () => {
-    if (!ticket?.qrCode) return;
-    downloadHighQualityQR(ticket.qrCode, `ticket-${ticket.ticketId}.png`);
+    if (!ticket?.ticketId) return;
+    downloadTicketQr(ticket.ticketId, `ticket-${ticket.ticketId}.png`).catch(() =>
+      toast.error("Could not download the QR code")
+    );
   };
 
   const dateLine = `${formatEventDate(ticket.event.startDate)}${
@@ -220,7 +223,8 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
             width={256}
             height={256}
             priority
-            src={ticket.qrCode}
+            src={ticketQrUrl(ticket.ticketId)}
+            unoptimized
             alt="Ticket QR Code"
             className="w-34 h-34"
           />

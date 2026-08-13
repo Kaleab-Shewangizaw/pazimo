@@ -1,4 +1,5 @@
 "use client"
+import { ticketQrUrl } from "@/lib/ticketQr";
 
 import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
@@ -276,14 +277,14 @@ export default function TicketDetailsPage({ params }: { params: Promise<{ id: st
         </Card>
 
         {/* QR Code */}
-        {ticket.qrCode && (
+        {ticket.ticketId && (
           <Card>
             <CardHeader>
               <CardTitle>Ticket QR Code</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex justify-center">
-                <img src={ticket.qrCode} alt="Ticket QR Code" className="w-48 h-48" />
+                <img src={ticketQrUrl(ticket.ticketId)} alt="Ticket QR Code" className="w-48 h-48" />
               </div>
             </CardContent>
           </Card>

@@ -4,126 +4,86 @@ const Withdrawal = require("../models/Withdrawal");
 const Loan = require("../models/Loan");
 const mongoose = require("mongoose");
 const { getOrganizerLoanFinance } = require("./loanRepaymentService");
+const {
+  getOrganizerEvents,
+  organizerTicketMatch,
+  TICKET_QUANTITY_EXPR,
+} = require("../utils/ticketRevenueQuery");
 
 const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
-  // Use aggregation pipeline for much faster calculation
-  const balanceData = await Ticket.aggregate([
-    {
-      $lookup: {
-        from: "events",
-        localField: "event",
-        foreignField: "_id",
-        as: "eventData"
-      }
-    },
-    {
-      $unwind: "$eventData"
-    },
-    {
-      $match: {
-        "eventData.organizer": new mongoose.Types.ObjectId(organizerId),
-        ...(normalizedCurrency === "ETB"
-          ? {
-              $or: [{ currency: "ETB" }, { currency: { $exists: false } }],
-            }
-          : { currency: normalizedCurrency }),
-        price: { $gt: 0 },
-        status: { $nin: ["cancelled", "failed", "expired"] },
-        $or: [
-          { paymentStatus: { $exists: false } },
-          { paymentStatus: { $nin: ["cancelled", "failed"] } }
-        ]
-      }
-    },
-    // Normalize ticket quantity to account for multi-person tickets
-    {
-      $addFields: {
-        ticketQuantity: {
-          $cond: [
-            { $gt: ["$purchaseQuantity", 0] },
-            "$purchaseQuantity",
-            {
-              $cond: [
-                { $gt: ["$ticketCount", 0] },
-                "$ticketCount",
-                1
-              ]
-            }
-          ]
-        }
-      }
-    },
-    {
-      $facet: {
-        revenue: [
-          {
-            $group: {
-              _id: null,
-              totalRevenue: { $sum: "$price" },
-              totalTickets: { $sum: "$ticketQuantity" }
-            }
-          }
-        ],
-        statusBreakdown: [
-          {
-            $group: {
-              _id: "$status",
-              revenue: { $sum: "$price" }
-            }
-          }
-        ],
-        eventBreakdown: [
-          {
-            $group: {
-              _id: {
-                eventId: "$eventData._id",
-                eventTitle: "$eventData.title"
+
+  // Resolve the organizer's events first, then match tickets by event id.
+  //
+  // This pipeline used to begin with a $lookup into events, $unwind, and only
+  // then $match on eventData.organizer — which meant Mongo scanned every ticket
+  // in the collection and did one event lookup per row before discarding almost
+  // all of them. No index can help a filter that runs after a join. Fetching
+  // event ids up front uses Event { organizer: 1 }, and the resulting
+  // `event: { $in: [...] }` uses the ticket indexes that lead with `event`.
+  //
+  // Event titles and ticketTypes came from the joined document; they now come
+  // from this same query, joined in memory afterwards.
+  const events = await getOrganizerEvents(organizerId, "_id title ticketTypes");
+  const eventIds = events.map((e) => e._id);
+  const eventById = new Map(events.map((e) => [String(e._id), e]));
+
+  const balanceData = eventIds.length
+    ? await Ticket.aggregate([
+        { $match: organizerTicketMatch(eventIds, normalizedCurrency) },
+        // Normalize ticket quantity to account for multi-person tickets
+        { $addFields: { ticketQuantity: TICKET_QUANTITY_EXPR } },
+        {
+          $facet: {
+            revenue: [
+              {
+                $group: {
+                  _id: null,
+                  totalRevenue: { $sum: "$price" },
+                  totalTickets: { $sum: "$ticketQuantity" },
+                },
               },
-              totalRevenue: { $sum: "$price" },
-              ticketsSold: { $sum: "$ticketQuantity" },
-              onDoorRevenue: {
-                $sum: { $cond: ["$isOnDoor", "$price", 0] }
+            ],
+            statusBreakdown: [
+              { $group: { _id: "$status", revenue: { $sum: "$price" } } },
+            ],
+            eventBreakdown: [
+              {
+                $group: {
+                  _id: "$event",
+                  totalRevenue: { $sum: "$price" },
+                  ticketsSold: { $sum: "$ticketQuantity" },
+                  onDoorRevenue: { $sum: { $cond: ["$isOnDoor", "$price", 0] } },
+                  onlineRevenue: {
+                    $sum: { $cond: [{ $not: "$isOnDoor" }, "$price", 0] },
+                  },
+                  onDoorTickets: {
+                    $sum: { $cond: ["$isOnDoor", "$ticketQuantity", 0] },
+                  },
+                  onlineTickets: {
+                    $sum: { $cond: [{ $not: "$isOnDoor" }, "$ticketQuantity", 0] },
+                  },
+                },
               },
-              onlineRevenue: {
-                $sum: { $cond: [{ $not: "$isOnDoor" }, "$price", 0] }
+            ],
+            typeBreakdown: [
+              {
+                $group: {
+                  _id: {
+                    eventId: "$event",
+                    ticketType: "$ticketType",
+                    isOnDoor: { $eq: ["$isOnDoor", true] },
+                  },
+                  totalSold: { $sum: "$ticketQuantity" },
+                  totalRevenue: { $sum: "$price" },
+                },
               },
-              onDoorTickets: {
-                $sum: { $cond: ["$isOnDoor", "$ticketQuantity", 0] }
-              },
-              onlineTickets: {
-                $sum: { $cond: [{ $not: "$isOnDoor" }, "$ticketQuantity", 0] }
-              }
-            }
-          }
-        ],
-        typeBreakdown: [
-          {
-            $group: {
-              _id: {
-                eventId: "$eventData._id",
-                ticketType: "$ticketType",
-                isOnDoor: { $eq: ["$isOnDoor", true] }
-              },
-              totalSold: { $sum: "$ticketQuantity" },
-              totalRevenue: { $sum: "$price" },
-              eventTicketTypes: { $first: "$eventData.ticketTypes" }
-            }
-          }
-        ],
-        eventCount: [
-          {
-            $group: {
-              _id: "$eventData._id"
-            }
+            ],
+            eventCount: [{ $group: { _id: "$event" } }, { $count: "total" }],
           },
-          {
-            $count: "total"
-          }
-        ]
-      }
-    }
-  ]);
+        },
+      ])
+    : [];
 
   // Get withdrawal stats in parallel
   const withdrawalCurrencyMatch =
@@ -215,8 +175,9 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     if (!typeBreakdownByEvent.has(eventKey)) {
       typeBreakdownByEvent.set(eventKey, []);
     }
+    const eventTicketTypes = eventById.get(eventKey)?.ticketTypes;
     typeBreakdownByEvent.get(eventKey).push({
-      ticketType: resolveTicketTypeName(item._id.ticketType, item.eventTicketTypes),
+      ticketType: resolveTicketTypeName(item._id.ticketType, eventTicketTypes),
       isOnDoor: item._id.isOnDoor,
       totalSold: item.totalSold,
       totalRevenue: item.totalRevenue,
@@ -226,15 +187,15 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
 
   // Format revenue breakdown by event
   const revenueBreakdown = (balanceData[0]?.eventBreakdown || []).map(item => ({
-    eventId: item._id.eventId,
-    eventTitle: item._id.eventTitle,
+    eventId: item._id,
+    eventTitle: eventById.get(String(item._id))?.title,
     totalRevenue: item.totalRevenue,
     totalTicketsSold: item.ticketsSold,
     onDoorRevenue: item.onDoorRevenue,
     onDoorTicketsSold: item.onDoorTickets,
     onlineRevenue: item.onlineRevenue,
     onlineTicketsSold: item.onlineTickets,
-    ticketTypeBreakdown: typeBreakdownByEvent.get(item._id.eventId.toString()) || []
+    ticketTypeBreakdown: typeBreakdownByEvent.get(String(item._id)) || []
   }));
 
   const totalEvents = balanceData[0]?.eventCount[0]?.total || 0;
