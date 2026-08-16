@@ -53,6 +53,23 @@ const WithdrawalSchema = new mongoose.Schema(
     transactionId: {
       type: String,
     },
+    // Which pool this withdrawal draws from.
+    //
+    // Ticket and beverage revenue are separate balances with separate
+    // withdrawal requests, so an organizer settles bar takings independently of
+    // door takings. They share this one model and one approval flow on purpose:
+    // a parallel BeverageWithdrawal would duplicate the balance check, the
+    // audit trail and the admin queue, which is how beverage revenue became
+    // invisible to money in the first place.
+    //
+    // Every row that existed before this field is ticket revenue.
+    stream: {
+      type: String,
+      enum: ["tickets", "beverages"],
+      default: "tickets",
+      required: true,
+    },
+
     // Legacy field. Borrowed Pazimo Capital principal is now credited into the
     // single ticket-revenue balance (see financeService.calculateOrganizerBalance),
     // so every withdrawal draws that one pool regardless of source. Kept only so
@@ -76,6 +93,7 @@ const WithdrawalSchema = new mongoose.Schema(
 
 // Add index for faster queries
 WithdrawalSchema.index({ organizer: 1, status: 1 });
+WithdrawalSchema.index({ organizer: 1, stream: 1, currency: 1, status: 1 });
 WithdrawalSchema.index({ organizer: 1, currency: 1, status: 1 });
 WithdrawalSchema.index({ organizer: 1, source: 1, status: 1 });
 WithdrawalSchema.index({ createdAt: -1 });

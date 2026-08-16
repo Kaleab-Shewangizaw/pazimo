@@ -1,10 +1,15 @@
 const { StatusCodes } = require("http-status-codes");
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
+const BeverageSale = require("../models/BeverageSale");
 const {
   validTicketMatch,
   revenueAccumulators,
 } = require("../utils/ticketRevenueQuery");
+const {
+  validBeverageSaleMatch,
+  beverageRevenueAccumulators,
+} = require("../utils/beverageRevenueQuery");
 const {
   DEFAULT_COMMISSION_RATE,
   MIN_COMMISSION_RATE,
@@ -35,14 +40,32 @@ const getCommissionSummary = async (req, res) => {
       if (req.query.to) match.createdAt.$lte = new Date(req.query.to);
     }
 
-    const [row] = await Ticket.aggregate([
-      { $match: match },
-      { $group: { _id: null, ticketCount: { $sum: 1 }, ...revenueAccumulators() } },
+    // Beverage sales are ETB-only today, so the USD view has a ticket stream
+    // and an empty beverage one rather than a pointless scan.
+    const bevMatch = { ...validBeverageSaleMatch(currency) };
+    if (match.createdAt) bevMatch.soldAt = match.createdAt;
+
+    const [[row], [bev]] = await Promise.all([
+      Ticket.aggregate([
+        { $match: match },
+        { $group: { _id: null, ticketCount: { $sum: 1 }, ...revenueAccumulators() } },
+      ]),
+      currency === "ETB"
+        ? BeverageSale.aggregate([
+            { $match: bevMatch },
+            { $group: { _id: null, salesCount: { $sum: 1 }, ...beverageRevenueAccumulators() } },
+          ])
+        : Promise.resolve([]),
     ]);
 
     const gross = round2(row?.grossRevenue || 0);
     const commission = round2(row?.pazimoCommission || 0);
     const vat = round2(row?.vatOnCommission || 0);
+
+    const bevGross = round2(bev?.grossRevenue || 0);
+    const bevCommission = round2(bev?.pazimoCommission || 0);
+    const bevVat = round2(bev?.vatOnCommission || 0);
+    const bevNet = round2(bev?.organizerRevenue || 0);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -50,16 +73,34 @@ const getCommissionSummary = async (req, res) => {
         currency,
         ticketCount: row?.ticketCount || 0,
 
-        // Card 1 — everything collected from buyers, before anything is taken.
-        totalCollected: gross,
+        // The three cards show tickets + beverages together, because that is
+        // the whole business. Each stream is broken out below so the split can
+        // be shown alongside.
+        totalCollected: round2(gross + bevGross),
+        organizerNet: round2((row?.organizerRevenue || 0) + bevNet),
+        pazimoCollected: round2(commission + vat + bevCommission + bevVat),
+        pazimoCommission: round2(commission + bevCommission),
+        vatOnCommission: round2(vat + bevVat),
 
-        // Card 2 — what the organizers keep once commission and VAT are out.
-        organizerNet: round2(row?.organizerRevenue || 0),
-
-        // Card 3 — Pazimo's side: commission plus the VAT charged on it.
-        pazimoCollected: round2(commission + vat),
-        pazimoCommission: commission,
-        vatOnCommission: vat,
+        streams: {
+          tickets: {
+            totalCollected: gross,
+            organizerNet: round2(row?.organizerRevenue || 0),
+            pazimoCommission: commission,
+            vatOnCommission: vat,
+            pazimoCollected: round2(commission + vat),
+            count: row?.ticketCount || 0,
+          },
+          beverages: {
+            totalCollected: bevGross,
+            organizerNet: bevNet,
+            pazimoCommission: bevCommission,
+            vatOnCommission: bevVat,
+            pazimoCollected: round2(bevCommission + bevVat),
+            count: bev?.salesCount || 0,
+            unitsSold: bev?.unitsSold || 0,
+          },
+        },
 
         // Blended, because events sit on different rates.
         effectiveCommissionRate: gross > 0 ? commission / gross : 0,
@@ -89,7 +130,7 @@ const listEventCommissions = async (req, res) => {
 
     const [events, total] = await Promise.all([
       Event.find(query)
-        .select("_id title status startDate organizer commissionRate")
+        .select("_id title status startDate organizer commissionRate beverageCommissionRate")
         .populate("organizer", "firstName lastName email")
         .sort("-createdAt")
         .skip((page - 1) * limit)
@@ -100,21 +141,36 @@ const listEventCommissions = async (req, res) => {
 
     // One aggregation for the whole page rather than one per event.
     const ids = events.map((e) => e._id);
-    const rows = ids.length
-      ? await Ticket.aggregate([
-          { $match: { event: { $in: ids }, ...validTicketMatch(currency) } },
-          { $group: { _id: "$event", ticketCount: { $sum: 1 }, ...revenueAccumulators() } },
-        ])
-      : [];
+    const [rows, bevRows] = await Promise.all([
+      ids.length
+        ? Ticket.aggregate([
+            { $match: { event: { $in: ids }, ...validTicketMatch(currency) } },
+            { $group: { _id: "$event", ticketCount: { $sum: 1 }, ...revenueAccumulators() } },
+          ])
+        : [],
+      ids.length && currency === "ETB"
+        ? BeverageSale.aggregate([
+            { $match: { event: { $in: ids }, ...validBeverageSaleMatch(currency) } },
+            { $group: { _id: "$event", salesCount: { $sum: 1 }, ...beverageRevenueAccumulators() } },
+          ])
+        : [],
+    ]);
     const byEvent = new Map(rows.map((r) => [String(r._id), r]));
+    const bevByEvent = new Map(bevRows.map((r) => [String(r._id), r]));
 
     const data = events.map((event) => {
       const r = byEvent.get(String(event._id)) || {};
+      const b = bevByEvent.get(String(event._id)) || {};
       const rate = normalizeCommissionRate(
         event.commissionRate ?? DEFAULT_COMMISSION_RATE
       );
+      const bevRate = normalizeCommissionRate(
+        event.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
+      );
       const commission = round2(r.pazimoCommission || 0);
       const vat = round2(r.vatOnCommission || 0);
+      const bevCommission = round2(b.pazimoCommission || 0);
+      const bevVat = round2(b.vatOnCommission || 0);
       return {
         _id: event._id,
         title: event.title,
@@ -132,6 +188,16 @@ const listEventCommissions = async (req, res) => {
         pazimoCommission: commission,
         vatOnCommission: vat,
         pazimoCollected: round2(commission + vat),
+
+        // Beverages, reported as their own stream with their own rate.
+        beverageCommissionRate: bevRate,
+        beverageCommissionPercent: toPercent(bevRate),
+        beverageTotalCutPercent: toPercent(bevRate * (1 + VAT_RATE)),
+        beverageSalesCount: b.salesCount || 0,
+        beverageUnitsSold: b.unitsSold || 0,
+        beverageCollected: round2(b.grossRevenue || 0),
+        beverageOrganizerNet: round2(b.organizerRevenue || 0),
+        beveragePazimoCollected: round2(bevCommission + bevVat),
       };
     });
 
@@ -167,26 +233,39 @@ const listEventCommissions = async (req, res) => {
 const updateEventCommission = async (req, res) => {
   try {
     const { eventId } = req.params;
-    const raw = req.body.commissionRate;
 
-    // Accept either 0.04 or 4 — the UI sends a percentage, scripts send a rate.
-    const asNumber = Number(raw);
-    if (!Number.isFinite(asNumber)) {
+    // Either rate can be sent, alone or together. Accepts 0.04 or 4 — the UI
+    // sends a percentage, scripts tend to send a rate.
+    const parse = (raw, label) => {
+      if (raw === undefined || raw === null || raw === "") return undefined;
+      const n = Number(raw);
+      if (!Number.isFinite(n)) throw new Error(`${label} must be a number`);
+      const rate = n > 1 ? n / 100 : n;
+      if (rate < MIN_COMMISSION_RATE || rate > MAX_COMMISSION_RATE) {
+        throw new Error(
+          `${label} must be between ${toPercent(MIN_COMMISSION_RATE)}% and ${toPercent(MAX_COMMISSION_RATE)}%`
+        );
+      }
+      return rate;
+    };
+
+    let rate, beverageRate;
+    try {
+      rate = parse(req.body.commissionRate, "commissionRate");
+      beverageRate = parse(req.body.beverageCommissionRate, "beverageCommissionRate");
+    } catch (err) {
+      return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: err.message });
+    }
+
+    if (rate === undefined && beverageRate === undefined) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: "commissionRate must be a number",
-      });
-    }
-    const rate = asNumber > 1 ? asNumber / 100 : asNumber;
-
-    if (rate < MIN_COMMISSION_RATE || rate > MAX_COMMISSION_RATE) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        success: false,
-        message: `commissionRate must be between ${toPercent(MIN_COMMISSION_RATE)}% and ${toPercent(MAX_COMMISSION_RATE)}%`,
+        message: "Send commissionRate, beverageCommissionRate, or both",
       });
     }
 
-    const event = await Event.findById(eventId).select("title commissionRate");
+    const event = await Event.findById(eventId)
+      .select("title commissionRate beverageCommissionRate");
     if (!event) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -195,7 +274,9 @@ const updateEventCommission = async (req, res) => {
     }
 
     const previous = event.commissionRate ?? DEFAULT_COMMISSION_RATE;
-    event.commissionRate = rate;
+    const previousBeverage = event.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE;
+    if (rate !== undefined) event.commissionRate = rate;
+    if (beverageRate !== undefined) event.beverageCommissionRate = beverageRate;
     await event.save();
 
     // How many sales are already locked at the old rate — useful context for
@@ -205,15 +286,22 @@ const updateEventCommission = async (req, res) => {
       ...validTicketMatch(null),
     });
 
+    const effective = event.commissionRate;
+    const effectiveBeverage = event.beverageCommissionRate;
+
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
         _id: event._id,
         title: event.title,
         previousRate: previous,
-        commissionRate: rate,
-        commissionPercent: toPercent(rate),
-        totalCutPercent: toPercent(rate * (1 + VAT_RATE)),
+        previousBeverageRate: previousBeverage,
+        commissionRate: effective,
+        commissionPercent: toPercent(effective),
+        totalCutPercent: toPercent(effective * (1 + VAT_RATE)),
+        beverageCommissionRate: effectiveBeverage,
+        beverageCommissionPercent: toPercent(effectiveBeverage),
+        beverageTotalCutPercent: toPercent(effectiveBeverage * (1 + VAT_RATE)),
         appliesTo: "future sales only",
         ticketsAlreadySoldAtPreviousRate: alreadySold,
       },

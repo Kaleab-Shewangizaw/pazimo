@@ -243,6 +243,22 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 </span>
               </Link>
             )}
+            {beverageEligible && (
+              <Link
+                href="/organizer/beverages/withdrawals"
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
+                  isActive("/organizer/beverages/withdrawals")
+                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
+                }`}
+              >
+                <Wallet className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">
+                  Bar withdrawals
+                </span>
+              </Link>
+            )}
             <Link
               href="/organizer/campaign"
               onClick={handleLinkClick}
@@ -278,7 +294,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             >
               <Wallet className="h-5 w-5 flex-shrink-0" />
               <span className="font-medium text-sm sm:text-base">
-                Withdrawals
+                {/* Only worth qualifying when there is a second pool to confuse
+                    it with — bar takings are settled on the beverages page. */}
+                {beverageEligible ? "Ticket withdrawals" : "Withdrawals"}
               </span>
             </Link>
             <Link

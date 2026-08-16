@@ -191,6 +191,19 @@ const EventSchema = new mongoose.Schema(
       min: MIN_COMMISSION_RATE,
       max: MAX_COMMISSION_RATE,
     },
+
+    // Commission on drinks and snacks sold at this event, tracked and reported
+    // separately from ticket commission so an organizer can see "I made X on
+    // tickets and Y on drinks" as two figures. Same 3% default, but the two
+    // rates move independently — a venue may take a different cut on bar sales.
+    //
+    // Snapshotted per sale on BeverageSale.commissionRate, same as tickets.
+    beverageCommissionRate: {
+      type: Number,
+      default: DEFAULT_COMMISSION_RATE,
+      min: MIN_COMMISSION_RATE,
+      max: MAX_COMMISSION_RATE,
+    },
     bannerStatus: {
       type: Boolean,
       default: false,

@@ -4,6 +4,11 @@ const beverageController = require("../controllers/beverageController");
 const beverageSalesController = require("../controllers/beverageSalesController");
 const upload = require("../middlewares/upload");
 const {
+  getOrganizerBeverageFinance,
+  getAdminBeverageFinance,
+  listBeverageEvents,
+} = require("../controllers/beverageFinanceController");
+const {
   authenticateUser,
   restrictTo,
   requireBeverageEligible,
@@ -213,6 +218,33 @@ router.delete(
   restrictTo("organizer"),
   requireBeverageEligible,
   beverageController.removeEventBeverage
+);
+
+// Beverage finance — its own dashboard, separate from ticket revenue.
+// The organizer route serves cinemas too; they sell drinks the same way.
+router.get(
+  "/finance/organizer",
+  authenticateUser,
+  restrictTo("organizer", "cinema"),
+  getOrganizerBeverageFinance
+);
+router.get(
+  "/finance/organizer/:organizerId",
+  authenticateUser,
+  restrictTo("admin"),
+  getOrganizerBeverageFinance
+);
+router.get(
+  "/finance/events",
+  authenticateUser,
+  restrictTo("admin"),
+  listBeverageEvents
+);
+router.get(
+  "/finance/admin",
+  authenticateUser,
+  restrictTo("admin"),
+  getAdminBeverageFinance
 );
 
 module.exports = router;

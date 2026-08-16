@@ -6,6 +6,7 @@ import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BeverageDashboard } from "@/components/beverages/beverage-dashboard";
+import BeverageBalanceCard from "@/components/beverages/BeverageBalanceCard";
 import { Beer, ArrowLeft } from "lucide-react";
 
 export default function OrganizerBeveragesPage() {
@@ -65,10 +66,13 @@ export default function OrganizerBeveragesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Beverage sales</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          What you&apos;ve sold across your events, and how much stock is left.
+          What you&apos;ve sold across your events, how much stock is left, and your
+          bar balance — withdrawn here, separately from ticket revenue.
         </p>
       </div>
 
+      {/* Bar takings are withdrawn separately from ticket sales. */}
+      <BeverageBalanceCard token={token} />
       <BeverageDashboard scope="organizer" token={token || ""} />
     </div>
   );

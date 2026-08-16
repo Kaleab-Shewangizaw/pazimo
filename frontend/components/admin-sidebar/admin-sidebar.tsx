@@ -373,7 +373,18 @@ export default function AdminSidebar({
                           : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
                       }`}
                     >
-                      Withdrawal Requests
+                      Ticket Withdrawal 
+                    </Link>
+                    <Link
+                      href="/admin/withdrawals/beverages"
+                      onClick={onClose}
+                      className={`block p-2.5 rounded-xl text-sm transition-colors ${
+                        isActive("/admin/withdrawals/beverages")
+                          ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400"
+                          : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
+                      }`}
+                    >
+                      Beverage Withdrawal
                     </Link>
                   </div>
                 )}

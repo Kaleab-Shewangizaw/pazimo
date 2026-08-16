@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -213,7 +214,9 @@ export default function WithdrawalsPage() {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?page=${currentPage}&limit=${itemsPerPage}&status=${statusFilter}&currency=${selectedCurrency}`,
+        // `stream=tickets` keeps bar takings out of this history — those are
+        // requested and listed on the beverages dashboard instead.
+        `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?page=${currentPage}&limit=${itemsPerPage}&status=${statusFilter}&currency=${selectedCurrency}&stream=tickets`,
         {
           method: "GET",
           headers: {
@@ -355,6 +358,9 @@ export default function WithdrawalsPage() {
       const requestBody = {
         amount: Number.parseFloat(withdrawAmount),
         currency: selectedCurrency,
+        // Draws the ticket pool. Beverage requests are posted from the
+        // beverages dashboard with stream: "beverages".
+        stream: "tickets",
         bankDetails,
       };
 
@@ -452,9 +458,19 @@ export default function WithdrawalsPage() {
     <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-white dark:bg-black min-h-screen">
       {/* Header */}
       <div className="mb-6 sm:mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold dark:text-gray-100">Withdrawals</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold dark:text-gray-100">
+          Ticket Withdrawals
+        </h1>
         <p className="text-muted-foreground dark:text-gray-400 text-sm sm:text-base mt-1">
-          Manage your earnings and withdrawal requests
+          Your ticket revenue and the payouts drawn from it. Bar takings are a
+          separate balance — settle those on your{" "}
+          <Link
+            href="/organizer/beverages"
+            className="font-medium text-[#1a2d5a] dark:text-blue-400 hover:underline"
+          >
+            beverages dashboard
+          </Link>
+          .
         </p>
         <div className="mt-3 w-full sm:w-[180px]">
           <Select

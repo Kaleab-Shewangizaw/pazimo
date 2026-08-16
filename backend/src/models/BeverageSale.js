@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
 const { getNextSequence } = require("./Counter");
+const {
+  DEFAULT_COMMISSION_RATE,
+  normalizeCommissionRate,
+} = require("../config/rates");
 
 // The ledger of beverage sales — one row per purchase of one drink at one
 // event. This is the source of truth for revenue; EventBeverage.sold is only a
@@ -69,6 +73,18 @@ const BeverageSaleSchema = new mongoose.Schema(
       default: "ETB",
     },
 
+    // The commission rate this sale was made under, copied from the event at
+    // sale time and never rewritten — same reasoning as the unitPrice snapshot
+    // above and Ticket.commissionRate. Renegotiating an event's bar cut must
+    // not restate drink revenue that has already been reported or paid out.
+    //
+    // Absent on sales made before beverage commission existed; readers fall
+    // back to the 3% default (see utils/beverageRevenueQuery.js).
+    commissionRate: {
+      type: Number,
+      min: 0,
+    },
+
     // Who bought it. Optional: a guest checkout has no account, and the
     // contact fields below are what a door list would be built from.
     customer: {
@@ -106,6 +122,15 @@ const BeverageSaleSchema = new mongoose.Schema(
       default: "manual",
     },
 
+    // Ties an online sale back to the payment that funded it, so a basket
+    // bought during ticket checkout can be reconciled against the transaction
+    // and refunded alongside the ticket if the whole order is reversed.
+    paymentReference: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+
     soldAt: {
       type: Date,
       default: Date.now,
@@ -121,6 +146,36 @@ BeverageSaleSchema.index({ organizer: 1, soldAt: -1 });
 BeverageSaleSchema.index({ beverage: 1, soldAt: -1 });
 BeverageSaleSchema.index({ status: 1, soldAt: -1 });
 BeverageSaleSchema.index({ referenceNumber: 1 }, { unique: true, sparse: true });
+// Revenue queries scope by organizer or event and exclude refunds.
+BeverageSaleSchema.index({ organizer: 1, status: 1, soldAt: -1 });
+BeverageSaleSchema.index({ event: 1, status: 1 });
+
+// Snapshot the beverage commission rate at the moment of sale.
+//
+// In the model rather than in beverageSalesService, so any future sale path —
+// the checkout basket in B2, an import, a backfill — cannot forget it.
+BeverageSaleSchema.pre("validate", async function snapshotCommissionRate(next) {
+  if (!this.isNew) return next();
+  if (typeof this.commissionRate === "number") return next();
+  if (!this.event) return next();
+
+  try {
+    const EventModel = require("./Event");
+    const event = await EventModel.findById(this.event)
+      .select("beverageCommissionRate")
+      .lean();
+    this.commissionRate = normalizeCommissionRate(
+      event?.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
+    );
+    next();
+  } catch (error) {
+    // Never block a paid sale on a pricing lookup — fall back to the same
+    // default a reader would have assumed.
+    console.error("Beverage commission snapshot failed, using default:", error.message);
+    this.commissionRate = DEFAULT_COMMISSION_RATE;
+    next();
+  }
+});
 
 // pre-validate rather than pre-save so the value exists before Mongoose runs
 // schema validation on a new document.

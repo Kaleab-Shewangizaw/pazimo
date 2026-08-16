@@ -53,6 +53,15 @@ const createWithdrawal = async (req, res) => {
     const { amount, notes, bankDetails } = req.body;
     const currency = req.body.currency === "USD" ? "USD" : "ETB";
 
+    // Which pool this request draws from. Ticket and beverage revenue are
+    // withdrawn separately, so the balance check has to be scoped or an
+    // organizer could drain one pool using the other's balance.
+    const stream = req.body.stream === "beverages" ? "beverages" : "tickets";
+
+    if (stream === "beverages" && currency !== "ETB") {
+      throw new BadRequestError("Beverage sales are ETB only");
+    }
+
     if (req.user.role === "admin") {
       organizerId = req.body.organizerId;
       if (!organizerId) {
@@ -71,14 +80,23 @@ const createWithdrawal = async (req, res) => {
     // Ticket revenue and borrowed principal share one balance now — sync any
     // active advance to the latest ticket sales, then validate against it.
     await syncOrganizerLoans(organizerId, req);
-    const { availableBalance } = await calculateOrganizerBalance(
-      organizerId,
-      currency
-    );
+    const balance = await calculateOrganizerBalance(organizerId, currency);
 
-    // Validate amount
-    if (amount > availableBalance) {
-      throw new BadRequestError("Withdrawal amount exceeds available balance");
+    const availableBalance =
+      stream === "beverages"
+        ? balance.streams.beverages.availableBalance
+        : balance.streams.tickets.availableBalance;
+
+    const requested = Number(amount);
+    if (!Number.isFinite(requested) || requested <= 0) {
+      throw new BadRequestError("Withdrawal amount must be greater than zero");
+    }
+    if (requested > availableBalance) {
+      throw new BadRequestError(
+        stream === "beverages"
+          ? `Withdrawal exceeds your beverage balance of ${availableBalance.toFixed(2)} ${currency}`
+          : `Withdrawal exceeds your ticket balance of ${availableBalance.toFixed(2)} ${currency}`
+      );
     }
 
     // Telebirr takes a 2% cut on withdrawal payouts; that cost is now passed
@@ -93,6 +111,7 @@ const createWithdrawal = async (req, res) => {
     // Create withdrawal request
     const withdrawal = await Withdrawal.create({
       organizer: organizerId,
+      stream,
       amount,
       currency,
       notes,
@@ -216,6 +235,10 @@ const getAllWithdrawals = async (req, res) => {
     const query = {};
     if (status && status !== "all") query.status = status;
     if (organizerId) query.organizer = organizerId;
+    if (req.query.stream === "beverages") query.stream = "beverages";
+    else if (req.query.stream === "tickets") {
+      query.$and = [{ $or: [{ stream: "tickets" }, { stream: { $exists: false } }] }];
+    }
     if (currency === "ETB") {
       query.$or = [{ currency: "ETB" }, { currency: { $exists: false } }];
     } else if (currency === "USD") {
@@ -305,6 +328,11 @@ const getOrganizerWithdrawals = async (req, res) => {
     // Build query
     const query = { organizer: organizerId };
     if (status && status !== "all") query.status = status;
+    if (req.query.stream === "beverages") query.stream = "beverages";
+    else if (req.query.stream === "tickets") {
+      // Rows written before the split carry no stream and are ticket revenue.
+      query.$and = [{ $or: [{ stream: "tickets" }, { stream: { $exists: false } }] }];
+    }
     if (currency === "ETB") {
       query.$or = [{ currency: "ETB" }, { currency: { $exists: false } }];
     } else if (currency === "USD") {

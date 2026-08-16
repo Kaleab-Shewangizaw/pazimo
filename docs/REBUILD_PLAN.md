@@ -31,6 +31,13 @@ Also outstanding, unrelated to any phase:
 
 ---
 
+## Companion plan
+
+New revenue streams — beverages, concessions, cinema — are planned separately in
+[BEVERAGE_CINEMA_PLAN.md](./BEVERAGE_CINEMA_PLAN.md). Read both.
+
+---
+
 ## Context a new session needs
 
 Established facts, so nothing gets re-derived:

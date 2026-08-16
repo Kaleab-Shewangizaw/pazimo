@@ -11,6 +11,9 @@ const {
   revenueAccumulators,
 } = require("../utils/ticketRevenueQuery");
 const { round2 } = require("../config/rates");
+const {
+  getOrganizerBeverageRevenue,
+} = require("../utils/beverageRevenueQuery");
 
 const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
@@ -108,7 +111,8 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     },
     {
       $group: {
-        _id: null,
+        // Rows written before the split have no stream and are ticket revenue.
+        _id: { $ifNull: ["$stream", "tickets"] },
         pendingAmount: {
           $sum: { $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0] }
         },
@@ -139,10 +143,15 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const effectiveCommissionRate =
     totalRevenue > 0 ? pazimoCommission / totalRevenue : 0;
 
-  // Get withdrawal amounts
-  const withdrawalData = withdrawalStats[0] || { pendingAmount: 0, approvedAmount: 0 };
-  const pendingAmount = withdrawalData.pendingAmount;
-  const approvedAmount = withdrawalData.approvedAmount;
+  // Withdrawals, split by the pool they drew from.
+  const emptyWithdrawals = { pendingAmount: 0, approvedAmount: 0 };
+  const withdrawalsByStream = new Map(withdrawalStats.map((r) => [r._id, r]));
+  const ticketWithdrawals = withdrawalsByStream.get("tickets") || emptyWithdrawals;
+  const beverageWithdrawals = withdrawalsByStream.get("beverages") || emptyWithdrawals;
+
+  // Kept for the combined view and for callers that predate the split.
+  const pendingAmount = ticketWithdrawals.pendingAmount + beverageWithdrawals.pendingAmount;
+  const approvedAmount = ticketWithdrawals.approvedAmount + beverageWithdrawals.approvedAmount;
 
   // Pazimo Capital position. Borrowed principal is added to the withdrawable
   // balance (the organizer spends it like their own money); repayment is then
@@ -152,12 +161,40 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   // 3% commission already baked into organizerRevenue) — matching the spec.
   const loanFinance = await getOrganizerLoanFinance(organizerId, normalizedCurrency);
 
+  // Beverage sales are a separate reporting stream but the same pool of money:
+  // an organizer withdraws one balance, not two. Until this landed, drink
+  // revenue was recorded and then never reachable — no balance, no payout, and
+  // no commission taken. USD has no beverage sales (BeverageSale is ETB-only),
+  // so the lookup is skipped rather than returning zeroes from a scan.
+  const beverage =
+    normalizedCurrency === "ETB"
+      ? await getOrganizerBeverageRevenue(organizerId, "ETB")
+      : { grossRevenue: 0, pazimoCommission: 0, vatOnCommission: 0,
+          organizerRevenue: 0, unitsSold: 0, salesCount: 0 };
+
   // Calculate available balance
-  const availableBalance =
+  // Two pools, drawn independently.
+  //
+  // Pazimo Capital sits entirely on the ticket side: advances are underwritten
+  // against event revenue and repaid from a cut of ticket sales, so bar takings
+  // neither fund nor repay a loan. Keeping the loan out of the beverage pool is
+  // what lets an organizer with an outstanding advance still settle bar money.
+  const ticketAvailableBalance = round2(
     organizerRevenue +
-    loanFinance.principalCredited -
-    loanFinance.totalRepaidFromTickets -
-    (pendingAmount + approvedAmount);
+      loanFinance.principalCredited -
+      loanFinance.totalRepaidFromTickets -
+      (ticketWithdrawals.pendingAmount + ticketWithdrawals.approvedAmount)
+  );
+
+  const beverageAvailableBalance = round2(
+    beverage.organizerRevenue -
+      (beverageWithdrawals.pendingAmount + beverageWithdrawals.approvedAmount)
+  );
+
+  // The historical field name. Still the ticket pool, because every existing
+  // caller — the withdrawals screen, the admin list, the organizer dashboard —
+  // means "what can be withdrawn from ticket sales" by it.
+  const availableBalance = ticketAvailableBalance;
 
   // Format status breakdown
   const statusBreakdown = {};
@@ -229,6 +266,42 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     totalDeduction,
     // Blended rate across this organizer's events, for display.
     effectiveCommissionRate,
+
+    // The two revenue streams, reported separately because organizers and
+    // admins want them split — and combined, because the balance is one pool.
+    streams: {
+      tickets: {
+        availableBalance: ticketAvailableBalance,
+        pendingWithdrawals: round2(ticketWithdrawals.pendingAmount),
+        approvedWithdrawals: round2(ticketWithdrawals.approvedAmount),
+        grossRevenue: totalRevenue,
+        organizerRevenue,
+        pazimoCommission,
+        vatOnCommission,
+        pazimoCollected: totalDeduction,
+        ticketsSold: totalTicketsSold,
+      },
+      beverages: {
+        availableBalance: beverageAvailableBalance,
+        pendingWithdrawals: round2(beverageWithdrawals.pendingAmount),
+        approvedWithdrawals: round2(beverageWithdrawals.approvedAmount),
+        grossRevenue: round2(beverage.grossRevenue),
+        organizerRevenue: round2(beverage.organizerRevenue),
+        pazimoCommission: round2(beverage.pazimoCommission),
+        vatOnCommission: round2(beverage.vatOnCommission),
+        pazimoCollected: round2(beverage.pazimoCommission + beverage.vatOnCommission),
+        unitsSold: beverage.unitsSold,
+        salesCount: beverage.salesCount,
+      },
+    },
+    combined: {
+      grossRevenue: round2(totalRevenue + beverage.grossRevenue),
+      organizerRevenue: round2(organizerRevenue + beverage.organizerRevenue),
+      pazimoCollected: round2(
+        totalDeduction + beverage.pazimoCommission + beverage.vatOnCommission
+      ),
+    },
+
     pendingWithdrawals: pendingAmount,
     approvedWithdrawals: approvedAmount,
     availableBalance,
@@ -458,6 +531,42 @@ const calculateOrganizerBalanceLegacy = async (organizerId) => {
     totalDeduction,
     // Blended rate across this organizer's events, for display.
     effectiveCommissionRate,
+
+    // The two revenue streams, reported separately because organizers and
+    // admins want them split — and combined, because the balance is one pool.
+    streams: {
+      tickets: {
+        availableBalance: ticketAvailableBalance,
+        pendingWithdrawals: round2(ticketWithdrawals.pendingAmount),
+        approvedWithdrawals: round2(ticketWithdrawals.approvedAmount),
+        grossRevenue: totalRevenue,
+        organizerRevenue,
+        pazimoCommission,
+        vatOnCommission,
+        pazimoCollected: totalDeduction,
+        ticketsSold: totalTicketsSold,
+      },
+      beverages: {
+        availableBalance: beverageAvailableBalance,
+        pendingWithdrawals: round2(beverageWithdrawals.pendingAmount),
+        approvedWithdrawals: round2(beverageWithdrawals.approvedAmount),
+        grossRevenue: round2(beverage.grossRevenue),
+        organizerRevenue: round2(beverage.organizerRevenue),
+        pazimoCommission: round2(beverage.pazimoCommission),
+        vatOnCommission: round2(beverage.vatOnCommission),
+        pazimoCollected: round2(beverage.pazimoCommission + beverage.vatOnCommission),
+        unitsSold: beverage.unitsSold,
+        salesCount: beverage.salesCount,
+      },
+    },
+    combined: {
+      grossRevenue: round2(totalRevenue + beverage.grossRevenue),
+      organizerRevenue: round2(organizerRevenue + beverage.organizerRevenue),
+      pazimoCollected: round2(
+        totalDeduction + beverage.pazimoCommission + beverage.vatOnCommission
+      ),
+    },
+
     pendingWithdrawals: pendingAmount,
     approvedWithdrawals: approvedAmount,
     availableBalance,

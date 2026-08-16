@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { BeverageDashboard } from "@/components/beverages/beverage-dashboard";
+import BeverageEventsPanel from "@/components/beverages/BeverageEventsPanel";
 import { toast } from "sonner";
 import {
   getBeverageColorVars,
@@ -71,6 +72,7 @@ import {
   Check,
   Minus,
   LayoutDashboard,
+  Landmark,
 } from "lucide-react";
 
 type Eligibility = "eligible" | "not_eligible";
@@ -511,6 +513,9 @@ export default function BeveragesPage() {
                 <Badge className="ml-1.5 bg-amber-500 text-white">{beverageStats.total}</Badge>
               ) : null}
             </TabsTrigger>
+            <TabsTrigger value="events">
+              <Landmark className="h-4 w-4 mr-1.5" /> Events
+            </TabsTrigger>
             <TabsTrigger value="organizers">
               <Building2 className="h-4 w-4 mr-1.5" /> Organizers
             </TabsTrigger>
@@ -524,6 +529,13 @@ export default function BeveragesPage() {
 
           <TabsContent value="dashboard">
             <BeverageDashboard scope="admin" token={token || ""} />
+          </TabsContent>
+
+          {/* Events with a drinks line-up: bar takings per event, and the
+              beverage commission rate, editable inline. The equivalent of the
+              commission table on the tickets page, for the other stream. */}
+          <TabsContent value="events">
+            <BeverageEventsPanel token={token} />
           </TabsContent>
 
           {/* ---------------- Beverage catalogue tab ----------------
