@@ -163,10 +163,16 @@ const protect = async (req, res, next) => {
 };
 
 // ============================================================================
-// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, REVERT BY WEEKEND (2026-07-12)
+// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, REVERT BY 2026-09-20
 // ----------------------------------------------------------------------------
+// DEADLINE EXTENDED 2026-08-16. Originally due 2026-07-12; it ran five weeks
+// past that date still live in production. Extended by five more weeks by
+// decision on 2026-08-16 because the organizer mobile app release that removes
+// the need for it has not shipped. This is the SECOND deadline. Treat the new
+// date as firm: the longer this sits, the more it reads as permanent.
+//
 // The organizer mobile app has a bug (auth header commented out client-side)
-// that can't be fixed until the weekend release. Until then, GET /api/users/:id
+// that can't be fixed until that release. Until then, GET /api/users/:id
 // falls back to trusting the :id in the URL with NO token at all, IF that
 // account's role is admin/organizer. This is a real IDOR: anyone who has (or
 // guesses) an organizer/admin's Mongo id can read their email/phone/ban
@@ -174,6 +180,15 @@ const protect = async (req, res, next) => {
 // only admin/organizer, and only on this one route (PUT/DELETE/list are
 // untouched). Every use of the fallback path is logged below so usage can be
 // audited.
+//
+// BEFORE EXTENDING AGAIN: check the logged fallback hits below. If nothing has
+// hit the no-token path in a while, the app is already sending a credential and
+// this block can simply be deleted rather than extended a third time.
+//
+// A middle option, if the app still cannot send a standard header: delete ONLY
+// the no-token branch at the bottom of this function and keep extractToken(),
+// which already accepts the token from x-access-token, x-auth-token or ?token=.
+// That closes the IDOR while still tolerating a non-standard client.
 //
 // TO REVERT: delete this whole block and the `protectStrictOrTrustParamId`
 // export, then in userRoutes.js change the GET /:id route back to:
@@ -216,7 +231,7 @@ const protectStrictOrTrustParamId = async (req, res, next) => {
     }
 
     console.warn(
-      `TEMP-BYPASS-2026-07-10: unauthenticated ${req.method} ${req.originalUrl} allowed through with no token (role=${account.role}). Remove this bypass by 2026-07-12.`
+      `TEMP-BYPASS-2026-07-10: unauthenticated ${req.method} ${req.originalUrl} allowed through with no token (role=${account.role}). Remove this bypass by 2026-09-20 (deadline extended 2026-08-16).`
     );
 
     req.user = account;
