@@ -3,6 +3,7 @@ const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const Withdrawal = require('../models/Withdrawal');
 const mongoose = require('mongoose');
+const { revenueFieldsOverArray } = require('../utils/ticketRevenueQuery');
 
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -177,10 +178,11 @@ exports.getOrganizersWithStats = async (req, res) => {
               }
             }
           },
-          // Calculate revenues
+          // Split per ticket at the rates it was sold under. A flat 0.97/0.03
+          // stopped being true once commission became per event, and is far
+          // out for an event whose VAT Pazimo covers.
           totalRevenue: { $sum: '$tickets.price' },
-          organizerRevenue: { $multiply: [{ $sum: '$tickets.price' }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: '$tickets.price' }, 0.03] },
+          ...revenueFieldsOverArray('$tickets'),
           // Calculate total tickets sold (with quantities)
           totalTicketsSold: {
             $sum: {

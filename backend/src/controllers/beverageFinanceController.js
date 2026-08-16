@@ -11,10 +11,10 @@ const {
 } = require("../utils/beverageRevenueQuery");
 const {
   DEFAULT_COMMISSION_RATE,
-  VAT_RATE,
   round2,
   toPercent,
   normalizeCommissionRate,
+  totalCutPercentFor,
 } = require("../config/rates");
 
 // The beverage side of the business, as its own dashboard.
@@ -74,7 +74,7 @@ const getOrganizerBeverageFinance = async (req, res) => {
     const eventIds = perEvent.map((r) => r._id);
     const events = eventIds.length
       ? await Event.find({ _id: { $in: eventIds } })
-          .select("_id title startDate beverageCommissionRate")
+          .select("_id title startDate beverageCommissionRate coversOrganizerVat")
           .lean()
       : [];
     const byId = new Map(events.map((e) => [String(e._id), e]));
@@ -88,7 +88,10 @@ const getOrganizerBeverageFinance = async (req, res) => {
           organizerNet,
           pazimoCommission: round2(t.pazimoCommission || 0),
           vatOnCommission: round2(t.vatOnCommission || 0),
-          pazimoCollected: round2((t.pazimoCommission || 0) + (t.vatOnCommission || 0)),
+          organizerVat: round2(t.organizerVat || 0),
+          pazimoCollected: round2(
+            (t.pazimoCommission || 0) + (t.vatOnCommission || 0) + (t.organizerVat || 0)
+          ),
           unitsSold: t.unitsSold || 0,
           salesCount: t.salesCount || 0,
         },
@@ -105,18 +108,23 @@ const getOrganizerBeverageFinance = async (req, res) => {
           const rate = normalizeCommissionRate(
             event?.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
           );
+          const covered = Boolean(event?.coversOrganizerVat);
           return {
             eventId: r._id,
             title: event?.title || "Unknown event",
             startDate: event?.startDate,
             commissionRate: rate,
             commissionPercent: toPercent(rate),
-            totalCutPercent: toPercent(rate * (1 + VAT_RATE)),
+            coversOrganizerVat: covered,
+            totalCutPercent: totalCutPercentFor(rate, covered),
             salesCount: r.salesCount,
             unitsSold: r.unitsSold,
             grossRevenue: round2(r.grossRevenue),
             organizerNet: round2(r.organizerRevenue),
-            pazimoCollected: round2(r.pazimoCommission + r.vatOnCommission),
+            organizerVat: round2(r.organizerVat || 0),
+            pazimoCollected: round2(
+              r.pazimoCommission + r.vatOnCommission + (r.organizerVat || 0)
+            ),
           };
         }),
       },
@@ -191,7 +199,10 @@ const getAdminBeverageFinance = async (req, res) => {
           organizerNet: round2(t.organizerRevenue || 0),
           pazimoCommission: round2(t.pazimoCommission || 0),
           vatOnCommission: round2(t.vatOnCommission || 0),
-          pazimoCollected: round2((t.pazimoCommission || 0) + (t.vatOnCommission || 0)),
+          organizerVat: round2(t.organizerVat || 0),
+          pazimoCollected: round2(
+            (t.pazimoCommission || 0) + (t.vatOnCommission || 0) + (t.organizerVat || 0)
+          ),
           unitsSold: t.unitsSold || 0,
           salesCount: t.salesCount || 0,
         },
@@ -207,7 +218,10 @@ const getAdminBeverageFinance = async (req, res) => {
             unitsSold: r.unitsSold,
             grossRevenue: round2(r.grossRevenue),
             organizerNet: net,
-            pazimoCollected: round2(r.pazimoCommission + r.vatOnCommission),
+            organizerVat: round2(r.organizerVat || 0),
+            pazimoCollected: round2(
+              r.pazimoCommission + r.vatOnCommission + (r.organizerVat || 0)
+            ),
             pendingWithdrawals: round2(wd.pending),
             approvedWithdrawals: round2(wd.approved),
             availableBalance: round2(net - wd.pending - wd.approved),
@@ -260,7 +274,7 @@ const listBeverageEvents = async (req, res) => {
 
     const [events, total] = await Promise.all([
       Event.find(query)
-        .select("_id title status startDate organizer beverageCommissionRate")
+        .select("_id title status startDate organizer beverageCommissionRate coversOrganizerVat")
         .populate("organizer", "firstName lastName email")
         .sort("-startDate")
         .skip((page - 1) * limit)
@@ -300,6 +314,7 @@ const listBeverageEvents = async (req, res) => {
         const rate = normalizeCommissionRate(
           event.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
         );
+        const covered = Boolean(event.coversOrganizerVat);
         return {
           _id: event._id,
           title: event.title,
@@ -308,7 +323,8 @@ const listBeverageEvents = async (req, res) => {
           organizer: event.organizer,
           commissionRate: rate,
           commissionPercent: toPercent(rate),
-          totalCutPercent: toPercent(rate * (1 + VAT_RATE)),
+          coversOrganizerVat: covered,
+          totalCutPercent: totalCutPercentFor(rate, covered),
           drinksOffered: l.drinksOffered || 0,
           stockTotal: l.stockTotal || 0,
           stockSold: l.sold || 0,
@@ -317,7 +333,10 @@ const listBeverageEvents = async (req, res) => {
           unitsSold: r.unitsSold || 0,
           totalCollected: round2(r.grossRevenue || 0),
           organizerNet: round2(r.organizerRevenue || 0),
-          pazimoCollected: round2((r.pazimoCommission || 0) + (r.vatOnCommission || 0)),
+          organizerVat: round2(r.organizerVat || 0),
+          pazimoCollected: round2(
+            (r.pazimoCommission || 0) + (r.vatOnCommission || 0) + (r.organizerVat || 0)
+          ),
         };
       }),
       pagination: { total, page, pages: Math.ceil(total / limit), limit },

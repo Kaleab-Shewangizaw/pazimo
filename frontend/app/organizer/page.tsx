@@ -680,8 +680,9 @@ export default function OrganizerDashboard() {
     (sum, t: any) => sum + (t.price || 0),
     0
   );
-  const organizerRevenue = totalRevenue * 0.97;
-  const pazimoCommission = totalRevenue * 0.03;
+  // No client-side 3% split here: commission is per event and an organizer
+  // whose VAT Pazimo covers loses a further 15%. The API returns the real
+  // figures — recomputing them in the browser only invents a second answer.
 
   const totalWithdrawn = withdrawals
     .filter((w: any) => ["approved", "completed"].includes(w.status))

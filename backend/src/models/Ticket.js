@@ -7,6 +7,7 @@ const path = require("path");
 const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
+  organizerVatRateFor,
 } = require("../config/rates");
 function generateShortId() {
   const chars =
@@ -90,6 +91,18 @@ const TicketSchema = new mongoose.Schema(
     // on tickets sold before per-event rates existed; readers fall back to the
     // 3% default (see utils/ticketRevenueQuery.COMMISSION_RATE_EXPR).
     commissionRate: {
+      type: Number,
+      min: 0,
+    },
+
+    // The organizer's own VAT withheld on this ticket, when Pazimo covers the
+    // event (Event.coversOrganizerVat). 0 or absent means the organizer is
+    // licensed and settles their own VAT — which is every ticket sold before
+    // coverage existed, so readers treat missing as 0.
+    //
+    // Snapshotted for the same reason as commissionRate: switching coverage on
+    // must not retroactively withhold 15% from revenue already paid out.
+    organizerVatRate: {
       type: Number,
       min: 0,
     },
@@ -193,31 +206,41 @@ TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
 TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
 
-// Snapshot the commission rate this ticket is being sold under.
+// Snapshot the rates this ticket is being sold under.
 //
 // Done here rather than at each of the nine places that create tickets, so a
 // new creation path cannot forget it. Runs once, on insert only: an existing
-// ticket's rate is never rewritten, which is the whole point of the snapshot.
+// ticket's rates are never rewritten, which is the whole point of the snapshot.
 TicketSchema.pre("validate", async function snapshotCommissionRate(next) {
   if (!this.isNew) return next();
-  if (typeof this.commissionRate === "number") return next();
+  const hasCommission = typeof this.commissionRate === "number";
+  const hasOrganizerVat = typeof this.organizerVatRate === "number";
+  if (hasCommission && hasOrganizerVat) return next();
   if (!this.event) return next();
 
   try {
     // Required lazily to avoid a require cycle through the model registry.
     const EventModel = require("./Event");
     const event = await EventModel.findById(this.event)
-      .select("commissionRate")
+      .select("commissionRate coversOrganizerVat")
       .lean();
-    this.commissionRate = normalizeCommissionRate(
-      event?.commissionRate ?? DEFAULT_COMMISSION_RATE
-    );
+    if (!hasCommission) {
+      this.commissionRate = normalizeCommissionRate(
+        event?.commissionRate ?? DEFAULT_COMMISSION_RATE
+      );
+    }
+    if (!hasOrganizerVat) {
+      this.organizerVatRate = organizerVatRateFor(event?.coversOrganizerVat);
+    }
     next();
   } catch (error) {
     // A pricing lookup must never block a paid ticket from being issued. Fall
-    // back to the default rate — the same figure the reader would have used.
+    // back to the defaults — the same figures the reader would have used.
     console.error("Commission rate snapshot failed, using default:", error.message);
-    this.commissionRate = DEFAULT_COMMISSION_RATE;
+    if (!hasCommission) this.commissionRate = DEFAULT_COMMISSION_RATE;
+    // Not covering is the safe fallback: it leaves the money with the
+    // organizer rather than withholding tax Pazimo may not owe.
+    if (!hasOrganizerVat) this.organizerVatRate = 0;
     next();
   }
 });

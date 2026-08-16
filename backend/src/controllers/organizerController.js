@@ -5,7 +5,10 @@ const mongoose = require("mongoose");
 const Event = require("../models/Event");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { getOrganizerEventIds } = require("../utils/ticketRevenueQuery");
+const {
+  getOrganizerEventIds,
+  revenueFieldsOverArray,
+} = require("../utils/ticketRevenueQuery");
 
 // Sign up organizer
 exports.signUp = async (req, res) => {
@@ -688,8 +691,10 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $addFields: {
           revenue: { $sum: "$paidTickets.price" },
-          organizerRevenue: { $multiply: [{ $sum: "$paidTickets.price" }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: "$paidTickets.price" }, 0.03] },
+          // Split per ticket at the rates it was sold under; a flat 0.97/0.03
+          // is wrong for any event off the default and for any event whose VAT
+          // Pazimo covers.
+          ...revenueFieldsOverArray("$paidTickets"),
           category: {
             _id: "$categoryData._id",
             name: "$categoryData.name",
@@ -906,8 +911,10 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $addFields: {
           revenue: { $sum: "$paidTickets.price" },
-          organizerRevenue: { $multiply: [{ $sum: "$paidTickets.price" }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: "$paidTickets.price" }, 0.03] },
+          // Split per ticket at the rates it was sold under; a flat 0.97/0.03
+          // is wrong for any event off the default and for any event whose VAT
+          // Pazimo covers.
+          ...revenueFieldsOverArray("$paidTickets"),
           category: {
             _id: "$categoryData._id",
             name: "$categoryData.name",

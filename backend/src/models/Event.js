@@ -204,6 +204,26 @@ const EventSchema = new mongoose.Schema(
       min: MIN_COMMISSION_RATE,
       max: MAX_COMMISSION_RATE,
     },
+
+    // Whether Pazimo covers this organizer's own VAT on this event.
+    //
+    // A licensed organizer declares their 15% themselves and this stays off.
+    // An organizer without a licence cannot, so turning this on makes Pazimo
+    // withhold a further 15% of gross — on tickets and bar sales alike — and
+    // remit it to the government for them. At the 3% default that takes the
+    // organizer's total deduction from 3.45% to 18.45%.
+    //
+    // The withheld VAT is a liability, never revenue: commission stays at
+    // whatever commissionRate says, and every "Pazimo earned" figure ignores
+    // this entirely. That is the reason this is a separate flag instead of
+    // simply setting the commission to 18%.
+    //
+    // Like the rates above, this governs FUTURE sales only — each ticket and
+    // bar sale snapshots its own organizerVatRate.
+    coversOrganizerVat: {
+      type: Boolean,
+      default: false,
+    },
     bannerStatus: {
       type: Boolean,
       default: false,

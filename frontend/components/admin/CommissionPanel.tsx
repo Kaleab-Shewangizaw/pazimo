@@ -26,6 +26,8 @@ import {
   Wallet,
   Users,
   Landmark,
+  Receipt,
+  ShieldCheck,
   Percent,
   Search,
   Check,
@@ -37,16 +39,28 @@ import {
 const API = process.env.NEXT_PUBLIC_API_URL;
 type Currency = "ETB" | "USD";
 
-interface Summary {
-  currency: Currency;
-  ticketCount: number;
+/** One income stream's split. Every figure below belongs to that stream alone. */
+interface Stream {
   totalCollected: number;
   organizerNet: number;
-  pazimoCollected: number;
   pazimoCommission: number;
   vatOnCommission: number;
+  organizerVat: number;
+  taxPayable: number;
+  pazimoCollected: number;
+  count: number;
   effectiveCommissionRate: number;
+}
+
+interface Summary {
+  currency: Currency;
   vatRate: number;
+  organizerVatRate: number;
+  // The response also carries combined tickets+beverages totals at the top
+  // level. They are deliberately not typed here: this panel is the admin
+  // TICKETS page, and reading them is what made it report bar takings as
+  // ticket sales.
+  streams: { tickets: Stream; beverages: Stream };
 }
 
 interface EventRow {
@@ -56,11 +70,27 @@ interface EventRow {
   organizer?: { firstName?: string; lastName?: string; email?: string } | null;
   commissionRate: number;
   commissionPercent: number;
+  coversOrganizerVat: boolean;
+  organizerVatPercent: number;
   totalCutPercent: number;
   ticketCount: number;
   totalCollected: number;
   organizerNet: number;
+  pazimoCommission: number;
+  vatOnCommission: number;
+  organizerVat: number;
   pazimoCollected: number;
+}
+
+/** What PATCH /admin/commission/events/:id returns. */
+interface RateChange {
+  commissionPercent: number;
+  beverageCommissionPercent: number;
+  totalCutPercent: number;
+  beverageTotalCutPercent: number;
+  coversOrganizerVat: boolean;
+  organizerVatPercent: number;
+  ticketsAlreadySoldAtPreviousRate: number;
 }
 
 interface Defaults {
@@ -68,6 +98,7 @@ interface Defaults {
   minCommissionRate: number;
   maxCommissionRate: number;
   vatRate: number;
+  organizerVatRate: number;
 }
 
 export default function CommissionPanel({ token }: { token: string | null }) {
@@ -117,7 +148,42 @@ export default function CommissionPanel({ token }: { token: string | null }) {
     return () => clearTimeout(timer);
   }, [load, search]);
 
-  const saveRate = async (event: EventRow) => {
+  /**
+   * Both edits go through the same PATCH, so the "applies to future sales
+   * only" wording is written once and cannot drift between the two.
+   */
+  const patchEvent = async (
+    event: EventRow,
+    body: Record<string, unknown>,
+    summarise: (data: RateChange) => string
+  ) => {
+    try {
+      setSaving(true);
+      const res = await fetch(`${API}/api/admin/commission/events/${event._id}`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(body),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.success) throw new Error(payload.message);
+
+      const sold = payload.data.ticketsAlreadySoldAtPreviousRate;
+      toast.success(summarise(payload.data), {
+        description:
+          sold > 0
+            ? `Applies to future sales. ${sold.toLocaleString()} ticket${sold === 1 ? "" : "s"} already sold keep their original terms.`
+            : "Applies to future sales.",
+      });
+      setEditing(null);
+      load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the change");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRate = (event: EventRow) => {
     const percent = Number(draftPercent);
     if (!Number.isFinite(percent)) {
       toast.error("Enter a number, for example 3 or 2.5");
@@ -129,64 +195,68 @@ export default function CommissionPanel({ token }: { token: string | null }) {
       return;
     }
 
-    try {
-      setSaving(true);
-      const res = await fetch(`${API}/api/admin/commission/events/${event._id}`, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ commissionRate: percent }),
-      });
-      const payload = await res.json();
-      if (!res.ok || !payload.success) throw new Error(payload.message);
-
-      const sold = payload.data.ticketsAlreadySoldAtPreviousRate;
-      toast.success(
-        `${event.title} is now ${payload.data.commissionPercent}% ` +
-          `(${payload.data.totalCutPercent}% with VAT)`,
-        {
-          description:
-            sold > 0
-              ? `Applies to future sales. ${sold.toLocaleString()} ticket${sold === 1 ? "" : "s"} already sold stay at the old rate.`
-              : "Applies to future sales.",
-        }
-      );
-      setEditing(null);
-      load();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update the rate");
-    } finally {
-      setSaving(false);
-    }
+    return patchEvent(
+      event,
+      { commissionRate: percent },
+      (d) =>
+        `${event.title} is now ${d.commissionPercent}% ` +
+        `(${d.totalCutPercent}% total deduction)`
+    );
   };
+
+  const toggleVatCoverage = (event: EventRow) =>
+    patchEvent(event, { coversOrganizerVat: !event.coversOrganizerVat }, (d) =>
+      d.coversOrganizerVat
+        ? `Pazimo now covers VAT for ${event.title} — ${d.organizerVatPercent}% of sales withheld, ${d.totalCutPercent}% deducted in total`
+        : `${event.title} settles its own VAT again — ${d.totalCutPercent}% deducted in total`
+    );
 
   const money = (n: number) => formatCompactMoney(n, currency);
 
+  // This is the admin TICKETS page, so every figure on it is the ticket stream
+  // alone. Bar sales are a separate income stream with their own screen; they
+  // used to be added in here, which reported 3,154 when ticket sales were 274.
+  const tickets = summary?.streams.tickets;
+  const beverages = summary?.streams.beverages;
+
+  // The last three add up to the first. Revenue and tax are deliberately two
+  // different cards: tax is money Pazimo holds and owes onward, and folding it
+  // into "Pazimo collected" is exactly how a platform talks itself into
+  // thinking it earned 18% when it earned 3%.
   const cards = [
     {
-      label: "Collected from buyers",
-      hint: "Everything organizers sold, before any deduction",
-      value: summary?.totalCollected ?? 0,
+      label: "Ticket sales",
+      hint: "Tickets only, before any deduction — no bar or invitation money",
+      value: tickets?.totalCollected ?? 0,
       icon: Wallet,
       tone: "text-blue-600 dark:text-blue-400",
       ring: "bg-blue-100 dark:bg-blue-900/30",
     },
     {
       label: "Organizers keep",
-      hint: "After commission and the VAT charged on it",
-      value: summary?.organizerNet ?? 0,
+      hint: "After commission, VAT on it, and any VAT Pazimo covers",
+      value: tickets?.organizerNet ?? 0,
       icon: Users,
       tone: "text-emerald-600 dark:text-emerald-400",
       ring: "bg-emerald-100 dark:bg-emerald-900/30",
     },
     {
-      label: "Pazimo collected",
-      hint: summary
-        ? `${money(summary.pazimoCommission)} commission + ${money(summary.vatOnCommission)} VAT`
-        : "Commission plus VAT",
-      value: summary?.pazimoCollected ?? 0,
+      label: "Pazimo revenue",
+      hint: "Commission only — the money Pazimo actually earned",
+      value: tickets?.pazimoCommission ?? 0,
       icon: Landmark,
       tone: "text-indigo-600 dark:text-indigo-400",
       ring: "bg-indigo-100 dark:bg-indigo-900/30",
+    },
+    {
+      label: "Held for government",
+      hint: tickets
+        ? `${money(tickets.vatOnCommission)} VAT on commission + ${money(tickets.organizerVat)} organizer VAT covered`
+        : "VAT owed, not earned",
+      value: tickets?.taxPayable ?? 0,
+      icon: Receipt,
+      tone: "text-amber-600 dark:text-amber-400",
+      ring: "bg-amber-100 dark:bg-amber-900/30",
     },
   ];
 
@@ -195,12 +265,15 @@ export default function CommissionPanel({ token }: { token: string | null }) {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            Commission &amp; VAT
+            Ticket commission &amp; VAT
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-            Each event has its own rate. The government charges{" "}
-            {((defaults?.vatRate ?? 0.15) * 100).toFixed(0)}% VAT on that
-            commission, so an event at 4% costs the organizer 4.6%.
+            Ticket sales only — bar, invitation and campaign money is counted on
+            its own screen. Each event has its own rate, and the government
+            charges {((defaults?.vatRate ?? 0.15) * 100).toFixed(0)}% VAT on
+            that commission, so an event at 4% costs the organizer 4.6% — and{" "}
+            {(((defaults?.organizerVatRate ?? 0.15) + 0.046) * 100).toFixed(1)}%
+            if Pazimo also covers the organizer&apos;s own VAT.
           </p>
         </div>
         <Select value={currency} onValueChange={(v: Currency) => setCurrency(v)}>
@@ -214,8 +287,8 @@ export default function CommissionPanel({ token }: { token: string | null }) {
         </Select>
       </div>
 
-      {/* The three totals. Card 2 + card 3 always equals card 1. */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Cards 2 + 3 + 4 always equal card 1. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {cards.map((card) => (
           <Card
             key={card.label}
@@ -241,17 +314,7 @@ export default function CommissionPanel({ token }: { token: string | null }) {
         ))}
       </div>
 
-      {summary && summary.totalCollected > 0 && (
-        <p className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-          <Percent className="h-3.5 w-3.5" />
-          Blended commission across all events:{" "}
-          <span className="font-semibold text-gray-700 dark:text-gray-300">
-            {(summary.effectiveCommissionRate * 100).toFixed(2)}%
-          </span>
-          {" · "}
-          {summary.ticketCount.toLocaleString()} tickets counted
-        </p>
-      )}
+      
 
       {/* Per-event rates */}
       <Card className="border border-gray-200 dark:border-gray-700">
@@ -274,9 +337,15 @@ export default function CommissionPanel({ token }: { token: string | null }) {
           <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 px-3 py-2">
             <Info className="h-4 w-4 shrink-0 mt-0.5 text-blue-600 dark:text-blue-400" />
             <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
-              Changing a rate affects <strong>future sales only</strong>. Every
-              ticket records the rate it was sold under, so past revenue and
-              payouts never move.
+              Changing a rate or VAT coverage affects{" "}
+              <strong>future sales only</strong>. Every ticket records the terms
+              it was sold under, so past revenue and payouts never move.{" "}
+              <strong>Covers VAT</strong> is for organizers with no VAT licence:
+              Pazimo withholds a further{" "}
+              {((defaults?.organizerVatRate ?? 0.15) * 100).toFixed(0)}% of
+              their sales and remits it to the government for them. That money
+              is a liability, never Pazimo revenue — commission stays exactly
+              where you set it.
             </p>
           </div>
 
@@ -288,21 +357,22 @@ export default function CommissionPanel({ token }: { token: string | null }) {
                   <TableHead>Organizer</TableHead>
                   <TableHead className="text-right">Tickets</TableHead>
                   <TableHead className="text-right">Collected</TableHead>
-                  <TableHead className="text-right">Pazimo</TableHead>
+                  <TableHead className="text-right">Pazimo earned</TableHead>
                   <TableHead className="text-right">Commission</TableHead>
+                  <TableHead className="text-center">Covers VAT</TableHead>
                   <TableHead className="w-[130px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-10 text-gray-500">
+                    <TableCell colSpan={8} className="text-center py-10 text-gray-500">
                       <Loader2 className="h-5 w-5 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
                 ) : events.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-10 text-gray-500">
+                    <TableCell colSpan={8} className="text-center py-10 text-gray-500">
                       No events found
                     </TableCell>
                   </TableRow>
@@ -327,8 +397,11 @@ export default function CommissionPanel({ token }: { token: string | null }) {
                         <TableCell className="text-right tabular-nums">
                           {money(event.totalCollected)}
                         </TableCell>
+                        {/* Commission alone. The tax withheld alongside it is
+                            shown under the coverage toggle, so the two are
+                            never read as one number. */}
                         <TableCell className="text-right tabular-nums text-indigo-600 dark:text-indigo-400">
-                          {money(event.pazimoCollected)}
+                          {money(event.pazimoCommission)}
                         </TableCell>
                         <TableCell className="text-right">
                           {editing === event._id ? (
@@ -359,8 +432,44 @@ export default function CommissionPanel({ token }: { token: string | null }) {
                                 {event.commissionPercent}%
                               </Badge>
                               <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
-                                {event.totalCutPercent}% with VAT
+                                {event.totalCutPercent}% deducted
                               </span>
+                            </div>
+                          )}
+                        </TableCell>
+                        {/* Coverage is a property of the event, so it applies
+                            to bar sales as well as tickets. */}
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant={event.coversOrganizerVat ? "default" : "outline"}
+                            disabled={saving}
+                            onClick={() => toggleVatCoverage(event)}
+                            title={
+                              event.coversOrganizerVat
+                                ? `Pazimo withholds ${event.organizerVatPercent}% of this event's sales and remits it. Click to stop.`
+                                : "This organizer settles their own VAT. Click to have Pazimo cover it."
+                            }
+                            className={
+                              event.coversOrganizerVat
+                                ? "h-8 px-2.5 bg-amber-600 hover:bg-amber-700 text-white"
+                                : "h-8 px-2.5 text-gray-500"
+                            }
+                          >
+                            {event.coversOrganizerVat ? (
+                              <span className="flex items-center gap-1.5">
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                <span className="tabular-nums">
+                                  {event.organizerVatPercent}%
+                                </span>
+                              </span>
+                            ) : (
+                              "Off"
+                            )}
+                          </Button>
+                          {event.organizerVat > 0 && (
+                            <div className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
+                              {money(event.organizerVat)} withheld
                             </div>
                           )}
                         </TableCell>

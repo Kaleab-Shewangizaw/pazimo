@@ -3,6 +3,7 @@ const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const { StatusCodes } = require("http-status-codes");
+const { revenueAccumulators } = require("../utils/ticketRevenueQuery");
 
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
@@ -47,7 +48,7 @@ const getDashboardStats = async (req, res) => {
               {
                 $group: {
                   _id: null,
-                  grossRevenue: { $sum: "$price" },
+                  ...revenueAccumulators(),
                 },
               },
             ],
@@ -148,10 +149,15 @@ const getDashboardStats = async (req, res) => {
       withdrawalStats[0]?.pending[0]?.amount || 0;
     const pendingWithdrawals = withdrawalStats[0]?.pending[0]?.count || 0;
 
-    // Calculate breakdown based on Gross Revenue
+    // The split comes from the aggregation, accumulated per ticket at the rates
+    // that ticket was sold under. It used to be grossRevenue * 0.97 / 0.03,
+    // which was already wrong for any event off the 3% default and is wildly
+    // wrong for one whose VAT Pazimo covers — there the organizer keeps 81.55%.
     const totalRevenue = grossRevenue;
-    const organizerRevenue = grossRevenue * 0.97;
-    const pazimoCommission = grossRevenue * 0.03;
+    const organizerRevenue = revenueStats[0]?.revenue[0]?.organizerRevenue || 0;
+    const pazimoCommission = revenueStats[0]?.revenue[0]?.pazimoCommission || 0;
+    const vatOnCommission = revenueStats[0]?.revenue[0]?.vatOnCommission || 0;
+    const organizerVat = revenueStats[0]?.revenue[0]?.organizerVat || 0;
 
     // Calculate available balance (Global)
     const availableBalance =
@@ -166,6 +172,10 @@ const getDashboardStats = async (req, res) => {
         totalRevenue,
         organizerRevenue,
         pazimoCommission,
+        // Both VAT lines are liabilities Pazimo holds and remits, kept apart
+        // from pazimoCommission so the dashboard never reports tax as earnings.
+        vatOnCommission,
+        organizerVat,
         totalTicketsSold,
         activeOrganizers,
         activeEvents,

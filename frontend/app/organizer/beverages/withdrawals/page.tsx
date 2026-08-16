@@ -56,6 +56,10 @@ interface FinanceData {
     organizerNet: number;
     pazimoCommission: number;
     vatOnCommission: number;
+    // VAT Pazimo withheld and remits to the government on the organizer's
+    // behalf, on events set to be covered. Shown so a smaller payout is
+    // explained rather than mysterious.
+    organizerVat: number;
     pazimoCollected: number;
     unitsSold: number;
     salesCount: number;
@@ -67,11 +71,13 @@ interface FinanceData {
     title: string;
     startDate?: string;
     commissionPercent: number;
+    coversOrganizerVat: boolean;
     totalCutPercent: number;
     salesCount: number;
     unitsSold: number;
     grossRevenue: number;
     organizerNet: number;
+    organizerVat: number;
     pazimoCollected: number;
   }[];
 }
@@ -353,7 +359,11 @@ export default function BeverageWithdrawalsPage() {
                   icon={TrendingUp}
                   label="Bar earnings"
                   value={formatEtb(totals?.organizerNet ?? 0)}
-                  
+                  sub={
+                    totals && totals.organizerVat > 0
+                      ? `After ${formatEtb(totals.organizerVat)} VAT paid for you`
+                      : undefined
+                  }
                   accent="text-purple-600 dark:text-purple-400"
                 />
               </div>
@@ -417,6 +427,11 @@ export default function BeverageWithdrawalsPage() {
                              
                               <TableCell className="text-xs font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                                 {formatEtb(row.organizerNet)}
+                                {row.organizerVat > 0 && (
+                                  <span className="block text-[11px] font-normal text-amber-600 dark:text-amber-400">
+                                    {formatEtb(row.organizerVat)} VAT paid for you
+                                  </span>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}

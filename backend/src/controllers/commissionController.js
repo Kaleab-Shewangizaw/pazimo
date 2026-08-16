@@ -15,9 +15,11 @@ const {
   MIN_COMMISSION_RATE,
   MAX_COMMISSION_RATE,
   VAT_RATE,
+  ORGANIZER_VAT_RATE,
   round2,
   toPercent,
   normalizeCommissionRate,
+  totalCutPercentFor,
 } = require("../config/rates");
 
 const escapeRegExp = (v = "") => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -61,10 +63,13 @@ const getCommissionSummary = async (req, res) => {
     const gross = round2(row?.grossRevenue || 0);
     const commission = round2(row?.pazimoCommission || 0);
     const vat = round2(row?.vatOnCommission || 0);
+    const orgVat = round2(row?.organizerVat || 0);
+    const net = round2(row?.organizerRevenue || 0);
 
     const bevGross = round2(bev?.grossRevenue || 0);
     const bevCommission = round2(bev?.pazimoCommission || 0);
     const bevVat = round2(bev?.vatOnCommission || 0);
+    const bevOrgVat = round2(bev?.organizerVat || 0);
     const bevNet = round2(bev?.organizerRevenue || 0);
 
     res.status(StatusCodes.OK).json({
@@ -73,38 +78,67 @@ const getCommissionSummary = async (req, res) => {
         currency,
         ticketCount: row?.ticketCount || 0,
 
-        // The three cards show tickets + beverages together, because that is
-        // the whole business. Each stream is broken out below so the split can
-        // be shown alongside.
+        // EVERY TOP-LEVEL FIGURE HERE IS TICKETS + BEVERAGES COMBINED.
+        //
+        // A screen about one stream must read `streams.tickets` or
+        // `streams.beverages` instead. The admin tickets page did not, and so
+        // reported bar takings as ticket sales — 3,154 where ticket sales were
+        // 274. Reach for these totals only when you actually mean the whole
+        // business.
+        //
+        // The identity each stream and the combined view both satisfy:
+        //   organizerNet + pazimoCommission + taxPayable = totalCollected
+        //
+        // pazimoCommission is the only line that is Pazimo's own money. Both
+        // VAT lines are held for the government, which is why they are summed
+        // into taxPayable and never into revenue.
         totalCollected: round2(gross + bevGross),
-        organizerNet: round2((row?.organizerRevenue || 0) + bevNet),
-        pazimoCollected: round2(commission + vat + bevCommission + bevVat),
+        organizerNet: round2(net + bevNet),
         pazimoCommission: round2(commission + bevCommission),
         vatOnCommission: round2(vat + bevVat),
+        organizerVat: round2(orgVat + bevOrgVat),
+        taxPayable: round2(vat + bevVat + orgVat + bevOrgVat),
+        // Everything withheld from organizers — revenue and liabilities alike.
+        // This is cash Pazimo holds, not cash Pazimo has earned.
+        pazimoCollected: round2(
+          commission + vat + orgVat + bevCommission + bevVat + bevOrgVat
+        ),
 
+        // Each stream on its own, carrying the same identity as the combined
+        // view above, so a single-stream screen has everything it needs
+        // without ever adding the other stream in by accident.
         streams: {
           tickets: {
             totalCollected: gross,
-            organizerNet: round2(row?.organizerRevenue || 0),
+            organizerNet: net,
             pazimoCommission: commission,
             vatOnCommission: vat,
-            pazimoCollected: round2(commission + vat),
+            organizerVat: orgVat,
+            taxPayable: round2(vat + orgVat),
+            pazimoCollected: round2(commission + vat + orgVat),
             count: row?.ticketCount || 0,
+            // Blended across this stream's events, which sit on different rates.
+            effectiveCommissionRate: gross > 0 ? commission / gross : 0,
           },
           beverages: {
             totalCollected: bevGross,
             organizerNet: bevNet,
             pazimoCommission: bevCommission,
             vatOnCommission: bevVat,
-            pazimoCollected: round2(bevCommission + bevVat),
+            organizerVat: bevOrgVat,
+            taxPayable: round2(bevVat + bevOrgVat),
+            pazimoCollected: round2(bevCommission + bevVat + bevOrgVat),
             count: bev?.salesCount || 0,
             unitsSold: bev?.unitsSold || 0,
+            effectiveCommissionRate: bevGross > 0 ? bevCommission / bevGross : 0,
           },
         },
 
-        // Blended, because events sit on different rates.
+        // Tickets only, and always was — kept here for callers that predate
+        // the per-stream block above.
         effectiveCommissionRate: gross > 0 ? commission / gross : 0,
         vatRate: VAT_RATE,
+        organizerVatRate: ORGANIZER_VAT_RATE,
       },
     });
   } catch (error) {
@@ -130,7 +164,9 @@ const listEventCommissions = async (req, res) => {
 
     const [events, total] = await Promise.all([
       Event.find(query)
-        .select("_id title status startDate organizer commissionRate beverageCommissionRate")
+        .select(
+          "_id title status startDate organizer commissionRate beverageCommissionRate coversOrganizerVat"
+        )
         .populate("organizer", "firstName lastName email")
         .sort("-createdAt")
         .skip((page - 1) * limit)
@@ -167,10 +203,16 @@ const listEventCommissions = async (req, res) => {
       const bevRate = normalizeCommissionRate(
         event.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
       );
+      // The event's CURRENT setting, which governs future sales. The withheld
+      // figures below come from the snapshots on sales already made, so the two
+      // legitimately disagree right after the toggle is flipped.
+      const covered = Boolean(event.coversOrganizerVat);
       const commission = round2(r.pazimoCommission || 0);
       const vat = round2(r.vatOnCommission || 0);
+      const orgVat = round2(r.organizerVat || 0);
       const bevCommission = round2(b.pazimoCommission || 0);
       const bevVat = round2(b.vatOnCommission || 0);
+      const bevOrgVat = round2(b.organizerVat || 0);
       return {
         _id: event._id,
         title: event.title,
@@ -179,25 +221,33 @@ const listEventCommissions = async (req, res) => {
         organizer: event.organizer,
         commissionRate: rate,
         commissionPercent: toPercent(rate),
-        // What the organizer actually loses: the rate plus VAT on it.
-        totalCutPercent: toPercent(rate * (1 + VAT_RATE)),
+        // Whether Pazimo remits this organizer's own VAT for them.
+        coversOrganizerVat: covered,
+        organizerVatRate: covered ? ORGANIZER_VAT_RATE : 0,
+        organizerVatPercent: toPercent(covered ? ORGANIZER_VAT_RATE : 0),
+        // What the organizer actually loses: the rate, VAT on it, and their
+        // own VAT when covered.
+        totalCutPercent: totalCutPercentFor(rate, covered),
         currency,
         ticketCount: r.ticketCount || 0,
         totalCollected: round2(r.grossRevenue || 0),
         organizerNet: round2(r.organizerRevenue || 0),
         pazimoCommission: commission,
         vatOnCommission: vat,
-        pazimoCollected: round2(commission + vat),
+        organizerVat: orgVat,
+        pazimoCollected: round2(commission + vat + orgVat),
 
-        // Beverages, reported as their own stream with their own rate.
+        // Beverages, reported as their own stream with their own rate. VAT
+        // coverage is per event, so it applies to both streams alike.
         beverageCommissionRate: bevRate,
         beverageCommissionPercent: toPercent(bevRate),
-        beverageTotalCutPercent: toPercent(bevRate * (1 + VAT_RATE)),
+        beverageTotalCutPercent: totalCutPercentFor(bevRate, covered),
         beverageSalesCount: b.salesCount || 0,
         beverageUnitsSold: b.unitsSold || 0,
         beverageCollected: round2(b.grossRevenue || 0),
         beverageOrganizerNet: round2(b.organizerRevenue || 0),
-        beveragePazimoCollected: round2(bevCommission + bevVat),
+        beverageOrganizerVat: bevOrgVat,
+        beveragePazimoCollected: round2(bevCommission + bevVat + bevOrgVat),
       };
     });
 
@@ -209,6 +259,7 @@ const listEventCommissions = async (req, res) => {
         minCommissionRate: MIN_COMMISSION_RATE,
         maxCommissionRate: MAX_COMMISSION_RATE,
         vatRate: VAT_RATE,
+        organizerVatRate: ORGANIZER_VAT_RATE,
       },
       pagination: { total, page, pages: Math.ceil(total / limit), limit },
     });
@@ -222,13 +273,14 @@ const listEventCommissions = async (req, res) => {
 };
 
 /**
- * Change an event's commission rate.
+ * Change an event's commission rate, or whether Pazimo covers its VAT.
  *
- * Applies to future sales only. Tickets already sold keep the rate they were
- * sold under (Ticket.commissionRate), so this can never restate revenue that
- * has been reported or paid out — the response says so explicitly, and the UI
- * repeats it, because "why did last month's number change?" is the expensive
- * kind of surprise.
+ * Applies to future sales only. Tickets already sold keep the rate and the
+ * coverage they were sold under (Ticket.commissionRate,
+ * Ticket.organizerVatRate), so this can never restate revenue that has been
+ * reported or paid out — the response says so explicitly, and the UI repeats
+ * it, because "why did last month's number change?" is the expensive kind of
+ * surprise.
  */
 const updateEventCommission = async (req, res) => {
   try {
@@ -257,15 +309,32 @@ const updateEventCommission = async (req, res) => {
       return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: err.message });
     }
 
-    if (rate === undefined && beverageRate === undefined) {
+    // Sent as a real boolean by the UI; accepted as "true"/"false" so scripts
+    // and query-string callers behave. Anything else is a mistake worth
+    // rejecting rather than silently reading as "don't cover".
+    let covers;
+    if (req.body.coversOrganizerVat !== undefined) {
+      const raw = req.body.coversOrganizerVat;
+      if (raw === true || raw === "true") covers = true;
+      else if (raw === false || raw === "false") covers = false;
+      else {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "coversOrganizerVat must be true or false",
+        });
+      }
+    }
+
+    if (rate === undefined && beverageRate === undefined && covers === undefined) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: "Send commissionRate, beverageCommissionRate, or both",
+        message:
+          "Send commissionRate, beverageCommissionRate, coversOrganizerVat, or any combination",
       });
     }
 
     const event = await Event.findById(eventId)
-      .select("title commissionRate beverageCommissionRate");
+      .select("title commissionRate beverageCommissionRate coversOrganizerVat");
     if (!event) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
@@ -275,8 +344,10 @@ const updateEventCommission = async (req, res) => {
 
     const previous = event.commissionRate ?? DEFAULT_COMMISSION_RATE;
     const previousBeverage = event.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE;
+    const previousCovers = Boolean(event.coversOrganizerVat);
     if (rate !== undefined) event.commissionRate = rate;
     if (beverageRate !== undefined) event.beverageCommissionRate = beverageRate;
+    if (covers !== undefined) event.coversOrganizerVat = covers;
     await event.save();
 
     // How many sales are already locked at the old rate — useful context for
@@ -288,6 +359,7 @@ const updateEventCommission = async (req, res) => {
 
     const effective = event.commissionRate;
     const effectiveBeverage = event.beverageCommissionRate;
+    const effectiveCovers = Boolean(event.coversOrganizerVat);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -296,12 +368,15 @@ const updateEventCommission = async (req, res) => {
         title: event.title,
         previousRate: previous,
         previousBeverageRate: previousBeverage,
+        previousCoversOrganizerVat: previousCovers,
         commissionRate: effective,
         commissionPercent: toPercent(effective),
-        totalCutPercent: toPercent(effective * (1 + VAT_RATE)),
+        totalCutPercent: totalCutPercentFor(effective, effectiveCovers),
         beverageCommissionRate: effectiveBeverage,
         beverageCommissionPercent: toPercent(effectiveBeverage),
-        beverageTotalCutPercent: toPercent(effectiveBeverage * (1 + VAT_RATE)),
+        beverageTotalCutPercent: totalCutPercentFor(effectiveBeverage, effectiveCovers),
+        coversOrganizerVat: effectiveCovers,
+        organizerVatPercent: toPercent(effectiveCovers ? ORGANIZER_VAT_RATE : 0),
         appliesTo: "future sales only",
         ticketsAlreadySoldAtPreviousRate: alreadySold,
       },

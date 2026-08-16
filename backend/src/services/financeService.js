@@ -134,11 +134,14 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const totalRevenue = revenueData.grossRevenue || 0;
   const totalTicketsSold = revenueData.totalTickets || 0;
 
-  // Per-event commission plus the 15% VAT charged on it, both accumulated per
-  // ticket at the rate that ticket was sold under.
+  // Per-event commission, the 15% VAT charged on it, and — on events where
+  // Pazimo covers the organizer's own VAT — a further 15% of gross withheld for
+  // the government. All accumulated per ticket at the rates that ticket was
+  // sold under, so flipping either setting never restates a past sale.
   const pazimoCommission = round2(revenueData.pazimoCommission || 0);
   const vatOnCommission = round2(revenueData.vatOnCommission || 0);
-  const totalDeduction = round2(pazimoCommission + vatOnCommission);
+  const organizerVat = round2(revenueData.organizerVat || 0);
+  const totalDeduction = round2(pazimoCommission + vatOnCommission + organizerVat);
   const organizerRevenue = round2(revenueData.organizerRevenue || 0);
   const effectiveCommissionRate =
     totalRevenue > 0 ? pazimoCommission / totalRevenue : 0;
@@ -170,7 +173,7 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     normalizedCurrency === "ETB"
       ? await getOrganizerBeverageRevenue(organizerId, "ETB")
       : { grossRevenue: 0, pazimoCommission: 0, vatOnCommission: 0,
-          organizerRevenue: 0, unitsSold: 0, salesCount: 0 };
+          organizerVat: 0, organizerRevenue: 0, unitsSold: 0, salesCount: 0 };
 
   // Calculate available balance
   // Two pools, drawn independently.
@@ -257,12 +260,17 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     availableBalance
   });
 
+  const beverageOrganizerVat = round2(beverage.organizerVat || 0);
+
   return {
     currency: normalizedCurrency,
     totalRevenue,
     organizerRevenue,
     pazimoCommission,
     vatOnCommission,
+    // VAT withheld from this organizer and owed to the government. Reported
+    // separately everywhere: it is neither the organizer's money nor Pazimo's.
+    organizerVat,
     totalDeduction,
     // Blended rate across this organizer's events, for display.
     effectiveCommissionRate,
@@ -278,6 +286,7 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
         organizerRevenue,
         pazimoCommission,
         vatOnCommission,
+        organizerVat,
         pazimoCollected: totalDeduction,
         ticketsSold: totalTicketsSold,
       },
@@ -289,7 +298,10 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
         organizerRevenue: round2(beverage.organizerRevenue),
         pazimoCommission: round2(beverage.pazimoCommission),
         vatOnCommission: round2(beverage.vatOnCommission),
-        pazimoCollected: round2(beverage.pazimoCommission + beverage.vatOnCommission),
+        organizerVat: beverageOrganizerVat,
+        pazimoCollected: round2(
+          beverage.pazimoCommission + beverage.vatOnCommission + beverageOrganizerVat
+        ),
         unitsSold: beverage.unitsSold,
         salesCount: beverage.salesCount,
       },
@@ -297,8 +309,12 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     combined: {
       grossRevenue: round2(totalRevenue + beverage.grossRevenue),
       organizerRevenue: round2(organizerRevenue + beverage.organizerRevenue),
+      organizerVat: round2(organizerVat + beverageOrganizerVat),
       pazimoCollected: round2(
-        totalDeduction + beverage.pazimoCommission + beverage.vatOnCommission
+        totalDeduction +
+          beverage.pazimoCommission +
+          beverage.vatOnCommission +
+          beverageOrganizerVat
       ),
     },
 

@@ -27,16 +27,31 @@ const COMMISSION_RATE_EXPR = {
   $ifNull: ["$commissionRate", DEFAULT_COMMISSION_RATE],
 };
 
+// Withheld only on events Pazimo covers; missing means 0, so bar sales made
+// before coverage existed are untouched.
+const ORGANIZER_VAT_RATE_EXPR = { $ifNull: ["$organizerVatRate", 0] };
+
 const COMMISSION_EXPR = { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR] };
 
 // VAT is 15% OF the commission, not of the sale price — a 3% cut costs the
 // organizer 3.45%.
 const VAT_EXPR = { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, VAT_RATE] };
 
+// The organizer's own VAT, which is charged on the sale price. A liability
+// Pazimo remits on their behalf, never Pazimo revenue.
+const ORGANIZER_VAT_EXPR = {
+  $multiply: ["$totalAmount", ORGANIZER_VAT_RATE_EXPR],
+};
+
 const ORGANIZER_SHARE_EXPR = {
   $subtract: [
     "$totalAmount",
-    { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, 1 + VAT_RATE] },
+    {
+      $add: [
+        { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, 1 + VAT_RATE] },
+        ORGANIZER_VAT_EXPR,
+      ],
+    },
   ],
 };
 
@@ -49,6 +64,7 @@ const beverageRevenueAccumulators = () => ({
   grossRevenue: { $sum: "$totalAmount" },
   pazimoCommission: { $sum: COMMISSION_EXPR },
   vatOnCommission: { $sum: VAT_EXPR },
+  organizerVat: { $sum: ORGANIZER_VAT_EXPR },
   organizerRevenue: { $sum: ORGANIZER_SHARE_EXPR },
   unitsSold: { $sum: "$quantity" },
 });
@@ -83,6 +99,7 @@ const getOrganizerBeverageRevenue = async (organizerId, currency = "ETB") => {
     grossRevenue: row?.grossRevenue || 0,
     pazimoCommission: row?.pazimoCommission || 0,
     vatOnCommission: row?.vatOnCommission || 0,
+    organizerVat: row?.organizerVat || 0,
     organizerRevenue: row?.organizerRevenue || 0,
     unitsSold: row?.unitsSold || 0,
     salesCount: row?.salesCount || 0,
@@ -94,6 +111,8 @@ module.exports = {
   COMMISSION_RATE_EXPR,
   COMMISSION_EXPR,
   VAT_EXPR,
+  ORGANIZER_VAT_RATE_EXPR,
+  ORGANIZER_VAT_EXPR,
   ORGANIZER_SHARE_EXPR,
   beverageRevenueAccumulators,
   getOrganizerBeverageRevenue,

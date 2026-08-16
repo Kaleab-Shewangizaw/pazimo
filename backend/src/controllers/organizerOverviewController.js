@@ -109,11 +109,12 @@ const getOrganizerOverview = async (req, res) => {
       const org = organizerByEvent.get(String(row._id));
       if (!org) continue;
       const acc = revenueByOrganizer.get(org) ||
-        { revenue: 0, tickets: 0, commission: 0, vat: 0, organizerShare: 0 };
+        { revenue: 0, tickets: 0, commission: 0, vat: 0, organizerVat: 0, organizerShare: 0 };
       acc.revenue += row.grossRevenue;
       acc.tickets += row.tickets;
       acc.commission += row.pazimoCommission;
       acc.vat += row.vatOnCommission;
+      acc.organizerVat += row.organizerVat;
       acc.organizerShare += row.organizerRevenue;
       revenueByOrganizer.set(org, acc);
     }
@@ -176,7 +177,7 @@ const getOrganizerOverview = async (req, res) => {
     const data = organizers.map((organizer) => {
       const key = String(organizer._id);
       const rev = revenueByOrganizer.get(key) ||
-        { revenue: 0, tickets: 0, commission: 0, vat: 0, organizerShare: 0 };
+        { revenue: 0, tickets: 0, commission: 0, vat: 0, organizerVat: 0, organizerShare: 0 };
       const wd = withdrawalsByOrganizer.get(key) || { pending: 0, approved: 0 };
       const loan = loansByOrganizer.get(key) || {
         principalCredited: 0,
@@ -198,7 +199,11 @@ const getOrganizerOverview = async (req, res) => {
         organizerRevenue: round2(organizerRevenue),
         pazimoCommission: round2(rev.commission),
         vatOnCommission: round2(rev.vat),
-        pazimoCollected: round2(rev.commission + rev.vat),
+        // VAT withheld on this organizer's behalf, on events Pazimo covers.
+        // Already excluded from organizerRevenue above; surfaced so the row can
+        // show why their share is smaller than commission alone would explain.
+        organizerVat: round2(rev.organizerVat),
+        pazimoCollected: round2(rev.commission + rev.vat + rev.organizerVat),
         pendingWithdrawals: round2(wd.pending),
         approvedWithdrawals: round2(wd.approved),
         // Same identity financeService.calculateOrganizerBalance uses, so the

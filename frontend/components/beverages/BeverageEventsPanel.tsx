@@ -27,6 +27,10 @@ interface BeverageEvent {
   organizer?: { firstName?: string; lastName?: string; email?: string } | null;
   commissionRate: number;
   commissionPercent: number;
+  // Set on the event, not on the bar: an event whose VAT Pazimo covers has it
+  // withheld on drinks too. Read-only here — it is edited on the Commission
+  // &amp; VAT screen so there is one place to turn it on.
+  coversOrganizerVat: boolean;
   totalCutPercent: number;
   drinksOffered: number;
   stockTotal: number;
@@ -36,6 +40,7 @@ interface BeverageEvent {
   unitsSold: number;
   totalCollected: number;
   organizerNet: number;
+  organizerVat: number;
   pazimoCollected: number;
 }
 
@@ -151,7 +156,9 @@ export default function BeverageEventsPanel({ token }: { token: string | null })
         <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
           Drinks carry their own commission, separate from the event&apos;s ticket
           rate. Changing it affects future sales only — every sale records the rate
-          it was made under.
+          it was made under. VAT coverage is set per event on the{" "}
+          <strong>Commission &amp; VAT</strong> screen and applies to drinks as
+          well as tickets.
         </p>
       </div>
 
@@ -219,6 +226,11 @@ export default function BeverageEventsPanel({ token }: { token: string | null })
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-emerald-600 dark:text-emerald-400">
                         {money(event.organizerNet)}
+                        {event.organizerVat > 0 && (
+                          <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+                            after {money(event.organizerVat)} VAT
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-indigo-600 dark:text-indigo-400">
                         {money(event.pazimoCollected)}
@@ -266,8 +278,13 @@ export default function BeverageEventsPanel({ token }: { token: string | null })
                               {event.commissionPercent}%
                             </Badge>
                             <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">
-                              {event.totalCutPercent}% with VAT
+                              {event.totalCutPercent}% deducted
                             </span>
+                            {event.coversOrganizerVat && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                                Pazimo covers VAT
+                              </span>
+                            )}
                           </button>
                         )}
                       </TableCell>

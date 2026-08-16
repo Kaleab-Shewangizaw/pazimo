@@ -3,6 +3,7 @@ const { getNextSequence } = require("./Counter");
 const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
+  organizerVatRateFor,
 } = require("../config/rates");
 
 // The ledger of beverage sales — one row per purchase of one drink at one
@@ -85,6 +86,15 @@ const BeverageSaleSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // The organizer's own VAT withheld on this sale, when Pazimo covers the
+    // event (Event.coversOrganizerVat). Coverage is a property of the event,
+    // not of the stream, so a covered event withholds it on drinks exactly as
+    // it does on tickets. 0 or absent means the organizer settles their own.
+    organizerVatRate: {
+      type: Number,
+      min: 0,
+    },
+
     // Who bought it. Optional: a guest checkout has no account, and the
     // contact fields below are what a door list would be built from.
     customer: {
@@ -150,29 +160,37 @@ BeverageSaleSchema.index({ referenceNumber: 1 }, { unique: true, sparse: true })
 BeverageSaleSchema.index({ organizer: 1, status: 1, soldAt: -1 });
 BeverageSaleSchema.index({ event: 1, status: 1 });
 
-// Snapshot the beverage commission rate at the moment of sale.
+// Snapshot the beverage commission rate and VAT coverage at the moment of sale.
 //
 // In the model rather than in beverageSalesService, so any future sale path —
 // the checkout basket in B2, an import, a backfill — cannot forget it.
 BeverageSaleSchema.pre("validate", async function snapshotCommissionRate(next) {
   if (!this.isNew) return next();
-  if (typeof this.commissionRate === "number") return next();
+  const hasCommission = typeof this.commissionRate === "number";
+  const hasOrganizerVat = typeof this.organizerVatRate === "number";
+  if (hasCommission && hasOrganizerVat) return next();
   if (!this.event) return next();
 
   try {
     const EventModel = require("./Event");
     const event = await EventModel.findById(this.event)
-      .select("beverageCommissionRate")
+      .select("beverageCommissionRate coversOrganizerVat")
       .lean();
-    this.commissionRate = normalizeCommissionRate(
-      event?.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
-    );
+    if (!hasCommission) {
+      this.commissionRate = normalizeCommissionRate(
+        event?.beverageCommissionRate ?? DEFAULT_COMMISSION_RATE
+      );
+    }
+    if (!hasOrganizerVat) {
+      this.organizerVatRate = organizerVatRateFor(event?.coversOrganizerVat);
+    }
     next();
   } catch (error) {
     // Never block a paid sale on a pricing lookup — fall back to the same
-    // default a reader would have assumed.
+    // defaults a reader would have assumed.
     console.error("Beverage commission snapshot failed, using default:", error.message);
-    this.commissionRate = DEFAULT_COMMISSION_RATE;
+    if (!hasCommission) this.commissionRate = DEFAULT_COMMISSION_RATE;
+    if (!hasOrganizerVat) this.organizerVatRate = 0;
     next();
   }
 });

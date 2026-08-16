@@ -84,50 +84,118 @@ const TICKET_QUANTITY_EXPR = {
   ],
 };
 
-// Commission is per event and snapshotted per ticket, so it can no longer be a
-// single multiplication applied to a summed total. It has to be summed per
-// ticket at the rate that ticket was sold under.
-//
-// Tickets sold before per-event rates existed have no snapshot; they fall back
-// to the 3% that was in force at the time, which is what they were actually
-// charged.
-const COMMISSION_RATE_EXPR = {
-  $ifNull: ["$commissionRate", DEFAULT_COMMISSION_RATE],
+/**
+ * The per-ticket money split, as aggregation expressions.
+ *
+ * Commission is per event and snapshotted per ticket, so it cannot be a single
+ * multiplication applied to a summed total. It has to be evaluated per ticket
+ * at the rates that ticket was sold under, which is what these express.
+ *
+ * `f` builds a field reference, so the same definitions serve a pipeline
+ * iterating the tickets collection (`$price`) and one working over tickets
+ * already joined into an array (`$$t.price`). One definition, two shapes — the
+ * alternative is a second copy that drifts.
+ *
+ * Missing snapshots are the normal case for old rows and must read as the
+ * defaults that were actually in force: 3% commission, and no withheld VAT.
+ * Reading a missing organizerVatRate as anything but 0 would retroactively
+ * withhold 15% from revenue already reported and mostly paid out.
+ */
+const revenueExprs = (f) => {
+  const price = f("price");
+  const commissionRate = { $ifNull: [f("commissionRate"), DEFAULT_COMMISSION_RATE] };
+  const organizerVatRate = { $ifNull: [f("organizerVatRate"), 0] };
+
+  // Pazimo's fee, and the government VAT on that fee — 15% OF the commission,
+  // not of the ticket price.
+  const commission = { $multiply: [price, commissionRate] };
+  const vat = { $multiply: [price, commissionRate, VAT_RATE] };
+
+  // The organizer's own VAT that Pazimo withheld and owes the government.
+  // Charged on the ticket price, unlike the VAT above. A liability, never
+  // revenue — no "Pazimo earned" figure may include it.
+  const organizerVat = { $multiply: [price, organizerVatRate] };
+
+  return {
+    price,
+    commissionRate,
+    organizerVatRate,
+    commission,
+    vat,
+    organizerVat,
+    // What the organizer keeps: price less commission, VAT on it, and their own.
+    organizerShare: {
+      $subtract: [
+        price,
+        {
+          $add: [
+            { $multiply: [price, commissionRate, 1 + VAT_RATE] },
+            organizerVat,
+          ],
+        },
+      ],
+    },
+  };
 };
 
-/** Pazimo's fee on this ticket. */
-const COMMISSION_EXPR = { $multiply: ["$price", COMMISSION_RATE_EXPR] };
+const ROOT = revenueExprs((k) => `$${k}`);
 
-/** Government VAT on that fee — 15% of the commission, not of the price. */
-const VAT_EXPR = {
-  $multiply: ["$price", COMMISSION_RATE_EXPR, VAT_RATE],
-};
-
-/** What the organizer keeps: price minus commission minus VAT on it. */
-const ORGANIZER_SHARE_EXPR = {
-  $subtract: [
-    "$price",
-    { $multiply: ["$price", COMMISSION_RATE_EXPR, 1 + VAT_RATE] },
-  ],
-};
+const COMMISSION_RATE_EXPR = ROOT.commissionRate;
+const ORGANIZER_VAT_RATE_EXPR = ROOT.organizerVatRate;
+const COMMISSION_EXPR = ROOT.commission;
+const VAT_EXPR = ROOT.vat;
+const ORGANIZER_VAT_EXPR = ROOT.organizerVat;
+const ORGANIZER_SHARE_EXPR = ROOT.organizerShare;
 
 /**
- * The three figures every revenue screen needs, summed per ticket so a mix of
- * commission rates across events adds up correctly. Drop into any $group.
+ * The figures every revenue screen needs, summed per ticket so a mix of
+ * commission rates and VAT-coverage settings across events adds up correctly.
+ * Drop into any $group.
+ *
+ * grossRevenue = pazimoCommission + vatOnCommission + organizerVat +
+ * organizerRevenue, always.
  */
 const revenueAccumulators = () => ({
-  grossRevenue: { $sum: "$price" },
+  grossRevenue: { $sum: ROOT.price },
   pazimoCommission: { $sum: COMMISSION_EXPR },
   vatOnCommission: { $sum: VAT_EXPR },
+  organizerVat: { $sum: ORGANIZER_VAT_EXPR },
   organizerRevenue: { $sum: ORGANIZER_SHARE_EXPR },
 });
+
+/**
+ * The same five figures for a pipeline that has already joined tickets into an
+ * array field — `$addFields` after a `$lookup`, where there is no `$group` to
+ * accumulate over.
+ *
+ * Several dashboards were splitting such an array with a flat `price * 0.97`,
+ * which stopped being true the moment any event moved off 3% and is wildly
+ * wrong for an event whose VAT Pazimo covers. Summing per element fixes both.
+ */
+const revenueFieldsOverArray = (arrayPath) => {
+  const e = revenueExprs((k) => `$$t.${k}`);
+  const sum = (expr) => ({
+    $sum: { $map: { input: arrayPath, as: "t", in: expr } },
+  });
+  return {
+    grossRevenue: sum(e.price),
+    pazimoCommission: sum(e.commission),
+    vatOnCommission: sum(e.vat),
+    organizerVat: sum(e.organizerVat),
+    organizerRevenue: sum(e.organizerShare),
+  };
+};
 
 module.exports = {
   COMMISSION_RATE_EXPR,
   COMMISSION_EXPR,
   VAT_EXPR,
+  ORGANIZER_VAT_RATE_EXPR,
+  ORGANIZER_VAT_EXPR,
   ORGANIZER_SHARE_EXPR,
+  revenueExprs,
   revenueAccumulators,
+  revenueFieldsOverArray,
   EXCLUDED_TICKET_STATUS,
   EXCLUDED_PAYMENT_STATUS,
   validTicketMatch,

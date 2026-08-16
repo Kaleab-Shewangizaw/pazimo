@@ -101,6 +101,12 @@ interface LoanInfo {
 interface BalanceData {
   currency?: "ETB" | "USD";
   totalRevenue: number;
+  pazimoCommission: number;
+  vatOnCommission: number;
+  // VAT withheld and remitted to the government for organizers who have no
+  // licence of their own. Zero for everyone else.
+  organizerVat: number;
+  effectiveCommissionRate: number;
   pendingWithdrawals: number;
   approvedWithdrawals: number;
   availableBalance: number;
@@ -511,8 +517,15 @@ export default function WithdrawalsPage() {
                     <div className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-gray-100">
                       {balance?.availableBalance.toFixed(2) || "0.00"} {selectedCurrency}
                     </div>
+                    {/* Driven by what was actually deducted, not a fixed 3%:
+                        rates vary per event, and an organizer whose VAT
+                        Pazimo covers loses a further 15% on top. */}
                     <div className="text-xs text-muted-foreground dark:text-gray-500 mt-1">
-                      After 3% commission
+                      {balance && balance.organizerVat > 0
+                        ? `After ${((balance.effectiveCommissionRate ?? 0) * 100).toFixed(2)}% commission and ${formatAmount(balance.organizerVat)} ${selectedCurrency} VAT paid for you`
+                        : balance && balance.totalRevenue > 0
+                          ? `After ${((balance.effectiveCommissionRate ?? 0) * 100).toFixed(2)}% commission and VAT`
+                          : "After commission and VAT"}
                     </div>
                   </div>
                   <div className="p-2 sm:p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 shadow-sm">
