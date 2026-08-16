@@ -221,11 +221,21 @@ router.delete(
 );
 
 // Beverage finance — its own dashboard, separate from ticket revenue.
-// The organizer route serves cinemas too; they sell drinks the same way.
+//
+// Organizers only. This endpoint reads the EVENT ledger (BeverageSale) and
+// reports the organizer's "beverages" pool, so it can only ever answer for an
+// account that sells drinks at events.
+//
+// It used to admit "cinema" as well, from when a cinema was going to be an
+// organizer with a different catalogue. A cinema now has its own ledger
+// (CinemaBeverageSale) and its own pool ("cinema_beverages"), so that access
+// returned a flat zero off the wrong collection while the cinema's real takings
+// sat elsewhere — the exact channel mixing this split exists to prevent.
+// Cinema finance belongs on a cinema route backed by cinemaFinanceService.
 router.get(
   "/finance/organizer",
   authenticateUser,
-  restrictTo("organizer", "cinema"),
+  restrictTo("organizer"),
   getOrganizerBeverageFinance
 );
 router.get(

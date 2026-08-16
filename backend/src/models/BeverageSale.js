@@ -21,6 +21,21 @@ const BeverageSaleSchema = new mongoose.Schema(
     referenceNumber: {
       type: String,
     },
+
+    // The sales context this row belongs to. Constant by design: a row in this
+    // collection is an event sale, always — venue sales live in their own
+    // ledger (see VenueBeverageSale for why they are not folded in here).
+    //
+    // It is stored rather than inferred because admin screens merge both
+    // ledgers into one feed, and every row in that feed has to state which
+    // channel produced it. Rows written before the venue channel existed carry
+    // no value; readers treat absent as "EVENT", which is what they were.
+    salesContext: {
+      type: String,
+      enum: ["EVENT"],
+      default: "EVENT",
+    },
+
     event: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Event",

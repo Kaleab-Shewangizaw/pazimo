@@ -3,8 +3,8 @@
 Companion to [REBUILD_PLAN.md](./REBUILD_PLAN.md). That file covers making the
 existing system fast and correct; this one covers the new revenue streams.
 
-**Status:** B1 done · B2 in progress
-**Last updated:** 2026-08-13
+**Status:** B1 done · B2 service layer done, checkout wiring open · V1 (venues) done
+**Last updated:** 2026-08-16
 
 > Same working agreement: tick items as they land, note where reality differed.
 > Any chat should be able to read this and pick up.
@@ -171,6 +171,72 @@ has to distinguish "admit" from "hand over drinks", and handle partial collectio
 
 ---
 
+## V1 — The venue channel
+
+**DONE**
+
+A club, bar, restaurant or lounge that sells drinks through Pazimo without
+running events. The second distribution channel: same catalogue, its own
+line-up, its own ledger, its own pool.
+
+```
+Beverage ── EventBeverage ── Event ── Organizer      (event channel)
+         └─ VenueBeverage ── Venue ── Venue account  (venue channel)
+```
+
+- [x] `User.role` gains `"venue"`; the business lives in a `Venue` model the
+      account owns. Auth, JWT, ban handling and `restrictTo` all unchanged.
+- [x] `Venue` carries what `Event` carries for the other channel —
+      `beverageCommissionRate` and `coversVenueVat` — because the venue IS the
+      sales context. Plus eligibility and a `blockedBeverages` deny list, which
+      live here rather than in a side table since a Venue exists only to sell.
+- [x] `VenueBeverage` — the line-up, unique on `{venue, beverage}`
+- [x] `VenueBeverageSale` — its own collection, `PZV-SL-` references
+- [x] `Withdrawal.stream` gains `venue_beverages` + a `venue` ref; same model,
+      same approval queue, third pool
+- [x] `financeService.calculateVenueBalance` — a sibling of
+      calculateOrganizerBalance, not a branch inside it
+- [x] `concessionBasketService` gains `priceVenueBasket` / `fulfilVenueBasket`;
+      every priced basket now states its `salesContext`
+- [x] `/api/venues/*` — admin CRUD, `/me`, line-up, sales, dashboard, finance
+- [x] Frontend: `/venue` area, admin **Venues** and **Venue sales** tabs
+- [x] `npm run migrate:venues` — stamps `salesContext:"EVENT"` on the existing
+      ledger and builds the new indexes. Idempotent.
+
+### Why a separate ledger, not a discriminator
+
+`BeverageSale` is read by aggregations that carry no ownership filter at all —
+`getAdminBeverageFinance` matches nothing but `validBeverageSaleMatch("ETB")`.
+Behind one collection, every one of those call sites *and every future one* would
+have to remember to exclude venue rows, or venue money lands in an organizer's
+balance and gets paid out. A separate collection makes that unwritable rather
+than merely forbidden.
+
+What is **not** duplicated is the arithmetic: both channels compute commission,
+VAT and the owner's share through `buildBeverageRevenueExpressions()` in
+`utils/beverageRevenueQuery.js`. Separate ledgers, shared machinery — the same
+rule `Withdrawal.stream` follows on the payout side.
+
+**Verified on the local bench (45 checks, all passing):**
+
+```
+event 10 x 100 -> PZB-SL-, salesContext EVENT     PASS
+venue  5 x 120 -> PZV-SL-, salesContext VENUE     PASS
+same drink, 100 at the event and 120 at the venue PASS
+organizer gross 1000 (excludes the venue sale)    PASS
+venue gross      600 (excludes the event sale)    PASS
+venue net 579.30 = 600 less 3.45%                 PASS
+covered venue: 100 -> 81.55, 15.00 VAT withheld   PASS
+venue withdrawal moves only the venue pool        PASS
+organizer beverage withdrawal leaves venue alone  PASS
+basket rejects a line from another venue          PASS
+fulfil refuses lines from another venue           PASS
+refund returns stock, leaves the row as history   PASS
+no venue field in the event ledger, or the reverse PASS
+```
+
+---
+
 ## B3 — Generalize to concessions
 
 **~2 days · do before cinema**
@@ -187,47 +253,68 @@ than a parallel model.
 
 ---
 
-## C1 — The cinema role
+## C1/C2 — The cinema channel
 
-**~3 days · can run in parallel with B2/B3**
+**DONE** (2026-08-16) — except the online checkout, which waits on B2.
 
-- [ ] Extend `User.role` to `["customer", "organizer", "cinema"]`
-- [ ] `restrictTo` audit: every route that currently allows `"organizer"` must
-      decide explicitly whether `"cinema"` belongs too. **Do not blanket-add** —
-      that is how a role silently gains access to withdrawals it should not have.
-- [ ] Cinema dashboard: ticket sales + beverage sales, both streams split
-- [ ] Decide whether cinemas get Pazimo Capital and withdrawals (probably yes —
-      they are organizers with a different catalogue)
+> **The design note that used to sit here has been overturned.** It read: *"a
+> cinema is an organizer with extra capability, not a separate tenant… screenings
+> are `Event.kind: 'screening'`."* Kaleab decided the opposite on 2026-08-16:
+> **a cinema is a separate tenant and a screening is NOT an Event.** Recorded
+> here so no future chat re-derives the old shape from a stale note.
+>
+> Rationale for the change: a dummy/`kind`-tagged Event puts cinema takings
+> inside every "what did my events earn?" figure on the platform, and fills the
+> public events listing with thirty showings of one film. The separation is the
+> feature.
 
-**Design note:** a cinema is an organizer with extra capability, not a separate
-tenant. Keeping the same `User` and the same payout path means withdrawals,
-commission, VAT and Capital work unchanged. The role gates *features*, not money.
+```
+Beverage ─┬─ EventBeverage  ── Event  ── Organizer      (event channel)
+          ├─ VenueBeverage  ── Venue  ── Venue account  (venue channel)
+          └─ CinemaBeverage ── Cinema ── Cinema account (cinema channel)
 
----
+Ticket       ── Event                                   (event channel)
+CinemaTicket ── CinemaShowtime ── CinemaMovie ── Cinema (cinema channel)
+```
 
-## C2 — Films, halls, screenings
-
-**~3 weeks · after REBUILD_PLAN Phase 3 (the ledger)**
-
-- [ ] `Film` catalogue (title, poster, duration, rating, language)
-- [ ] `Hall` (cinema, name, capacity)
-- [ ] `Event.kind: "event" | "screening"` + `Event.film` + `Event.hall`
-- [ ] **Shared query helper that excludes screenings by default** — otherwise the
-      public events page fills with 30 showings of one film. Same discipline as
-      `validTicketMatch`: make forgetting impossible at the call site.
+- [x] `User.role` gains `"cinema"`; the business lives in a `Cinema` model the
+      account owns. Auth, JWT, ban handling and `restrictTo` unchanged.
+- [x] `restrictTo` audit done — `"cinema"` was added to exactly three shared
+      routes (`POST /api/withdrawals`, the payout-history read, and the existing
+      beverage finance read). **Not blanket-added.**
+- [x] `Cinema` carries TWO rates — `ticketCommissionRate` and
+      `beverageCommissionRate` — because unlike a venue it sells two things, and
+      the cut on a seat is a different negotiation from the cut on popcorn.
+      Plus `coversCinemaVat`, eligibility, and a `blockedBeverages` deny list.
+- [x] `CinemaHall`, `CinemaMovie`, `CinemaShowtime` (tiers priced per screening,
+      not per film), `CinemaTicket`, `CinemaBeverage`, `CinemaBeverageSale`
+- [x] Own ledgers (`PZC-SL-` references), own revenue readers, rates snapshotted
+      per sale exactly as the other channels do
+- [x] **Two pools, not one**: `Withdrawal.stream` gains `cinema_tickets` and
+      `cinema_beverages`, plus a `cinema` ref. Seat money cannot fund a
+      concession payout. Same model, same admin queue.
+- [x] Cinema dashboard at `/cinema` — overview, programme, tickets,
+      concessions, money
+- [x] Admin → Cinema page
+- [x] Atomic seat claim on the tier's `sold` counter — verified with 8
+      concurrent buyers against 5 seats: exactly 5 sold, no oversell
+- [x] Cinema QR reuses `qrRenderer`, with a `ctx:"CINEMA"` payload so an event
+      scanner rejects a cinema ticket as the wrong kind rather than "not found"
+- [ ] **Online ticket checkout** — box-office selling works end to end; buying a
+      cinema ticket online needs the same payment wiring B2 is waiting on
 - [ ] Bulk "schedule screenings" tool — one film, many showtimes
-- [ ] Concessions work already; money works already
+- [ ] Customer-facing browse/buy pages (the public API is in place)
 
-**Seats are confirmed as required** — Kaleab, 2026-08-13. Not deferred, but
-sequenced after the necessary work: build screenings on tier/capacity first, then
-add the seat layer. Seat selection needs a seat map per hall, holds with expiry,
-concurrency control on the hold, and a picker UI. Treat it as its own phase (C3)
-rather than folding it into C2.
+**Pazimo Capital does not reach cinema money.** Advances are underwritten
+against event ticket revenue; a cinema has none. Same rule as venues.
 
-**Why after the ledger:** with it, a cinema ticket is one more `kind` value and
-commission/VAT/balance/refund apply automatically. Without it, cinema becomes the
-fourth revenue stream integrated by hand into aggregations that are already hard
-to keep in agreement.
+**Built before the ledger, deliberately.** The old note sequenced this after
+REBUILD_PLAN Phase 3 so commission/VAT/balance would apply automatically. With
+separate tenancy that argument inverts: the cinema ledgers are their own
+collections, so they cannot pollute the aggregations the ledger was meant to
+protect. The arithmetic is still shared — `config/rates.js` and
+`beverageRevenueQuery.buildBeverageRevenueExpressions` are used by all three
+channels, so a change to how VAT is charged still has one home.
 
 ---
 
@@ -235,12 +322,17 @@ to keep in agreement.
 
 **After C2 · required, not optional**
 
-- [ ] `Hall.seatMap` — rows, numbers, and per-seat tier
+**Seats are confirmed as required** — Kaleab, 2026-08-13. Screenings are built on
+tier/capacity first (done); the seat layer goes on top. `CinemaShowtime`'s tiers
+already carry an atomic `sold` counter, so the hold discipline below is that same
+rule applied per seat rather than per tier.
+
+- [ ] `CinemaHall.seatMap` — rows, numbers, and per-seat tier
 - [ ] `SeatHold` with a TTL index so abandoned checkouts release automatically
-- [ ] Atomic hold claim, same discipline as the ticket stock decrement: re-verify
+- [ ] Atomic hold claim, same discipline as the seat-tier decrement: re-verify
       availability inside the write, never read-then-write
 - [ ] Seat picker UI
-- [ ] `Ticket.seat` snapshot
+- [ ] `CinemaTicket.seat` snapshot
 
 ---
 

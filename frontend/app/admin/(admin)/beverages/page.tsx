@@ -47,6 +47,8 @@ import {
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { BeverageDashboard } from "@/components/beverages/beverage-dashboard";
 import BeverageEventsPanel from "@/components/beverages/BeverageEventsPanel";
+import AdminVenuePanel from "@/components/venue/admin-venue-panel";
+import AdminVenueSalesPanel from "@/components/venue/admin-venue-sales-panel";
 import { toast } from "sonner";
 import {
   getBeverageColorVars,
@@ -62,6 +64,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
+  Store,
+  Receipt,
   ShieldCheck,
   ShieldOff,
   Plus,
@@ -525,10 +529,27 @@ export default function BeveragesPage() {
                 <Badge className="ml-1.5 bg-emerald-500 text-white">{eligibleCount}</Badge>
               ) : null}
             </TabsTrigger>
+            <TabsTrigger value="venues">
+              <Store className="h-4 w-4 mr-1.5" /> Venues
+            </TabsTrigger>
+            {/* The venue channel's sales, kept as its own tab rather than mixed
+                into the Dashboard: that one reads the event ledger, and the two
+                pools must never be shown as one figure. */}
+            <TabsTrigger value="venue-sales">
+              <Receipt className="h-4 w-4 mr-1.5" /> Venue sales
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard">
             <BeverageDashboard scope="admin" token={token || ""} />
+          </TabsContent>
+
+          <TabsContent value="venues">
+            <AdminVenuePanel />
+          </TabsContent>
+
+          <TabsContent value="venue-sales">
+            <AdminVenueSalesPanel token={token} />
           </TabsContent>
 
           {/* Events with a drinks line-up: bar takings per event, and the

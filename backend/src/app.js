@@ -29,6 +29,8 @@ const santimPayRoutes = require("./routes/santimPayRoutes");
 const paymentConfigRoutes = require("./routes/paymentConfigRoutes");
 const capitalRoutes = require("./routes/capitalRoutes");
 const beverageRoutes = require("./routes/beverageRoutes");
+const venueRoutes = require("./routes/venueRoutes");
+const cinemaRoutes = require("./routes/cinemaRoutes");
 const { sendInvitationEmail } = require("./controllers/invitationEmailController");
 const { sendSMS } = require("./utils/sms");
 
@@ -153,6 +155,8 @@ app.use("/api/rsvp", rsvpRoutes);
 app.use("/api/config/payment", paymentConfigRoutes);
 app.use("/api/capital", capitalRoutes);
 app.use("/api/beverages", beverageRoutes);
+app.use("/api/venues", venueRoutes);
+app.use("/api/cinemas", cinemaRoutes);
 app.use("/api/qr-tickets", qrTicketRoutes);
 app.use("/", santimPayRoutes);
 

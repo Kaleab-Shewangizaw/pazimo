@@ -597,7 +597,111 @@ const calculateOrganizerBalanceLegacy = async (organizerId) => {
   };
 };
 
+/**
+ * One venue's balance.
+ *
+ * A deliberate sibling of calculateOrganizerBalance rather than a branch inside
+ * it. That function is built around events: it resolves the organizer's events,
+ * scans tickets by event id, and folds in Pazimo Capital, none of which a venue
+ * has. Threading a "is this a venue?" flag through all of it would leave every
+ * ticket and loan path one forgotten condition away from touching venue money.
+ *
+ * A venue has exactly one pool — drinks — so the shape is much smaller. It is
+ * still reported under `streams.venueBeverages` so callers read a venue balance
+ * the same way they read the other two, and `availableBalance` means the same
+ * thing everywhere: what this account may withdraw right now.
+ *
+ * Pazimo Capital does not reach this pool. Advances are underwritten against
+ * event ticket revenue; a venue has none.
+ */
+const calculateVenueBalance = async (venueId, currency = "ETB") => {
+  // Required here rather than at the top of the file: financeService is loaded
+  // by controllers that predate the venue channel, and a top-level require
+  // would pull the venue models into every one of them.
+  const {
+    getVenueBeverageRevenue,
+  } = require("../utils/venueBeverageRevenueQuery");
+
+  // VenueBeverageSale is ETB-only (the currency enum has one value), so a USD
+  // request returns an empty stream rather than running a pointless scan — the
+  // same decision calculateOrganizerBalance makes for the beverage stream.
+  const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
+  const revenue =
+    normalizedCurrency === "ETB"
+      ? await getVenueBeverageRevenue(venueId, "ETB")
+      : {
+          grossRevenue: 0,
+          pazimoCommission: 0,
+          vatOnCommission: 0,
+          venueVat: 0,
+          venueRevenue: 0,
+          unitsSold: 0,
+          salesCount: 0,
+        };
+
+  // Scoped by `venue` AND by stream. Either alone would be enough today, but
+  // both together mean a row can only be counted against this pool if it was
+  // explicitly written as a venue payout for this venue.
+  const [withdrawalRow] = await Withdrawal.aggregate([
+    {
+      $match: {
+        venue: new mongoose.Types.ObjectId(String(venueId)),
+        stream: "venue_beverages",
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        pending: {
+          $sum: { $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0] },
+        },
+        approved: {
+          $sum: {
+            $cond: [{ $in: ["$status", ["approved", "completed"]] }, "$amount", 0],
+          },
+        },
+      },
+    },
+  ]);
+
+  const pendingWithdrawals = round2(withdrawalRow?.pending || 0);
+  const approvedWithdrawals = round2(withdrawalRow?.approved || 0);
+  const venueRevenue = round2(revenue.venueRevenue || 0);
+  const venueVat = round2(revenue.venueVat || 0);
+
+  const availableBalance = round2(
+    venueRevenue - pendingWithdrawals - approvedWithdrawals
+  );
+
+  return {
+    currency: normalizedCurrency,
+    availableBalance,
+    pendingWithdrawals,
+    approvedWithdrawals,
+    streams: {
+      venueBeverages: {
+        availableBalance,
+        pendingWithdrawals,
+        approvedWithdrawals,
+        grossRevenue: round2(revenue.grossRevenue),
+        venueRevenue,
+        pazimoCommission: round2(revenue.pazimoCommission),
+        vatOnCommission: round2(revenue.vatOnCommission),
+        // Withheld for the government, never Pazimo revenue — reported on its
+        // own for the same reason the event side reports organizerVat apart.
+        venueVat,
+        pazimoCollected: round2(
+          revenue.pazimoCommission + revenue.vatOnCommission + venueVat
+        ),
+        unitsSold: revenue.unitsSold,
+        salesCount: revenue.salesCount,
+      },
+    },
+  };
+};
+
 module.exports = {
   calculateOrganizerBalance,
   calculateOrganizerBalanceLegacy,
+  calculateVenueBalance,
 };

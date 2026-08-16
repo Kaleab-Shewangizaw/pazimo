@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
-import { EventBeverageManager } from "@/components/beverages/event-beverage-manager";
+import { BeverageLineupManager } from "@/components/beverages/beverage-lineup-manager";
 import { Beer, ArrowLeft } from "lucide-react";
 
 export default function EventBeveragesPage({
@@ -58,10 +58,9 @@ export default function EventBeveragesPage({
         </p>
       </div>
 
-      <EventBeverageManager
-        eventId={eventId}
+      <BeverageLineupManager
         token={token || ""}
-        scope="organizer"
+        context={{ kind: "event", eventId, scope: "organizer" }}
         onForbidden={() => setForbidden(true)}
         onEventLoaded={(event) => setEventTitle(event.title)}
       />

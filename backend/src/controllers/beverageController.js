@@ -60,6 +60,19 @@ const parseColor = (value) => {
   return value.trim().toLowerCase();
 };
 
+// The catalogue category (B3). Rejected rather than silently defaulted on a bad
+// value: an admin who typed "snacks" needs to be told, not have it quietly
+// filed as a drink and reported in the wrong group forever.
+const CATEGORIES = ["drink", "snack", "combo"];
+const parseCategory = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (!CATEGORIES.includes(normalized)) {
+    throw new BadRequestError(`category must be one of: ${CATEGORIES.join(", ")}`);
+  }
+  return normalized;
+};
+
 const duplicateNameError = (error) =>
   error?.code === 11000 ? new BadRequestError("A beverage with this name already exists") : error;
 
@@ -95,6 +108,9 @@ const listBeverages = async (req, res) => {
     }
     if (status === "active") query.isActive = true;
     if (status === "inactive") query.isActive = false;
+    // Lets the catalogue screen show drinks, snacks and combos apart, which is
+    // the whole point of the category existing.
+    if (req.query.category) query.category = parseCategory(req.query.category);
 
     const [beverages, total, activeCount, inactiveCount] = await Promise.all([
       Beverage.find(query).sort("name").skip(skip).limit(Number(limit)).lean(),
@@ -141,6 +157,7 @@ const createBeverage = async (req, res) => {
       name,
       image: req.file ? `/uploads/${req.file.filename}` : null,
       color: parseColor(req.body.color) ?? null,
+      category: parseCategory(req.body.category) ?? "drink",
       isActive: parseBoolean(req.body.isActive, true),
       createdBy: req.user.userId,
       updatedBy: req.user.userId,
@@ -173,6 +190,9 @@ const updateBeverage = async (req, res) => {
 
     const color = parseColor(req.body.color);
     if (color !== undefined) beverage.color = color;
+
+    const category = parseCategory(req.body.category);
+    if (category !== undefined) beverage.category = category;
 
     const previousImage = beverage.image;
     if (req.file) beverage.image = `/uploads/${req.file.filename}`;

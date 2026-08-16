@@ -32,9 +32,22 @@ const userSchema = new mongoose.Schema(
       minlength: [6, "Password must be at least 6 characters long"],
       select: false,
     },
+    // "venue" is a club, bar, restaurant or lounge that sells drinks through
+    // Pazimo without running events. It is a login and nothing more — the
+    // business itself lives in the Venue model, which this account owns.
+    //
+    // "cinema" is a cinema business selling screening tickets and concessions.
+    // Same arrangement: a login only, with the business in the Cinema model that
+    // this account owns. It differs from "venue" in selling two things rather
+    // than one, so it settles two pools instead of one.
+    //
+    // A new role rather than a flag on organizer: the three settle different
+    // pools, and restrictTo() must be able to say "organizers only" on the
+    // event-side money routes without a venue or a cinema slipping through.
+    // Every route that admits "venue" or "cinema" does so explicitly.
     role: {
       type: String,
-      enum: ["customer", "organizer"],
+      enum: ["customer", "organizer", "venue", "cinema"],
       required: true,
     },
     firstName: {

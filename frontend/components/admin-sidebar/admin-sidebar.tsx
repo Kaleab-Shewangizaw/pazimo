@@ -19,6 +19,7 @@ import {
   ClipboardList,
   Banknote,
   Beer,
+  Film,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -420,6 +421,21 @@ export default function AdminSidebar({
               >
                 <Beer className="h-5 w-5 flex-shrink-0" />
                 <span className="font-medium text-sm sm:text-base">Beverages</span>
+              </Link>
+            )}
+
+            {!isPartner && (
+              <Link
+                href="/admin/cinema"
+                onClick={onClose}
+                className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-xl transition-all duration-200 group ${
+                  pathname.startsWith("/admin/cinema")
+                    ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-900/50"
+                    : "text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-900 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <Film className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">Cinemas</span>
               </Link>
             )}
 

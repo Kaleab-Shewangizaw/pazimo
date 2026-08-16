@@ -19,7 +19,7 @@ import { EventFormSection } from "@/app/organizer/events/create/_components/even
 import { EventImagesSection } from "@/app/organizer/events/create/_components/event-images-section";
 import { TicketTypesSection } from "@/app/organizer/events/create/_components/ticket-types-section";
 import { WaveTicketDialog } from "@/app/organizer/events/create/_components/wave-ticket-dialog";
-import { EventBeverageManager } from "@/components/beverages/event-beverage-manager";
+import { BeverageLineupManager } from "@/components/beverages/beverage-lineup-manager";
 import type {
   Category,
   EventFormData,
@@ -1203,7 +1203,10 @@ export default function AdminEditEventPage() {
                   separately from the rest of the form.
                 </p>
               </div>
-              <EventBeverageManager eventId={eventId} token={token || ""} scope="admin" />
+              <BeverageLineupManager
+                token={token || ""}
+                context={{ kind: "event", eventId, scope: "admin" }}
+              />
             </EventFormSection>
           </div>
         </CreateEventPageShell>

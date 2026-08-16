@@ -50,7 +50,13 @@ function SignInContent() {
 
       const nextUrl = searchParams.get("next");
 
-      if (currentUser?.role === "organizer") {
+      // No admin branch here on purpose: admins are turned away above and sent
+      // to the admin login, so a redirect for them would be unreachable.
+      if (currentUser?.role === "venue") {
+        router.push("/venue");
+      } else if (currentUser?.role === "cinema") {
+        router.push("/cinema");
+      } else if (currentUser?.role === "organizer") {
         router.push("/organizer");
       } else if (nextUrl) {
         try {

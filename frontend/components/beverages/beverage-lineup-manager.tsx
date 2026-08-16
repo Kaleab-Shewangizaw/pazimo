@@ -57,34 +57,60 @@ export const buildBeverageImageUrl = (image?: string | null) =>
 
 const UNAVAILABLE_COPY: Record<string, string> = {
   inactive: "Pazimo has paused this drink. It won't be sold until it returns.",
-  blocked: "This organizer is no longer approved to sell this drink.",
+  blocked: "This seller is no longer approved to sell this drink.",
   removed: "This drink was removed from the Pazimo catalogue.",
 };
 
-interface EventBeverageManagerProps {
-  eventId: string;
+/**
+ * Which sales channel this manager is editing.
+ *
+ * An event line-up and a venue line-up are the same interaction — pick from the
+ * catalogue, set a price, set stock, stop selling — against different owners.
+ * One component serves both rather than a near-copy per channel, because a copy
+ * is where the two would silently drift apart on validation and on the
+ * stop-selling-vs-delete rule that protects the ledger.
+ *
+ * Only the endpoints and the noun differ, and both live in this table.
+ */
+type ChannelContext =
+  | { kind: "event"; eventId: string; scope: "admin" | "organizer" }
+  | { kind: "venue"; venueId: string; scope: "admin" | "venue" };
+
+const CHANNEL_COPY = {
+  event: { place: "this event", placeCap: "This event", owner: "organizer" },
+  venue: { place: "this venue", placeCap: "This venue", owner: "venue" },
+} as const;
+
+interface BeverageLineupManagerProps {
   token: string;
   // Which surface is mounting this. Chooses the API prefix, and admins get
-  // wording that refers to the organizer in the third person.
-  scope: "admin" | "organizer";
+  // wording that refers to the owner in the third person.
+  context: ChannelContext;
   onForbidden?: () => void;
   onEventLoaded?: (event: { title: string }) => void;
 }
 
-export function EventBeverageManager({
-  eventId,
+export function BeverageLineupManager({
   token,
-  scope,
+  context,
   onForbidden,
   onEventLoaded,
-}: EventBeverageManagerProps) {
-  const isAdmin = scope === "admin";
-  const lineupUrl = `${API_URL}/api/beverages/${scope}/events/${eventId}/beverages`;
-  // Admins pick from the drinks this event's organizer is allowed to sell,
-  // which is not the same list as the raw catalogue.
-  const catalogUrl = isAdmin
-    ? `${API_URL}/api/beverages/admin/events/${eventId}/catalog`
-    : `${API_URL}/api/beverages/organizer/catalog`;
+}: BeverageLineupManagerProps) {
+  const isAdmin = context.scope === "admin";
+  const copy = CHANNEL_COPY[context.kind];
+
+  // Admins pick from the drinks this owner is allowed to sell, which is not the
+  // same list as the raw catalogue — the deny list is applied server-side.
+  const lineupUrl =
+    context.kind === "venue"
+      ? `${API_URL}/api/venues/${context.venueId}/beverages`
+      : `${API_URL}/api/beverages/${context.scope}/events/${context.eventId}/beverages`;
+  const catalogUrl =
+    context.kind === "venue"
+      ? `${API_URL}/api/venues/${context.venueId}/catalog`
+      : isAdmin
+      ? `${API_URL}/api/beverages/admin/events/${context.eventId}/catalog`
+      : `${API_URL}/api/beverages/organizer/catalog`;
 
   const [rows, setRows] = useState<LineupRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +145,9 @@ export function EventBeverageManager({
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to load beverages");
 
       setRows(data.data);
-      setEligibility(data.organizerEligibility || "eligible");
+      // The two channels name this after their owner; either means the same
+      // thing — may this seller list drinks at all?
+      setEligibility(data.venueEligibility || data.organizerEligibility || "eligible");
       if (data.event) onEventLoaded?.(data.event);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load beverages");
@@ -182,7 +210,7 @@ export function EventBeverageManager({
         price: addPrice,
         stockTotal: addStock,
       });
-      toast.success("Drink added to this event");
+      toast.success(`Drink added to ${copy.place}`);
       setAddOpen(false);
       fetchLineup();
     } catch (error) {
@@ -242,7 +270,7 @@ export function EventBeverageManager({
     try {
       setBusyRow(removeTarget._id);
       await request(`${lineupUrl}/${removeTarget._id}`, "DELETE");
-      toast.success("Drink removed from this event");
+      toast.success(`Drink removed from ${copy.place}`);
       setRemoveTarget(null);
       fetchLineup();
     } catch (error) {
@@ -279,8 +307,8 @@ export function EventBeverageManager({
       {isAdmin && notApproved && (
         <p className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          This organizer isn&apos;t approved to sell beverages, so no new drinks can be added. You
-          can still edit or remove what&apos;s already here.
+          This {copy.owner} isn&apos;t approved to sell beverages, so no new drinks can be added.
+          You can still edit or remove what&apos;s already here.
         </p>
       )}
 
@@ -300,10 +328,14 @@ export function EventBeverageManager({
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950/40">
             <Beer className="h-6 w-6 text-amber-600 dark:text-amber-400" />
           </div>
-          <p className="font-semibold text-gray-900 dark:text-gray-100">No drinks on this event</p>
+          <p className="font-semibold text-gray-900 dark:text-gray-100">
+            No drinks on {copy.place}
+          </p>
           <p className="mt-1 max-w-sm text-sm text-gray-600 dark:text-gray-400">
             {isAdmin
               ? "Nothing is being sold here yet."
+              : context.kind === "venue"
+              ? "Add a drink and set your price. This is what customers pay at your bar."
               : "Add a drink and set your price. Guests buy ahead of the event, so price below what they'd pay at the door."}
           </p>
         </div>
@@ -347,7 +379,7 @@ export function EventBeverageManager({
                   <div className="mt-auto space-y-2 border-t border-gray-100 pt-3 dark:border-gray-700">
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="text-xs uppercase tracking-wide text-gray-500">
-                        {isAdmin ? "Organizer's price" : "Your price"}
+                        {isAdmin ? `${copy.owner === "venue" ? "Venue" : "Organizer"}'s price` : "Your price"}
                       </span>
                       <span className="font-semibold text-gray-900 dark:text-gray-100">
                         {formatCompactMoney(row.price, row.currency)}
@@ -448,9 +480,7 @@ export function EventBeverageManager({
           <DialogHeader>
             <DialogTitle>Add a drink</DialogTitle>
             <DialogDescription>
-              {isAdmin
-                ? "Pick a drink and set what guests pay for it at this event."
-                : "Pick a drink and set what guests pay for it at this event."}
+              Pick a drink and set what customers pay for it at {copy.place}.
             </DialogDescription>
           </DialogHeader>
 
@@ -458,9 +488,9 @@ export function EventBeverageManager({
             <p className="py-6 text-center text-sm text-gray-600 dark:text-gray-400">
               {catalog.length === 0
                 ? isAdmin
-                  ? "No drinks are approved for this organizer yet."
+                  ? `No drinks are approved for this ${copy.owner} yet.`
                   : "There are no drinks approved for you yet."
-                : "Every approved drink is already on this event."}
+                : `Every approved drink is already on ${copy.place}.`}
             </p>
           ) : (
             <div className="space-y-4">
@@ -535,7 +565,7 @@ export function EventBeverageManager({
               disabled={saving || addable.length === 0}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              {saving ? "Adding..." : "Add to event"}
+              {saving ? "Adding..." : context.kind === "venue" ? "Add to venue" : "Add to event"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -603,7 +633,7 @@ export function EventBeverageManager({
             <AlertDialogDescription>
               {(removeTarget?.sold ?? 0) > 0
                 ? `${removeTarget?.sold} bottles have already sold, so this can't be removed — the record of what people paid has to stay. Use "Stop selling" instead.`
-                : "It comes off this event entirely. To pause sales without losing the price and stock, use \"Stop selling\" instead."}
+                : `It comes off ${copy.place} entirely. To pause sales without losing the price and stock, use "Stop selling" instead.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

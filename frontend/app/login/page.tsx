@@ -10,7 +10,7 @@ import { toast } from "sonner"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login } = useAuthStore()
+  const { setAuth } = useAuthStore()
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -35,9 +35,20 @@ export default function LoginPage() {
       }
 
       // Store user and token
-      login(data.data.user, data.data.token)
+      setAuth({ user: data.data.user, token: data.data.token })
       toast.success('Login successful')
-      router.push('/')
+      const role = data.data.user?.role
+      if (role === "admin") {
+        router.push('/admin')
+      } else if (role === "venue") {
+        router.push('/venue')
+      } else if (role === "organizer") {
+        router.push('/organizer')
+      } else if (role === "cinema") {
+        router.push('/cinema')
+      } else {
+        router.push('/')
+      }
     } catch (error) {
       console.error('Login error:', error)
       toast.error(error instanceof Error ? error.message : 'Login failed')

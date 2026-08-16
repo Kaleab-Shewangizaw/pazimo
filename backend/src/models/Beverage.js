@@ -33,6 +33,27 @@ const BeverageSchema = new mongoose.Schema(
       default: null,
       match: [/^#[0-9a-f]{6}$/, "Colour must be a hex value like #1f7a3f"],
     },
+    // What kind of product this is.
+    //
+    // Popcorn and crisps are beverages with a different label, so this is a
+    // category on the existing catalogue rather than a parallel Concession model
+    // — the cheapest possible way to carry snacks, and the one that leaves every
+    // price, stock and revenue path already written working unchanged.
+    //
+    // Defaults to "drink" so every row that predates this field reads correctly:
+    // the catalogue was drinks-only when they were created.
+    //
+    // "combo" is accepted here but has no bundling behaviour yet — a combo is
+    // currently just a product with its own price and its own stock. Decrementing
+    // each component's stock on redemption is deliberately not implemented,
+    // because whether a combo is priced independently or summed from its parts is
+    // still an open question (see docs/BEVERAGE_CINEMA_PLAN.md, B3).
+    category: {
+      type: String,
+      enum: ["drink", "snack", "combo"],
+      default: "drink",
+      index: true,
+    },
     // Inactive beverages stay in the catalogue (and on any past selection)
     // but are hidden from the list organizers pick from.
     isActive: {

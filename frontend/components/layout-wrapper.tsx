@@ -22,12 +22,16 @@ export default function LayoutWrapper({
   const isAdminRoute = pathname?.startsWith("/admin");
   const isSignIn = pathname?.startsWith("/sign-in");
   const isOrganizerRoute = pathname?.startsWith("/organizer");
+  const isVenueRoute = pathname?.startsWith("/venue");
+  const isCinemaRoute = pathname?.startsWith("/cinema");
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isRsvpForm = pathname?.startsWith("/rsvp-form/");
   const isTicketPage = pathname?.startsWith("/ticket/");
 
-  // Hide Header and Footer for admin and organizer routes, as they have their own layouts/headers/footers
-  const hideGlobalHeaderFooter = isAdminRoute || isOrganizerRoute;
+  // Hide Header and Footer for admin, organizer, venue and cinema routes, as
+  // they have their own layouts/headers/footers
+  const hideGlobalHeaderFooter =
+    isAdminRoute || isOrganizerRoute || isVenueRoute || isCinemaRoute;
 
   // Show a minimal layout during SSR to prevent hydration issues
   if (!mounted) {

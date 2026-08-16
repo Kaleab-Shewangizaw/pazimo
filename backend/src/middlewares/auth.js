@@ -308,6 +308,111 @@ const requireBeverageEligible = async (req, res, next) => {
   }
 };
 
+// Resolves the venue owned by the calling account and attaches it as req.venue.
+//
+// Same contract and same reasoning as requireBeverageEligible above: the venue
+// and its approval are mutable admin-granted state, so both are read from the
+// database on every request and never taken from the JWT. A token issued while
+// a venue was approved must stop working the moment approval is withdrawn.
+//
+// Deliberately does NOT read a venue id from the request. The venue a caller
+// may act as is derived from their account and nothing else, so no route behind
+// this middleware can be pointed at another venue by changing a parameter.
+const requireVenueAccount = async (req, res, next) => {
+  try {
+    const Venue = require("../models/Venue");
+    const venue = await Venue.findOne({ account: req.user.userId });
+
+    if (!venue) {
+      return res.status(403).json({
+        status: "error",
+        message: "This account is not linked to a venue.",
+      });
+    }
+    if (venue.isActive === false) {
+      return res.status(403).json({
+        status: "error",
+        message: "This venue has been suspended.",
+      });
+    }
+
+    req.venue = venue;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
+// Adds the approval check on top. Split from requireVenueAccount because a
+// venue must still be able to read its own profile — and be told it is awaiting
+// approval — while it is not yet eligible to sell anything.
+const requireVenueEligible = async (req, res, next) => {
+  requireVenueAccount(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.venue || req.venue.eligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "This venue is not approved to sell beverages yet.",
+      });
+    }
+    next();
+  });
+};
+
+// Resolves the cinema owned by the calling account and attaches it as
+// req.cinema. The cinema twin of requireVenueAccount, with the same contract and
+// the same reasoning: the cinema and its approval are mutable admin-granted
+// state, so both are read from the database on every request and never taken
+// from the JWT. A token issued while a cinema was active must stop working the
+// moment it is suspended.
+//
+// Deliberately does NOT read a cinema id from the request. The cinema a caller
+// may act as is derived from their account and nothing else, so no route behind
+// this middleware can be pointed at another cinema by changing a parameter —
+// which is what stops Cinema A editing Cinema B.
+const requireCinemaAccount = async (req, res, next) => {
+  try {
+    const Cinema = require("../models/Cinema");
+    const cinema = await Cinema.findOne({ account: req.user.userId });
+
+    if (!cinema) {
+      return res.status(403).json({
+        status: "error",
+        message: "This account is not linked to a cinema.",
+      });
+    }
+    if (cinema.isActive === false) {
+      return res.status(403).json({
+        status: "error",
+        message: "This cinema has been suspended.",
+      });
+    }
+
+    req.cinema = cinema;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
+// Adds the concession-approval check on top. Split from requireCinemaAccount for
+// the reason requireVenueEligible is split: a cinema must still be able to read
+// its own profile, sell seats, and be told it is awaiting approval, while it is
+// not yet eligible to sell drinks and snacks. Selling seats is what a cinema is
+// for — only the concession surface is gated.
+const requireCinemaBeverageEligible = async (req, res, next) => {
+  requireCinemaAccount(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.cinema || req.cinema.beverageEligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "This cinema is not approved to sell concessions yet.",
+      });
+    }
+    next();
+  });
+};
+
 module.exports = {
   protect,
   authenticateUser,
@@ -316,5 +421,9 @@ module.exports = {
   isAdmin,
   requireCapitalEligible,
   requireBeverageEligible,
+  requireVenueAccount,
+  requireVenueEligible,
+  requireCinemaAccount,
+  requireCinemaBeverageEligible,
   protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };

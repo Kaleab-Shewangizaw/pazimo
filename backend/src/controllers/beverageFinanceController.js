@@ -48,10 +48,12 @@ const beverageWithdrawalTotals = async (organizerId) => {
 /** One organizer's beverage dashboard: totals, balance, and a per-event split. */
 const getOrganizerBeverageFinance = async (req, res) => {
   try {
+    // An organizer always reads its own figures; only an admin may name another
+    // account. "cinema" is deliberately absent: a cinema's drink revenue is in
+    // CinemaBeverageSale, and scoping this event-ledger query by a cinema's id
+    // would report zero rather than its real takings.
     const organizerId =
-      req.user.role === "organizer" || req.user.role === "cinema"
-        ? req.user.userId
-        : req.params.organizerId;
+      req.user.role === "organizer" ? req.user.userId : req.params.organizerId;
 
     const [totalsRow, perEvent, withdrawals] = await Promise.all([
       BeverageSale.aggregate([

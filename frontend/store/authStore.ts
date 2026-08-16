@@ -9,7 +9,7 @@ interface User {
   firstName: string;
   lastName?: string;
   phoneNumber: string;
-  role: "customer" | "organizer" | "admin";
+  role: "customer" | "organizer" | "venue" | "admin" | "cinema";
 }
 
 interface AuthState {
