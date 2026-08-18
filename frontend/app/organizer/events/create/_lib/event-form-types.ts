@@ -16,6 +16,8 @@ export interface WaveDraft {
   description: string;
   waveSwitchMode: WaveSwitchMode;
   saleStartDate: string;
+  /** Wall-clock Africa/Addis_Ababa time of day, "HH:MM". */
+  saleStartTime: string;
   saleEndDate: string;
 }
 
@@ -40,6 +42,8 @@ export interface TicketType {
   quantity: string;
   description: string;
   saleStartDate: string;
+  /** Wall-clock Africa/Addis_Ababa time of day, "HH:MM". */
+  saleStartTime?: string;
   saleEndDate: string;
   isActive: boolean;
   hasDateRange: boolean;

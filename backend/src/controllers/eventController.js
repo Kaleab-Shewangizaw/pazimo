@@ -8,6 +8,8 @@ const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { claimTicketStock } = require("../utils/ticketStock");
+const { resolveEatInstant } = require("../utils/eatTime");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 const {
   generateShortId,
@@ -28,12 +30,6 @@ const toNumberOrUndefined = (value) => {
   if (value === undefined || value === null || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const toDateOrUndefined = (value) => {
-  if (!value) return undefined;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 };
 
 // Roles allowed to see full, unsanitized event data (draft events, organizer
@@ -158,8 +154,19 @@ const normalizeTicketTypes = (rawTickets = []) =>
       (priceETB !== undefined ? priceETB : priceUSD !== undefined ? priceUSD : 0);
 
     const quantity = toNumberOrUndefined(ticket.quantity) ?? 0;
-    const startDate = toDateOrUndefined(ticket.startDate || ticket.saleStartDate);
-    const endDate = toDateOrUndefined(ticket.endDate || ticket.saleEndDate);
+
+    // Organizers pick a wall-clock Ethiopian date *and* time ("Aug 19, 8:00 PM").
+    // Anchor it to EAT explicitly: a bare "YYYY-MM-DD" run through `new Date()`
+    // parses as UTC midnight, which is 3:00 AM in Addis, so date-only wave
+    // transitions used to fire three hours after the organizer expected.
+    const startDate = resolveEatInstant(
+      ticket.startDate || ticket.saleStartDate,
+      ticket.startTime || ticket.saleStartTime
+    );
+    const endDate = resolveEatInstant(
+      ticket.endDate || ticket.saleEndDate,
+      ticket.endTime || ticket.saleEndTime
+    );
     const inferredWaveOrder = detectWaveOrderFromName(ticket.name);
     const waveOrder = toNumberOrUndefined(ticket.waveOrder) ?? inferredWaveOrder;
     const waveSwitchMode = normalizeWaveSwitchMode(
@@ -255,24 +262,30 @@ const applyManualAvailabilityOverrides = (
   return (nextTicketTypes || []).map((ticket) => {
     const existing = existingByKey.get(createTicketTypeKey(ticket));
 
-    let manualDisabled = Boolean(existing?.manualDisabled);
-
-    if (typeof ticket.manualDisabled === "boolean") {
-      manualDisabled = ticket.manualDisabled;
-    } else if (
-      existing &&
-      typeof existing.available === "boolean" &&
-      typeof ticket.available === "boolean" &&
-      existing.available !== ticket.available
-    ) {
-      // If admin flipped availability, persist that intent.
-      manualDisabled = ticket.available === false;
-    }
+    // Manual disabling is now an *explicit* signal only.
+    //
+    // This used to also infer intent: if the submitted `available` disagreed
+    // with the stored one, the difference was written back as a permanent
+    // `manualDisabled: true`. But `available` is a derived flag that the wave
+    // engine owns, and the edit forms recomputed it client-side with rules that
+    // did not match the server's. Any drift — an admin form that did not
+    // understand a switch mode, a wave that transitioned between page load and
+    // save — turned an untouched round-trip through the edit screen into a
+    // permanently dead wave, which then stalled the rest of the chain behind it.
+    const manualDisabled =
+      typeof ticket.manualDisabled === "boolean"
+        ? ticket.manualDisabled
+        : Boolean(existing?.manualDisabled);
 
     return {
       ...ticket,
+      // Preserve the subdocument identity across edits. Replacing the array
+      // wholesale would make Mongoose mint fresh _ids for every ticket type,
+      // breaking in-flight checkouts that reference the old ticketTypeId.
+      ...(existing?._id ? { _id: existing._id } : {}),
       manualDisabled,
-      // Keep payload coherent; rules will still enforce windows/quantity for enabled tickets.
+      // Availability itself is always recomputed by applyTicketAvailabilityRules
+      // right after this; never let a stale client value decide what is live.
       available: manualDisabled ? false : ticket.available,
     };
   });
@@ -456,14 +469,22 @@ const buyTicket = async (req, res) => {
     isVerifiedPaid = true;
   }
 
-  event.ticketTypes[index].quantity -= quantity;
-  if (event.ticketTypes[index].quantity === 0) {
-    event.ticketTypes[index].available = false;
+  // Claim the stock atomically. The availability/quantity check above reads a
+  // snapshot that two simultaneous buyers can both pass; only a conditional
+  // decrement in a single database operation can decide who actually gets the
+  // last tickets. This also hands the chain off to the next wave the moment
+  // this one empties.
+  const claim = await claimTicketStock({
+    eventId: event._id,
+    ticketTypeId: selectedType._id,
+    ticketTypeName: selectedType.name,
+    count: quantity,
+    now,
+  });
+
+  if (!claim.claimed) {
+    throw new BadRequestError("Not enough tickets available");
   }
-
-  applyTicketAvailabilityRules(event, now);
-
-  await event.save();
 
   const ticket = await Ticket.create({
     event: event._id,
@@ -519,6 +540,12 @@ const getOrganizerEvents = async (req, res) => {
     ;
 
   await Promise.all(events.map((event) => ensureEventUrlFields(event)));
+
+  for (const event of events) {
+    if (applyTicketAvailabilityRules(event).changed) {
+      await event.save();
+    }
+  }
 
   // Optionally include tickets if requested
   if (includeTickets && events.length > 0) {
@@ -746,6 +773,15 @@ const getAllEvents = async (req, res) => {
     .limit(Number(limit));
 
   await Promise.all(events.map((event) => ensureEventUrlFields(event)));
+
+  // This listing feeds the public homepage, so it has to reflect the live wave
+  // just like the detail endpoints do — otherwise a card can advertise a price
+  // from a wave that already handed off.
+  for (const event of events) {
+    if (applyTicketAvailabilityRules(event).changed) {
+      await event.save();
+    }
+  }
 
   const eventIds = events.map((event) => event._id);
 

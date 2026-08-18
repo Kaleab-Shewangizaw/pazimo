@@ -138,6 +138,147 @@ export const groupWaveTickets = (ticketTypes: TicketType[]) =>
     return groups;
   }, {});
 
+// Africa/Addis_Ababa is a fixed UTC+3 offset year-round (no DST), matching the
+// backend's eatTime helper. Wave start times are entered as Ethiopian wall
+// clock, so they must be anchored to EAT rather than to the browser's timezone.
+const EAT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * The instant a wave is scheduled to take over, or null when no time trigger is
+ * configured. Mirrors `getWaveStartInstant` on the backend — including the fact
+ * that a *missing* date means "no trigger", never "already started".
+ */
+export const resolveWaveStartInstant = (
+  ticket: Pick<TicketType, "saleStartDate" | "saleStartTime">,
+): Date | null => {
+  const date = (ticket.saleStartDate || "").trim();
+  if (!date) return null;
+
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  const time = (ticket.saleStartTime || "").trim();
+  const [hours = 0, minutes = 0] = time
+    ? time.split(":").map(Number)
+    : [0, 0];
+
+  const wallClockUtc = Date.UTC(year, month - 1, day, hours || 0, minutes || 0);
+  return new Date(wallClockUtc - EAT_OFFSET_MS);
+};
+
+export const isTicketActiveByDateRange = (
+  startDate: string,
+  endDate: string,
+): boolean => {
+  if (!startDate || !endDate) {
+    return true;
+  }
+
+  const today = new Date();
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  end.setHours(23, 59, 59, 999);
+  return today >= start && today <= end;
+};
+
+/**
+ * Split a stored UTC instant back into the EAT date and time the organizer
+ * originally entered, so an edit form round-trips without drifting.
+ *
+ * `new Date(value).toISOString()` would render the *UTC* calendar day, which
+ * lands on the wrong date for any wave scheduled between midnight and 3 AM
+ * Addis time.
+ */
+const toEatParts = (value?: string | Date | null) => {
+  if (!value) return null;
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) return null;
+
+  const shifted = new Date(instant.getTime() + EAT_OFFSET_MS).toISOString();
+  return { date: shifted.slice(0, 10), time: shifted.slice(11, 16) };
+};
+
+export const toEatDateInput = (value?: string | Date | null) =>
+  toEatParts(value)?.date ?? "";
+
+export const toEatTimeInput = (value?: string | Date | null) =>
+  toEatParts(value)?.time ?? "";
+
+const isWaveFinished = (wave: TicketType) => Number(wave.quantity || 0) <= 0;
+
+/**
+ * Which wave in a chain is live right now.
+ *
+ * This deliberately mirrors `resolveActiveWaveIndex` in
+ * backend/src/utils/ticketAvailability.js. The forms used to each carry their
+ * own slightly different copy of this rule — the admin form, for instance, never
+ * handled `date_or_quantity` — and because the computed flag was posted back and
+ * compared against the stored one, any disagreement was recorded as a permanent
+ * manual disable. Keeping a single shared implementation is what stops that
+ * class of bug from returning.
+ */
+export const resolveActiveWaveIndex = (
+  waves: TicketType[],
+  now: Date = new Date(),
+) => {
+  let index = 0;
+
+  while (index < waves.length - 1) {
+    const current = waves[index];
+    const next = waves[index + 1];
+
+    const nextIsTimeTriggered = (next.waveSwitchMode || "date") !== "quantity";
+    const nextStart = resolveWaveStartInstant(next);
+    const nextTimeReached =
+      nextIsTimeTriggered && nextStart !== null && now >= nextStart;
+
+    if (!isWaveFinished(current) && !nextTimeReached) break;
+
+    index += 1;
+  }
+
+  return index;
+};
+
+/**
+ * Recompute `isActive` across every ticket type, applying wave chains where they
+ * exist and plain date/quantity rules everywhere else.
+ */
+export const recalculateTicketAvailability = (ticketTypes: TicketType[]) => {
+  const nextTicketTypes = ticketTypes.map((ticket) => ({ ...ticket }));
+  const waveGroups = groupWaveTickets(nextTicketTypes);
+  const chained = new Set<TicketType>();
+
+  Object.values(waveGroups).forEach((group) => {
+    const ordered = [...group].sort(
+      (a, b) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0),
+    );
+
+    ordered.forEach((ticket) => {
+      ticket.isActive = false;
+      chained.add(ticket);
+    });
+
+    const activeIndex = resolveActiveWaveIndex(ordered);
+    const active = ordered[activeIndex];
+    if (active) {
+      active.isActive = Number(active.quantity || 0) > 0;
+    }
+  });
+
+  nextTicketTypes.forEach((ticket) => {
+    if (chained.has(ticket)) return;
+
+    ticket.isActive =
+      ticket.hasDateRange && ticket.saleStartDate && ticket.saleEndDate
+        ? isTicketActiveByDateRange(ticket.saleStartDate, ticket.saleEndDate)
+        : true;
+  });
+
+  return nextTicketTypes.map(syncLegacyPriceField);
+};
+
 export const getComparableTicketPrice = (
   ticket: Pick<TicketType, "priceETB" | "priceUSD" | "price">,
 ) => ticket.priceETB || ticket.priceUSD || ticket.price || "";
@@ -158,6 +299,7 @@ export const buildWaveDraftFromTicket = (
   description: ticket.description || "",
   waveSwitchMode: ticket.waveSwitchMode || "date",
   saleStartDate: ticket.saleStartDate || "",
+  saleStartTime: ticket.saleStartTime || "",
   saleEndDate: ticket.saleEndDate || "",
 });
 
@@ -170,6 +312,7 @@ export const createDefaultWaveDraft = (seed: Partial<WaveDraft> = {}): WaveDraft
   description: "",
   waveSwitchMode: "date",
   saleStartDate: "",
+  saleStartTime: "",
   saleEndDate: "",
   ...seed,
 });
@@ -201,8 +344,25 @@ export const formatDateWindow = (startDate: string, endDate: string) => {
   return `${formatDate(startDate)} - ${formatDate(endDate)}`;
 };
 
+const formatWaveStart = (
+  ticket: Pick<TicketType, "saleStartDate" | "saleStartTime">,
+) => {
+  if (!ticket.saleStartDate) return "";
+
+  const [year, month, day] = ticket.saleStartDate.split("-").map(Number);
+  if (!year || !month || !day) return "";
+
+  const label = new Date(year, month - 1, day).toLocaleDateString();
+  const time = (ticket.saleStartTime || "").trim();
+
+  return time ? `${label} at ${time}` : label;
+};
+
 export const formatWaveActivationSummary = (
-  ticket: Pick<TicketType, "waveOrder" | "waveSwitchMode" | "saleStartDate">,
+  ticket: Pick<
+    TicketType,
+    "waveOrder" | "waveSwitchMode" | "saleStartDate" | "saleStartTime"
+  >,
 ) => {
   const waveOrder = Number(ticket.waveOrder || 0);
 
@@ -214,16 +374,17 @@ export const formatWaveActivationSummary = (
     return "Starts when previous wave sells out";
   }
 
+  const start = formatWaveStart(ticket);
+
   if (ticket.waveSwitchMode === "date_or_quantity") {
-    if (ticket.saleStartDate) {
-      return `Starts ${new Date(ticket.saleStartDate).toLocaleDateString()} or when previous wave sells out`;
-    }
-    return "Starts on date or when previous wave sells out";
+    return start
+      ? `Starts ${start} or when previous wave sells out`
+      : "Starts on date or when previous wave sells out";
   }
 
-  if (ticket.saleStartDate) {
-    return `Starts ${new Date(ticket.saleStartDate).toLocaleDateString()}`;
-  }
-
-  return "Start date not set";
+  // A dated wave also takes over early if the wave before it sells out, so the
+  // sell-out half of the handoff is always worth stating.
+  return start
+    ? `Starts ${start}, or earlier if the previous wave sells out`
+    : "Start date not set";
 };

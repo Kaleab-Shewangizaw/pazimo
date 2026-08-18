@@ -8,7 +8,7 @@ const {
   processPaidInvitations,
 } = require("./invitationController");
 const { processGuestInvitation } = require("./ticketController");
-const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { claimTicketStock } = require("../utils/ticketStock");
 const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 
@@ -246,15 +246,18 @@ const generateTicketsForTransaction = async (transaction) => {
         );
 
         if (selectedType) {
-          const typeIndex = event.ticketTypes.indexOf(selectedType);
-          if (typeIndex > -1) {
-            event.ticketTypes[typeIndex].quantity = Math.max(
-              0,
-              event.ticketTypes[typeIndex].quantity - qty
-            );
-            applyTicketAvailabilityRules(event);
-            await event.save();
-          }
+          // Settled payment: claim the stock atomically so two callbacks
+          // landing together cannot oversell, and so a wave that empties here
+          // hands off to the next one immediately. `requireAvailable: false`
+          // because the customer has already paid — the money is in, the seat
+          // must be honoured even if the wave flipped mid-checkout.
+          await claimTicketStock({
+            eventId: event._id,
+            ticketTypeId: selectedType._id,
+            ticketTypeName: selectedType.name,
+            count: qty,
+            requireAvailable: false,
+          });
 
           // Create a single ticket with the total quantity
           const ticket = new Ticket({

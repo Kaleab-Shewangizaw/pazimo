@@ -32,78 +32,9 @@ import {
   groupWaveTickets,
   hasAtLeastOneTicketPrice,
   isWaveTicket,
+  recalculateTicketAvailability,
   syncLegacyPriceField,
 } from "./_lib/event-form-utils";
-
-const isTicketActiveByDate = (startDate: string, endDate: string): boolean => {
-  if (!startDate || !endDate) {
-    return true;
-  }
-
-  const today = new Date();
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  end.setHours(23, 59, 59, 999);
-  return today >= start && today <= end;
-};
-
-const recalculateTicketAvailability = (ticketTypes: TicketType[]) => {
-  const nextTicketTypes = ticketTypes.map((ticket) => ({ ...ticket }));
-
-  nextTicketTypes.forEach((ticket) => {
-    if (!isWaveTicket(ticket)) {
-      if (ticket.name === "Regular" && ticket.hasDateRange) {
-        ticket.isActive =
-          ticket.saleStartDate && ticket.saleEndDate
-            ? isTicketActiveByDate(ticket.saleStartDate, ticket.saleEndDate)
-            : true;
-      } else {
-        ticket.isActive = true;
-      }
-    }
-  });
-
-  const waveGroups = groupWaveTickets(nextTicketTypes);
-
-  Object.values(waveGroups).forEach((group) => {
-    const orderedGroup = [...group].sort(
-      (a, b) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0),
-    );
-
-    orderedGroup.forEach((ticket) => {
-      ticket.isActive = false;
-    });
-
-    const firstWave = orderedGroup[0];
-    if (!firstWave) {
-      return;
-    }
-
-    let activeIndex = 0;
-
-    for (let index = 1; index < orderedGroup.length; index += 1) {
-      const wave = orderedGroup[index];
-      const previousWave = orderedGroup[index - 1];
-      const startsByDate =
-        (wave.waveSwitchMode === "date" || wave.waveSwitchMode === "date_or_quantity") &&
-        wave.saleStartDate &&
-        new Date(wave.saleStartDate) <= new Date();
-      const startsByQuantity =
-        (wave.waveSwitchMode === "quantity" || wave.waveSwitchMode === "date_or_quantity") &&
-        Number(previousWave?.quantity || 0) <= 0;
-
-      if (startsByDate || startsByQuantity) {
-        activeIndex = index;
-      }
-    }
-
-    orderedGroup[activeIndex].isActive =
-      Number(orderedGroup[activeIndex].quantity || 0) > 0;
-  });
-
-  return nextTicketTypes.map(syncLegacyPriceField);
-};
 
 const getTicketPriceValidationError = (ticketTypes: TicketType[]) => {
   const waveGroups = groupWaveTickets(ticketTypes);
@@ -548,6 +479,7 @@ export default function CreateEventPage() {
         quantity: draft.quantity || baseTicket.quantity || "0",
         description: draft.description || baseTicket.description || "",
         saleStartDate: usesDates ? draft.saleStartDate : "",
+        saleStartTime: usesDates ? draft.saleStartTime : "",
         saleEndDate: "",
         isActive: false,
         hasDateRange: usesDates,
@@ -844,6 +776,12 @@ export default function CreateEventPage() {
           payload.append(
             `ticketTypes[${index}][startDate]`,
             ticket.saleStartDate,
+          );
+          // Sent separately so the server can anchor the wall clock to Addis
+          // time rather than letting a bare date parse as UTC midnight.
+          payload.append(
+            `ticketTypes[${index}][startTime]`,
+            ticket.saleStartTime || "00:00",
           );
         }
       });

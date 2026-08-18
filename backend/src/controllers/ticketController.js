@@ -25,6 +25,7 @@ const SantimPayService = require("../services/santimPayService");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
 const { isPhoneBanned } = require("../utils/fraudGuard");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
@@ -111,6 +112,14 @@ const processSuccessfulPayment = async (payment) => {
     throw new NotFoundError("Event not found");
   }
 
+  // Bring wave availability up to date before resolving the ticket type, so a
+  // wave whose start time has passed (or whose predecessor just sold out) is
+  // sellable immediately rather than only after the next scheduler tick.
+  const now = new Date();
+  if (applyTicketAvailabilityRules(event, now).changed) {
+    await event.save();
+  }
+
   // Find the ticket type in the event
   const ticketTypeInfo = event.ticketTypes.find(
     (type) => type.name === ticketType || type._id.toString() === ticketType
@@ -129,25 +138,20 @@ const processSuccessfulPayment = async (payment) => {
 
   // ⚡ Atomically claim the stock. The check above reads a snapshot that can
   // go stale if two purchases for the same wave land at the same moment —
-  // both could read "enough left" before either writes. The actual decrement
-  // must re-verify quantity/availability in the same DB operation; if a
-  // concurrent purchase already took the remaining tickets, this matches
-  // nothing and we abort instead of overselling.
-  const stockClaim = await Event.updateOne(
-    {
-      _id: eventId,
-      ticketTypes: {
-        $elemMatch: {
-          _id: ticketTypeInfo._id,
-          available: true,
-          quantity: { $gte: ticketCount || 1 },
-        },
-      },
-    },
-    { $inc: { "ticketTypes.$.quantity": -(ticketCount || 1) } }
-  );
+  // both could read "enough left" before either writes. The shared helper
+  // re-verifies quantity/availability inside a single DB operation; if a
+  // concurrent purchase already took the remaining tickets, it claims nothing
+  // and we abort instead of overselling. It also advances the wave chain as
+  // soon as this claim empties the current wave.
+  const stockClaim = await claimTicketStock({
+    eventId,
+    ticketTypeId: ticketTypeInfo._id,
+    ticketTypeName: ticketTypeInfo.name,
+    count: ticketCount || 1,
+    now,
+  });
 
-  if (stockClaim.matchedCount === 0) {
+  if (!stockClaim.claimed) {
     throw new BadRequestError("Ticket type is not available or sold out");
   }
 
@@ -314,23 +318,8 @@ const processSuccessfulPayment = async (payment) => {
   }
   console.log(`[TICKET-CREATE] ✅ Updated event & user records`);
 
-  // ⚡ Re-evaluate wave/date availability right away so a wave that just sold
-  // out (or whose date trigger already passed) hands off to the next wave
-  // immediately, instead of waiting up to 60s for the background scheduler.
-  // Non-blocking: this must never delay ticket delivery to the buyer.
-  Event.findById(eventId)
-    .then(async (freshEvent) => {
-      if (!freshEvent) return;
-      if (applyTicketAvailabilityRules(freshEvent, new Date()).changed) {
-        await freshEvent.save();
-      }
-    })
-    .catch((availabilityError) => {
-      console.error(
-        "[TICKET-CREATE] ❌ Failed to refresh ticket availability:",
-        availabilityError,
-      );
-    });
+  // Wave hand-off already happened as part of the atomic stock claim above, so
+  // there is nothing to re-evaluate here.
 
   // ⚡ Send SMS Confirmation ASYNCHRONOUSLY (non-blocking)
   // This prevents SMS delays from blocking ticket delivery
@@ -599,18 +588,24 @@ const createGuestTicket = async (req, res) => {
       throw new NotFoundError("Event not found");
     }
 
-    applyTicketAvailabilityRules(event);
-
     // Check if ticketType exists and update quantity if so
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
       if (typeInfo) {
-        if (typeInfo.quantity < (ticketCount || 1)) {
+        // Invitations draw down the same allocation as sales, so the decrement
+        // has to be atomic too — otherwise a burst of invitations can push a
+        // wave below zero and corrupt the sell-out signal the chain relies on.
+        const claim = await claimTicketStock({
+          eventId,
+          ticketTypeId: typeInfo._id,
+          ticketTypeName: typeInfo.name,
+          count: ticketCount || 1,
+          requireAvailable: false,
+        });
+
+        if (!claim.claimed) {
           throw new BadRequestError("Not enough tickets available");
         }
-        typeInfo.quantity -= ticketCount || 1;
-        applyTicketAvailabilityRules(event);
-        await event.save();
       }
     }
 
@@ -1017,18 +1012,24 @@ const createInvitationTicket = async (req, res) => {
       throw new NotFoundError("Event not found");
     }
 
-    applyTicketAvailabilityRules(event);
-
     // Check if ticketType exists and update quantity if so
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
       if (typeInfo) {
-        if (typeInfo.quantity < (ticketCount || 1)) {
+        // Invitations draw down the same allocation as sales, so the decrement
+        // has to be atomic too — otherwise a burst of invitations can push a
+        // wave below zero and corrupt the sell-out signal the chain relies on.
+        const claim = await claimTicketStock({
+          eventId,
+          ticketTypeId: typeInfo._id,
+          ticketTypeName: typeInfo.name,
+          count: ticketCount || 1,
+          requireAvailable: false,
+        });
+
+        if (!claim.claimed) {
           throw new BadRequestError("Not enough tickets available");
         }
-        typeInfo.quantity -= ticketCount || 1;
-        applyTicketAvailabilityRules(event);
-        await event.save();
       }
     }
 
@@ -1762,15 +1763,13 @@ const cancelTicket = async (req, res) => {
     ticket.status = "cancelled";
     await ticket.save();
 
-    // Update event ticket quantity
-    const event = await Event.findById(ticket.event);
-    const ticketType = event.ticketTypes.find(
-      (type) => type.name === ticket.ticketType
-    );
-    if (ticketType) {
-      ticketType.quantity += 1;
-      await event.save();
-    }
+    // Return the seat to its wave atomically, then re-evaluate the chain — a
+    // cancellation can reopen a wave that had just sold out.
+    await releaseTicketStock({
+      eventId: ticket.event,
+      ticketTypeName: ticket.ticketType,
+      count: 1,
+    });
 
     res.status(StatusCodes.OK).json({ ticket });
   } catch (error) {
@@ -1815,14 +1814,11 @@ const deleteTicket = async (req, res) => {
 
     // Restore inventory only when deleting an active ticket.
     if (event && ticket.status === "active") {
-      const ticketType = event.ticketTypes.find(
-        (type) => type.name === ticket.ticketType
-      );
-      if (ticketType) {
-        const restoreCount = ticket.purchaseQuantity || ticket.ticketCount || 1;
-        ticketType.quantity += restoreCount;
-        await event.save();
-      }
+      await releaseTicketStock({
+        eventId: event._id,
+        ticketTypeName: ticket.ticketType,
+        count: ticket.purchaseQuantity || ticket.ticketCount || 1,
+      });
     }
 
     if (ticket.user) {
@@ -2357,10 +2353,23 @@ const createOnDoorTicket = async (req, res) => {
       });
     }
 
-    // Deduct quantity
-    ticketType.quantity -= quantity;
-    applyTicketAvailabilityRules(event);
-    await event.save();
+    // Deduct quantity atomically so simultaneous door sales cannot oversell the
+    // wave, and so selling out at the door advances the chain like any other
+    // successful sale.
+    const claim = await claimTicketStock({
+      eventId,
+      ticketTypeId: ticketType._id,
+      ticketTypeName: ticketType.name,
+      count: quantity,
+      requireAvailable: false,
+    });
+
+    if (!claim.claimed) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Not enough tickets available. Only ${ticketType.quantity} left.`,
+      });
+    }
 
     const totalPrice = ticketType.price * quantity;
     const transactionId = `ONDOOR-${uuidv4()}`;
