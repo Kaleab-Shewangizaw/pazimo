@@ -301,6 +301,15 @@ const Header = () => {
             >
               Featured
             </button>
+            {/* A Link, not a scrollToSection like its neighbours: Cinema is its
+                own page rather than a section of the home page, so it has to
+                navigate even when the user is already somewhere else. */}
+            <Link
+              href="/cinemas"
+              className="px-4 py-1.5 rounded-full text-foreground dark:text-white hover:bg-white/60 dark:hover:bg-white/10 hover:text-primary dark:hover:text-yellow-300 font-medium transition-all text-sm"
+            >
+              Cinema
+            </Link>
             <button
               type="button"
               onClick={() => scrollToSection("categories")}
@@ -565,6 +574,16 @@ const Header = () => {
                 >
                   Featured
                 </button>
+                {/* Navigates rather than scrolling — Cinema is its own page.
+                    Closes the menu explicitly, which scrollToSection does for
+                    the others but a Link does not. */}
+                <Link
+                  href="/cinemas"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors"
+                >
+                  Cinema
+                </Link>
                 <button
                   className="px-3 py-2 rounded-lg cursor:pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-[#115db1] dark:hover:text-blue-400 transition-colors text-left"
                   onClick={() => scrollToSection("categories")}

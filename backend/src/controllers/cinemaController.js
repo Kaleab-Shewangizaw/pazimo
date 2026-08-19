@@ -49,6 +49,74 @@ const removeUploadedImage = (imagePath) => {
   });
 };
 
+// Turnaround minutes. null clears the hall's override so it inherits the
+// cinema default; undefined means "not supplied" and leaves it untouched.
+const parseTurnaround = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "" || value === "null" || value === "inherit") {
+    return null;
+  }
+  const minutes = Number(value);
+  if (!Number.isInteger(minutes) || minutes < 0) {
+    throw new BadRequestError("turnaroundMinutes must be a whole number of 0 or more");
+  }
+  return minutes;
+};
+
+// The seat grid (Phase 2 scaffolding). Accepts a JSON object or a multipart
+// string; the model validates it against capacity.
+const parseSeatLayout = (value) => {
+  if (value === undefined) return undefined;
+  let raw = value;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === "null") return null;
+    try {
+      raw = JSON.parse(trimmed);
+    } catch {
+      throw new BadRequestError("seatLayout must be a JSON object");
+    }
+  }
+  if (raw === null) return null;
+  if (typeof raw !== "object") throw new BadRequestError("seatLayout must be an object");
+
+  const asCount = (v, label) => {
+    if (v === undefined || v === null || v === "") return undefined;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 1) {
+      throw new BadRequestError(`seatLayout.${label} must be a whole number of at least 1`);
+    }
+    return n;
+  };
+
+  return {
+    rows: asCount(raw.rows, "rows"),
+    seatsPerRow: asCount(raw.seatsPerRow, "seatsPerRow"),
+    rowLabels: Array.isArray(raw.rowLabels)
+      ? raw.rowLabels.map((l) => String(l).trim()).filter(Boolean)
+      : [],
+  };
+};
+
+/**
+ * Map a Mongoose validation failure onto a 400.
+ *
+ * Model-level rules (the seat-grid checks on CinemaHall) throw ValidationError,
+ * which carries no statusCode — so the `error.statusCode || 500` fallback every
+ * handler uses reported "internal server error" for what is plainly bad input,
+ * and hid the message explaining what was wrong.
+ */
+const normalizeValidationError = (error) => {
+  if (error?.name === "ValidationError") {
+    const detail = Object.values(error.errors || {})
+      .map((e) => e.message)
+      .filter(Boolean)
+      .join("; ");
+    return new BadRequestError(detail || "Invalid input");
+  }
+  return error;
+};
+
 const duplicateNameError = (error) =>
   error?.code === 11000
     ? new BadRequestError("A cinema with this name already exists")
@@ -281,6 +349,14 @@ const updateCinema = async (req, res) => {
     assignIfPresent("phoneNumber", normalizeText(req.body.phoneNumber));
     assignIfPresent("email", normalizeText(req.body.email)?.toLowerCase());
 
+    // An operational setting the cinema owns, unlike the commercial terms below
+    // which stay admin-only: how long their own staff need to clean a hall is
+    // not Pazimo's call.
+    const turnaround = parseTurnaround(req.body.turnaroundMinutes);
+    if (turnaround !== undefined && turnaround !== null) {
+      cinema.turnaroundMinutes = turnaround;
+    }
+
     if (req.file) cinema.image = `/uploads/${req.file.filename}`;
 
     if (isAdmin) {
@@ -447,6 +523,9 @@ const createHall = async (req, res) => {
       throw new BadRequestError("capacity must be a whole number of at least 1");
     }
 
+    const seatLayout = parseSeatLayout(req.body.seatLayout);
+    const turnaround = parseTurnaround(req.body.turnaroundMinutes);
+
     const hall = await CinemaHall.create({
       // Taken from the resolved cinema, never from the body — a hall cannot be
       // created inside someone else's cinema.
@@ -454,6 +533,10 @@ const createHall = async (req, res) => {
       name,
       capacity,
       screenType: normalizeText(req.body.screenType),
+      // undefined leaves the schema default (null = inherit the cinema's).
+      turnaroundMinutes: turnaround,
+      hasAssignedSeating: parseBoolean(req.body.hasAssignedSeating, false),
+      ...(seatLayout ? { seatLayout } : {}),
       isActive: parseBoolean(req.body.isActive, true),
     });
 
@@ -463,7 +546,7 @@ const createHall = async (req, res) => {
     const normalized =
       error?.code === 11000
         ? new BadRequestError("This cinema already has a hall with that name")
-        : error;
+        : normalizeValidationError(error);
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
   }
@@ -495,6 +578,17 @@ const updateHall = async (req, res) => {
 
     const screenType = normalizeText(req.body.screenType);
     if (screenType !== undefined) hall.screenType = screenType;
+
+    const turnaround = parseTurnaround(req.body.turnaroundMinutes);
+    if (turnaround !== undefined) hall.turnaroundMinutes = turnaround;
+
+    const seatLayout = parseSeatLayout(req.body.seatLayout);
+    if (seatLayout !== undefined) hall.seatLayout = seatLayout || undefined;
+
+    hall.hasAssignedSeating = parseBoolean(
+      req.body.hasAssignedSeating,
+      hall.hasAssignedSeating
+    );
     hall.isActive = parseBoolean(req.body.isActive, hall.isActive);
 
     await hall.save();
@@ -504,7 +598,7 @@ const updateHall = async (req, res) => {
     const normalized =
       error?.code === 11000
         ? new BadRequestError("This cinema already has a hall with that name")
-        : error;
+        : normalizeValidationError(error);
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
   }

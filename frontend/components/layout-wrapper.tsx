@@ -23,7 +23,32 @@ export default function LayoutWrapper({
   const isSignIn = pathname?.startsWith("/sign-in");
   const isOrganizerRoute = pathname?.startsWith("/organizer");
   const isVenueRoute = pathname?.startsWith("/venue");
-  const isCinemaRoute = pathname?.startsWith("/cinema");
+  // The /cinema prefix is shared by two different audiences:
+  //   /cinema                    -> the cinema OWNER dashboard
+  //   /cinema/programme, ...     -> dashboard sections
+  //   /cinema/{slug}-{shortId}   -> a PUBLIC film page
+  //   /cinemas                   -> the public browse page
+  //
+  // So this cannot be a prefix test. The dashboard sections are enumerated, and
+  // anything else under /cinema/ is a film page that must keep the site header
+  // and footer. Keep this list in step with app/cinema/(dashboard)/.
+  const CINEMA_DASHBOARD_SECTIONS = [
+    "programme",
+    "schedule",
+    "tickets",
+    "concessions",
+    "money",
+    "account",
+    "help",
+    "scanner",
+  ];
+  const cinemaSegment = pathname?.startsWith("/cinema/")
+    ? pathname.split("/")[2]
+    : undefined;
+  const isCinemaRoute =
+    pathname === "/cinema" ||
+    (cinemaSegment !== undefined &&
+      CINEMA_DASHBOARD_SECTIONS.includes(cinemaSegment));
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isRsvpForm = pathname?.startsWith("/rsvp-form/");
   const isTicketPage = pathname?.startsWith("/ticket/");

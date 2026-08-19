@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const mongoose = require("mongoose");
 const { StatusCodes } = require("http-status-codes");
 const CinemaMovie = require("../models/CinemaMovie");
 const CinemaShowtime = require("../models/CinemaShowtime");
@@ -7,6 +8,7 @@ const CinemaHall = require("../models/CinemaHall");
 const CinemaTicket = require("../models/CinemaTicket");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { resolveCinema } = require("../utils/cinemaAccess");
+const { extractShortIdFromEventSlug } = require("../utils/eventUrl");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -36,6 +38,43 @@ const removeUploadedImage = (imagePath) => {
       console.error("Failed to remove movie poster:", error.message);
     }
   });
+};
+
+// multer.fields() delivers files on req.files keyed by field name, unlike
+// .single() which sets req.file. One accessor so every call site reads the same
+// way and a missing file is simply undefined.
+const uploadedPath = (req, field) => {
+  const file = req.files?.[field]?.[0];
+  return file ? `/uploads/${file.filename}` : undefined;
+};
+
+// Every file this request wrote to disk, for cleanup when the write fails.
+const uploadedPaths = (req) =>
+  Object.values(req.files || {})
+    .flat()
+    .map((f) => `/uploads/${f.filename}`);
+
+const MOVIE_STATUSES = ["coming_soon", "now_showing", "archived"];
+const parseStatus = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (!MOVIE_STATUSES.includes(normalized)) {
+    throw new BadRequestError(`status must be one of: ${MOVIE_STATUSES.join(", ")}`);
+  }
+  return normalized;
+};
+
+// Returns undefined for "not supplied" and null for "explicitly cleared", so an
+// update can tell the two apart — same contract beverageController.parseColor
+// uses.
+const parseDate = (value, label) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "" || value === "null") return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new BadRequestError(`${label} must be a valid date`);
+  }
+  return date;
 };
 
 // Genres arrive as a JSON array from the dashboard and as a comma-separated
@@ -129,19 +168,23 @@ const createMovie = async (req, res) => {
       cinema: cinema._id,
       title,
       description: normalizeText(req.body.description),
-      poster: req.file ? `/uploads/${req.file.filename}` : null,
+      poster: uploadedPath(req, "poster") ?? null,
+      coverImage: uploadedPath(req, "coverImage") ?? null,
       durationMinutes,
       genre: parseGenres(req.body.genre) || [],
       language: normalizeText(req.body.language),
       subtitles: normalizeText(req.body.subtitles),
       ageRating: normalizeText(req.body.ageRating),
+      trailerUrl: normalizeText(req.body.trailerUrl),
+      releaseDate: parseDate(req.body.releaseDate, "releaseDate") ?? undefined,
+      status: parseStatus(req.body.status) ?? "now_showing",
       isActive: parseBoolean(req.body.isActive, true),
     });
 
     res.status(StatusCodes.CREATED).json({ success: true, data: movie });
   } catch (error) {
     console.error("Error creating movie:", error);
-    if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
+    uploadedPaths(req).forEach(removeUploadedImage);
     const normalized =
       error?.code === 11000
         ? new BadRequestError("This cinema already lists a film with that title")
@@ -162,6 +205,7 @@ const updateMovie = async (req, res) => {
     if (!movie) throw new NotFoundError("Movie not found");
 
     const previousPoster = movie.poster;
+    const previousCover = movie.coverImage;
     const durationChanged =
       req.body.durationMinutes !== undefined &&
       req.body.durationMinutes !== null &&
@@ -180,6 +224,13 @@ const updateMovie = async (req, res) => {
     assignIfPresent("language", normalizeText(req.body.language));
     assignIfPresent("subtitles", normalizeText(req.body.subtitles));
     assignIfPresent("ageRating", normalizeText(req.body.ageRating));
+    assignIfPresent("trailerUrl", normalizeText(req.body.trailerUrl));
+
+    const releaseDate = parseDate(req.body.releaseDate, "releaseDate");
+    if (releaseDate !== undefined) movie.releaseDate = releaseDate;
+
+    const status = parseStatus(req.body.status);
+    if (status !== undefined) movie.status = status;
 
     const genres = parseGenres(req.body.genre);
     if (genres !== undefined) movie.genre = genres;
@@ -194,8 +245,30 @@ const updateMovie = async (req, res) => {
       movie.durationMinutes = durationMinutes;
     }
 
-    if (req.file) movie.poster = `/uploads/${req.file.filename}`;
+    const newPoster = uploadedPath(req, "poster");
+    const newCover = uploadedPath(req, "coverImage");
+    if (newPoster) movie.poster = newPoster;
+    if (newCover) movie.coverImage = newCover;
     movie.isActive = parseBoolean(req.body.isActive, movie.isActive);
+
+    // Promotion is admin-only — see CinemaMovie.isFeatured. Read from the body
+    // only when the caller is an admin, rather than validated and rejected, so a
+    // cinema sending it simply has it ignored instead of failing its own edit.
+    if (req.user.role === "admin") {
+      const featured = parseBoolean(req.body.isFeatured, undefined);
+      if (featured !== undefined && featured !== movie.isFeatured) {
+        movie.isFeatured = featured;
+        movie.featuredSetBy = req.user.userId;
+        movie.featuredSetAt = new Date();
+      }
+      if (req.body.featuredOrder !== undefined) {
+        const order = Number(req.body.featuredOrder);
+        if (!Number.isFinite(order)) {
+          throw new BadRequestError("featuredOrder must be a number");
+        }
+        movie.featuredOrder = order;
+      }
+    }
 
     await movie.save();
 
@@ -211,12 +284,15 @@ const updateMovie = async (req, res) => {
       await Promise.all(upcoming.map((s) => s.save()));
     }
 
-    if (req.file && previousPoster) removeUploadedImage(previousPoster);
+    // Only once the save succeeded — a failed update must not delete artwork
+    // the film is still using.
+    if (newPoster && previousPoster) removeUploadedImage(previousPoster);
+    if (newCover && previousCover) removeUploadedImage(previousCover);
 
     res.status(StatusCodes.OK).json({ success: true, data: movie });
   } catch (error) {
     console.error("Error updating movie:", error);
-    if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
+    uploadedPaths(req).forEach(removeUploadedImage);
     const normalized =
       error?.code === 11000
         ? new BadRequestError("This cinema already lists a film with that title")
@@ -251,6 +327,7 @@ const deleteMovie = async (req, res) => {
 
     await movie.deleteOne();
     if (movie.poster) removeUploadedImage(movie.poster);
+    if (movie.coverImage) removeUploadedImage(movie.coverImage);
     res.status(StatusCodes.OK).json({ success: true, data: { _id: movie._id } });
   } catch (error) {
     console.error("Error deleting movie:", error);
@@ -316,30 +393,81 @@ const parseTicketTypes = (value) => {
 };
 
 /**
- * Refuse a screening that would run while the same hall is already occupied.
+ * How long this hall needs between screenings, in minutes.
+ *
+ * The hall's own value wins when set; otherwise the cinema's default. Null on
+ * the hall means "not set" and falls through — an explicit 0 is a real answer
+ * ("this room needs no gap") and is preserved, which is why this tests for null
+ * rather than falsiness.
+ */
+const turnaroundFor = (hall, cinema) => {
+  if (hall && hall.turnaroundMinutes !== null && hall.turnaroundMinutes !== undefined) {
+    return hall.turnaroundMinutes;
+  }
+  return cinema?.turnaroundMinutes ?? 0;
+};
+
+/**
+ * Refuse a screening that would run while the same hall is still occupied.
+ *
+ * The occupied window is the screening PLUS its turnaround: a room showing a
+ * film until 19:28 that needs 15 minutes to clean is not free at 19:30. Checking
+ * only the film's own runtime produces schedules that do not overlap on paper
+ * and cannot be run in practice, which is the failure this exists to prevent.
+ *
+ * The buffer is applied to both sides — the new screening's window is padded,
+ * and so is each existing one — because a clash is symmetric: it does not matter
+ * which of the two came first.
  *
  * Only checked when both windows are known. A film with no runtime has a null
  * endsAt, which the model documents as "cannot tell" — this warns rather than
  * silently approving a clash it never actually checked.
  */
-const assertHallFree = async ({ hallId, startsAt, endsAt, excludeId }) => {
-  if (!endsAt) return { warning: "No runtime set for this film, so overlapping screenings in the same hall could not be checked." };
+const assertHallFree = async ({
+  hallId,
+  startsAt,
+  endsAt,
+  excludeId,
+  turnaroundMinutes = 0,
+}) => {
+  if (!endsAt) {
+    return {
+      warning:
+        "No runtime set for this film, so overlapping screenings in the same hall could not be checked.",
+    };
+  }
+
+  const buffer = Math.max(Number(turnaroundMinutes) || 0, 0) * 60000;
+  // The window this screening actually ties the room up for.
+  const claimStart = new Date(startsAt.getTime() - buffer);
+  const claimEnd = new Date(endsAt.getTime() + buffer);
 
   const query = {
     hall: hallId,
     status: { $ne: "cancelled" },
-    startsAt: { $lt: endsAt },
-    endsAt: { $gt: startsAt },
+    startsAt: { $lt: claimEnd },
+    endsAt: { $gt: claimStart },
   };
   if (excludeId) query._id = { $ne: excludeId };
 
   const clash = await CinemaShowtime.findOne(query)
     .populate("movie", "title")
+    .sort({ startsAt: 1 })
     .lean();
 
   if (clash) {
+    const when = new Date(clash.startsAt).toLocaleString();
+    const until = clash.endsAt
+      ? ` until ${new Date(clash.endsAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`
+      : "";
+    const gap = buffer
+      ? ` (allowing ${turnaroundMinutes} min to clean the hall)`
+      : "";
     throw new BadRequestError(
-      `That hall is already showing ${clash.movie?.title || "another film"} at ${new Date(clash.startsAt).toISOString()}`
+      `That hall is showing ${clash.movie?.title || "another film"} at ${when}${until}${gap}. Pick another time or hall.`
     );
   }
   return {};
@@ -435,6 +563,7 @@ const createShowtime = async (req, res) => {
       hallId: hall._id,
       startsAt: showtime.startsAt,
       endsAt: showtime.endsAt,
+      turnaroundMinutes: turnaroundFor(hall, cinema),
     });
 
     await showtime.save();
@@ -558,6 +687,7 @@ const updateShowtime = async (req, res) => {
         startsAt: showtime.startsAt,
         endsAt: showtime.endsAt,
         excludeId: showtime._id,
+        turnaroundMinutes: turnaroundFor(hall, cinema),
       }));
     }
 
@@ -610,6 +740,132 @@ const deleteShowtime = async (req, res) => {
 // ---------------------------------------------------------------------------
 // Public — what is on
 // ---------------------------------------------------------------------------
+
+/**
+ * One film's public page: the movie, its cinema, and every upcoming screening
+ * grouped by day.
+ *
+ * Grouped by day on the server because that grouping is what the picker
+ * renders, and because "which day is this screening on" depends on the
+ * timezone the grouping is done in — doing it here means one answer rather than
+ * one per client.
+ *
+ * Seats remaining are exposed per tier, but `sold` and `allocation` are not: a
+ * customer needs to know whether they can buy, not how the cinema is
+ * performing. Same projection rule as listPublicShowtimes.
+ */
+const getPublicMovie = async (req, res) => {
+  try {
+    const { movieId } = req.params;
+
+    // The parameter is either a pretty slug ("spider-man-a7f2") or a raw id.
+    // The shortId is the last dash-separated chunk and is what actually
+    // identifies the film — the slug in front of it is decoration, so a stale
+    // or mistyped title still resolves as long as the code is intact. Same
+    // contract as extractShortIdFromEventSlug on the event side.
+    const shortId = extractShortIdFromEventSlug(movieId);
+    const lookup = shortId
+      ? { shortId, isActive: true }
+      : mongoose.Types.ObjectId.isValid(movieId)
+        ? { _id: movieId, isActive: true }
+        : null;
+
+    if (!lookup) throw new NotFoundError("Movie not found");
+
+    const movie = await CinemaMovie.findOne(lookup)
+      .populate({
+        path: "cinema",
+        // A suspended cinema's film must not be bookable; the populate match
+        // returns null and is rejected below.
+        match: { isActive: true },
+        select: "name description city address phoneNumber image",
+      })
+      .lean();
+
+    if (!movie || !movie.cinema) throw new NotFoundError("Movie not found");
+
+    const showtimes = await CinemaShowtime.find({
+      movie: movie._id,
+      status: "scheduled",
+      isPublished: true,
+      startsAt: { $gte: new Date() },
+    })
+      .populate("hall", "name screenType")
+      .sort("startsAt")
+      .lean();
+
+    // Group into days, preserving the chronological order the sort produced.
+    const days = [];
+    const byKey = new Map();
+    for (const show of showtimes) {
+      const start = new Date(show.startsAt);
+      const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+
+      if (!byKey.has(key)) {
+        const day = { date: key, showtimes: [] };
+        byKey.set(key, day);
+        days.push(day);
+      }
+
+      const tiers = (show.ticketTypes || [])
+        .filter((t) => t.isAvailable)
+        .map((t) => ({
+          _id: t._id,
+          name: t.name,
+          price: t.price,
+          description: t.description,
+          seatsRemaining: Math.max((t.allocation || 0) - (t.sold || 0), 0),
+        }));
+
+      byKey.get(key).showtimes.push({
+        _id: show._id,
+        startsAt: show.startsAt,
+        endsAt: show.endsAt,
+        currency: show.currency,
+        hall: show.hall,
+        ticketTypes: tiers,
+        // One flag so the picker can grey out a full screening without summing
+        // tiers itself and possibly disagreeing with the server.
+        soldOut: tiers.every((t) => t.seatsRemaining === 0),
+      });
+    }
+
+    const prices = showtimes
+      .flatMap((s) => (s.ticketTypes || []).filter((t) => t.isAvailable).map((t) => t.price))
+      .filter((p) => typeof p === "number");
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        movie: {
+          _id: movie._id,
+          slug: movie.slug,
+          shortId: movie.shortId,
+          title: movie.title,
+          description: movie.description,
+          poster: movie.poster,
+          coverImage: movie.coverImage,
+          durationMinutes: movie.durationMinutes,
+          genre: movie.genre,
+          language: movie.language,
+          subtitles: movie.subtitles,
+          ageRating: movie.ageRating,
+          trailerUrl: movie.trailerUrl,
+          releaseDate: movie.releaseDate,
+          status: movie.status,
+        },
+        cinema: movie.cinema,
+        days,
+        fromPrice: prices.length ? Math.min(...prices) : null,
+        upcomingCount: showtimes.length,
+      },
+    });
+  } catch (error) {
+    console.error("Error loading public movie:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
 
 /**
  * A cinema's public schedule.
@@ -670,6 +926,401 @@ const listPublicShowtimes = async (req, res) => {
   }
 };
 
+/**
+ * Every movie on the platform, for the admin curation screen.
+ *
+ * Spans all cinemas — the one movie endpoint that is not scoped to a single
+ * one — because the question this answers is "what has been posted, and what
+ * should we put on the front page". Filterable by cinema, status and display
+ * slot so an admin can go straight to "what is currently bannered".
+ */
+const listAllMoviesForAdmin = async (req, res) => {
+  try {
+    const { page = 1, limit = 24, search, cinemaId, status, slot } = req.query;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    if (search) {
+      query.title = new RegExp(
+        String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i"
+      );
+    }
+    if (cinemaId && mongoose.Types.ObjectId.isValid(cinemaId)) {
+      query.cinema = cinemaId;
+    }
+    if (status) query.status = status;
+    // Jump straight to what currently occupies a display slot.
+    if (slot === "banner") query.bannerStatus = true;
+    if (slot === "featured") query.isFeatured = true;
+    if (slot === "trending") query.isTrending = true;
+
+    const [movies, total, counts] = await Promise.all([
+      CinemaMovie.find(query)
+        .populate("cinema", "name city isActive")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      CinemaMovie.countDocuments(query),
+      // Slot occupancy, so the screen can say "4 bannered" without a second
+      // request per slot.
+      CinemaMovie.aggregate([
+        { $match: { isActive: true } },
+        {
+          $group: {
+            _id: null,
+            banner: { $sum: { $cond: ["$bannerStatus", 1, 0] } },
+            featured: { $sum: { $cond: ["$isFeatured", 1, 0] } },
+            trending: { $sum: { $cond: ["$isTrending", 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    // Screening counts make the list actionable: bannering a film with nothing
+    // scheduled puts a dead card on the front page.
+    const showCounts = await CinemaShowtime.aggregate([
+      {
+        $match: {
+          movie: { $in: movies.map((m) => m._id) },
+          status: "scheduled",
+          isPublished: true,
+          startsAt: { $gte: new Date() },
+        },
+      },
+      { $group: { _id: "$movie", upcoming: { $sum: 1 } } },
+    ]);
+    const byMovie = new Map(showCounts.map((c) => [String(c._id), c.upcoming]));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: movies.map((m) => ({
+        ...m,
+        upcomingShowtimes: byMovie.get(String(m._id)) || 0,
+      })),
+      slots: counts[0]
+        ? { banner: counts[0].banner, featured: counts[0].featured, trending: counts[0].trending }
+        : { banner: 0, featured: 0, trending: 0 },
+      pagination: {
+        total,
+        page: Number(page),
+        pages: Math.ceil(total / limit) || 1,
+      },
+    });
+  } catch (error) {
+    console.error("Error listing movies for admin:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to list movies",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Put a film into (or out of) a display slot.
+ *
+ * Admin-only, and takes the movie id alone rather than a cinema id plus a movie
+ * id: an admin curating the front page is working across cinemas and should not
+ * have to know which cinema owns a title to promote it.
+ *
+ * Each flag is applied only when present, so a request can toggle one slot
+ * without disturbing the others.
+ */
+const setMovieDisplay = async (req, res) => {
+  try {
+    const { movieId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(movieId)) {
+      throw new NotFoundError("Movie not found");
+    }
+
+    const movie = await CinemaMovie.findById(movieId);
+    if (!movie) throw new NotFoundError("Movie not found");
+
+    const applied = [];
+    const setFlag = (field, value) => {
+      const parsed = parseBoolean(value, undefined);
+      if (parsed === undefined) return;
+      movie[field] = parsed;
+      applied.push(field);
+    };
+
+    setFlag("bannerStatus", req.body.bannerStatus);
+    setFlag("isTrending", req.body.isTrending);
+
+    const featured = parseBoolean(req.body.isFeatured, undefined);
+    if (featured !== undefined && featured !== movie.isFeatured) {
+      movie.isFeatured = featured;
+      movie.featuredSetBy = req.user.userId;
+      movie.featuredSetAt = new Date();
+      applied.push("isFeatured");
+    }
+
+    if (req.body.featuredOrder !== undefined) {
+      const order = Number(req.body.featuredOrder);
+      if (!Number.isFinite(order)) {
+        throw new BadRequestError("featuredOrder must be a number");
+      }
+      movie.featuredOrder = order;
+      applied.push("featuredOrder");
+    }
+
+    if (applied.length === 0) {
+      throw new BadRequestError(
+        "Nothing to change — send bannerStatus, isFeatured, isTrending or featuredOrder"
+      );
+    }
+
+    await movie.save();
+
+    res.status(StatusCodes.OK).json({ success: true, data: movie, applied });
+  } catch (error) {
+    console.error("Error setting movie display:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * One day's schedule, grouped by hall — what the calendar view renders.
+ *
+ * Grouped on the server rather than in the page because the grouping IS the
+ * answer to the question being asked ("what is running in each room today"),
+ * and because the free-gap calculation below needs the turnaround rules, which
+ * live here. Two clients would otherwise have to reimplement them and could
+ * disagree about whether a hall is bookable.
+ *
+ * Every active hall appears, including empty ones: "Hall 3 has nothing on" is
+ * exactly what an operator scanning for a slot needs to see, and omitting it
+ * would make an idle room invisible.
+ */
+const getSchedule = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+
+    // Local-time day boundaries from a YYYY-MM-DD, defaulting to today.
+    const dayParam = req.query.date;
+    const base = dayParam ? new Date(`${dayParam}T00:00:00`) : new Date();
+    if (Number.isNaN(base.getTime())) {
+      throw new BadRequestError("date must be YYYY-MM-DD");
+    }
+    const dayStart = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const dayEnd = new Date(dayStart.getTime() + 86400000);
+
+    const [halls, showtimes] = await Promise.all([
+      CinemaHall.find({ cinema: cinema._id }).sort("name").lean(),
+      CinemaShowtime.find({
+        cinema: cinema._id,
+        startsAt: { $gte: dayStart, $lt: dayEnd },
+      })
+        .populate("movie", "title poster durationMinutes ageRating")
+        .sort("startsAt")
+        .lean(),
+    ]);
+
+    const byHall = new Map(halls.map((h) => [String(h._id), []]));
+    const orphaned = [];
+    for (const show of showtimes) {
+      const key = String(show.hall);
+      const row = {
+        _id: show._id,
+        movie: show.movie,
+        startsAt: show.startsAt,
+        endsAt: show.endsAt,
+        status: show.status,
+        isPublished: show.isPublished,
+        seatsAllocated: (show.ticketTypes || []).reduce(
+          (sum, t) => sum + (t.allocation || 0),
+          0
+        ),
+        seatsSold: (show.ticketTypes || []).reduce(
+          (sum, t) => sum + (t.sold || 0),
+          0
+        ),
+      };
+      // A screening whose hall was deleted still has to be visible somewhere,
+      // or it silently disappears from the schedule while still selling.
+      if (byHall.has(key)) byHall.get(key).push(row);
+      else orphaned.push(row);
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        date: dayStart.toISOString(),
+        cinema: { _id: cinema._id, name: cinema.name },
+        defaultTurnaroundMinutes: cinema.turnaroundMinutes ?? 0,
+        halls: halls.map((hall) => ({
+          _id: hall._id,
+          name: hall.name,
+          capacity: hall.capacity,
+          screenType: hall.screenType,
+          isActive: hall.isActive,
+          // Resolved here so the UI can say "15 min gap" without re-deriving
+          // the inheritance rule.
+          turnaroundMinutes: turnaroundFor(hall, cinema),
+          showtimes: byHall.get(String(hall._id)) || [],
+        })),
+        orphanedShowtimes: orphaned,
+      },
+    });
+  } catch (error) {
+    console.error("Error building cinema schedule:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * The admin-curated promoted row on the public cinema page.
+ *
+ * Spans every cinema, so it is NOT scoped to one — this is the one public
+ * cinema endpoint that reads across the platform. Inactive films and suspended
+ * cinemas are excluded at the database rather than filtered in the page, so a
+ * cinema going dark cannot leave its poster on the front page.
+ */
+const listMoviesInSlot = (slotField, defaultLimit) => async (req, res) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || defaultLimit, 30);
+
+    const movies = await CinemaMovie.find({ [slotField]: true, isActive: true })
+      .populate({
+        path: "cinema",
+        // The match runs on the joined document; a film whose cinema is
+        // suspended comes back with cinema: null and is dropped below.
+        match: { isActive: true },
+        select: "name city image",
+      })
+      .sort({ featuredOrder: 1, updatedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const visible = movies.filter((m) => m.cinema);
+
+    // The soonest upcoming screening per film, so a card can say "Today 19:30"
+    // rather than making the customer open it to find out if it is even on.
+    const next = await CinemaShowtime.aggregate([
+      {
+        $match: {
+          movie: { $in: visible.map((m) => m._id) },
+          status: "scheduled",
+          isPublished: true,
+          startsAt: { $gte: new Date() },
+        },
+      },
+      { $sort: { startsAt: 1 } },
+      { $group: { _id: "$movie", startsAt: { $first: "$startsAt" }, count: { $sum: 1 } } },
+    ]);
+    const byMovie = new Map(next.map((n) => [String(n._id), n]));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: visible.map((m) => ({
+        _id: m._id,
+        slug: m.slug,
+        shortId: m.shortId,
+        title: m.title,
+        poster: m.poster,
+        durationMinutes: m.durationMinutes,
+        ageRating: m.ageRating,
+        genre: m.genre,
+        language: m.language,
+        description: m.description,
+        coverImage: m.coverImage,
+        cinema: m.cinema,
+        nextShowtime: byMovie.get(String(m._id))?.startsAt || null,
+        upcomingCount: byMovie.get(String(m._id))?.count || 0,
+      })),
+    });
+  } catch (error) {
+    console.error(`Error listing ${slotField} movies:`, error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to list movies",
+    });
+  }
+};
+
+// The three public rows. Same reader, same projection, different slot — so a
+// film cannot render differently depending on which strip it appears in.
+const listFeaturedMovies = listMoviesInSlot("isFeatured", 12);
+const listBannerMovies = listMoviesInSlot("bannerStatus", 8);
+const listTrendingMovies = listMoviesInSlot("isTrending", 12);
+
+/**
+ * What is showing at one cinema.
+ *
+ * Only films that actually have an upcoming published screening are returned:
+ * a customer browsing a cinema wants what they can buy, and a film with nothing
+ * scheduled is a dead card. The counts and next time come from the same
+ * aggregation so the list and its labels cannot disagree.
+ */
+const listPublicMovies = async (req, res) => {
+  try {
+    const { cinemaId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(cinemaId)) {
+      throw new NotFoundError("Cinema not found");
+    }
+
+    const Cinema = require("../models/Cinema");
+    const cinema = await Cinema.findOne({ _id: cinemaId, isActive: true })
+      .select("name description city address phoneNumber image")
+      .lean();
+    if (!cinema) throw new NotFoundError("Cinema not found");
+
+    const grouped = await CinemaShowtime.aggregate([
+      {
+        $match: {
+          cinema: new mongoose.Types.ObjectId(String(cinemaId)),
+          status: "scheduled",
+          isPublished: true,
+          startsAt: { $gte: new Date() },
+        },
+      },
+      { $sort: { startsAt: 1 } },
+      {
+        $group: {
+          _id: "$movie",
+          nextShowtime: { $first: "$startsAt" },
+          upcomingCount: { $sum: 1 },
+          // The cheapest seat across upcoming screenings — a "from X" label.
+          fromPrice: { $min: { $min: "$ticketTypes.price" } },
+        },
+      },
+      { $sort: { nextShowtime: 1 } },
+    ]);
+
+    const movies = await CinemaMovie.find({
+      _id: { $in: grouped.map((g) => g._id) },
+      isActive: true,
+    })
+      .select("title slug shortId poster durationMinutes ageRating genre language subtitles description")
+      .lean();
+
+    const byId = new Map(movies.map((m) => [String(m._id), m]));
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        cinema,
+        movies: grouped
+          .filter((g) => byId.has(String(g._id)))
+          .map((g) => ({
+            ...byId.get(String(g._id)),
+            nextShowtime: g.nextShowtime,
+            upcomingCount: g.upcomingCount,
+            fromPrice: g.fromPrice ?? null,
+          })),
+      },
+    });
+  } catch (error) {
+    console.error("Error listing public cinema movies:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   listMovies,
   createMovie,
@@ -680,4 +1331,12 @@ module.exports = {
   updateShowtime,
   deleteShowtime,
   listPublicShowtimes,
+  getPublicMovie,
+  getSchedule,
+  listAllMoviesForAdmin,
+  setMovieDisplay,
+  listFeaturedMovies,
+  listBannerMovies,
+  listTrendingMovies,
+  listPublicMovies,
 };

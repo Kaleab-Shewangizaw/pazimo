@@ -161,6 +161,20 @@ const CinemaSchema = new mongoose.Schema(
       default: false,
     },
 
+    // Default minutes between screenings in any of this cinema's halls, for
+    // emptying, cleaning and re-seating the room.
+    //
+    // Lives on the cinema so an operator sets it once rather than per hall; a
+    // hall that genuinely differs overrides it via CinemaHall.turnaroundMinutes.
+    // Overlap detection adds this to a screening's end before deciding the room
+    // is free, which is what stops a schedule that is technically non-
+    // overlapping but physically impossible to run.
+    turnaroundMinutes: {
+      type: Number,
+      min: 0,
+      default: 15,
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",

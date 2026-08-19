@@ -33,6 +33,14 @@ const {
 // database on every /me request rather than trusting the JWT, so suspending a
 // cinema takes effect immediately.
 
+// A movie carries two images with different crops — a portrait poster for
+// cards and a landscape cover for its own page — so the movie routes take two
+// named files rather than one.
+const movieUploads = upload.fields([
+  { name: "poster", maxCount: 1 },
+  { name: "coverImage", maxCount: 1 },
+]);
+
 const cinemaSelf = [
   authenticateUser,
   restrictTo("cinema"),
@@ -46,6 +54,15 @@ const adminOnly = [authenticateUser, restrictTo("admin")];
 // ---------------------------------------------------------------------------
 
 router.get("/public/cinemas", cinemaController.listPublicCinemas);
+// The admin-curated promoted row. Declared before the /:cinemaId patterns so
+// "featured-movies" is never read as a cinema id.
+router.get("/public/featured-movies", programmeController.listFeaturedMovies);
+router.get("/public/banner-movies", programmeController.listBannerMovies);
+router.get("/public/trending-movies", programmeController.listTrendingMovies);
+// One film's page: the movie, its cinema, and its screenings grouped by day.
+// "movies" is a literal segment so it precedes the /:cinemaId patterns.
+router.get("/public/movies/:movieId", programmeController.getPublicMovie);
+router.get("/public/:cinemaId/movies", programmeController.listPublicMovies);
 router.get("/public/:cinemaId/showtimes", programmeController.listPublicShowtimes);
 router.get("/public/:cinemaId/concessions", beverageController.listPublicLineup);
 
@@ -81,12 +98,14 @@ router.delete("/me/halls/:hallId", ...cinemaSelf, cinemaController.deleteHall);
 
 // Movies
 router.get("/me/movies", ...cinemaSelf, programmeController.listMovies);
-router.post("/me/movies", ...cinemaSelf, upload.single("poster"), programmeController.createMovie);
-router.patch("/me/movies/:movieId", ...cinemaSelf, upload.single("poster"), programmeController.updateMovie);
+router.post("/me/movies", ...cinemaSelf, movieUploads, programmeController.createMovie);
+router.patch("/me/movies/:movieId", ...cinemaSelf, movieUploads, programmeController.updateMovie);
 router.delete("/me/movies/:movieId", ...cinemaSelf, programmeController.deleteMovie);
 
 // Showtimes
 router.get("/me/showtimes", ...cinemaSelf, programmeController.listShowtimes);
+// The day-by-hall calendar view.
+router.get("/me/schedule", ...cinemaSelf, programmeController.getSchedule);
 router.post("/me/showtimes", ...cinemaSelf, programmeController.createShowtime);
 router.patch("/me/showtimes/:showtimeId", ...cinemaSelf, programmeController.updateShowtime);
 router.delete("/me/showtimes/:showtimeId", ...cinemaSelf, programmeController.deleteShowtime);
@@ -123,6 +142,11 @@ router.get("/me/finance/withdrawals", ...cinemaSelf, financeController.listCinem
 // cinema id. Order is load-bearing here — do not move these below.
 router.get("/admin/finance", ...adminOnly, financeController.getAdminCinemaFinance);
 
+// Cross-cinema movie curation. Literal second segments, so declared before the
+// /admin/:cinemaId patterns.
+router.get("/admin/movies", ...adminOnly, programmeController.listAllMoviesForAdmin);
+router.patch("/admin/movies/:movieId/display", ...adminOnly, programmeController.setMovieDisplay);
+
 // Reversals are admin-only on both ledgers: a refund moves money back out, so it
 // is not something a cinema does to its own sales figures.
 router.patch("/admin/ticket-sales/:ticketId/refund", ...adminOnly, ticketController.refund);
@@ -145,12 +169,13 @@ router.delete("/admin/:cinemaId/halls/:hallId", ...adminOnly, cinemaController.d
 
 // Movies
 router.get("/admin/:cinemaId/movies", ...adminOnly, programmeController.listMovies);
-router.post("/admin/:cinemaId/movies", ...adminOnly, upload.single("poster"), programmeController.createMovie);
-router.patch("/admin/:cinemaId/movies/:movieId", ...adminOnly, upload.single("poster"), programmeController.updateMovie);
+router.post("/admin/:cinemaId/movies", ...adminOnly, movieUploads, programmeController.createMovie);
+router.patch("/admin/:cinemaId/movies/:movieId", ...adminOnly, movieUploads, programmeController.updateMovie);
 router.delete("/admin/:cinemaId/movies/:movieId", ...adminOnly, programmeController.deleteMovie);
 
 // Showtimes
 router.get("/admin/:cinemaId/showtimes", ...adminOnly, programmeController.listShowtimes);
+router.get("/admin/:cinemaId/schedule", ...adminOnly, programmeController.getSchedule);
 router.post("/admin/:cinemaId/showtimes", ...adminOnly, programmeController.createShowtime);
 router.patch("/admin/:cinemaId/showtimes/:showtimeId", ...adminOnly, programmeController.updateShowtime);
 router.delete("/admin/:cinemaId/showtimes/:showtimeId", ...adminOnly, programmeController.deleteShowtime);

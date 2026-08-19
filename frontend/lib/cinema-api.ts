@@ -10,6 +10,36 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export type CinemaEligibility = "not_eligible" | "eligible";
 
+export interface ScheduleShowtime {
+  _id: string;
+  movie: { _id: string; title: string; poster?: string | null; durationMinutes?: number; ageRating?: string };
+  startsAt: string;
+  endsAt?: string | null;
+  status: "scheduled" | "cancelled" | "completed";
+  isPublished: boolean;
+  seatsAllocated: number;
+  seatsSold: number;
+}
+
+export interface ScheduleHall {
+  _id: string;
+  name: string;
+  capacity: number;
+  screenType?: string;
+  isActive: boolean;
+  /** Already resolved against the cinema default by the server. */
+  turnaroundMinutes: number;
+  showtimes: ScheduleShowtime[];
+}
+
+export interface CinemaSchedule {
+  date: string;
+  cinema: { _id: string; name: string };
+  defaultTurnaroundMinutes: number;
+  halls: ScheduleHall[];
+  orphanedShowtimes: ScheduleShowtime[];
+}
+
 export interface CinemaProfile {
   _id: string;
   name: string;
@@ -25,6 +55,7 @@ export interface CinemaProfile {
   ticketCommissionRate: number;
   beverageCommissionRate: number;
   coversCinemaVat: boolean;
+  turnaroundMinutes: number;
   halls?: CinemaHall[];
 }
 
@@ -35,7 +66,13 @@ export interface CinemaHall {
   capacity: number;
   screenType?: string;
   isActive: boolean;
+  /** null means "inherit the cinema's default". */
+  turnaroundMinutes: number | null;
+  hasAssignedSeating: boolean;
+  seatLayout?: { rows?: number; seatsPerRow?: number; rowLabels?: string[] };
 }
+
+export type MovieStatus = "coming_soon" | "now_showing" | "archived";
 
 export interface CinemaMovie {
   _id: string;
@@ -43,11 +80,15 @@ export interface CinemaMovie {
   title: string;
   description?: string;
   poster?: string | null;
+  coverImage?: string | null;
   durationMinutes?: number;
   genre: string[];
   language?: string;
   subtitles?: string;
   ageRating?: string;
+  trailerUrl?: string;
+  releaseDate?: string | null;
+  status: MovieStatus;
   isActive: boolean;
   showtimeCount?: number;
 }
@@ -285,6 +326,15 @@ export const fetchConcessionSales = (token: string, query = "") =>
   cinemaRequest<{ data: CinemaConcessionSale[]; pagination: { total: number; pages: number } }>(
     `/api/cinemas/me/concession-sales${query}`,
     token
+  );
+
+/** One day's schedule, grouped by hall. `date` is YYYY-MM-DD. */
+export const fetchSchedule = (token: string, date: string) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaSchedule }>(
+      `/api/cinemas/me/schedule?date=${date}`,
+      token
+    )
   );
 
 export const fetchCinemaBalance = (token: string) =>

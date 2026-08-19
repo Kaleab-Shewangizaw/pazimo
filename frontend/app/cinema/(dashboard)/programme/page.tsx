@@ -19,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus, Trash2, Film, CalendarDays, DoorOpen } from "lucide-react";
@@ -54,7 +55,12 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   }, [reload]);
 
   // --- Halls ---------------------------------------------------------------
-  const [hallForm, setHallForm] = useState({ name: "", capacity: "", screenType: "" });
+  const [hallForm, setHallForm] = useState({
+    name: "",
+    capacity: "",
+    screenType: "",
+    turnaroundMinutes: "",
+  });
 
   const addHall = async () => {
     setBusy(true);
@@ -65,10 +71,15 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           name: hallForm.name,
           capacity: Number(hallForm.capacity),
           screenType: hallForm.screenType || undefined,
+          // Blank means inherit the cinema's default, which the API expresses
+          // as null rather than 0 — 0 is a real answer ("no gap needed").
+          turnaroundMinutes: hallForm.turnaroundMinutes === ""
+            ? null
+            : Number(hallForm.turnaroundMinutes),
         }),
       });
       toast.success("Hall added");
-      setHallForm({ name: "", capacity: "", screenType: "" });
+      setHallForm({ name: "", capacity: "", screenType: "", turnaroundMinutes: "" });
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -97,24 +108,47 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     durationMinutes: "",
     ageRating: "",
     language: "",
+    subtitles: "",
+    genre: "",
+    trailerUrl: "",
+    releaseDate: "",
+    status: "now_showing",
+    description: "",
   });
+  const [poster, setPoster] = useState<File | null>(null);
+  const [cover, setCover] = useState<File | null>(null);
 
   const addMovie = async () => {
     setBusy(true);
     try {
+      // Multipart rather than JSON: the poster and cover are files, and they go
+      // through the same multer upload the rest of the platform uses.
+      const body = new FormData();
+      Object.entries(movieForm).forEach(([k, v]) => {
+        if (v !== "" && v !== undefined) body.append(k, String(v));
+      });
+      if (poster) body.append("poster", poster);
+      if (cover) body.append("coverImage", cover);
+
       await cinemaRequest("/api/cinemas/me/movies", token, {
         method: "POST",
-        body: JSON.stringify({
-          title: movieForm.title,
-          durationMinutes: movieForm.durationMinutes
-            ? Number(movieForm.durationMinutes)
-            : undefined,
-          ageRating: movieForm.ageRating || undefined,
-          language: movieForm.language || undefined,
-        }),
+        body,
       });
       toast.success("Film added");
-      setMovieForm({ title: "", durationMinutes: "", ageRating: "", language: "" });
+      setMovieForm({
+        title: "",
+        durationMinutes: "",
+        ageRating: "",
+        language: "",
+        subtitles: "",
+        genre: "",
+        trailerUrl: "",
+        releaseDate: "",
+        status: "now_showing",
+        description: "",
+      });
+      setPoster(null);
+      setCover(null);
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -432,10 +466,84 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                     setMovieForm({ ...movieForm, language: e.target.value })
                   }
                 />
+                <Input
+                  placeholder="Subtitles"
+                  value={movieForm.subtitles}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, subtitles: e.target.value })
+                  }
+                />
+                <Input
+                  placeholder="Genre (comma separated)"
+                  value={movieForm.genre}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, genre: e.target.value })
+                  }
+                />
+                <div>
+                  <Label className="text-xs">Release date</Label>
+                  <Input
+                    type="date"
+                    value={movieForm.releaseDate}
+                    onChange={(e) =>
+                      setMovieForm({ ...movieForm, releaseDate: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Status</Label>
+                  <select
+                    className={selectClass}
+                    value={movieForm.status}
+                    onChange={(e) =>
+                      setMovieForm({ ...movieForm, status: e.target.value })
+                    }
+                  >
+                    <option value="now_showing">Now showing</option>
+                    <option value="coming_soon">Coming soon</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
               </div>
+
+              <Input
+                placeholder="Trailer URL"
+                value={movieForm.trailerUrl}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, trailerUrl: e.target.value })
+                }
+              />
+              <Textarea
+                rows={2}
+                placeholder="Description"
+                value={movieForm.description}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, description: e.target.value })
+                }
+              />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <Label className="text-xs">Poster (portrait, 2:3)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setPoster(e.target.files?.[0] || null)}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Cover (landscape banner)</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setCover(e.target.files?.[0] || null)}
+                  />
+                </div>
+              </div>
+
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Runtime is used to warn you when two screenings would overlap in
-                the same hall.
+                the same hall — set it, or conflicts cannot be checked.
               </p>
               <Button onClick={addMovie} disabled={busy || !movieForm.title}>
                 Add film
@@ -457,6 +565,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {[
+                        m.status === "coming_soon" ? "Coming soon" : null,
                         m.durationMinutes ? `${m.durationMinutes} min` : null,
                         m.ageRating,
                         m.language,
@@ -483,7 +592,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                 <DoorOpen className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
                 Add a hall
               </h2>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-4">
                 <Input
                   placeholder="Name (Screen 1)"
                   value={hallForm.name}
@@ -504,7 +613,20 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                     setHallForm({ ...hallForm, screenType: e.target.value })
                   }
                 />
+                <Input
+                  type="number"
+                  placeholder="Turnaround (min)"
+                  value={hallForm.turnaroundMinutes}
+                  onChange={(e) =>
+                    setHallForm({ ...hallForm, turnaroundMinutes: e.target.value })
+                  }
+                />
               </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Turnaround is the gap needed to empty and clean the room between
+                screenings. Leave blank to use the cinema default; scheduling
+                will refuse a film that starts inside it.
+              </p>
               <Button
                 onClick={addHall}
                 disabled={busy || !hallForm.name || !hallForm.capacity}
@@ -527,6 +649,9 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {h.capacity} seats{h.screenType ? ` · ${h.screenType}` : ""}
+                      {h.turnaroundMinutes !== null
+                        ? ` · ${h.turnaroundMinutes} min turnaround`
+                        : " · default turnaround"}
                     </p>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => removeHall(h._id)}>

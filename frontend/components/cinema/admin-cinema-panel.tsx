@@ -13,7 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
+import AdminMovieCuration from "@/components/cinema/admin-movie-curation";
 import {
+  Clapperboard,
   Film,
   Plus,
   Pencil,
@@ -282,12 +284,15 @@ export default function AdminCinemaPanel() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="dashboard" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[340px]">
+        <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[480px]">
           <TabsTrigger value="dashboard">
             <Film className="mr-1.5 h-4 w-4" /> Dashboard
           </TabsTrigger>
           <TabsTrigger value="cinemas">
             <Store className="mr-1.5 h-4 w-4" /> Cinemas
+          </TabsTrigger>
+          <TabsTrigger value="movies">
+            <Clapperboard className="mr-1.5 h-4 w-4" /> Movies
           </TabsTrigger>
         </TabsList>
 
@@ -498,6 +503,21 @@ export default function AdminCinemaPanel() {
               </Button>
             </div>
           </div>
+        </TabsContent>
+
+        {/* Cross-cinema curation: what the public cinema page shows is decided
+            here, not by the cinemas themselves. */}
+        <TabsContent value="movies" className="space-y-6">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Movies &amp; display
+            </h2>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Every film posted by every cinema. Choose what appears on the
+              public cinema page — cinemas cannot promote themselves.
+            </p>
+          </div>
+          <AdminMovieCuration />
         </TabsContent>
       </Tabs>
 

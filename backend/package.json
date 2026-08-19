@@ -11,7 +11,8 @@
     "indexes:create": "node src/scripts/createIndexes.js",
     "indexes:sync": "node src/scripts/createIndexes.js --sync",
     "indexes:rsvp": "node src/scripts/createRsvpIndexes.js",
-    "migrate:venues": "node src/scripts/migrateVenueSalesChannel.js"
+    "migrate:venues": "node src/scripts/migrateVenueSalesChannel.js",
+    "backfill:cinema-slugs": "node src/scripts/backfillCinemaMovieSlugs.js"
   },
   "keywords": [],
   "author": "",

@@ -3,6 +3,12 @@ import CategoryIcons, { Category } from "@/components/category-icons";
 import FeaturedEventsSection, {
   FeaturedCardEvent,
 } from "@/components/home/featured-events-section";
+import MoviesSection from "@/components/cinemas/movies-section";
+import {
+  movieToBannerEvent,
+  movieToTrendingCard,
+} from "@/components/cinemas/cinema-format";
+import type { FeaturedMovie } from "@/components/cinemas/public-cinema-types";
 import TrendingEventsSection, {
   TrendingCardEvent,
 } from "@/components/home/trending-events-section";
@@ -266,6 +272,34 @@ const sanitizeEventForCard = (event: any): CardEvent => ({
   isSoldOut: event.isSoldOut || false,
 });
 
+/**
+ * The films an admin has promoted, for one of the home page's rows.
+ *
+ * Three slots, mirroring how an event reaches the home page: banner puts it in
+ * the hero carousel, featured in its own "Now Showing" row, trending in the
+ * trending strip. Same admin controls, same three destinations.
+ *
+ * Never throws: cinema is one section of a page that is mostly events, so a
+ * cinema API that is down or not yet deployed must degrade to "no Movies row"
+ * rather than taking the whole home page with it.
+ */
+async function getCuratedMovies(
+  slot: "featured" | "trending" | "banner"
+): Promise<FeaturedMovie[]> {
+  try {
+    const response = await fetch(
+      withBase(`/api/cinemas/public/${slot}-movies?limit=12`),
+      { cache: "no-store" }
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data?.data || [];
+  } catch (error) {
+    console.error(`Error fetching ${slot} movies:`, error);
+    return [];
+  }
+}
+
 async function getCategories(): Promise<Category[]> {
   try {
     const response = await fetch(withBase("/api/categories"), {
@@ -339,14 +373,28 @@ async function getPublishedRsvpForms(): Promise<PublicRsvpForm[]> {
 }
 
 export default async function Page() {
-  const [categories, featuredRes, trendingRes, otherRes, bannerEvents, publishedRsvpForms] =
-    await Promise.all([
+  const [
+    categories,
+    featuredRes,
+    trendingRes,
+    otherRes,
+    bannerEvents,
+    publishedRsvpForms,
+    featuredMovies,
+    trendingMovies,
+    bannerMovies,
+  ] = await Promise.all([
     getCategories(),
     getPublicEvents({ isFeatured: true, limit: 8, sort: "-startDate" }),
     getPublicEvents({ isTrending: true, limit: 6, sort: "-startDate" }),
     getPublicEvents({ limit: 12, skip: 0, sort: "-startDate" }),
       getBannerEvents(),
       getPublishedRsvpForms(),
+      // Alongside the rest rather than after: they are independent reads, and
+      // sequencing them would add round trips to every home page load.
+      getCuratedMovies("featured"),
+      getCuratedMovies("trending"),
+      getCuratedMovies("banner"),
     ]);
 
   const featuredEvents = (featuredRes.events || [])
@@ -424,8 +472,15 @@ export default async function Page() {
   const bannerRsvps = (publishedRsvpForms || []).filter((f) => f.bannerStatus).map(rsvpToBannerCarouselEvent);
 
   const featuredEventsCombined = featuredEvents.concat(featuredRsvps);
-  const trendingEventsCombined = trendingEvents.concat(trendingRsvps);
-  const bannerEventsCombined = (bannerEvents || []).concat(bannerRsvps);
+  // Curated films join the same rows events do, so an admin's three toggles
+  // reach the home page exactly the way an event's do. The cards are the same
+  // components, so the rows stay visually uniform.
+  const trendingEventsCombined = trendingEvents
+    .concat(trendingRsvps)
+    .concat(trendingMovies.map(movieToTrendingCard));
+  const bannerEventsCombined = (bannerEvents || [])
+    .concat(bannerRsvps)
+    .concat(bannerMovies.map(movieToBannerEvent));
 
   const initialOtherEvents = (otherRes.events || []).map(sanitizeEventForCard);
   const hasMore = otherRes.meta?.hasMore ?? false;
@@ -437,6 +492,10 @@ export default async function Page() {
       </Suspense>
 
       <FeaturedEventsSection events={featuredEventsCombined} />
+
+      {/* Between Featured and Categories, mirroring where "Cinema" sits in the
+          header nav so the page order and the menu order agree. */}
+      <MoviesSection movies={featuredMovies} />
 
       <section id="categories" className="scroll-mt-24">
         <CategoryIcons initialCategories={categories} />
