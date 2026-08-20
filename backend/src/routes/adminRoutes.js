@@ -11,6 +11,7 @@ const {
 } = require('../controllers/commissionController');
 const {
 	getDashboardStats,
+  getFinancePartitions,
 	getRevenueChartData,
 	getEventRegistrationsChartData,
 	getTicketSalesChartData,
@@ -49,6 +50,9 @@ const {
 
 // Admin dashboard stats
 router.get('/dashboard/stats', authenticateUser, restrictTo('admin'), getDashboardStats);
+// The money split by pool — event tickets, event beverages, venue beverages,
+// cinema tickets, cinema concessions. One ledger aggregation, not five scans.
+router.get('/finance/partitions', authenticateUser, restrictTo('admin'), getFinancePartitions);
 
 // Organizer list with event counts and revenue already joined. Replaces the
 // browser assembling this from hundreds of per-organizer / per-event requests.

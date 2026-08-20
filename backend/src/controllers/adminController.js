@@ -4,6 +4,7 @@ const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const { StatusCodes } = require("http-status-codes");
 const { revenueAccumulators } = require("../utils/ticketRevenueQuery");
+const ledgerRead = require("../services/ledgerReadService");
 
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
@@ -13,6 +14,20 @@ const getDashboardStats = async (req, res) => {
       currency === "ETB"
         ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
         : { currency: "USD" };
+    // Withdrawal.stream was added with the beverage channel and defaults to
+    // "tickets", but rows written before the field existed have no value at
+    // all — so "is a ticket payout" is "tickets or unset", never `stream:
+    // "tickets"` alone, which would silently drop the platform's oldest payouts.
+    const ticketStreamMatch = {
+      $or: [{ stream: "tickets" }, { stream: { $exists: false } }],
+    };
+    // Combined under $and, NOT by spreading both objects into one. Both
+    // conditions are `$or`s, and two `$or` keys in one object do not intersect —
+    // the second silently replaces the first, which would drop the currency
+    // filter entirely and sum USD payouts into the ETB figure.
+    const ticketWithdrawalMatch = {
+      $and: [withdrawalCurrencyMatch, ticketStreamMatch],
+    };
     // Run all count queries in parallel for better performance
     const [
       totalUsers,
@@ -91,14 +106,27 @@ const getDashboardStats = async (req, res) => {
           },
         },
       ]),
-      // Use aggregation for withdrawal stats
+      // Withdrawal stats.
+      //
+      // SCOPED TO `stream: "tickets"`. Without that filter these sums covered
+      // every stream — event beverages, venue beverages, cinema seats, cinema
+      // concessions — while the revenue side above counts ticket revenue only.
+      // Subtracting one channel's payouts from another channel's revenue is what
+      // drove availableBalance negative (-1,346.87 on the local database:
+      // 273.13 ticket revenue less a 1,500.00 BEVERAGE withdrawal and 120.00
+      // pending). Rows written before `stream` existed default to tickets, so
+      // they are matched explicitly rather than dropped.
+      //
+      // The per-channel figures live on /admin/finance/partitions, which reads
+      // the ledger. This one stays because the dashboard header still reports
+      // the ticket pool.
       Withdrawal.aggregate([
         {
           $facet: {
             withdrawn: [
               {
                 $match: {
-                  ...withdrawalCurrencyMatch,
+                  ...ticketWithdrawalMatch,
                   status: { $in: ["approved", "completed"] },
                 },
               },
@@ -112,7 +140,7 @@ const getDashboardStats = async (req, res) => {
             pending: [
               {
                 $match: {
-                  ...withdrawalCurrencyMatch,
+                  ...ticketWithdrawalMatch,
                   status: "pending",
                 },
               },
@@ -189,6 +217,48 @@ const getDashboardStats = async (req, res) => {
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       status: "error",
       message: "Failed to get dashboard statistics",
+    });
+  }
+};
+
+/**
+ * The money, split by pool — the admin dashboard's balance cards.
+ *
+ * Five partitions: event tickets, event beverages, venue beverages, cinema
+ * tickets, cinema concessions. Each reports its own gross revenue, what the
+ * seller earned, what Pazimo took, what has been paid out, what is pending, and
+ * what is still available.
+ *
+ * REPLACES a single global "available balance" that subtracted payouts from
+ * EVERY stream from TICKET revenue alone, and so went negative the moment
+ * anyone withdrew beverage money. Pools are settled separately, so they are
+ * reported separately; a single number across them could only ever be a sum of
+ * things that are not interchangeable.
+ *
+ * ONE aggregation over LedgerBalance — one document per (owner, currency,
+ * stream) — rather than five collection scans that re-derive commission and VAT
+ * per row and grow with every sale.
+ */
+const getFinancePartitions = async (req, res) => {
+  try {
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
+    const result = await ledgerRead.getPlatformPartitions(currency);
+
+    // Surfaced rather than swallowed: if the ledger has not been backfilled,
+    // every figure above is a truthful 0.00 about an empty ledger and a lie
+    // about the business. The client shows a warning instead of the cards.
+    if (result.coverage && !result.coverage.backfilled) {
+      console.warn(
+        `[ADMIN-FINANCE] ledger is empty while ${result.coverage.sourceRows} source rows exist — run npm run ledger:backfill`
+      );
+    }
+
+    res.status(StatusCodes.OK).json({ status: "success", data: result });
+  } catch (error) {
+    console.error("Error getting finance partitions:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      status: "error",
+      message: "Failed to get finance partitions",
     });
   }
 };
@@ -320,6 +390,7 @@ const getTicketSalesChartData = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  getFinancePartitions,
   getRevenueChartData,
   getEventRegistrationsChartData,
   getTicketSalesChartData,
