@@ -17,7 +17,9 @@
     "ledger:reconcile": "node src/scripts/reconcileLedger.js",
     "ledger:bench": "node src/scripts/benchLedgerReads.js",
     "check:write-surface": "node src/scripts/checkPublicWriteSurface.js",
-    "backfill:platform-fees": "node src/scripts/backfillPlatformFees.js"
+    "backfill:platform-fees": "node src/scripts/backfillPlatformFees.js",
+    "migrate:cinema-publication": "node src/scripts/migrateCinemaMoviePublication.js",
+    "backfill:beverage-categories": "node src/scripts/backfillBeverageCategories.js"
   },
   "keywords": [],
   "author": "",

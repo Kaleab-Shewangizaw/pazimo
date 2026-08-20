@@ -181,9 +181,19 @@ not made yet — see Open questions.
 
 ### Still to run on production
 
-- [ ] `npm run backfill:platform-fees` — dry run first and read the
-      classification table, then `--write`. It only recomputes what is owed and
-      sends nothing.
+Every one of these is dry-run by default. Read the report before `--write`.
+
+- [ ] `npm run backfill:platform-fees` — read the classification table first.
+      Only recomputes what is owed; sends nothing.
+- [ ] `npm run ledger:backfill` — **required before the admin money cards show
+      anything.** Until it runs, the dashboard shows the coverage warning rather
+      than figures.
+- [ ] `npm run migrate:cinema-publication` — moves every existing film into the
+      admin review queue. **This hides every cinema film from customers until an
+      admin publishes it**, which is the chosen behaviour;
+      `--publish-existing` grandfathers them instead.
+- [ ] `npm run backfill:beverage-categories` — gives pre-existing catalogue rows
+      the "drink" category the schema default never applied to them.
 - [ ] Watch for `protect() rejected GET /api/users/` in the logs for a few days.
       If the mobile app appears there, fix the app — do not reopen the bypass.
 
@@ -224,8 +234,18 @@ Cinema concessions at checkout need the same wiring events have been waiting on.
 
 ### P1.3 — Cinema finishing work
 
-- [ ] Admin: movies/showtimes/ticket-sales tabs on the Admin → Cinema page.
-      The APIs all exist; only the UI is missing.
+- [x] **Admin publication gate.** A cinema creates a film; an admin decides
+      whether it reaches customers. `CinemaMovie.publicationStatus`
+      (pending | published | rejected), admin-only. `PUBLIC_MOVIE_MATCH` is the
+      one definition of "a customer may see and buy this" and every public read
+      uses it. `issueTicket` gates on it **by default**, so P1.1's online
+      checkout is gated the day it lands; the box office opts out explicitly,
+      because an admin backlog must not be able to close a real till.
+      Editing a customer-facing field returns a film to the queue, and an
+      unpublished film cannot hold a banner/featured/trending slot.
+- [x] Admin review queue UI on Admin → Cinema, opening on the backlog.
+- [x] Cinema concessions report what has been sold — totals plus a per-product
+      breakdown. The summary endpoint already existed; nothing called it.
 - [ ] Bulk "schedule screenings" — one film, many showtimes
 - [ ] Customer-facing browse polish; the public API is in place
 - [ ] Backfill slugs on production (`npm run backfill:cinema-slugs`) so existing
@@ -280,7 +300,24 @@ QR strip removes the scan's remaining excuse.
       failure can never fail a sale
 - [x] Backfill (dry-run default, idempotent) and reconciler
 - [x] Reconciler agrees: 12 exact, 1 within per-transaction rounding, 0 real
-- [ ] **Commit it.** It is uncommitted as of 2026-08-20.
+- [x] **Committed** 2026-08-20.
+- [x] **First read cut over: the admin dashboard's money cards.**
+      `GET /api/admin/finance/partitions` returns the five pools — event
+      tickets, event beverages, venue beverages, cinema tickets, cinema
+      concessions — from ONE aggregation over `LedgerBalance` grouped by
+      owner kind × stream, which is already the ledger's natural key. 2.0 ms.
+
+      Moved ahead of the gate deliberately: the figure it replaced was not
+      merely slow but **wrong** — a single "available balance" that subtracted
+      payouts from every stream from ticket revenue alone, and showed
+      **-1,346.87** on the local database. It is also a read-only admin report
+      that nobody is paid out on. Owner-facing reads and the withdrawal check
+      stay on the old formulas until the reconciler has agreed for the full
+      period.
+
+      Carries a coverage guard: an unbackfilled ledger reports itself instead of
+      answering a confident 0.00. Verified against a database with 15,000
+      tickets and no ledger.
 - [ ] Run the reconciler on a schedule and let it agree for the gate period
 - [ ] Wrap money movements in `session.withTransaction()` on Atlas — closes the
       withdrawal double-spend race, which has no lock today
@@ -291,6 +328,32 @@ QR strip removes the scan's remaining excuse.
 
 **Gate:** reconciler agrees for the full period · reads cut over · old formulas
 deleted.
+
+---
+
+## Bugs found and fixed along the way
+
+Kept because each was invisible until something else was being verified, and
+the same shape will recur.
+
+- **The admin dashboard showed a negative available balance.** Ticket revenue
+  minus withdrawals from *every* stream: `273.13 - 1,500.00 (beverages) -
+  120.00 = -1,346.87`. Decision 1 exists precisely to prevent this and the
+  dashboard predated it. Fixed twice over — the stream filter added, and the
+  single global figure replaced by per-pool cards.
+- **Async controller errors hung the request** (see P0). ~250 throw sites.
+- **The commission sweep counted nothing** (see P0).
+- **Beverage categories were never backfilled.** `default: "drink"` applies at
+  document creation, never to existing rows, so every pre-existing beverage sat
+  at null and the drink/snack/combo label and filter silently did nothing.
+- **`components/header/Header.tsx`** was a two-line placeholder colliding with
+  the real `header.tsx` — a build error, and a name clash outright on a
+  case-insensitive filesystem.
+
+**The pattern worth remembering:** three of these are the same mistake — *a
+schema default or a new field does not change rows that already exist.* Any new
+field on an existing collection needs a migration, and the migration needs to
+match `null` as well as absent.
 
 ---
 
