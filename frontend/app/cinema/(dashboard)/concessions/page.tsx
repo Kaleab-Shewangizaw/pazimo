@@ -70,7 +70,12 @@ function ConcessionsContent({
       .finally(() => setLoading(false));
   }, [reload, approved]);
 
-  const [form, setForm] = useState({ beverage: "", price: "", stockTotal: "" });
+  const [form, setForm] = useState({
+    beverage: "",
+    price: "",
+    stockTotal: "",
+    unlimitedStock: false,
+  });
 
   const addItem = async () => {
     setBusy(true);
@@ -80,11 +85,15 @@ function ConcessionsContent({
         body: JSON.stringify({
           beverage: form.beverage,
           price: Number(form.price),
-          stockTotal: Number(form.stockTotal),
+          unlimitedStock: form.unlimitedStock,
+          // Omitted entirely on an unlimited line: the server ignores it, and
+          // sending a number that means nothing invites a later reader to trust
+          // it.
+          ...(form.unlimitedStock ? {} : { stockTotal: Number(form.stockTotal) }),
         }),
       });
       toast.success("Added to line-up");
-      setForm({ beverage: "", price: "", stockTotal: "" });
+      setForm({ beverage: "", price: "", stockTotal: "", unlimitedStock: false });
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -212,15 +221,36 @@ function ConcessionsContent({
                   <Input
                     type="number"
                     value={form.stockTotal}
+                    disabled={form.unlimitedStock}
+                    placeholder={form.unlimitedStock ? "Not counted" : ""}
                     onChange={(e) =>
                       setForm({ ...form, stockTotal: e.target.value })
                     }
                   />
                 </div>
               </div>
+              {/* A stand runs out of cups, not of fountain soda. Retyping 9999
+                  every morning is a chore that eventually gets forgotten and
+                  closes the till mid-rush. */}
+              <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={form.unlimitedStock}
+                  onChange={(e) =>
+                    setForm({ ...form, unlimitedStock: e.target.checked })
+                  }
+                  className="h-3.5 w-3.5 rounded border-gray-300"
+                />
+                Unlimited — don&apos;t count stock for this one
+              </label>
               <Button
                 onClick={addItem}
-                disabled={busy || !form.beverage || !form.price}
+                disabled={
+                  busy ||
+                  !form.beverage ||
+                  !form.price ||
+                  (!form.unlimitedStock && !form.stockTotal)
+                }
               >
                 Add to line-up
               </Button>
@@ -242,11 +272,20 @@ function ConcessionsContent({
                 >
                   <option value="">Select a product…</option>
                   {lineup
-                    .filter((l) => l.isAvailable && l.stockRemaining > 0)
+                    // An unlimited line reports stockRemaining as null and is
+                    // always sellable; a counted one needs stock left.
+                    .filter(
+                      (l) =>
+                        l.isAvailable &&
+                        (l.stockRemaining === null || l.stockRemaining > 0)
+                    )
                     .map((l) => (
                       <option key={l._id} value={l._id}>
-                        {l.beverage?.name} — {money(l.price)} ({l.stockRemaining}{" "}
-                        left)
+                        {l.beverage?.name} — {money(l.price)} (
+                        {l.stockRemaining === null
+                          ? "unlimited"
+                          : `${l.stockRemaining} left`}
+                        )
                       </option>
                     ))}
                 </select>
@@ -284,7 +323,10 @@ function ConcessionsContent({
                       </Badge>
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {money(l.price)} · {l.sold} sold · {l.stockRemaining} left
+                      {money(l.price)} · {l.sold} sold ·{" "}
+                      {l.stockRemaining === null
+                        ? "unlimited stock"
+                        : `${l.stockRemaining} left`}
                       {!l.isAvailable && " · off sale"}
                     </p>
                   </div>

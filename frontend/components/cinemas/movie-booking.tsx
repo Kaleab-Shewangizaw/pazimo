@@ -16,6 +16,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { clockLabel, dayLabel, posterUrl, runtimeLabel } from "./cinema-format";
+import BookingFlow from "./booking-flow";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { PublicMovieDetail, PublicShowtime } from "./public-cinema-types";
 
 const money = (n: number, currency = "ETB") =>
@@ -40,6 +48,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
   const [dayIndex, setDayIndex] = useState(0);
   const [showtimeId, setShowtimeId] = useState<string | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [booking, setBooking] = useState(false);
 
   const day = days[dayIndex];
   const showtime: PublicShowtime | undefined = useMemo(
@@ -370,22 +379,48 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
                   </>
                 )}
 
-                {/* Checkout is Phase 2. Disabled rather than hidden so the flow
-                    reads end to end, and labelled honestly rather than
-                    pretending to be a working button. */}
-                <Button className="mt-4 w-full" size="lg" disabled>
-                  {lines.length === 0 ? "Select tickets" : "Checkout coming soon"}
+                <Button
+                  className="mt-4 w-full"
+                  size="lg"
+                  disabled={!showtime}
+                  onClick={() => setBooking(true)}
+                >
+                  {!showtime ? "Pick a screening" : "Choose seats"}
                 </Button>
-                {lines.length > 0 && (
-                  <p className="mt-2 text-center text-xs text-muted-foreground">
-                    Online payment for cinema tickets is being set up.
-                  </p>
-                )}
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Pick where you sit, add snacks, and pay — your seats are held while
+                  you do.
+                </p>
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      <Dialog open={booking} onOpenChange={setBooking}>
+        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{movie.title}</DialogTitle>
+            <DialogDescription>
+              {showtime
+                ? `${dayLabel(day.date)} · ${clockLabel(showtime.startsAt)}${
+                    showtime.hall?.name ? ` · ${showtime.hall.name}` : ""
+                  }`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          {showtime && (
+            <BookingFlow
+              // Keyed by screening: opening a different one must start from ITS
+              // room and its prices, not from the last one's selection.
+              key={showtime._id}
+              showtimeId={showtime._id}
+              cinemaId={cinema._id}
+              onClose={() => setBooking(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

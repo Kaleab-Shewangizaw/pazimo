@@ -248,7 +248,10 @@ export interface CinemaConcession {
   currency: string;
   stockTotal: number;
   sold: number;
-  stockRemaining: number;
+  /** Whether this line is counted at all. */
+  unlimitedStock?: boolean;
+  /** null on an unlimited line — "we do not count this" has no numeric answer. */
+  stockRemaining: number | null;
   isAvailable: boolean;
 }
 
