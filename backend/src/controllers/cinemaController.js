@@ -65,8 +65,10 @@ const parseTurnaround = (value) => {
 
 // The seat grid (Phase 2 scaffolding). Accepts a JSON object or a multipart
 // string; the model validates it against capacity.
-const parseSeatLayout = (value) => {
-  if (value === undefined) return undefined;
+// Accepts either a real object or a JSON string, because the hall form is
+// multipart (it can carry an image) and multipart has no types — everything
+// arrives as text.
+const asObject = (value, label) => {
   let raw = value;
   if (typeof raw === "string") {
     const trimmed = raw.trim();
@@ -74,27 +76,104 @@ const parseSeatLayout = (value) => {
     try {
       raw = JSON.parse(trimmed);
     } catch {
-      throw new BadRequestError("seatLayout must be a JSON object");
+      throw new BadRequestError(`${label} must be valid JSON`);
     }
   }
-  if (raw === null) return null;
-  if (typeof raw !== "object") throw new BadRequestError("seatLayout must be an object");
+  return raw;
+};
 
-  const asCount = (v, label) => {
-    if (v === undefined || v === null || v === "") return undefined;
+/** The seat categories a room offers. */
+const parseSeatCategories = (value) => {
+  if (value === undefined) return undefined;
+  const raw = asObject(value, "seatCategories");
+  if (raw === null) return null;
+  if (!Array.isArray(raw)) throw new BadRequestError("seatCategories must be a list");
+
+  return raw.map((category, index) => {
+    const key = String(category?.key ?? "").trim().toLowerCase();
+    const label = String(category?.label ?? "").trim();
+    if (!key) throw new BadRequestError(`Seat category ${index + 1} needs a key`);
+    if (!label) throw new BadRequestError(`Seat category "${key}" needs a label`);
+    // The key is what tickets and showtime prices reference for ever, so it is
+    // constrained to something that cannot break a URL or a lookup. The LABEL
+    // is the free-text half a cinema renames as it likes.
+    if (!/^[a-z0-9_-]+$/.test(key)) {
+      throw new BadRequestError(
+        `Seat category key "${key}" may only use letters, numbers, dashes and underscores`
+      );
+    }
+    return {
+      key,
+      label,
+      color: String(category?.color ?? "").trim() || "#6366f1",
+    };
+  });
+};
+
+/**
+ * The room itself, row by row.
+ *
+ * Deliberately permissive about what a row or a seat is CALLED and strict about
+ * structure: numbering conventions differ between cinemas and a wrong
+ * assumption makes a real hall undescribable, but a malformed map would fail
+ * later at sale time instead of here at edit time.
+ *
+ * Cross-row checks — duplicate labels, unknown categories, capacity — belong to
+ * the model, so every write path gets them rather than only this one.
+ */
+const parseSeatMap = (value) => {
+  if (value === undefined) return undefined;
+  const raw = asObject(value, "seatMap");
+  if (raw === null) return null;
+  if (typeof raw !== "object") throw new BadRequestError("seatMap must be an object");
+
+  const rows = raw.rows;
+  if (!Array.isArray(rows)) throw new BadRequestError("seatMap.rows must be a list");
+  if (rows.length === 0) return { rows: [] };
+  if (rows.length > 60) {
+    throw new BadRequestError("A hall can have at most 60 rows");
+  }
+
+  const asOffset = (v, label) => {
+    if (v === undefined || v === null || v === "") return 0;
     const n = Number(v);
-    if (!Number.isInteger(n) || n < 1) {
-      throw new BadRequestError(`seatLayout.${label} must be a whole number of at least 1`);
+    if (!Number.isFinite(n) || n < -100 || n > 100) {
+      throw new BadRequestError(`${label} must be a number between -100 and 100`);
     }
     return n;
   };
 
   return {
-    rows: asCount(raw.rows, "rows"),
-    seatsPerRow: asCount(raw.seatsPerRow, "seatsPerRow"),
-    rowLabels: Array.isArray(raw.rowLabels)
-      ? raw.rowLabels.map((l) => String(l).trim()).filter(Boolean)
-      : [],
+    rows: rows.map((row, rowIndex) => {
+      const label = String(row?.label ?? "").trim();
+      if (!label) throw new BadRequestError(`Row ${rowIndex + 1} needs a label`);
+
+      const seats = Array.isArray(row?.seats) ? row.seats : [];
+      if (seats.length > 80) {
+        throw new BadRequestError(`Row ${label} has more than 80 seats`);
+      }
+
+      return {
+        label,
+        curve: asOffset(row?.curve, `Row ${label} curve`),
+        offset: asOffset(row?.offset, `Row ${label} offset`),
+        seats: seats.map((seat, seatIndex) => {
+          const number = String(seat?.number ?? "").trim();
+          if (!number) {
+            throw new BadRequestError(
+              `Seat ${seatIndex + 1} in row ${label} needs a number`
+            );
+          }
+          return {
+            number,
+            categoryKey: String(seat?.categoryKey ?? "").trim().toLowerCase(),
+            // Default TRUE: a seat sent without the flag is a seat, not a gap.
+            exists: seat?.exists === undefined ? true : parseBoolean(seat.exists, true),
+            blocked: parseBoolean(seat?.blocked, false),
+          };
+        }),
+      };
+    }),
   };
 };
 
@@ -523,7 +602,8 @@ const createHall = async (req, res) => {
       throw new BadRequestError("capacity must be a whole number of at least 1");
     }
 
-    const seatLayout = parseSeatLayout(req.body.seatLayout);
+    const seatCategories = parseSeatCategories(req.body.seatCategories);
+    const seatMap = parseSeatMap(req.body.seatMap);
     const turnaround = parseTurnaround(req.body.turnaroundMinutes);
 
     const hall = await CinemaHall.create({
@@ -536,7 +616,8 @@ const createHall = async (req, res) => {
       // undefined leaves the schema default (null = inherit the cinema's).
       turnaroundMinutes: turnaround,
       hasAssignedSeating: parseBoolean(req.body.hasAssignedSeating, false),
-      ...(seatLayout ? { seatLayout } : {}),
+      ...(seatCategories ? { seatCategories } : {}),
+      ...(seatMap ? { seatMap } : {}),
       isActive: parseBoolean(req.body.isActive, true),
     });
 
@@ -582,8 +663,17 @@ const updateHall = async (req, res) => {
     const turnaround = parseTurnaround(req.body.turnaroundMinutes);
     if (turnaround !== undefined) hall.turnaroundMinutes = turnaround;
 
-    const seatLayout = parseSeatLayout(req.body.seatLayout);
-    if (seatLayout !== undefined) hall.seatLayout = seatLayout || undefined;
+    const seatCategories = parseSeatCategories(req.body.seatCategories);
+    if (seatCategories !== undefined) {
+      hall.seatCategories = seatCategories || undefined;
+    }
+
+    const seatMap = parseSeatMap(req.body.seatMap);
+    if (seatMap !== undefined) {
+      hall.seatMap = seatMap || undefined;
+      // Capacity is re-derived from the map by the model, so a stale capacity
+      // sent alongside a new map never wins.
+    }
 
     hall.hasAssignedSeating = parseBoolean(
       req.body.hasAssignedSeating,

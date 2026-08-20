@@ -388,15 +388,25 @@ const parseTicketTypes = (value) => {
       throw new BadRequestError(`${name}: price must be 0 or more`);
     }
 
-    const allocation = Number(tier?.allocation);
-    if (!Number.isInteger(allocation) || allocation < 0) {
-      throw new BadRequestError(`${name}: allocation must be a whole number`);
+    // On a hall with assigned seating the tier names a seat CATEGORY and the
+    // model derives the allocation from the seat map, so an allocation is not
+    // required here — and any figure sent alongside one is ignored rather than
+    // trusted, because the map is the more specific statement.
+    const seatCategoryKey = normalizeText(tier?.seatCategoryKey)?.toLowerCase();
+
+    let allocation = 0;
+    if (!seatCategoryKey) {
+      allocation = Number(tier?.allocation);
+      if (!Number.isInteger(allocation) || allocation < 0) {
+        throw new BadRequestError(`${name}: allocation must be a whole number`);
+      }
     }
 
     return {
       name,
       price,
       allocation,
+      ...(seatCategoryKey ? { seatCategoryKey } : {}),
       description: normalizeText(tier?.description),
       isAvailable: parseBoolean(tier?.isAvailable, true),
     };
@@ -551,11 +561,17 @@ const createShowtime = async (req, res) => {
     }
 
     const ticketTypes = parseTicketTypes(req.body.ticketTypes);
-    const allocated = ticketTypes.reduce((sum, t) => sum + t.allocation, 0);
-    if (allocated > hall.capacity) {
-      throw new BadRequestError(
-        `Those tiers allocate ${allocated} seats but ${hall.name} holds ${hall.capacity}`
-      );
+    // Only meaningful on a hall that sells by capacity. On one with assigned
+    // seating the model derives each tier's allocation from the seat map, so
+    // summing what the client sent would compare a number nobody is going to
+    // use against a capacity the map already guarantees.
+    if (!hall.hasAssignedSeating) {
+      const allocated = ticketTypes.reduce((sum, t) => sum + t.allocation, 0);
+      if (allocated > hall.capacity) {
+        throw new BadRequestError(
+          `Those tiers allocate ${allocated} seats but ${hall.name} holds ${hall.capacity}`
+        );
+      }
     }
 
     const showtime = new CinemaShowtime({
@@ -681,14 +697,21 @@ const updateShowtime = async (req, res) => {
     await showtime.validate();
 
     const hall = await CinemaHall.findById(showtime.hall).lean();
-    const allocated = showtime.ticketTypes.reduce(
-      (sum, t) => sum + (t.allocation || 0),
-      0
-    );
-    if (hall && allocated > hall.capacity) {
-      throw new BadRequestError(
-        `Those tiers allocate ${allocated} seats but ${hall.name} holds ${hall.capacity}`
+    // Runs after validate(), which is where an assigned-seating hall's
+    // allocations are derived from the seat map — so on those halls this sum is
+    // already the map's own totals and the comparison is trivially satisfied.
+    // Skipped explicitly all the same, so the intent does not depend on hook
+    // ordering staying the way it is today.
+    if (hall && !hall.hasAssignedSeating) {
+      const allocated = showtime.ticketTypes.reduce(
+        (sum, t) => sum + (t.allocation || 0),
+        0
       );
+      if (allocated > hall.capacity) {
+        throw new BadRequestError(
+          `Those tiers allocate ${allocated} seats but ${hall.name} holds ${hall.capacity}`
+        );
+      }
     }
 
     let warning;
