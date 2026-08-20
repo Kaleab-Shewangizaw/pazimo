@@ -8,6 +8,7 @@ record of how we got here. If those disagree with this file, this file wins.
 carry 1,000,000 tickets a year.
 
 **Status:** 2026-08-20 · working branch `feat/beverage-revenue-and-withdrawals`
+**P0 is done.** Cinema (P1) is next.
 **Working agreement:** tick items as they land. Note where reality differed.
 Any chat should be able to read this and pick up.
 
@@ -102,40 +103,89 @@ takes long.
 
 ## P0 — Stop the bleeding
 
-**~1 day. Do this first.**
+**DONE 2026-08-20.** Landed in three commits. What follows is the record,
+including two things found while doing it that were not on the list.
 
-Four endpoints accept writes from anyone on the internet. Each was confirmed by
-an unauthenticated HTTP request against a local copy on 2026-08-19.
+Four endpoints accepted writes from anyone on the internet. Each was confirmed
+by an unauthenticated HTTP request against a local copy on 2026-08-19.
 
-- [ ] `PUT /api/invitation-pricing` — **HTTP 200**, sets email/SMS prices to 0.
-      This is what organizers are charged. `req.user` is never referenced.
-- [ ] `POST /api/categories`, `PATCH/PUT/DELETE /api/categories/:id` — **HTTP
-      201/200**. `categoryController` contains no reference to `req.user`,
-      `admin` or `role`. Anyone can delete every category on the platform.
-- [ ] `POST /api/qr-tickets/generate` — mints admission QR codes from a raw
-      `eventId` and `qrCount`.
-- [ ] `GET /api/users/:id` — the `TEMP-BYPASS-2026-07-10` IDOR. Returns an
-      organizer's email, phone and ban status with no credentials.
+- [x] `PUT /api/invitation-pricing` — was **HTTP 200**, set email/SMS prices to
+      0. Now admin-only. Also validates: a partial body previously left one
+      event type untouched while reporting success.
+- [x] `POST /api/categories`, `PATCH/PUT/DELETE /api/categories/:id` — were
+      **HTTP 201/200**. Now admin-only; reads stay public for the browse UI.
+- [x] `POST /api/qr-tickets/generate` — minted admission QR codes from a raw
+      `eventId` and `qrCount`. Now staff-only **and ownership-checked**: role
+      alone would still have let one organizer mint tickets against another's
+      event. `qrCount` bounded at 100.
+- [x] `POST /api/qr-tickets/verify` — **not on the original list, and worse.**
+      It burns a ticket, and ticket numbers are sequential (`ABC-0001`), so
+      anyone could invalidate tickets by counting. Now staff-only.
+- [x] `GET /api/users/:id` — `TEMP-BYPASS-2026-07-10` removed, reverted to
+      `protect` + `restrictTo("admin", "organizer")`.
 
-The first three are one line each: `authenticateUser, restrictTo("admin")`.
+On the bypass: production logs were never needed. Both options in the original
+plan delete the no-token branch, and they differ only on whether `extractToken`
+keeps its tolerance for `x-access-token`, `x-auth-token` and `?token=`. Keeping
+it is strictly safer — that tolerance is about *where* the credential is, never
+*whether* there is one, since every branch still has to survive `jwt.verify`.
+So the middle option is correct either way and the question is moot. If the app
+truly sends no token, `protect()` logs the rejection with the URL.
 
-The fourth has a shortcut its own commit message spells out: **the fallback
-path logs on every hit.** Check production logs for
-`TEMP-BYPASS-2026-07-10`. If nothing has hit it, the mobile app is already
-sending a credential and the whole block can be deleted today rather than
-waiting for 2026-09-20. If it has been hit, take the middle option — drop only
-the no-token branch, keep `extractToken`'s tolerance for `x-access-token`,
-`x-auth-token` and `?token=`.
+- [x] **Fixed the commission sweep.** `computeDailyTotal` filtered
+      `provider: "chapa_giftcard"`, of which production has **zero** — a payment
+      is only tagged that when gift-card routing is configured, and it never
+      was. So it computed 0 every day and all 74 ledger rows are zero, against
+      701,493.24 ETB earned.
 
-- [ ] **Fix the commission sweep.** `platformFeeService.computeDailyTotal`
-      filters `provider: "chapa_giftcard"`. Production has **zero** of those —
-      18,186 `chapa`, 160 `santim`, 1,257 null. So the sweep computes 0 every
-      day and all 74 ledger rows are zero. Against 701,493.24 ETB earned.
-      Widen the filter, then backfill the missed days.
-- [ ] Rate-limit the write endpoints above. Only login and RSVP are limited today.
+      **Widening it was not just dropping the filter.** `Payment` is shared by
+      ticket sales, invitation email/SMS fees, campaign payments and on-door
+      cash. Invitation and campaign fees are already 100% platform income —
+      counting them charges ourselves a fee on our own money. `invitationType`
+      cannot separate them, because a plain ticket sale sets nothing and
+      inherits the default `"guest"`, the same value invitations use. What does
+      separate them is `ticketDetails`: `ticketCount` for tickets,
+      `qrCodeCount` for invitations, `campaignId` for campaigns.
+- [x] Rate-limited that write surface, as a backstop behind the auth.
 
-**Gate:** the four endpoints reject anonymous callers; one day's fee ledger row
-is non-zero.
+**Gate met:** `npm run check:write-surface` boots the API and fires an anonymous
+request at all eight endpoints; all eight refuse. It passes only on 401/403/429,
+deliberately not any 4xx, so an unguarded route that happens to reject one body
+with a 400 cannot read as secured. Verified in both directions — removing a
+guard makes it fail.
+
+### Found while doing P0
+
+**Every async controller error hung the request.** Found by removing a guard to
+check the new test could actually fail: the request did not return 400, it took
+the process down. Express 4 wraps handlers in a plain try/catch, which cannot
+catch an async throw — an `async` function returns a rejecting promise, and
+nothing was looking at it. `server.js` then swallows `unhandledRejection` by
+design to avoid crashing, so **no response was ever written and the request hung
+until the client gave up**, holding a socket each time. Not a 400, not a crash —
+a silent hang, on every validation error in the API. The typed errors in
+`errors/`, their status codes, and the error middleware in `app.js` were all
+unreachable code for async handlers: roughly 250 throw sites.
+
+Fixed in `middlewares/asyncErrors.js`, one require in `app.js`, reversible by
+deleting it.
+
+**The sweep can compute what is owed but may not be able to send it.**
+`sendFee` draws the payout from a gift card, so it can only source the part of a
+day that landed in one — and none ever did, which is the same misconfiguration
+that caused the original bug. The fix records `giftCardSales` alongside
+`totalSales` so this gap is a visible number rather than a payout that fails at
+00:05. **Recording what is owed is now correct; actually sweeping it still needs
+gift-card routing configured, or a different settlement path.** That decision is
+not made yet — see Open questions.
+
+### Still to run on production
+
+- [ ] `npm run backfill:platform-fees` — dry run first and read the
+      classification table, then `--write`. It only recomputes what is owed and
+      sends nothing.
+- [ ] Watch for `protect() rejected GET /api/users/` in the logs for a few days.
+      If the mobile app appears there, fix the app — do not reopen the bypass.
 
 ---
 
@@ -308,5 +358,12 @@ Do not re-litigate these.
 - [ ] Combos: independent price, or summed from components? (`category: "combo"`
       exists and carries no bundling behaviour yet.)
 - [ ] Do cinemas get Pazimo Capital? Currently no, by decision 6.
-- [ ] Has anything actually hit the `TEMP-BYPASS` fallback? The answer decides
-      whether P0's fourth item is a delete or a rewrite.
+- [x] ~~Has anything actually hit the `TEMP-BYPASS` fallback?~~ Moot. Both
+      options deleted the no-token branch; the safer one works either way and
+      is what landed.
+- [ ] **How does the platform fee actually get collected?** The sweep now
+      computes the right number but pays out of a gift card that the money never
+      went into. Either configure gift-card routing so ticket payments land
+      somewhere the sweep can draw from, or accept that commission is settled
+      by the ledger and retire the gift-card sweep. Until this is answered the
+      fee is recorded and not sent.
