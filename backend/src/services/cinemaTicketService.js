@@ -116,6 +116,15 @@ const issueTicket = async ({
   // refused — the guard that stops a caller selling seats for a cinema it does
   // not own by passing someone else's showtime id.
   cinemaId,
+  // Whether the film must have cleared the admin publication gate.
+  //
+  // DEFAULTS TO TRUE, so every future caller is gated unless it deliberately
+  // says otherwise. The one caller that opts out is the box office: a member of
+  // cinema staff selling a seat to a person standing in front of them is not
+  // the public surface the gate governs, and letting an admin review backlog
+  // stop a real cinema trading would be a worse failure than an unlisted film
+  // selling a counter ticket.
+  requirePublished = true,
 }) => {
   if (!mongoose.Types.ObjectId.isValid(showtimeId)) {
     throw new NotFoundError("Showtime not found");
@@ -131,7 +140,7 @@ const issueTicket = async ({
 
   const preview = await CinemaShowtime.findById(showtimeId)
     .select("cinema movie hall startsAt status")
-    .populate("movie", "title")
+    .populate("movie", "title publicationStatus isActive")
     .populate("hall", "name")
     .lean();
   if (!preview) throw new NotFoundError("Showtime not found");
@@ -139,6 +148,15 @@ const issueTicket = async ({
     // "Not found" rather than "forbidden": probing ids should not confirm what
     // exists at another cinema.
     throw new NotFoundError("Showtime not found");
+  }
+
+  // Checked BEFORE seats are claimed, so a refused sale never has to give a
+  // seat back — the claim/release dance below exists for failures that can only
+  // be discovered after the claim, and this is not one of them.
+  if (requirePublished && preview.movie?.publicationStatus !== "published") {
+    throw new BadRequestError(
+      "This film is not published yet, so tickets cannot be sold for it online."
+    );
   }
 
   const { tier } = await claimSeats({

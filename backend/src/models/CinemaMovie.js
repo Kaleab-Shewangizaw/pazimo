@@ -181,6 +181,43 @@ const CinemaMovieSchema = new mongoose.Schema(
     featuredSetAt: {
       type: Date,
     },
+
+    // --- Admin publication gate --------------------------------------------
+    //
+    // Whether this film has been approved to face the public at all. A cinema
+    // creates a film; an admin decides whether it goes live. Until it does, the
+    // film is invisible to customers and no ticket can be sold for it.
+    //
+    // A SEPARATE FIELD FROM `status` ON PURPOSE. `status` is presentation —
+    // coming soon, showing now, finished its run — and belongs to the cinema.
+    // This is permission, and belongs to the admin. Folding them into one enum
+    // would mean a cinema moving a film to "now_showing" could publish itself,
+    // which is the entire thing this gate prevents.
+    //
+    // ADMIN-ONLY, like the three display slots above and for the same reason:
+    // the party that benefits must not be the party that decides. The
+    // cinema-facing update handler ignores this field rather than validating
+    // it, so a cinema sending it simply has no effect.
+    publicationStatus: {
+      type: String,
+      enum: ["pending", "published", "rejected"],
+      default: "pending",
+      required: true,
+    },
+    publishedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+    },
+    publishedAt: {
+      type: Date,
+    },
+    // Why an admin rejected it, shown back to the cinema so a rejection is
+    // actionable rather than a silent refusal to go live.
+    publicationNote: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
   },
   { timestamps: true }
 );
@@ -203,6 +240,16 @@ CinemaMovieSchema.index({ bannerStatus: 1, isActive: 1 });
 CinemaMovieSchema.index({ isTrending: 1, isActive: 1 });
 
 CinemaMovieSchema.index({ shortId: 1 }, { unique: true, sparse: true });
+
+// The admin review queue: everything awaiting a decision, oldest first, so the
+// backlog is worked in the order cinemas submitted it.
+CinemaMovieSchema.index({ publicationStatus: 1, createdAt: 1 });
+// Every public read is scoped by publication, so it leads each of those indexes
+// rather than being a filter applied after the fact.
+CinemaMovieSchema.index({ publicationStatus: 1, isActive: 1, isFeatured: 1, featuredOrder: 1 });
+CinemaMovieSchema.index({ publicationStatus: 1, isActive: 1, bannerStatus: 1 });
+CinemaMovieSchema.index({ publicationStatus: 1, isActive: 1, isTrending: 1 });
+CinemaMovieSchema.index({ cinema: 1, publicationStatus: 1 });
 
 // Keep the URL fields populated, exactly as Event does.
 //
@@ -234,6 +281,44 @@ CinemaMovieSchema.pre("save", function syncStatusAndActive(next) {
   } else if (this.isModified("isActive") && this.isActive === false) {
     // Retired through the older flag: reflect it in the lifecycle too.
     this.status = "archived";
+  }
+  next();
+});
+
+// A film that is edited after approval goes back into the queue.
+//
+// Without this, publication would be a one-time key: a cinema could submit a
+// bland placeholder, get it approved, then rewrite the title, synopsis and
+// poster into anything at all. Only the fields a customer actually sees trigger
+// re-review — rescheduling or restocking must not cost a cinema its listing.
+//
+// In the model rather than the controller so it holds for every write path.
+const CUSTOMER_FACING_FIELDS = [
+  "title",
+  "description",
+  "poster",
+  "coverImage",
+  "trailerUrl",
+  "genre",
+  "language",
+  "subtitles",
+  "ageRating",
+  "durationMinutes",
+  "releaseDate",
+];
+
+CinemaMovieSchema.pre("save", function requeueOnCustomerFacingEdit(next) {
+  if (this.isNew) return next();
+  // An admin's own decision must not undo itself: when publicationStatus is
+  // part of this same save, that is the review landing, not a cinema edit.
+  if (this.isModified("publicationStatus")) return next();
+  if (this.publicationStatus !== "published") return next();
+
+  if (CUSTOMER_FACING_FIELDS.some((field) => this.isModified(field))) {
+    this.publicationStatus = "pending";
+    this.publishedBy = undefined;
+    this.publishedAt = undefined;
+    this.publicationNote = "Returned for review after the listing was edited.";
   }
   next();
 });

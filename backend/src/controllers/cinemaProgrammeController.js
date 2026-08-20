@@ -54,6 +54,17 @@ const uploadedPaths = (req) =>
     .flat()
     .map((f) => `/uploads/${f.filename}`);
 
+// The single definition of "a customer may see and buy this film".
+//
+// Every public read and every sale path is scoped by this rather than each
+// spelling out its own filter, because a film that is buyable somewhere it is
+// not visible — or visible somewhere it is not buyable — is exactly the drift a
+// shared constant prevents. `isActive` is the cinema's own retire switch;
+// `publicationStatus` is the admin's gate. A film needs both.
+const PUBLIC_MOVIE_MATCH = { publicationStatus: "published", isActive: true };
+
+const PUBLICATION_STATUSES = ["pending", "published", "rejected"];
+
 const MOVIE_STATUSES = ["coming_soon", "now_showing", "archived"];
 const parseStatus = (value) => {
   if (value === undefined || value === null || value === "") return undefined;
@@ -764,10 +775,14 @@ const getPublicMovie = async (req, res) => {
     // or mistyped title still resolves as long as the code is intact. Same
     // contract as extractShortIdFromEventSlug on the event side.
     const shortId = extractShortIdFromEventSlug(movieId);
+    // Scoped by PUBLIC_MOVIE_MATCH, so an unpublished film 404s here exactly as
+    // a non-existent one does. Deliberately not a 403: the existence of a film
+    // an admin has not approved is not public information, and a distinguishable
+    // response would let anyone enumerate what cinemas have submitted.
     const lookup = shortId
-      ? { shortId, isActive: true }
+      ? { shortId, ...PUBLIC_MOVIE_MATCH }
       : mongoose.Types.ObjectId.isValid(movieId)
-        ? { _id: movieId, isActive: true }
+        ? { _id: movieId, ...PUBLIC_MOVIE_MATCH }
         : null;
 
     if (!lookup) throw new NotFoundError("Movie not found");
@@ -950,6 +965,12 @@ const listAllMoviesForAdmin = async (req, res) => {
       query.cinema = cinemaId;
     }
     if (status) query.status = status;
+    // The review queue. `?publication=pending` is what the admin's Cinema page
+    // opens on, so the backlog is the default view rather than something to go
+    // looking for.
+    if (PUBLICATION_STATUSES.includes(req.query.publication)) {
+      query.publicationStatus = req.query.publication;
+    }
     // Jump straight to what currently occupies a display slot.
     if (slot === "banner") query.bannerStatus = true;
     if (slot === "featured") query.isFeatured = true;
@@ -973,6 +994,17 @@ const listAllMoviesForAdmin = async (req, res) => {
             banner: { $sum: { $cond: ["$bannerStatus", 1, 0] } },
             featured: { $sum: { $cond: ["$isFeatured", 1, 0] } },
             trending: { $sum: { $cond: ["$isTrending", 1, 0] } },
+            // The review backlog, in the same pass — the admin screen shows it
+            // as a badge and should not pay a second round trip for it.
+            pending: {
+              $sum: { $cond: [{ $eq: ["$publicationStatus", "pending"] }, 1, 0] },
+            },
+            published: {
+              $sum: { $cond: [{ $eq: ["$publicationStatus", "published"] }, 1, 0] },
+            },
+            rejected: {
+              $sum: { $cond: [{ $eq: ["$publicationStatus", "rejected"] }, 1, 0] },
+            },
           },
         },
       ]),
@@ -1002,6 +1034,13 @@ const listAllMoviesForAdmin = async (req, res) => {
       slots: counts[0]
         ? { banner: counts[0].banner, featured: counts[0].featured, trending: counts[0].trending }
         : { banner: 0, featured: 0, trending: 0 },
+      publication: counts[0]
+        ? {
+            pending: counts[0].pending,
+            published: counts[0].published,
+            rejected: counts[0].rejected,
+          }
+        : { pending: 0, published: 0, rejected: 0 },
       pagination: {
         total,
         page: Number(page),
@@ -1015,6 +1054,102 @@ const listAllMoviesForAdmin = async (req, res) => {
       message: "Failed to list movies",
       error: error.message,
     });
+  }
+};
+
+/**
+ * Publish, reject, or return a film to the queue.
+ *
+ * ADMIN ONLY. This is the gate between a cinema creating a listing and that
+ * listing reaching customers: only a published film appears on the home page,
+ * in browse, on its own public page, or in an online checkout.
+ *
+ * Takes a movie id alone rather than a cinema id plus a movie id, for the same
+ * reason setMovieDisplay does — an admin working a review queue is working
+ * across cinemas and should not have to know who owns a title to approve it.
+ *
+ * Rejecting does NOT delete anything. The cinema keeps the row, keeps its
+ * showtimes, and can edit and resubmit; the note is what tells them why. A
+ * rejection that destroyed work would make admins reluctant to use it.
+ */
+const setMoviePublication = async (req, res) => {
+  try {
+    const { movieId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(movieId)) {
+      throw new NotFoundError("Movie not found");
+    }
+
+    const next = normalizeText(req.body.publicationStatus);
+    if (!PUBLICATION_STATUSES.includes(next)) {
+      throw new BadRequestError(
+        `publicationStatus must be one of: ${PUBLICATION_STATUSES.join(", ")}`
+      );
+    }
+
+    const note = normalizeText(req.body.note);
+    if (next === "rejected" && !note) {
+      // A rejection with no reason is not actionable — the cinema learns only
+      // that it failed, not what to change — so the reason is required rather
+      // than optional at exactly the moment it matters.
+      throw new BadRequestError("A rejection needs a note saying why");
+    }
+
+    const movie = await CinemaMovie.findById(movieId).populate(
+      "cinema",
+      "name isActive"
+    );
+    if (!movie) throw new NotFoundError("Movie not found");
+
+    const previous = movie.publicationStatus;
+
+    movie.publicationStatus = next;
+    movie.publicationNote = note || undefined;
+    if (next === "published") {
+      movie.publishedBy = req.user.userId;
+      movie.publishedAt = new Date();
+    } else {
+      // Cleared rather than kept: these record who put the film live, and it is
+      // no longer live. Leaving them would make an unpublished film look
+      // approved in every screen that reads them.
+      movie.publishedBy = undefined;
+      movie.publishedAt = undefined;
+    }
+
+    // A film pulled from public view must not keep occupying shared shelf
+    // space. Left set, an unpublished film would hold a banner or featured slot
+    // that the public row then filters out — a slot that looks taken on the
+    // admin screen and shows nothing to customers.
+    if (next !== "published") {
+      movie.bannerStatus = false;
+      movie.isFeatured = false;
+      movie.isTrending = false;
+    }
+
+    await movie.save();
+
+    console.log(
+      `[CINEMA-PUBLICATION] ${movie.title} (${movie._id}) ${previous} -> ${next} ` +
+        `by admin ${req.user.userId}${note ? `: ${note}` : ""}`
+    );
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        _id: movie._id,
+        title: movie.title,
+        cinema: movie.cinema,
+        publicationStatus: movie.publicationStatus,
+        publicationNote: movie.publicationNote ?? null,
+        publishedAt: movie.publishedAt ?? null,
+        bannerStatus: movie.bannerStatus,
+        isFeatured: movie.isFeatured,
+        isTrending: movie.isTrending,
+      },
+    });
+  } catch (error) {
+    console.error("Error setting movie publication:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
   }
 };
 
@@ -1037,6 +1172,16 @@ const setMovieDisplay = async (req, res) => {
 
     const movie = await CinemaMovie.findById(movieId);
     if (!movie) throw new NotFoundError("Movie not found");
+
+    // The display slots are public shelf space, and the public rows filter on
+    // publication — so promoting an unpublished film would silently do nothing
+    // while the admin screen showed the slot as taken. Refused here with a
+    // reason rather than accepted into that inconsistency.
+    if (movie.publicationStatus !== "published") {
+      throw new BadRequestError(
+        "Publish this film before giving it a banner, featured or trending slot"
+      );
+    }
 
     const applied = [];
     const setFlag = (field, value) => {
@@ -1184,7 +1329,7 @@ const listMoviesInSlot = (slotField, defaultLimit) => async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || defaultLimit, 30);
 
-    const movies = await CinemaMovie.find({ [slotField]: true, isActive: true })
+    const movies = await CinemaMovie.find({ [slotField]: true, ...PUBLIC_MOVIE_MATCH })
       .populate({
         path: "cinema",
         // The match runs on the joined document; a film whose cinema is
@@ -1291,9 +1436,14 @@ const listPublicMovies = async (req, res) => {
       { $sort: { nextShowtime: 1 } },
     ]);
 
+    // The showtime aggregation above cannot filter on publication — that lives
+    // on the film — so the gate is applied here, and the `byId.has(...)` filter
+    // below drops any screening whose film is not published. A cinema can
+    // therefore schedule freely while an admin review is outstanding without any
+    // of it leaking to customers.
     const movies = await CinemaMovie.find({
       _id: { $in: grouped.map((g) => g._id) },
-      isActive: true,
+      ...PUBLIC_MOVIE_MATCH,
     })
       .select("title slug shortId poster durationMinutes ageRating genre language subtitles description")
       .lean();
@@ -1335,6 +1485,7 @@ module.exports = {
   getSchedule,
   listAllMoviesForAdmin,
   setMovieDisplay,
+  setMoviePublication,
   listFeaturedMovies,
   listBannerMovies,
   listTrendingMovies,

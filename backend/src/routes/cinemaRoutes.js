@@ -146,6 +146,10 @@ router.get("/admin/finance", ...adminOnly, financeController.getAdminCinemaFinan
 // /admin/:cinemaId patterns.
 router.get("/admin/movies", ...adminOnly, programmeController.listAllMoviesForAdmin);
 router.patch("/admin/movies/:movieId/display", ...adminOnly, programmeController.setMovieDisplay);
+// The publication gate: a cinema creates a film, an admin decides whether it
+// reaches customers. Same movie-id-only shape as /display, and for the same
+// reason — an admin working the review queue works across cinemas.
+router.patch("/admin/movies/:movieId/publication", ...adminOnly, programmeController.setMoviePublication);
 
 // Reversals are admin-only on both ledgers: a refund moves money back out, so it
 // is not something a cinema does to its own sales figures.

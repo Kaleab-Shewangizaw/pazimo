@@ -66,6 +66,13 @@ const sellAtBoxOffice = async (req, res) => {
       paymentStatus: "completed",
       // Stops a caller selling seats for a cinema it does not own.
       cinemaId: cinema._id,
+      // The counter opts out of the admin publication gate. Publication governs
+      // Pazimo's public surface — the home page, browse, and the customer
+      // checkout — not whether cinema staff may sell a seat to someone standing
+      // at the till. Blocking here would let an admin review backlog close a
+      // real box office, which is a worse outcome than an unlisted film selling
+      // a counter ticket. Every other caller stays gated by default.
+      requirePublished: false,
     });
 
     res.status(StatusCodes.CREATED).json({ success: true, data: ticket });
