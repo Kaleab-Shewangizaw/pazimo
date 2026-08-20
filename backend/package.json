@@ -21,7 +21,8 @@
     "migrate:cinema-publication": "node src/scripts/migrateCinemaMoviePublication.js",
     "backfill:beverage-categories": "node src/scripts/backfillBeverageCategories.js",
     "check:seats": "node src/scripts/checkSeatSelection.js",
-    "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js"
+    "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js",
+    "clone:prod": "node src/scripts/cloneProductionDb.js"
   },
   "keywords": [],
   "author": "",
