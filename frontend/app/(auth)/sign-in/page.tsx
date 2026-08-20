@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import Image from "next/image";
+import { accountHomeFor, hasOwnDashboard } from "@/lib/account-home";
 
 function SignInContent() {
   const router = useRouter();
@@ -52,12 +53,12 @@ function SignInContent() {
 
       // No admin branch here on purpose: admins are turned away above and sent
       // to the admin login, so a redirect for them would be unreachable.
-      if (currentUser?.role === "venue") {
-        router.push("/venue");
-      } else if (currentUser?.role === "cinema") {
-        router.push("/cinema");
-      } else if (currentUser?.role === "organizer") {
-        router.push("/organizer");
+      //
+      // A seller goes to their own dashboard and `next` is ignored: a cinema or
+      // venue owner signing in belongs on their dashboard, not on whichever
+      // public page they happened to click first. Only customers follow `next`.
+      if (hasOwnDashboard(currentUser?.role)) {
+        router.push(accountHomeFor(currentUser?.role));
       } else if (nextUrl) {
         try {
           const url = new URL(nextUrl, window.location.origin);

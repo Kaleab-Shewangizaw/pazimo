@@ -33,6 +33,7 @@ import {
 import ThemeToggle from "@/components/theme-toggle";
 import { useTheme } from "next-themes";
 import { buildEventUrl } from "@/lib/event-url";
+import { accountHomeFor } from "@/lib/account-home";
 
 const Header = () => {
   const router = useRouter();
@@ -155,11 +156,10 @@ const Header = () => {
 
   const handleUserClick = () => {
     setMobileMenuOpen(false);
-    if (user?.role === "organizer") {
-      router.push("/organizer");
-    } else {
-      router.push("/my-account");
-    }
+    // Every role, from one map. This used to name organizer alone, so a cinema
+    // or venue owner clicking their own account button was dropped into the
+    // customer area instead of their dashboard.
+    router.push(accountHomeFor(user?.role));
   };
 
   const handleSearch = (e: React.FormEvent) => {
