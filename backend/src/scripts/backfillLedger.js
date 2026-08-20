@@ -39,6 +39,34 @@ const CURRENCY = args.includes("--usd") ? "USD" : "ETB";
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /**
+ * Match a currency the way the data actually looks.
+ *
+ * `currency` was added to Withdrawal and Loan after both were in use, so rows
+ * written before it exist with no value at all. A bare `{ currency: "ETB" }`
+ * silently drops every one of them — and "silently" is the whole problem: the
+ * backfill reports a clean PASS while the ledger is short, so an organizer's
+ * balance reads HIGH by the payouts that were skipped.
+ *
+ * Measured on a production mirror: 62 approved withdrawals worth 7,502,480.50
+ * ETB were being dropped this way. The ticket side never had the bug because
+ * validTicketMatch has always matched "ETB or absent"; this brings the payout
+ * and loan queries in line with it.
+ *
+ * USD is matched exactly: there is no era in which a USD row lacked the field,
+ * so treating absent as USD would misfile every legacy ETB row.
+ */
+const currencyMatch = (currency) =>
+  currency === "USD"
+    ? { currency: "USD" }
+    : {
+        $or: [
+          { currency: "ETB" },
+          { currency: { $exists: false } },
+          { currency: null },
+        ],
+      };
+
+/**
  * Every source of money, described uniformly.
  *
  * Each channel differs only in which collection it reads, how it finds the
@@ -256,7 +284,7 @@ const run = async () => {
   };
 
   const payouts = await Withdrawal.find({
-    currency: CURRENCY,
+    ...currencyMatch(CURRENCY),
     status: { $in: ["pending", "approved", "completed"] },
   }).lean();
 
@@ -305,7 +333,7 @@ const run = async () => {
     const Loan = require("../models/Loan");
 
     const borrowers = await Loan.distinct("organizer", {
-      currency: CURRENCY,
+      ...currencyMatch(CURRENCY),
       status: { $in: ["active", "repaid"] },
     });
 
