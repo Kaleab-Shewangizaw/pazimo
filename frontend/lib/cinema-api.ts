@@ -69,7 +69,98 @@ export interface CinemaHall {
   /** null means "inherit the cinema's default". */
   turnaroundMinutes: number | null;
   hasAssignedSeating: boolean;
-  seatLayout?: { rows?: number; seatsPerRow?: number; rowLabels?: string[] };
+  seatCategories?: SeatCategory[];
+  seatMap?: { rows: SeatMapRow[] };
+}
+
+/** A tier of seat in a room. Its key is what a showtime prices. */
+export interface SeatCategory {
+  key: string;
+  label: string;
+  color?: string;
+}
+
+export interface SeatMapSeat {
+  number: string;
+  categoryKey: string;
+  /** false is a GAP — an aisle, a pillar — not a deleted seat. */
+  exists: boolean;
+  /** A chair nobody may buy: a house seat, a sightline block. */
+  blocked: boolean;
+}
+
+export interface SeatMapRow {
+  label: string;
+  /** How far the row bows toward the screen. Presentational only. */
+  curve: number;
+  /** Horizontal nudge, so a short row can sit centred. */
+  offset: number;
+  seats: SeatMapSeat[];
+}
+
+/** One seat as the PUBLIC picker sees it: its own state, not the hall's config. */
+export interface PickerSeat {
+  number: string;
+  seatKey: string;
+  categoryKey: string;
+  exists: boolean;
+  status: "available" | "held" | "sold" | "gap" | "blocked";
+}
+
+export interface PickerRow {
+  label: string;
+  curve: number;
+  offset: number;
+  seats: PickerSeat[];
+}
+
+export interface ShowtimeSeatMap {
+  assignedSeating: boolean;
+  showtimeId: string;
+  currency?: string;
+  holdMinutes?: number;
+  categories?: (SeatCategory & {
+    ticketTypeId?: string;
+    name?: string;
+    price?: number;
+    isAvailable?: boolean;
+  })[];
+  rows?: PickerRow[];
+}
+
+export interface CinemaBasketTicket {
+  seatKey?: string;
+  row?: string;
+  number?: string;
+  categoryKey?: string;
+  categoryLabel?: string;
+  ticketTypeId: string;
+  ticketType: string;
+  price: number;
+}
+
+export interface CinemaBasketConcession {
+  cinemaBeverage: string;
+  name: string;
+  image?: string | null;
+  category: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface CinemaBasket {
+  showtimeId: string;
+  cinemaId: string;
+  movieTitle?: string;
+  startsAt: string;
+  assignedSeating: boolean;
+  currency: string;
+  tickets: CinemaBasketTicket[];
+  ticketTotal: number;
+  concessions: CinemaBasketConcession[];
+  concessionTotal: number;
+  total: number;
 }
 
 export type MovieStatus = "coming_soon" | "now_showing" | "archived";
@@ -371,6 +462,96 @@ export const fetchConcessionSales = (token: string, query = "") =>
     `/api/cinemas/me/concession-sales${query}`,
     token
   );
+
+// --- Public booking -------------------------------------------------------
+//
+// No token: these are the customer-facing calls. They go through plain fetch
+// rather than cinemaRequest, which requires one.
+
+const publicGet = async <T,>(path: string): Promise<T> => {
+  const res = await fetch(`${API_URL}${path}`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body?.success === false) {
+    throw new Error(body?.message || "Something went wrong");
+  }
+  return body.data as T;
+};
+
+const publicPost = async <T,>(path: string, payload: unknown): Promise<T> => {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body?.success === false) {
+    throw new Error(body?.message || "Something went wrong");
+  }
+  return body.data as T;
+};
+
+/** The room and what is already taken, for one screening. */
+export const fetchShowtimeSeats = (showtimeId: string) =>
+  publicGet<ShowtimeSeatMap>(`/api/cinemas/public/showtimes/${showtimeId}/seats`);
+
+/** What this cinema sells at the counter, for the snacks step. */
+export const fetchPublicConcessions = (cinemaId: string) =>
+  publicGet<CinemaConcession[]>(`/api/cinemas/public/${cinemaId}/concessions`);
+
+/**
+ * What a basket would cost. Reserves nothing, so it is safe to call on every
+ * change to the selection.
+ */
+export const quoteCinemaBasket = (payload: {
+  showtime: string;
+  seats?: string[];
+  ticketType?: string;
+  quantity?: number;
+  concessions?: { cinemaBeverage: string; quantity: number }[];
+}) => publicPost<CinemaBasket>("/api/cinemas/public/checkout/quote", payload);
+
+/** Locks the seats and starts a payment. */
+export const startCinemaCheckout = (payload: {
+  showtime: string;
+  seats?: string[];
+  ticketType?: string;
+  quantity?: number;
+  concessions?: { cinemaBeverage: string; quantity: number }[];
+  phoneNumber: string;
+  customerName?: string;
+  customerEmail?: string;
+  provider?: "santim" | "chapa";
+  paymentMethod?: string;
+}) =>
+  publicPost<{
+    transactionId: string;
+    checkoutUrl: string | null;
+    total: number;
+    currency: string;
+    expiresAt: string | null;
+    seats: string[];
+  }>("/api/cinemas/public/checkout", payload);
+
+/** Everything one paid order produced — tickets and snacks. */
+export const fetchCinemaOrder = (transactionId: string) =>
+  publicGet<{
+    transactionId: string;
+    status: string;
+    total: number;
+    currency: string;
+    tickets: {
+      _id: string;
+      ticketId: string;
+      movieTitle: string;
+      hallName?: string;
+      showtimeStartsAt: string;
+      ticketType: string;
+      totalAmount: number;
+      currency: string;
+      seat?: { row?: string; number?: string; categoryLabel?: string };
+    }[];
+    concessions: CinemaBasketConcession[];
+  }>(`/api/cinemas/public/orders/${transactionId}`);
 
 /** One day's schedule, grouped by hall. `date` is YYYY-MM-DD. */
 export const fetchSchedule = (token: string, date: string) =>

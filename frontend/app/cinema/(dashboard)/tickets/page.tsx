@@ -219,7 +219,7 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
             </h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Enter the code from the ticket QR. Only this cinema&apos;s tickets
-              can be admitted here — an event ticket will not validate.
+              can be admitted here
             </p>
             <div className="flex gap-2">
               <Input

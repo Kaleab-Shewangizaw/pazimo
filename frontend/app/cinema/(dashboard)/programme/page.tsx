@@ -22,12 +22,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Film, CalendarDays, DoorOpen } from "lucide-react";
+import { Plus, Trash2, Film, CalendarDays, DoorOpen, LayoutGrid } from "lucide-react";
+import SeatMapEditor from "@/components/cinema/seat-map-editor";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Tier {
   name: string;
   price: string;
   allocation: string;
+  /**
+   * Set only on a hall with a seat map. Its presence is what switches this tier
+   * from "a count I typed" to "the price of a category", which is also how
+   * addShowtime decides what to send.
+   */
+  seatCategoryKey?: string;
 }
 
 function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
@@ -80,6 +94,36 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
       });
       toast.success("Hall added");
       setHallForm({ name: "", capacity: "", screenType: "", turnaroundMinutes: "" });
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Which hall's seat map is open. One at a time: two open editors would let an
+  // operator save one over the other without noticing.
+  const [editingSeatMap, setEditingSeatMap] = useState<CinemaHall | null>(null);
+
+  const saveSeatMap = async (
+    hallId: string,
+    payload: { seatCategories: unknown; seatMap: unknown }
+  ) => {
+    setBusy(true);
+    try {
+      await cinemaRequest(`/api/cinemas/me/halls/${hallId}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...payload,
+          // Saving a map is what turns assigned seating on. Doing it implicitly
+          // avoids the state where a hall has a map that nothing reads because a
+          // separate switch was never flipped.
+          hasAssignedSeating: true,
+        }),
+      });
+      toast.success("Seat map saved");
+      setEditingSeatMap(null);
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -177,6 +221,27 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     { name: "Regular", price: "", allocation: "" },
   ]);
 
+  // The hall being scheduled into. Its seat map decides whether the cinema is
+  // pricing CATEGORIES or typing seat counts by hand.
+  const selectedHall = halls.find((h) => h._id === showForm.hall);
+  const assignedSeating = !!selectedHall?.hasAssignedSeating;
+
+  // When an assigned-seating hall is picked, the tier list becomes exactly its
+  // categories: one price each, no more and no fewer. The server refuses any
+  // other shape — a category nobody prices, or two tiers pricing one category —
+  // so the form should not let it be built in the first place.
+  useEffect(() => {
+    if (!assignedSeating || !selectedHall?.seatCategories?.length) return;
+    setTiers(
+      selectedHall.seatCategories.map((category) => ({
+        name: category.label,
+        price: "",
+        allocation: "",
+        seatCategoryKey: category.key,
+      }))
+    );
+  }, [showForm.hall, assignedSeating, selectedHall]);
+
   const addShowtime = async () => {
     setBusy(true);
     try {
@@ -189,7 +254,12 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           ticketTypes: tiers.map((t) => ({
             name: t.name,
             price: Number(t.price),
-            allocation: Number(t.allocation),
+            // On an assigned-seating hall the seat map decides the allocation,
+            // so none is sent — sending one would be a number the server
+            // discards, and a reader of this code would think it mattered.
+            ...(t.seatCategoryKey
+              ? { seatCategoryKey: t.seatCategoryKey }
+              : { allocation: Number(t.allocation) }),
           })),
         }),
       });
@@ -314,11 +384,29 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                       Ticket types — prices are set per screening, so a matinee
                       can differ from a premiere
                     </Label>
+                    {assignedSeating && (
+                      <p className="rounded-md bg-indigo-50 px-3 py-2 text-xs text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
+                        {selectedHall?.name} has a seat map, so you set one price per
+                        seat category. How many of each there are comes from the map.
+                      </p>
+                    )}
                     {tiers.map((tier, i) => (
-                      <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                      <div
+                        key={i}
+                        className={`grid gap-2 ${
+                          assignedSeating
+                            ? "sm:grid-cols-[1fr_1fr]"
+                            : "sm:grid-cols-[1fr_1fr_1fr_auto]"
+                        }`}
+                      >
                         <Input
                           placeholder="Name (Regular, VIP, Student…)"
                           value={tier.name}
+                          // Locked on an assigned-seating hall: the name comes
+                          // from the seat category it prices, and letting them
+                          // drift would put one label on the map and another on
+                          // the ticket.
+                          readOnly={assignedSeating}
                           onChange={(e) => {
                             const next = [...tiers];
                             next[i] = { ...tier, name: e.target.value };
@@ -335,35 +423,41 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                             setTiers(next);
                           }}
                         />
-                        <Input
-                          type="number"
-                          placeholder="Seats"
-                          value={tier.allocation}
-                          onChange={(e) => {
-                            const next = [...tiers];
-                            next[i] = { ...tier, allocation: e.target.value };
-                            setTiers(next);
-                          }}
-                        />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={tiers.length === 1}
-                          onClick={() => setTiers(tiers.filter((_, x) => x !== i))}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {!assignedSeating && (
+                          <>
+                            <Input
+                              type="number"
+                              placeholder="Seats"
+                              value={tier.allocation}
+                              onChange={(e) => {
+                                const next = [...tiers];
+                                next[i] = { ...tier, allocation: e.target.value };
+                                setTiers(next);
+                              }}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={tiers.length === 1}
+                              onClick={() => setTiers(tiers.filter((_, x) => x !== i))}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     ))}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setTiers([...tiers, { name: "", price: "", allocation: "" }])
-                      }
-                    >
-                      <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
-                    </Button>
+                    {!assignedSeating && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setTiers([...tiers, { name: "", price: "", allocation: "" }])
+                        }
+                      >
+                        <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
+                      </Button>
+                    )}
                   </div>
 
                   <Button
@@ -642,20 +736,52 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                 key={h._id}
                 className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50"
               >
-                <CardContent className="flex items-center justify-between gap-3 p-4">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {h.name} {!h.isActive && <Badge variant="secondary">off</Badge>}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {h.capacity} seats{h.screenType ? ` · ${h.screenType}` : ""}
-                      {h.turnaroundMinutes !== null
-                        ? ` · ${h.turnaroundMinutes} min turnaround`
-                        : " · default turnaround"}
-                    </p>
+                <CardContent className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 dark:text-gray-100">
+                        {h.name} {!h.isActive && <Badge variant="secondary">off</Badge>}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {h.capacity} seats{h.screenType ? ` · ${h.screenType}` : ""}
+                        {h.turnaroundMinutes !== null
+                          ? ` · ${h.turnaroundMinutes} min turnaround`
+                          : " · default turnaround"}
+                      </p>
+                      {h.hasAssignedSeating ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(h.seatCategories || []).map((c) => (
+                            <span
+                              key={c.key}
+                              className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                            >
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ backgroundColor: c.color || "#6366f1" }}
+                              />
+                              {c.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                          Sells by capacity — no seat map yet
+                        </p>
+                      )}
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => removeHall(h._id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeHall(h._id)}>
-                    <Trash2 className="h-4 w-4" />
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setEditingSeatMap(h)}
+                  >
+                    <LayoutGrid className="mr-1 h-3 w-3" />
+                    {h.hasAssignedSeating ? "Edit seat map" : "Set up seats"}
                   </Button>
                 </CardContent>
               </Card>
@@ -663,6 +789,33 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={!!editingSeatMap}
+        onOpenChange={(open) => !open && setEditingSeatMap(null)}
+      >
+        <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingSeatMap?.name} — seat map</DialogTitle>
+            <DialogDescription>
+              Remove a seat to make an aisle, block one to keep it out of sale, and give
+              each seat a category. A showtime prices the categories, so a VIP seat
+              charges the VIP price.
+            </DialogDescription>
+          </DialogHeader>
+          {editingSeatMap && (
+            <SeatMapEditor
+              // Keyed by hall so opening a different one starts from ITS map
+              // rather than from the last hall's state.
+              key={editingSeatMap._id}
+              initialCategories={editingSeatMap.seatCategories}
+              initialRows={editingSeatMap.seatMap?.rows}
+              saving={busy}
+              onSave={(payload) => saveSeatMap(editingSeatMap._id, payload)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
