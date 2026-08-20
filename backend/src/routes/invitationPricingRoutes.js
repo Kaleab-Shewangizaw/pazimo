@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const InvitationPricing = require('../models/InvitationPricing');
+const { authenticateUser, restrictTo } = require('../middlewares/auth');
+const { adminWriteLimiter } = require('../middlewares/rateLimiters');
 
 // Get all pricing
 router.get('/', async (req, res) => {
@@ -55,17 +57,52 @@ router.get('/:eventType', async (req, res) => {
   }
 });
 
-// Update pricing (admin only)
-router.put('/', async (req, res) => {
+// A price is a number Pazimo charges organizers, so it is validated the way
+// money is validated everywhere else: present, parseable, finite, and not
+// negative. parseFloat(undefined) is NaN, which Mongoose would previously have
+// rejected with a 500 or — worse, for a partial body — left one event type
+// silently untouched while reporting success.
+const parsePrice = (value, label) => {
+  const price = parseFloat(value);
+  if (!Number.isFinite(price) || price < 0) {
+    throw new Error(`${label} must be a number of 0 or more`);
+  }
+  return price;
+};
+
+// Update pricing.
+//
+// ADMIN ONLY. This sets what organizers are charged per invitation email and
+// SMS. Until 2026-08-20 it referenced no credential at all: an anonymous PUT
+// answered 200 and could set every price on the platform to 0.
+router.put('/', adminWriteLimiter, authenticateUser, restrictTo('admin'), async (req, res) => {
   try {
     const { public: publicPricing, private: privatePricing } = req.body;
+
+    if (!publicPricing || !privatePricing) {
+      return res.status(400).json({
+        error: 'Both public and private pricing are required',
+      });
+    }
+
+    let prices;
+    try {
+      prices = {
+        publicEmail: parsePrice(publicPricing.emailPrice, 'Public email price'),
+        publicSms: parsePrice(publicPricing.smsPrice, 'Public SMS price'),
+        privateEmail: parsePrice(privatePricing.emailPrice, 'Private email price'),
+        privateSms: parsePrice(privatePricing.smsPrice, 'Private SMS price'),
+      };
+    } catch (validationError) {
+      return res.status(400).json({ error: validationError.message });
+    }
 
     // Update or create public pricing
     await InvitationPricing.findOneAndUpdate(
       { eventType: 'public' },
-      { 
-        emailPrice: parseFloat(publicPricing.emailPrice),
-        smsPrice: parseFloat(publicPricing.smsPrice)
+      {
+        emailPrice: prices.publicEmail,
+        smsPrice: prices.publicSms
       },
       { upsert: true, new: true }
     );
@@ -73,11 +110,17 @@ router.put('/', async (req, res) => {
     // Update or create private pricing
     await InvitationPricing.findOneAndUpdate(
       { eventType: 'private' },
-      { 
-        emailPrice: parseFloat(privatePricing.emailPrice),
-        smsPrice: parseFloat(privatePricing.smsPrice)
+      {
+        emailPrice: prices.privateEmail,
+        smsPrice: prices.privateSms
       },
       { upsert: true, new: true }
+    );
+
+    console.log(
+      `[INVITATION-PRICING] updated by admin ${req.user.userId}: ` +
+        `public ${prices.publicEmail}/${prices.publicSms}, ` +
+        `private ${prices.privateEmail}/${prices.privateSms}`
     );
 
     res.json({

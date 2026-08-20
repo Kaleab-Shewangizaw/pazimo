@@ -15,7 +15,8 @@
     "backfill:cinema-slugs": "node src/scripts/backfillCinemaMovieSlugs.js",
     "ledger:backfill": "node src/scripts/backfillLedger.js",
     "ledger:reconcile": "node src/scripts/reconcileLedger.js",
-    "ledger:bench": "node src/scripts/benchLedgerReads.js"
+    "ledger:bench": "node src/scripts/benchLedgerReads.js",
+    "check:write-surface": "node src/scripts/checkPublicWriteSurface.js"
   },
   "keywords": [],
   "author": "",
