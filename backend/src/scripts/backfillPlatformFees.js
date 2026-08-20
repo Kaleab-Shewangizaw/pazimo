@@ -9,6 +9,7 @@ require("dotenv").config({ path: path.join(__dirname, "../../.env") });
 const Payment = require("../models/Payment");
 const PlatformFeeLedger = require("../models/PlatformFeeLedger");
 const {
+  settledInRange,
   ticketSaleMatch,
   eatDateKey,
   eatDayBounds,
@@ -63,7 +64,10 @@ const money = (n) => round2(n).toLocaleString("en-US", { minimumFractionDigits: 
 // be checked against real data before anything is written.
 const classify = async (start, end) => {
   const rows = await Payment.aggregate([
-    { $match: { status: "PAID", currency: CURRENCY, paidAt: { $gte: start, $lt: end } } },
+    // Same window definition the figures below use — see settledInRange. A
+    // table that counted a different set from the totals under it would be
+    // worse than no table.
+    { $match: { status: "PAID", currency: CURRENCY, ...settledInRange(start, end) } },
     {
       $group: {
         _id: {
