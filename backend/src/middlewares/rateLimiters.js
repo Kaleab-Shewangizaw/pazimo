@@ -81,7 +81,34 @@ const unifiedAuthLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many attempts. Please wait a few minutes and try again."),
 });
 
+// Guards the admin/staff write surface (categories, invitation pricing, QR
+// ticket minting). These sit behind authentication, so this is not the primary
+// control — it is the backstop that turns a stolen token or a scripted mistake
+// into a few dozen rows rather than a few hundred thousand. Deliberately
+// generous, because a real admin doing bulk work must never hit it, and
+// per-IP, so one caller can only exhaust their own budget.
+const adminWriteLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 100, // writes per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many changes in a short time. Please wait a moment and try again."),
+});
+
+// Minting admission QR codes is the one write here that creates something with
+// real-world value at the door, so it gets a tighter allowance than the rest of
+// the admin write surface even though it is authenticated too.
+const qrIssueLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 30, // issue requests per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many ticket generation requests. Please wait a few minutes and try again."),
+});
+
 module.exports = {
+  adminWriteLimiter,
+  qrIssueLimiter,
   rsvpSubmissionLimiter,
   rsvpPublicReadLimiter,
   loginLimiter,
