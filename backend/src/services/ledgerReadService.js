@@ -266,9 +266,14 @@ const getPlatformPartitions = async (currency = "ETB", { withCoverage = true } =
           withdrawnMinor: { $sum: "$withdrawnMinor" },
           pendingMinor: { $sum: "$pendingMinor" },
           availableMinor: { $sum: "$availableMinor" },
-          // How many distinct sellers hold a balance in this pool — the number
-          // that makes "1,247.52 available" mean something.
-          ownerCount: { $sum: 1 },
+          // How many distinct sellers actually hold a position in this pool —
+          // the number that makes "1,247.52 available" mean something.
+          //
+          // Counts only owners with at least one entry. A projection row can
+          // exist with entryCount 0 (created, then every entry reversed or
+          // removed), and counting those would report sellers into a pool that
+          // has never seen a transaction.
+          ownerCount: { $sum: { $cond: [{ $gt: ["$entryCount", 0] }, 1, 0] } },
           entryCount: { $sum: "$entryCount" },
           lastEntryAt: { $max: "$lastEntryAt" },
         },
@@ -315,27 +320,48 @@ const getPlatformPartitions = async (currency = "ETB", { withCoverage = true } =
     byStream: Object.fromEntries(
       platformRows.map((r) => [r._id.stream, toMajor(r.grossMinor)])
     ),
+    // Per-stream figures above are each converted from their own integer, so
+    // they never drift; the total is summed in minor units for the same reason.
   };
 
   // Sums across pools, for a header line. Display only: a withdrawal is always
   // validated against ONE pool, because summing them is precisely what would
   // let seat money fund a concession payout.
-  const totals = partitions.reduce(
-    (acc, p) => ({
-      grossRevenue: acc.grossRevenue + p.grossRevenue,
-      ownerRevenue: acc.ownerRevenue + p.ownerRevenue,
-      pazimoCommission: acc.pazimoCommission + p.pazimoCommission,
-      vatOnCommission: acc.vatOnCommission + p.vatOnCommission,
-      ownerVat: acc.ownerVat + p.ownerVat,
-      withdrawn: acc.withdrawn + p.withdrawn,
-      pendingWithdrawals: acc.pendingWithdrawals + p.pendingWithdrawals,
-      availableBalance: acc.availableBalance + p.availableBalance,
-    }),
-    {
-      grossRevenue: 0, ownerRevenue: 0, pazimoCommission: 0, vatOnCommission: 0,
-      ownerVat: 0, withdrawn: 0, pendingWithdrawals: 0, availableBalance: 0,
-    }
-  );
+  //
+  // Accumulated in MINOR UNITS and converted once at the end, not by adding the
+  // already-converted majors. Summing majors reintroduces exactly the float
+  // drift the integer money rule exists to prevent — 9.37 + 115.20 came out as
+  // 124.57000000000001 and went to the client that way.
+  const partitionKeys = new Set(PARTITIONS.map((p) => `${p.ownerKind}:${p.stream}`));
+  const totalsMinor = rows
+    .filter((r) => partitionKeys.has(`${r._id.ownerKind}:${r._id.stream}`))
+    .reduce(
+      (acc, r) => ({
+        grossMinor: acc.grossMinor + r.grossMinor,
+        netMinor: acc.netMinor + r.netMinor,
+        commissionMinor: acc.commissionMinor + r.commissionMinor,
+        vatMinor: acc.vatMinor + r.vatMinor,
+        ownerVatMinor: acc.ownerVatMinor + r.ownerVatMinor,
+        withdrawnMinor: acc.withdrawnMinor + r.withdrawnMinor,
+        pendingMinor: acc.pendingMinor + r.pendingMinor,
+        availableMinor: acc.availableMinor + r.availableMinor,
+      }),
+      {
+        grossMinor: 0, netMinor: 0, commissionMinor: 0, vatMinor: 0,
+        ownerVatMinor: 0, withdrawnMinor: 0, pendingMinor: 0, availableMinor: 0,
+      }
+    );
+
+  const totals = {
+    grossRevenue: toMajor(totalsMinor.grossMinor),
+    ownerRevenue: toMajor(totalsMinor.netMinor),
+    pazimoCommission: toMajor(totalsMinor.commissionMinor),
+    vatOnCommission: toMajor(totalsMinor.vatMinor),
+    ownerVat: toMajor(totalsMinor.ownerVatMinor),
+    withdrawn: toMajor(totalsMinor.withdrawnMinor),
+    pendingWithdrawals: toMajor(totalsMinor.pendingMinor),
+    availableBalance: toMajor(totalsMinor.availableMinor),
+  };
 
   return { currency, partitions, platform, totals, coverage };
 };

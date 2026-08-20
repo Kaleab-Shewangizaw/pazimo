@@ -319,6 +319,13 @@ CinemaMovieSchema.pre("save", function requeueOnCustomerFacingEdit(next) {
     this.publishedBy = undefined;
     this.publishedAt = undefined;
     this.publicationNote = "Returned for review after the listing was edited.";
+    // Slots go with it, exactly as they do when an admin un-publishes. The
+    // public rows already filter on publication, so a film left holding a slot
+    // here would read as occupying shared shelf space on the admin screen while
+    // showing customers nothing — a slot that looks taken and is not.
+    this.bannerStatus = false;
+    this.isFeatured = false;
+    this.isTrending = false;
   }
   next();
 });
