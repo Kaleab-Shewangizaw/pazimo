@@ -83,18 +83,32 @@ const recordSale = async ({
     }
   }
 
+  // An unlimited line skips the ceiling entirely rather than comparing against
+  // a very large number: "we do not count this" and "we have 9,999 of these"
+  // are different statements, and only the first stays true tomorrow. `sold`
+  // still increments either way, so revenue and popularity reporting do not
+  // care which kind of line this is.
   const reserved = await CinemaBeverage.findOneAndUpdate(
     {
       _id: line._id,
       isAvailable: true,
-      // Only matches while the sale still fits inside the listed stock.
-      $expr: { $lte: [{ $add: ["$sold", requested] }, "$stockTotal"] },
+      ...(line.unlimitedStock
+        ? {}
+        : {
+            // Only matches while the sale still fits inside the listed stock.
+            $expr: { $lte: [{ $add: ["$sold", requested] }, "$stockTotal"] },
+          }),
     },
     { $inc: { sold: requested } },
     { new: true }
   );
 
   if (!reserved) {
+    // Unreachable on an unlimited line unless it was switched off mid-request,
+    // which is what the availability half of the filter is for.
+    if (line.unlimitedStock) {
+      throw new BadRequestError(`${line.beverage.name} is not currently on sale`);
+    }
     const remaining = Math.max(line.stockTotal - line.sold, 0);
     throw new BadRequestError(
       remaining === 0

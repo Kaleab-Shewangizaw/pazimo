@@ -95,7 +95,13 @@ const listLineup = async (req, res) => {
         ...l,
         // Derived rather than stored: stockTotal and sold are the truth, and a
         // third counter would be one more thing to keep in step.
-        stockRemaining: Math.max((l.stockTotal || 0) - (l.sold || 0), 0),
+        //
+        // null on an unlimited line rather than a big number, so a client cannot
+        // render "9999 left" and cannot compare it to decide something is
+        // running low. "We do not count this" has no numeric answer.
+        stockRemaining: l.unlimitedStock
+          ? null
+          : Math.max((l.stockTotal || 0) - (l.sold || 0), 0),
       })),
       eligibility: cinema.beverageEligibility,
     });
@@ -132,9 +138,17 @@ const addLineupItem = async (req, res) => {
       throw new BadRequestError("price must be 0 or more");
     }
 
-    const stockTotal = Number(req.body.stockTotal);
-    if (!Number.isInteger(stockTotal) || stockTotal < 0) {
-      throw new BadRequestError("stockTotal must be a whole number");
+    // An unlimited line is not counted, so it does not need a stock figure —
+    // requiring one anyway would make the caller invent a number that means
+    // nothing and that a later reader might trust.
+    const unlimitedStock = parseBoolean(req.body.unlimitedStock, false);
+
+    let stockTotal = 0;
+    if (!unlimitedStock) {
+      stockTotal = Number(req.body.stockTotal);
+      if (!Number.isInteger(stockTotal) || stockTotal < 0) {
+        throw new BadRequestError("stockTotal must be a whole number");
+      }
     }
 
     const item = await CinemaBeverage.create({
@@ -143,6 +157,7 @@ const addLineupItem = async (req, res) => {
       beverage: beverage._id,
       price,
       stockTotal,
+      unlimitedStock,
       isAvailable: parseBoolean(req.body.isAvailable, true),
     });
 
@@ -181,14 +196,29 @@ const updateLineupItem = async (req, res) => {
       item.price = price;
     }
 
+    if (req.body.unlimitedStock !== undefined) {
+      item.unlimitedStock = parseBoolean(req.body.unlimitedStock, item.unlimitedStock);
+    }
+
     if (req.body.stockTotal !== undefined) {
       const stockTotal = Number(req.body.stockTotal);
       if (!Number.isInteger(stockTotal) || stockTotal < 0) {
         throw new BadRequestError("stockTotal must be a whole number");
       }
-      if (stockTotal < item.sold) {
+      // Only enforced on a counted line, because stockTotal is ignored entirely
+      // while a line is unlimited.
+      //
+      // stockTotal is CUMULATIVE — everything ever put up for sale, with
+      // remaining derived as stockTotal - sold — so it can never be below what
+      // has already gone. That bites hardest when switching a line back from
+      // unlimited, where `sold` may be large and the operator is thinking in
+      // "how many do I have today", so the message says which number to enter
+      // rather than only refusing.
+      if (!item.unlimitedStock && stockTotal < item.sold) {
         throw new BadRequestError(
-          `${item.sold} already sold, so stock cannot be set below that`
+          `${item.sold} have already been sold. stockTotal counts everything ever ` +
+            `stocked, not what is left — to have ${stockTotal} available now, ` +
+            `set it to ${item.sold + stockTotal}.`
         );
       }
       item.stockTotal = stockTotal;

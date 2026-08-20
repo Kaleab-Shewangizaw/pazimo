@@ -45,6 +45,18 @@ const CinemaBeverageSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Sell without counting stock.
+    //
+    // Real concession stands run out of branded cups, not of fountain soda, and
+    // making an operator retype 9999 every morning to express that is a chore
+    // that eventually gets forgotten and closes the till mid-rush. When this is
+    // on, `stockTotal` is ignored entirely and the claim skips its ceiling
+    // check — `sold` keeps counting, so revenue and popularity reporting are
+    // unchanged.
+    unlimitedStock: {
+      type: Boolean,
+      default: false,
+    },
     // Sold so far. Denormalised from the CinemaBeverageSale ledger, which stays
     // the source of truth for money. This counter exists so "is there stock
     // left?" can be answered and decremented in one atomic update — checking the

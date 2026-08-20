@@ -27,10 +27,28 @@ const CinemaTicketTypeSchema = new mongoose.Schema(
     },
     // Seats allocated to this tier for this screening. The sum across tiers is
     // validated against the hall's capacity when the showtime is saved.
+    //
+    // On a hall with assigned seating this is DERIVED from the seat map rather
+    // than typed: see the hook below. Two numbers that must agree are one
+    // number too many.
     allocation: {
       type: Number,
       required: true,
       min: 0,
+    },
+
+    // Which seat category on the hall this tier prices.
+    //
+    // Set only on halls with assigned seating, and it is what makes "picking
+    // seat K7 charges the VIP price" work: the seat carries a category, the
+    // category is priced here, and the customer never chooses a tier at all.
+    //
+    // Optional because halls WITHOUT a seat map still sell by tier the old way —
+    // the customer picks "Student", any seat, and nothing maps to a category.
+    seatCategoryKey: {
+      type: String,
+      trim: true,
+      lowercase: true,
     },
     // Sold so far. Denormalised from the CinemaTicket ledger, which stays the
     // source of truth for money and history.
@@ -153,6 +171,91 @@ CinemaShowtimeSchema.pre("validate", async function deriveEndsAt(next) {
     // A runtime lookup must never block a schedule from being saved.
     console.error("Showtime endsAt derivation failed:", error.message);
     this.endsAt = null;
+    next();
+  }
+});
+
+// On a hall with assigned seating, the seat map decides the allocation.
+//
+// A tier that prices a category can only ever sell the seats that category
+// actually has. Deriving it here rather than trusting the form is what stops a
+// cinema selling 30 VIP tickets into a 24-seat VIP box — and means removing a
+// row for an aisle updates every future screening's allocation instead of
+// silently overselling until someone notices.
+//
+// Halls without a map are untouched: their tiers keep whatever allocation was
+// typed, validated against capacity as before.
+CinemaShowtimeSchema.pre("validate", async function deriveAllocationFromSeatMap(next) {
+  if (!this.hall || !Array.isArray(this.ticketTypes) || !this.ticketTypes.length) {
+    return next();
+  }
+
+  try {
+    // Required lazily to avoid a require cycle through the model registry.
+    const CinemaHall = require("./CinemaHall");
+    const hall = await CinemaHall.findById(this.hall);
+    if (!hall) return next();
+
+    if (!hall.hasAssignedSeating) {
+      // Unassigned hall: the tiers must still fit in the room.
+      const total = this.ticketTypes.reduce(
+        (sum, t) => sum + (Number(t.allocation) || 0),
+        0
+      );
+      if (total > hall.capacity) {
+        this.invalidate(
+          "ticketTypes",
+          `Those tiers allocate ${total} seats but ${hall.name} holds ${hall.capacity}`
+        );
+      }
+      return next();
+    }
+
+    const counts = hall.seatCountsByCategory();
+    const priced = new Set();
+
+    for (const tier of this.ticketTypes) {
+      if (!tier.seatCategoryKey) {
+        this.invalidate(
+          "ticketTypes",
+          `${hall.name} has assigned seating, so "${tier.name}" must say which seat category it prices`
+        );
+        continue;
+      }
+      if (!counts.has(tier.seatCategoryKey)) {
+        this.invalidate(
+          "ticketTypes",
+          `${hall.name} has no seats in category "${tier.seatCategoryKey}"`
+        );
+        continue;
+      }
+      if (priced.has(tier.seatCategoryKey)) {
+        // Two prices for one category would make a seat's price ambiguous, and
+        // the customer never picks a tier to break the tie.
+        this.invalidate(
+          "ticketTypes",
+          `Two tiers both price the "${tier.seatCategoryKey}" seats`
+        );
+        continue;
+      }
+      priced.add(tier.seatCategoryKey);
+      tier.allocation = counts.get(tier.seatCategoryKey);
+    }
+
+    // A category with seats but no price cannot be sold, and the customer would
+    // see bookable-looking seats that refuse to be added. Better refused here.
+    for (const [key, count] of counts) {
+      if (!priced.has(key)) {
+        this.invalidate(
+          "ticketTypes",
+          `${count} seats are in category "${key}" and no tier prices them`
+        );
+      }
+    }
+
+    next();
+  } catch (error) {
+    console.error("Showtime allocation derivation failed:", error.message);
     next();
   }
 });

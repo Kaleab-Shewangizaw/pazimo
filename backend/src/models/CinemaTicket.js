@@ -111,6 +111,26 @@ const CinemaTicketSchema = new mongoose.Schema(
       required: true,
     },
 
+    // The seat this ticket admits, on a hall with assigned seating.
+    //
+    // A SNAPSHOT, not a reference. The hall's map is a living document a cinema
+    // re-tiers and re-labels; a sold ticket must keep saying "Row K, seat 7,
+    // VIP" for ever, even after row K is renamed or the VIP box is moved. It is
+    // also what the door reads, and the door cannot depend on the map still
+    // describing the room the way it did when the ticket was bought.
+    //
+    // Absent on unassigned-seating halls and on box-office sales that predate a
+    // hall's seat map, where a ticket admits to the room and not to a chair.
+    seat: {
+      row: { type: String, trim: true },
+      number: { type: String, trim: true },
+      // "A-12" — the identity the hold used, kept so a refund can find and
+      // release the exact row that was locked.
+      seatKey: { type: String, trim: true },
+      categoryKey: { type: String, trim: true },
+      categoryLabel: { type: String, trim: true },
+    },
+
     // The per-seat price of the tier at the moment of sale.
     price: {
       type: Number,
@@ -247,6 +267,10 @@ CinemaTicketSchema.index({ customer: 1, purchaseDate: -1 });
 CinemaTicketSchema.index({ cinema: 1, status: 1, paymentStatus: 1, purchaseDate: -1 });
 // The scanner looks a ticket up by its code and nothing else.
 CinemaTicketSchema.index({ showtime: 1, checkedIn: 1 });
+// "Which seat is this?" at the door, and the refund path's lookup by seat.
+// Sparse: only assigned-seating tickets carry one, and indexing the nulls of
+// every box-office sale would be pure cost.
+CinemaTicketSchema.index({ showtime: 1, "seat.seatKey": 1 }, { sparse: true });
 
 // Snapshot the cinema's ticket commission rate and VAT coverage at sale time.
 //
