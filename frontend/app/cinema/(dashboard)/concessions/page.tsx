@@ -6,11 +6,13 @@ import {
   cinemaRequest,
   fetchConcessionCatalog,
   fetchConcessionSales,
+  fetchConcessionSummary,
   fetchConcessions,
   money,
   type CinemaCatalogItem,
   type CinemaConcession,
   type CinemaConcessionSale,
+  type CinemaConcessionSummary,
   type CinemaProfile,
 } from "@/lib/cinema-api";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Popcorn, Clock, Trash2 } from "lucide-react";
+import { Popcorn, Clock, Trash2, TrendingUp } from "lucide-react";
 
 const CATEGORY_LABEL: Record<string, string> = {
   drink: "Drink",
@@ -39,20 +41,23 @@ function ConcessionsContent({
   const [lineup, setLineup] = useState<CinemaConcession[]>([]);
   const [catalog, setCatalog] = useState<CinemaCatalogItem[]>([]);
   const [sales, setSales] = useState<CinemaConcessionSale[]>([]);
+  const [summary, setSummary] = useState<CinemaConcessionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const approved = cinema.beverageEligibility === "eligible";
 
   const reload = useCallback(async () => {
-    const [l, c, s] = await Promise.all([
+    const [l, c, s, sum] = await Promise.all([
       fetchConcessions(token),
       fetchConcessionCatalog(token),
       fetchConcessionSales(token),
+      fetchConcessionSummary(token),
     ]);
     setLineup(l);
     setCatalog(c);
     setSales(s.data);
+    setSummary(sum);
   }, [token]);
 
   useEffect(() => {
@@ -292,7 +297,102 @@ function ConcessionsContent({
           </div>
         </TabsContent>
 
-        <TabsContent value="sales">
+        <TabsContent value="sales" className="space-y-6">
+          {/* How much has actually been sold. The table below is every
+              individual sale; this is the same money totalled, and split per
+              product so it is clear WHAT sells rather than only how much. */}
+          {summary && (
+            <>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                {[
+                  {
+                    label: "Sold, all time",
+                    value: money(summary.revenue.grossRevenue),
+                    hint: `${summary.revenue.salesCount} ${summary.revenue.salesCount === 1 ? "sale" : "sales"}`,
+                  },
+                  {
+                    label: "Items sold",
+                    value: summary.revenue.unitsSold.toLocaleString(),
+                    hint: "units across every product",
+                  },
+                  {
+                    label: "You keep",
+                    value: money(summary.revenue.cinemaRevenue),
+                    hint: "after Pazimo's fee and VAT",
+                  },
+                  {
+                    label: "Pazimo's fee",
+                    value: money(
+                      summary.revenue.pazimoCommission + summary.revenue.vatOnCommission
+                    ),
+                    hint: "commission plus VAT on it",
+                  },
+                ].map((tile) => (
+                  <Card
+                    key={tile.label}
+                    className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50"
+                  >
+                    <CardContent className="p-4">
+                      <p className="text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        {tile.label}
+                      </p>
+                      <p className="mt-1 text-xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
+                        {tile.value}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">
+                        {tile.hint}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {summary.byProduct.length > 0 && (
+                <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+                  <CardContent className="space-y-3 p-5">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <TrendingUp className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                      What sells
+                    </h2>
+                    <div className="space-y-2">
+                      {summary.byProduct.map((product) => {
+                        // Bar width is relative to the best seller, so the
+                        // comparison is between products rather than against an
+                        // arbitrary scale.
+                        const top = summary.byProduct[0]?.grossRevenue || 1;
+                        const width = Math.max(2, (product.grossRevenue / top) * 100);
+                        return (
+                          <div key={product._id}>
+                            <div className="flex items-baseline justify-between gap-3 text-sm">
+                              <span className="truncate text-gray-800 dark:text-gray-200">
+                                {product.name}
+                                <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                  {CATEGORY_LABEL[product.category] ?? product.category}
+                                </span>
+                              </span>
+                              <span className="shrink-0 tabular-nums text-gray-600 dark:text-gray-300">
+                                {product.unitsSold} × &nbsp;
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {money(product.grossRevenue)}
+                                </span>
+                              </span>
+                            </div>
+                            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
+                              <div
+                                className="h-full rounded-full bg-indigo-500"
+                                style={{ width: `${width}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+
           <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
             <CardContent className="p-5">
               <div className="overflow-x-auto">

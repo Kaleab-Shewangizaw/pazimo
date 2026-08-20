@@ -188,6 +188,32 @@ export interface CinemaConcessionSale {
   showtime?: { _id: string; startsAt: string } | null;
 }
 
+/**
+ * What a cinema has actually sold at the counter.
+ *
+ * `revenue` is the whole concession pool; `byProduct` is the same money split
+ * per item, so a cinema can see that popcorn carries the bar rather than only
+ * that the bar took X.
+ */
+export interface CinemaConcessionSummary {
+  revenue: {
+    grossRevenue: number;
+    pazimoCommission: number;
+    vatOnCommission: number;
+    cinemaVat: number;
+    cinemaRevenue: number;
+    unitsSold: number;
+    salesCount: number;
+  };
+  byProduct: {
+    _id: string;
+    name: string;
+    category: string;
+    unitsSold: number;
+    grossRevenue: number;
+  }[];
+}
+
 /** One pool's figures. Both cinema streams share this shape. */
 export interface CinemaPool {
   availableBalance: number;
@@ -320,6 +346,12 @@ export const fetchConcessionCatalog = (token: string) =>
       "/api/cinemas/me/concessions/catalog",
       token
     )
+  );
+
+export const fetchConcessionSummary = (token: string) =>
+  cinemaRequest<CinemaConcessionSummary>(
+    "/api/cinemas/me/concession-sales/summary",
+    token
   );
 
 export const fetchConcessionSales = (token: string, query = "") =>

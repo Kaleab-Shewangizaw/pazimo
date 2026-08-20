@@ -7,6 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Film,
@@ -15,9 +24,14 @@ import {
   TrendingUp,
   Images,
   AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  EyeOff,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+type PublicationStatus = "pending" | "published" | "rejected";
 
 interface AdminMovie {
   _id: string;
@@ -33,10 +47,34 @@ interface AdminMovie {
   isTrending: boolean;
   featuredOrder: number;
   upcomingShowtimes: number;
+  publicationStatus: PublicationStatus;
+  publicationNote?: string | null;
+  publishedAt?: string | null;
   cinema?: { _id: string; name: string; city?: string; isActive: boolean };
 }
 
 type Slot = "bannerStatus" | "isFeatured" | "isTrending";
+
+const PUBLICATION_BADGE: Record<
+  PublicationStatus,
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "Awaiting review",
+    className:
+      "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800",
+  },
+  published: {
+    label: "Live",
+    className:
+      "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800",
+  },
+  rejected: {
+    label: "Rejected",
+    className:
+      "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300 dark:border-rose-800",
+  },
+};
 
 const SLOTS: { key: Slot; label: string; icon: typeof Star; hint: string }[] = [
   { key: "bannerStatus", label: "Banner", icon: Images, hint: "Hero carousel at the top of the cinema page" },
@@ -48,9 +86,16 @@ export default function AdminMovieCuration() {
   const { token } = useAdminAuthStore();
   const [movies, setMovies] = useState<AdminMovie[]>([]);
   const [slots, setSlots] = useState({ banner: 0, featured: 0, trending: 0 });
+  const [publication, setPublication] = useState({ pending: 0, published: 0, rejected: 0 });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [slotFilter, setSlotFilter] = useState("");
+  // Opens on the review queue rather than on everything: the backlog is the
+  // thing an admin comes to this screen to clear, so it should not have to be
+  // gone looking for.
+  const [publicationFilter, setPublicationFilter] = useState<PublicationStatus | "">("pending");
+  const [rejecting, setRejecting] = useState<AdminMovie | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
   // Per-movie in-flight guard, so toggling one card does not disable the rest.
   const [saving, setSaving] = useState<string | null>(null);
 
@@ -61,6 +106,7 @@ export default function AdminMovieCuration() {
       const params = new URLSearchParams({ limit: "48" });
       if (search) params.set("search", search);
       if (slotFilter) params.set("slot", slotFilter);
+      if (publicationFilter) params.set("publication", publicationFilter);
 
       const res = await fetch(`${API_URL}/api/cinemas/admin/movies?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -69,17 +115,58 @@ export default function AdminMovieCuration() {
       if (!res.ok || !data.success) throw new Error(data.message || "Failed to load movies");
       setMovies(data.data || []);
       setSlots(data.slots || { banner: 0, featured: 0, trending: 0 });
+      setPublication(data.publication || { pending: 0, published: 0, rejected: 0 });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load movies");
     } finally {
       setLoading(false);
     }
-  }, [token, search, slotFilter]);
+  }, [token, search, slotFilter, publicationFilter]);
 
   useEffect(() => {
     const t = setTimeout(load, search ? 400 : 0);
     return () => clearTimeout(t);
   }, [load, search]);
+
+  const decide = async (
+    movie: AdminMovie,
+    publicationStatus: PublicationStatus,
+    note?: string
+  ) => {
+    if (!token) return;
+    setSaving(movie._id);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/cinemas/admin/movies/${movie._id}/publication`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ publicationStatus, note }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Could not save");
+
+      toast.success(
+        publicationStatus === "published"
+          ? `"${movie.title}" is live`
+          : publicationStatus === "rejected"
+            ? `"${movie.title}" rejected`
+            : `"${movie.title}" returned to the queue`
+      );
+      // Reloaded rather than patched in place: publishing can change a film's
+      // display slots and moves it between filtered views, so the server's
+      // answer is the only reliable one.
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save");
+    } finally {
+      setSaving(null);
+    }
+  };
 
   const toggle = async (movie: AdminMovie, slot: Slot) => {
     setSaving(movie._id);
@@ -142,6 +229,39 @@ export default function AdminMovieCuration() {
         })}
       </div>
 
+      {/* Review queue first: publication decides whether customers can see or
+          buy a film at all, so it outranks which promo row it sits in. */}
+      <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 pb-3 dark:border-gray-800">
+        {(
+          [
+            ["pending", "Awaiting review", publication.pending],
+            ["published", "Live", publication.published],
+            ["rejected", "Rejected", publication.rejected],
+            ["", "All films", null],
+          ] as [PublicationStatus | "", string, number | null][]
+        ).map(([value, label, count]) => (
+          <Button
+            key={label}
+            variant={publicationFilter === value ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setPublicationFilter(value)}
+          >
+            {label}
+            {count !== null && count > 0 && (
+              <span
+                className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                  value === "pending"
+                    ? "bg-amber-500 text-white"
+                    : "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200"
+                }`}
+              >
+                {count}
+              </span>
+            )}
+          </Button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -188,9 +308,11 @@ export default function AdminMovieCuration() {
           <CardContent className="py-16 text-center">
             <Film className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-700" />
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {search || slotFilter
-                ? "No films match that filter."
-                : "No films have been posted by any cinema yet."}
+              {publicationFilter === "pending" && !search && !slotFilter
+                ? "Nothing waiting for review. Every film has been decided on."
+                : search || slotFilter || publicationFilter
+                  ? "No films match that filter."
+                  : "No films have been posted by any cinema yet."}
             </p>
           </CardContent>
         </Card>
@@ -218,9 +340,17 @@ export default function AdminMovieCuration() {
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate font-semibold text-gray-900 dark:text-gray-100">
-                    {movie.title}
-                  </h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="truncate font-semibold text-gray-900 dark:text-gray-100">
+                      {movie.title}
+                    </h3>
+                    <Badge
+                      variant="outline"
+                      className={`shrink-0 text-[10px] ${PUBLICATION_BADGE[movie.publicationStatus]?.className ?? ""}`}
+                    >
+                      {PUBLICATION_BADGE[movie.publicationStatus]?.label ?? movie.publicationStatus}
+                    </Badge>
+                  </div>
                   <p className="truncate text-xs text-gray-500 dark:text-gray-400">
                     {movie.cinema?.name}
                     {movie.cinema?.city ? ` · ${movie.cinema.city}` : ""}
@@ -254,16 +384,77 @@ export default function AdminMovieCuration() {
                     </Badge>
                   )}
 
+                  {/* Why it was rejected, or why it came back to the queue —
+                      shown so the next reviewer picks up the thread. */}
+                  {movie.publicationStatus !== "published" && movie.publicationNote && (
+                    <p className="mt-1 text-xs italic text-gray-500 dark:text-gray-400">
+                      {movie.publicationNote}
+                    </p>
+                  )}
+
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {movie.publicationStatus !== "published" ? (
+                      <Button
+                        size="sm"
+                        disabled={saving === movie._id}
+                        onClick={() => decide(movie, "published")}
+                        className="h-7 bg-emerald-600 px-2 text-xs text-white hover:bg-emerald-700"
+                      >
+                        <CheckCircle2 className="mr-1 h-3 w-3" />
+                        Publish
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={saving === movie._id}
+                        onClick={() => decide(movie, "pending", "Taken down for another look.")}
+                        className="h-7 px-2 text-xs"
+                        title="Take it off the public site and return it to the queue"
+                      >
+                        <EyeOff className="mr-1 h-3 w-3" />
+                        Unpublish
+                      </Button>
+                    )}
+                    {movie.publicationStatus !== "rejected" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={saving === movie._id}
+                        onClick={() => {
+                          setRejectNote("");
+                          setRejecting(movie);
+                        }}
+                        className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400"
+                      >
+                        <XCircle className="mr-1 h-3 w-3" />
+                        Reject
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Slots are shared shelf space on the public page, and the
+                      public rows filter on publication — so an unpublished film
+                      cannot hold one. The server refuses it too; disabling here
+                      just means the admin is not invited to try. */}
                   <div className="mt-2 flex flex-wrap gap-1">
                     {SLOTS.map(({ key, label, icon: Icon }) => (
                       <Button
                         key={key}
                         size="sm"
                         variant={movie[key] ? "default" : "outline"}
-                        disabled={saving === movie._id}
+                        disabled={
+                          saving === movie._id || movie.publicationStatus !== "published"
+                        }
                         onClick={() => toggle(movie, key)}
                         className="h-7 px-2 text-xs"
-                        title={movie[key] ? `Remove from ${label}` : `Add to ${label}`}
+                        title={
+                          movie.publicationStatus !== "published"
+                            ? "Publish this film before giving it a slot"
+                            : movie[key]
+                              ? `Remove from ${label}`
+                              : `Add to ${label}`
+                        }
                       >
                         <Icon className="mr-1 h-3 w-3" />
                         {label}
@@ -276,6 +467,46 @@ export default function AdminMovieCuration() {
           ))}
         </div>
       )}
+
+      {/* Rejection needs a reason. The server requires it too — a rejection with
+          no note tells the cinema it failed but not what to change, so it is
+          required at exactly the moment it matters rather than left optional. */}
+      <Dialog open={!!rejecting} onOpenChange={(open) => !open && setRejecting(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject &ldquo;{rejecting?.title}&rdquo;?</DialogTitle>
+            <DialogDescription>
+              The cinema keeps the film and its showtimes and can edit and resubmit.
+              Nothing is deleted. Tell them what needs to change.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            autoFocus
+            rows={4}
+            maxLength={500}
+            placeholder="e.g. The poster is low resolution, and the synopsis is missing."
+            value={rejectNote}
+            onChange={(e) => setRejectNote(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejecting(null)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-rose-600 text-white hover:bg-rose-700"
+              disabled={!rejectNote.trim() || saving === rejecting?._id}
+              onClick={async () => {
+                const movie = rejecting;
+                if (!movie) return;
+                setRejecting(null);
+                await decide(movie, "rejected", rejectNote.trim());
+              }}
+            >
+              Reject film
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
