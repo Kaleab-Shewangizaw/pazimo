@@ -1,3 +1,9 @@
+// FIRST, before any router is built: teaches Express 4 to route a rejected
+// promise from an async handler into the error middleware at the bottom of this
+// file. Without it every `throw new BadRequestError(...)` in the controllers
+// hangs the request instead of answering it. See middlewares/asyncErrors.js.
+require("./middlewares/asyncErrors");
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
