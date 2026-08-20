@@ -658,7 +658,13 @@ const updateShowtime = async (req, res) => {
         if (!current) return { ...tier, sold: 0 };
 
         matched.add(String(current._id));
-        if (tier.allocation < current.sold) {
+        // Only meaningful for a tier that carries its own allocation. A tier
+        // that names a seat CATEGORY has allocation 0 here as a placeholder —
+        // the model fills it from the seat map — so comparing it to `sold`
+        // would refuse every re-price of an assigned-seating screening that had
+        // sold a single ticket, which is exactly the screening most likely to
+        // need re-pricing.
+        if (!tier.seatCategoryKey && tier.allocation < current.sold) {
           throw new BadRequestError(
             `${tier.name}: ${current.sold} seats are already sold, so the allocation cannot be set to ${tier.allocation}`
           );

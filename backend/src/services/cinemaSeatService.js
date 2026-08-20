@@ -130,6 +130,11 @@ const getSeatMapForShowtime = async (showtimeId) => {
     holdMinutes: HOLD_MINUTES,
     categories,
     rows,
+    // True when the hall has a seat map but this screening's tiers do not price
+    // its categories — the state left behind by adding a seat map to a hall
+    // that already had screenings booked into it. The picker can then say so
+    // instead of rendering a room where every seat refuses to be added.
+    needsRepricing: priceByCategory.size === 0,
   };
 };
 

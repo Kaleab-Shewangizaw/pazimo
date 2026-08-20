@@ -126,6 +126,13 @@ export interface ShowtimeSeatMap {
     isAvailable?: boolean;
   })[];
   rows?: PickerRow[];
+  /**
+   * The hall has a seat map, but this screening's tiers do not price its
+   * categories — the state left behind when a seat map is added to a hall that
+   * already had screenings booked. Every seat would refuse to be added, so the
+   * picker says so instead of rendering a room that cannot be used.
+   */
+  needsRepricing?: boolean;
 }
 
 export interface CinemaBasketTicket {

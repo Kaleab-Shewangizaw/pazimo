@@ -197,6 +197,23 @@ export default function BookingFlow({
     );
   }
 
+  // The hall was given a seat map after this screening was scheduled, so its
+  // tiers still price seat COUNTS rather than seat categories. Every seat would
+  // refuse to be added; saying so beats a room where nothing works.
+  if (seatMap.needsRepricing) {
+    return (
+      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-6 text-center text-sm dark:border-amber-800 dark:bg-amber-950/30">
+        <p className="font-medium text-amber-900 dark:text-amber-200">
+          This screening isn&apos;t open for seat booking yet
+        </p>
+        <p className="mt-1 text-amber-800 dark:text-amber-300">
+          The cinema has just set up seating for this hall and needs to set a price
+          for each type of seat. Try another screening, or buy at the box office.
+        </p>
+      </div>
+    );
+  }
+
   const currency = seatMap.currency || "ETB";
 
   return (

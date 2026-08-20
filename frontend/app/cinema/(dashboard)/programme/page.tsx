@@ -112,7 +112,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   ) => {
     setBusy(true);
     try {
-      await cinemaRequest(`/api/cinemas/me/halls/${hallId}`, token, {
+      const res = await cinemaRequest<{ warning?: string }>(`/api/cinemas/me/halls/${hallId}`, token, {
         method: "PATCH",
         body: JSON.stringify({
           ...payload,
@@ -122,7 +122,15 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           hasAssignedSeating: true,
         }),
       });
-      toast.success("Seat map saved");
+      // The server returns a warning when screenings already booked into this
+      // hall still price by seat count. Shown for longer than a success toast,
+      // because it is a job the operator now has to do.
+      const warning = (res as { warning?: string })?.warning;
+      if (warning) {
+        toast.warning(warning, { duration: 12000 });
+      } else {
+        toast.success("Seat map saved");
+      }
       setEditingSeatMap(null);
       await reload();
     } catch (e) {

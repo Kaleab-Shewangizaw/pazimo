@@ -70,8 +70,15 @@ const priceTickets = async ({ showtime, hall, seatKeys, ticketTypeId, quantity }
 
       const tier = tiersByCategory.get(seat.categoryKey);
       if (!tier) {
+        // Almost always one specific situation: the screening was scheduled
+        // BEFORE the hall had a seat map, so its tiers carry allocations rather
+        // than seat categories. Named explicitly, because "no price for this
+        // seat" sends an operator hunting through the seat map when the thing
+        // to fix is the screening.
         throw new BadRequestError(
-          `Seat ${seat.seatKey} has no price for this screening`
+          tiersByCategory.size === 0
+            ? "This screening was scheduled before the hall had a seat map, so its ticket types are not priced per seat category yet. The cinema needs to re-save its prices."
+            : `Seat ${seat.seatKey} is a ${seat.categoryKey} seat and no ticket type prices that category for this screening`
         );
       }
       if (!tier.isAvailable) {

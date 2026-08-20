@@ -682,7 +682,45 @@ const updateHall = async (req, res) => {
     hall.isActive = parseBoolean(req.body.isActive, hall.isActive);
 
     await hall.save();
-    res.status(StatusCodes.OK).json({ success: true, data: hall });
+
+    // Screenings already booked into this hall keep the tiers they were created
+    // with. If the hall has just gained a seat map, those tiers price a NUMBER
+    // OF SEATS rather than a seat CATEGORY, and every seat in the picker will
+    // refuse to be added until they are re-saved.
+    //
+    // Surfaced here because this is the moment it becomes true and the moment
+    // an operator can act on it — discovering it later, from a customer who
+    // cannot buy a ticket, is the outcome worth spending a query to avoid.
+    let warning;
+    if (hall.hasAssignedSeating) {
+      const CinemaShowtime = require("../models/CinemaShowtime");
+      const stale = await CinemaShowtime.find({
+        hall: hall._id,
+        status: "scheduled",
+        startsAt: { $gte: new Date() },
+        // A tier with no seatCategoryKey is one that predates the map.
+        ticketTypes: { $elemMatch: { seatCategoryKey: { $exists: false } } },
+      })
+        .select("startsAt movie")
+        .populate("movie", "title")
+        .sort({ startsAt: 1 })
+        .limit(20)
+        .lean();
+
+      if (stale.length) {
+        warning =
+          `${stale.length} upcoming screening${stale.length === 1 ? "" : "s"} in ` +
+          `${hall.name} still price by seat count rather than by seat category. ` +
+          `Open each one and set a price per category, or customers will not be ` +
+          `able to pick seats for them.`;
+        console.warn(
+          `[CINEMA-HALL] ${hall.name} (${hall._id}) gained a seat map with ${stale.length} ` +
+            `showtime(s) still priced by allocation`
+        );
+      }
+    }
+
+    res.status(StatusCodes.OK).json({ success: true, data: hall, warning });
   } catch (error) {
     console.error("Error updating hall:", error);
     const normalized =

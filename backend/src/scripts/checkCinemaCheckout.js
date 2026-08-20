@@ -153,6 +153,65 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   const st2=flat.reduce((a,s)=>{a[s.status]=(a[s.status]||0)+1;return a;},{});
   check('picker shows 3 sold, 2 available: '+JSON.stringify(st2), st2.sold===3 && st2.available===2);
 
+
+  // ---------------------------------------------------------------------
+  // A hall that gains a seat map when screenings are ALREADY booked into it.
+  //
+  // The real-world upgrade path, and the one that silently breaks: those
+  // screenings price a NUMBER OF SEATS, not a seat CATEGORY, so every seat in
+  // the picker refuses to be added until they are re-saved. What matters is
+  // that it fails loudly and is repairable, not that it cannot happen.
+  // ---------------------------------------------------------------------
+  const legacyCinemaId = new m.Types.ObjectId();
+  console.log('\n--- a hall that sells by capacity, with screenings already booked ---');
+  const legacyHall=await CinemaHall.create({cinema:legacyCinemaId,name:'Legacy Screen',capacity:96});
+  const legacyMovie=await CinemaMovie.create({cinema:legacyCinemaId,title:'Old Film',durationMinutes:100,publicationStatus:'published'});
+  const legacySt=await CinemaShowtime.create({cinema:legacyCinemaId,movie:legacyMovie._id,hall:legacyHall._id,
+    startsAt:new Date(Date.now()+86400000),
+    ticketTypes:[{name:'Regular',price:200,allocation:70},{name:'VIP',price:400,allocation:26}]});
+  check('showtime created the old way', legacySt.ticketTypes[0].allocation===70);
+
+  console.log('\n--- the cinema now adds a seat map to that hall ---');
+  legacyHall.hasAssignedSeating=true;
+  legacyHall.seatCategories=[{key:'standard',label:'Standard'},{key:'vip',label:'VIP'}];
+  legacyHall.seatMap={rows:[
+    {label:'A',curve:20,seats:Array.from({length:12},(_,i)=>({number:String(i+1),categoryKey:'standard'}))},
+    {label:'B',curve:10,seats:Array.from({length:12},(_,i)=>({number:String(i+1),categoryKey:'vip'}))}]};
+  await legacyHall.save();
+  check('capacity re-derived from the map', legacyHall.capacity===24, legacyHall.capacity);
+
+  console.log('\n--- the existing screening is now un-bookable, and says why ---');
+  const legacyMap=await seats.getSeatMapForShowtime(legacySt._id);
+  check('seat map flags needsRepricing', legacyMap.needsRepricing===true);
+  check('no category carries a price', legacyMap.categories.every(c=>c.price===undefined));
+  err=null;
+  try{ await checkout.priceBasket({showtimeId:legacySt._id,seatKeys:['A-1']}); }catch(e){err=e;}
+  check('pricing fails with an actionable message', !!err && /scheduled before the hall had a seat map/.test(err.message), err&&err.message);
+
+  console.log('\n--- the cinema re-prices per category, WITH a ticket already sold ---');
+  // A prior sale on the Regular tier, written with updateOne so it does not
+  // trip the validation this test is about to exercise deliberately.
+  await CinemaShowtime.updateOne(
+    { _id: legacySt._id, 'ticketTypes._id': legacySt.ticketTypes[0]._id },
+    { $set: { 'ticketTypes.$.sold': 3 } }
+  );
+  const fresh=await CinemaShowtime.findById(legacySt._id);
+  check('the prior sale is recorded', fresh.ticketTypes[0].sold===3);
+  fresh.ticketTypes = [
+    { _id: fresh.ticketTypes[0]._id, name:'Standard', price:220, allocation:0, seatCategoryKey:'standard', sold:3 },
+    { _id: fresh.ticketTypes[1]._id, name:'VIP', price:450, allocation:0, seatCategoryKey:'vip', sold:0 },
+  ];
+  err=null; try{ await fresh.save(); }catch(e){err=e;}
+  check('re-pricing a screening that has sales is allowed', !err, err&&err.message);
+  const alloc=Object.fromEntries(fresh.ticketTypes.map(t=>[t.seatCategoryKey,t.allocation]));
+  check('allocations now derived from the map', alloc.standard===12&&alloc.vip===12, JSON.stringify(alloc));
+
+  console.log('\n--- and it becomes bookable ---');
+  const legacyMap2=await seats.getSeatMapForShowtime(legacySt._id);
+  check('needsRepricing cleared', legacyMap2.needsRepricing===false);
+  const legacyBasket=await checkout.priceBasket({showtimeId:legacySt._id,seatKeys:['A-1','B-1']});
+  check('a standard + a VIP seat price correctly (220 + 450)', legacyBasket.total===670, legacyBasket.total);
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await m.connection.dropDatabase(); await m.disconnect();
   process.exit(fail?1:0);
