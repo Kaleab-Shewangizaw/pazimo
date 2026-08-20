@@ -301,7 +301,13 @@ function ConcessionsContent({
           {/* How much has actually been sold. The table below is every
               individual sale; this is the same money totalled, and split per
               product so it is clear WHAT sells rather than only how much. */}
-          {summary && (
+          {/* Guarded on the field actually read, not just on `summary` being
+              truthy. A malformed response previously satisfied `summary &&` and
+              then threw on `.revenue.grossRevenue`, which the error boundary
+              turned into a blank page — so a cinema could not manage its
+              line-up or see a single sale because one tile failed. A hidden
+              panel is the right failure here, not a dead page. */}
+          {summary?.revenue && (
             <>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 {[
@@ -347,7 +353,7 @@ function ConcessionsContent({
                 ))}
               </div>
 
-              {summary.byProduct.length > 0 && (
+              {summary.byProduct?.length > 0 && (
                 <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
                   <CardContent className="space-y-3 p-5">
                     <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">

@@ -348,10 +348,22 @@ export const fetchConcessionCatalog = (token: string) =>
     )
   );
 
+// Wrapped in unwrap(), like fetchTicketSummary above: cinemaRequest returns the
+// WHOLE response body, and this endpoint answers { success, data: { revenue,
+// byProduct } }. Calling it without unwrap returned the envelope, so
+// `summary.revenue` was undefined and the panel crashed the page reading
+// `.grossRevenue` off it.
+//
+// The type parameter did not catch that, because cinemaRequest ends in
+// `return data as T` — a blind cast. Annotating it <CinemaConcessionSummary>
+// asserted the envelope WAS the summary and the compiler took it at its word,
+// which is why the wrapper shape has to be spelled out here rather than trusted.
 export const fetchConcessionSummary = (token: string) =>
-  cinemaRequest<CinemaConcessionSummary>(
-    "/api/cinemas/me/concession-sales/summary",
-    token
+  unwrap(
+    cinemaRequest<{ data: CinemaConcessionSummary }>(
+      "/api/cinemas/me/concession-sales/summary",
+      token
+    )
   );
 
 export const fetchConcessionSales = (token: string, query = "") =>
