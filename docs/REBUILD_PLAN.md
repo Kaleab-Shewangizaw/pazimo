@@ -1,5 +1,11 @@
 # Pazimo Rebuild Plan — The Road to One Million
 
+> **SUPERSEDED — 2026-08-20.** The single source of truth is now
+> [PAZIMO_PLAN.md](./PAZIMO_PLAN.md), which merges this file with the other
+> plan and reflects what is actually in the code. This file is kept as the
+> record of how the design got here; where the two disagree, PAZIMO_PLAN wins.
+
+
 **Goal:** carry 1,000,000 tickets/year (Ethiopian calendar 2019 E.C. season) plus the
 beverages feature, fast and correct.
 

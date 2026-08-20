@@ -1,5 +1,11 @@
 # Beverages, Concessions & Cinema — Implementation Plan
 
+> **SUPERSEDED — 2026-08-20.** The single source of truth is now
+> [PAZIMO_PLAN.md](./PAZIMO_PLAN.md), which merges this file with the other
+> plan and reflects what is actually in the code. This file is kept as the
+> record of how the design got here; where the two disagree, PAZIMO_PLAN wins.
+
+
 Companion to [REBUILD_PLAN.md](./REBUILD_PLAN.md). That file covers making the
 existing system fast and correct; this one covers the new revenue streams.
 
