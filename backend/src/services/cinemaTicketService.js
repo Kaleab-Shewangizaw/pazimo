@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const CinemaShowtime = require("../models/CinemaShowtime");
 const CinemaTicket = require("../models/CinemaTicket");
 const { BadRequestError, NotFoundError } = require("../errors");
+const { mirrorSale } = require("./ledgerDualWrite");
 
 // Cinema ticket issuing.
 //
@@ -147,7 +148,7 @@ const issueTicket = async ({
   });
 
   try {
-    return await CinemaTicket.create({
+    const ticket = await CinemaTicket.create({
       cinema: preview.cinema,
       showtime: showtimeId,
       movie: preview.movie?._id || preview.movie,
@@ -170,6 +171,27 @@ const issueTicket = async ({
       paymentDate: paymentStatus === "completed" ? new Date() : undefined,
       // commissionRate and cinemaVatRate are snapshotted by the model hook.
     });
+
+    // Mirror into the ledger, after the ticket exists. mirrorSale swallows its
+    // own errors — a ledger failure must never fail a paid sale while the
+    // ledger is still a shadow copy — so awaiting it here cannot reach the
+    // catch below and release seats a customer has paid for. The rates come off
+    // the saved ticket, not from here, so the ledger records exactly what was
+    // charged.
+    if (ticket.paymentStatus === "completed") {
+      await mirrorSale({
+        owner: { kind: "cinema", id: ticket.cinema },
+        stream: "tickets",
+        grossAmount: ticket.totalAmount,
+        commissionRate: ticket.commissionRate,
+        ownerVatRate: ticket.cinemaVatRate,
+        source: { cinemaTicket: ticket._id },
+        reference: `cinema_ticket:${ticket._id}`,
+        occurredAt: ticket.purchaseDate,
+      });
+    }
+
+    return ticket;
   } catch (error) {
     // The seats were already claimed above. If the ledger write fails they must
     // go back, or they are lost to a ticket that does not exist.

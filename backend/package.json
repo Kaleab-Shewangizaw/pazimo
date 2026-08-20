@@ -12,7 +12,10 @@
     "indexes:sync": "node src/scripts/createIndexes.js --sync",
     "indexes:rsvp": "node src/scripts/createRsvpIndexes.js",
     "migrate:venues": "node src/scripts/migrateVenueSalesChannel.js",
-    "backfill:cinema-slugs": "node src/scripts/backfillCinemaMovieSlugs.js"
+    "backfill:cinema-slugs": "node src/scripts/backfillCinemaMovieSlugs.js",
+    "ledger:backfill": "node src/scripts/backfillLedger.js",
+    "ledger:reconcile": "node src/scripts/reconcileLedger.js",
+    "ledger:bench": "node src/scripts/benchLedgerReads.js"
   },
   "keywords": [],
   "author": "",

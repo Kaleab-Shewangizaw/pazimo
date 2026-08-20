@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const VenueBeverage = require("../models/VenueBeverage");
 const VenueBeverageSale = require("../models/VenueBeverageSale");
 const { BadRequestError, NotFoundError } = require("../errors");
+const { mirrorSale } = require("./ledgerDualWrite");
 
 // The venue channel's twin of beverageSalesService.
 //
@@ -85,7 +86,7 @@ const recordSale = async ({
   }
 
   try {
-    return await VenueBeverageSale.create({
+    const sale = await VenueBeverageSale.create({
       venue: reserved.venue,
       venueBeverage: reserved._id,
       beverage: line.beverage._id,
@@ -102,6 +103,21 @@ const recordSale = async ({
       paymentReference,
       // commissionRate and venueVatRate are snapshotted by the model hook.
     });
+
+    // Shadow-write to the ledger; never allowed to fail the sale. See
+    // services/ledgerDualWrite.
+    await mirrorSale({
+      owner: { kind: "venue", id: sale.venue },
+      stream: "beverages",
+      grossAmount: sale.totalAmount,
+      commissionRate: sale.commissionRate,
+      ownerVatRate: sale.venueVatRate,
+      source: { venueBeverageSale: sale._id },
+      reference: `venue_beverage_sale:${sale._id}`,
+      occurredAt: sale.soldAt,
+    });
+
+    return sale;
   } catch (error) {
     // The stock was already claimed above. If the ledger write fails the
     // bottles must go back, or they are lost to a row that does not exist.

@@ -11,6 +11,7 @@ const Notification = require("../models/Notification");
 const { calculateOrganizerBalance } = require("../services/financeService");
 const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 const { TELEBIRR_FEE_RATE } = require("../config/rates");
+const { mirrorWithdrawal } = require("../services/ledgerDualWrite");
 
 // Get organizer's available balance. Ticket revenue and any borrowed Pazimo
 // Capital principal are now a single pool: the advance is credited straight in
@@ -119,6 +120,17 @@ const createVenueWithdrawal = async (req, res) => {
     status: "pending",
   });
 
+  // Shadow-write to the ledger. Never allowed to fail the payout while the
+  // ledger is still a shadow copy — see services/ledgerDualWrite.
+  await mirrorWithdrawal({
+    owner: { kind: "venue", id: venue._id },
+    stream: "beverages",
+    amount: requested,
+    withdrawalId: withdrawal._id,
+    currency,
+    occurredAt: withdrawal.createdAt,
+  });
+
   return res.status(StatusCodes.CREATED).json({ success: true, data: withdrawal });
 };
 
@@ -212,6 +224,15 @@ const createCinemaWithdrawal = async (req, res) => {
     netAmount: requested - feeAmount,
     processedBy: req.user.role === "admin" ? req.user.userId : undefined,
     status: "pending",
+  });
+
+  await mirrorWithdrawal({
+    owner: { kind: "cinema", id: cinema._id },
+    stream: poolKey,
+    amount: requested,
+    withdrawalId: withdrawal._id,
+    currency,
+    occurredAt: withdrawal.createdAt,
   });
 
   return res

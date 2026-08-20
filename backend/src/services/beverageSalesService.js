@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const EventBeverage = require("../models/EventBeverage");
 const BeverageSale = require("../models/BeverageSale");
 const { BadRequestError, NotFoundError } = require("../errors");
+const { mirrorSale } = require("./ledgerDualWrite");
 
 // Sales are recorded here rather than in the controller so the eventual
 // customer checkout can call recordSale() directly from the payment webhook,
@@ -67,7 +68,7 @@ const recordSale = async ({
   }
 
   try {
-    return await BeverageSale.create({
+    const sale = await BeverageSale.create({
       event: reserved.event,
       organizer: reserved.organizer,
       eventBeverage: reserved._id,
@@ -83,6 +84,21 @@ const recordSale = async ({
       customerPhone,
       channel,
     });
+
+    // Shadow-write to the ledger; never allowed to fail the sale. See
+    // services/ledgerDualWrite.
+    await mirrorSale({
+      owner: { kind: "organizer", id: sale.organizer },
+      stream: "beverages",
+      grossAmount: sale.totalAmount,
+      commissionRate: sale.commissionRate,
+      ownerVatRate: sale.organizerVatRate,
+      source: { beverageSale: sale._id },
+      reference: `beverage_sale:${sale._id}`,
+      occurredAt: sale.soldAt,
+    });
+
+    return sale;
   } catch (error) {
     // The stock was already claimed above. If the ledger write fails the
     // bottles must go back, or they are lost to a row that does not exist.

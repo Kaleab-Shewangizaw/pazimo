@@ -3,6 +3,7 @@ const CinemaBeverage = require("../models/CinemaBeverage");
 const CinemaBeverageSale = require("../models/CinemaBeverageSale");
 const CinemaShowtime = require("../models/CinemaShowtime");
 const { BadRequestError, NotFoundError } = require("../errors");
+const { mirrorSale } = require("./ledgerDualWrite");
 
 // The cinema channel's twin of beverageSalesService and
 // venueBeverageSalesService.
@@ -103,7 +104,7 @@ const recordSale = async ({
   }
 
   try {
-    return await CinemaBeverageSale.create({
+    const sale = await CinemaBeverageSale.create({
       cinema: reserved.cinema,
       cinemaBeverage: reserved._id,
       beverage: line.beverage._id,
@@ -122,6 +123,21 @@ const recordSale = async ({
       paymentReference,
       // commissionRate and cinemaVatRate are snapshotted by the model hook.
     });
+
+    // Shadow-write to the ledger; never allowed to fail the sale. See
+    // services/ledgerDualWrite.
+    await mirrorSale({
+      owner: { kind: "cinema", id: sale.cinema },
+      stream: "beverages",
+      grossAmount: sale.totalAmount,
+      commissionRate: sale.commissionRate,
+      ownerVatRate: sale.cinemaVatRate,
+      source: { cinemaBeverageSale: sale._id },
+      reference: `cinema_beverage_sale:${sale._id}`,
+      occurredAt: sale.soldAt,
+    });
+
+    return sale;
   } catch (error) {
     // The stock was already claimed above. If the ledger write fails the items
     // must go back, or they are lost to a row that does not exist.
