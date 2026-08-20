@@ -203,34 +203,41 @@ Every one of these is dry-run by default. Read the report before `--write`.
 
 **~1.5 weeks. The stated priority.**
 
-### P1.1 — Cinema online checkout
+### P1.1 — Cinema online checkout · **DONE 2026-08-20**
 
-The one thing standing between Cinema and being sellable. Everything underneath
-already exists: `issueTicket` resolves prices server-side and claims seats
-atomically, the booking UI reaches the point of payment, and the payment
-providers are wired for events.
+- [x] `POST /public/checkout/quote` prices a basket **server-side**; a `total`
+      or `unitPrice` in the request body is never read. Separate from checkout
+      so browsing takes no locks.
+- [x] Payment is tickets **and** concessions as one transaction.
+- [x] Settlement routed by `Payment.salesContext`, branched once inside
+      `processSuccessfulPayment` rather than at its four call sites — a fifth
+      added later would otherwise settle a cinema order as an event.
+- [x] Seats held before the provider is called, with a TTL, and released
+      immediately if the provider refuses rather than left to expire.
+- [x] Ticket delivered: `/cinema/order/{transactionId}` shows every ticket's QR,
+      its seat, and the snacks to collect.
 
-- [ ] Checkout route accepts `{ showtimeId, ticketTypeId, quantity }` and prices
-      it **server-side** — the client says what it wants, never what it costs
-- [ ] Payment amount = tickets (+ concessions once B2 lands) as one transaction
-- [ ] `processSuccessfulPayment` calls `issueTicket` on settlement
-- [ ] Seats held between checkout and settlement, with expiry, so a slow payment
-      cannot oversell — reuse the atomic claim, do not invent a second one
-- [ ] Ticket delivered: QR page + link. The renderer and scanner already work.
+**The concurrency piece, resolved.** The claim did move earlier, but the answer
+was not to move `issueTicket`'s counter — it was to add a second, different
+lock. `ticketTypes.$.sold` answers "is there **a** seat left"; only
+`CinemaSeatHold` answers "is **K7** left". Both now run, in that order.
 
-**Watch for:** the seat claim currently happens inside `issueTicket`. Online
-checkout needs the claim to happen *earlier* (at basket time) and be released
-if payment fails. That is the one genuinely new piece of concurrency here.
+`issueTicket` refuses a seatless sale on an assigned-seating hall, **including
+at the box office** — otherwise a counter sale increments the tier counter
+without taking a seat lock and can hand out a chair an online customer is at
+that moment paying for.
 
-### P1.2 — B2, unblocked
+### P1.2 — B2, unblocked · **DONE for cinema**
 
-Cinema concessions at checkout need the same wiring events have been waiting on.
-
-- [ ] Checkout accepts a concession basket alongside the ticket selection
-- [ ] `processSuccessfulPayment` calls `fulfilBasket` after the ticket is created
-- [ ] Decide what happens to `failed` lines — a paid drink that sold out between
-      checkout and settlement needs a refund path, and there is none yet
+- [x] Checkout accepts a concession basket alongside the seats.
+- [x] Settlement fulfils it after the tickets, deliberately in that order: a
+      seat cannot be handed over at the counter afterwards and popcorn can.
+- [x] `failed` lines are RECORDED on the result and logged loudly with the
+      reference, never swallowed. Money was taken for something not delivered,
+      so it needs a human — the refund path is still P4.
 - [ ] Redemption at the counter marks a pre-bought item collected
+- [ ] The same wiring for the EVENT channel — `fulfilBasket` is still uncalled
+      there. Cinema now has the working shape to copy.
 
 ### P1.3 — Cinema finishing work
 
@@ -362,12 +369,25 @@ match `null` as well as absent.
 - [ ] **Refunds.** Nothing in the backend can reverse settled money. The ledger
       makes this expressible for the first time — a refund is an appended
       reversal, not a deletion. Needed by B2 and by any real support process.
-- [ ] **Seats (C3).** `hasAssignedSeating` and `seatLayout` are already on
-      `CinemaHall` and unread, so this is additive: seat map, `SeatHold` with a
-      TTL index, atomic hold claim, picker UI, `CinemaTicket.seat` snapshot.
-- [ ] **Tests.** There is no test framework. Everything verified so far has been
-      throwaway bench scripts. The money paths and the authorization matrix
-      deserve a real suite that runs on every change.
+- [x] ~~**Seats (C3).**~~ **Done 2026-08-20**, ahead of its place in this list
+      because online checkout needed it. Flexible seat maps (categories, gaps,
+      blocked house seats, per-row curve), `CinemaSeatHold` with a unique index
+      as the lock and a TTL index as the release, a picker, and a
+      `CinemaTicket.seat` snapshot. Seat CATEGORY sets the price, so picking a
+      VIP seat charges the VIP price with nothing for staff to police, and a
+      showtime's allocation is derived from the map rather than typed.
+- [ ] **Tests.** There is still no test framework, but three committed check
+      scripts now cover the parts that would be worst to get wrong, each against
+      a scratch database it creates and drops:
+
+      ```
+      npm run check:write-surface     8 endpoints reject anonymous callers
+      npm run check:seats            29 checks — the seat lock under contention
+      npm run check:cinema-checkout  25 checks — pricing, settlement, idempotence
+      ```
+
+      These are the shape a real suite should take over. The money paths and the
+      authorization matrix still deserve one that runs on every change.
 - [ ] **The audit we have not done.** Frontend XSS and exposed keys, webhook
       signature verification on the Chapa and SantimPay callbacks (they take
       money instructions unauthenticated by design), dependency CVEs, and
@@ -417,7 +437,11 @@ Do not re-litigate these.
 
 ## Open questions
 
-- [ ] Pre-bought drinks: ticket QR, or their own redemption code?
+- [x] ~~Pre-bought drinks: ticket QR, or their own redemption code?~~ The
+      ticket QR, for now — the order page tells the customer to show any of
+      their ticket codes at the counter. Nothing yet MARKS an item collected,
+      so a counter can hand the same popcorn over twice; that is the open half,
+      tracked under P1.2.
 - [ ] Combos: independent price, or summed from components? (`category: "combo"`
       exists and carries no bundling behaviour yet.)
 - [ ] Do cinemas get Pazimo Capital? Currently no, by decision 6.
