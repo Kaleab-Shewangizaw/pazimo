@@ -16,6 +16,23 @@ const Payment = new mongoose.Schema({
     enum: ["santim", "chapa", "chapa_giftcard"],
     default: "santim",
   },
+  // Which channel this payment belongs to.
+  //
+  // The Payment collection is shared by event tickets, invitations, campaigns
+  // and now cinema orders, and settlement differs completely between them —
+  // an event payment creates a Ticket, a cinema payment creates CinemaTickets
+  // and concession sales. Without a discriminator, processSuccessfulPayment has
+  // to guess from the shape of ticketDetails, which is how a cinema order ends
+  // up half-settled as an event.
+  //
+  // Absent means EVENT, so every payment written before this field existed
+  // keeps its current behaviour untouched.
+  salesContext: {
+    type: String,
+    enum: ["EVENT", "CINEMA"],
+    index: true,
+  },
+
   // Populated only when provider === "chapa_giftcard": which card received
   // the funds, and the Chapa Link reference used to verify/poll status.
   giftCardNumber: String,

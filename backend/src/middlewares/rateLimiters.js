@@ -106,7 +106,23 @@ const qrIssueLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many ticket generation requests. Please wait a few minutes and try again."),
 });
 
+// Guards the unauthenticated cinema checkout. Each call takes seat locks and
+// calls a payment provider, so the abuse this stops is not load but denial of
+// sale: a script starting checkouts it never pays for could hold every seat in
+// a sold-out screening. Tighter than a read limit for that reason, and generous
+// enough that a family retrying a failed payment is never caught.
+const cinemaCheckoutLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 12, // checkout attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler(
+    "Too many booking attempts from this network. Please wait a few minutes and try again."
+  ),
+});
+
 module.exports = {
+  cinemaCheckoutLimiter,
   adminWriteLimiter,
   qrIssueLimiter,
   rsvpSubmissionLimiter,

@@ -56,6 +56,20 @@ const validateSignature = (signature, payload) => {
 
 // Helper to process successful payment and create ticket
 const processSuccessfulPayment = async (payment) => {
+  // Cinema orders settle completely differently — CinemaTickets against a
+  // showtime, plus concession sales — so they are dispatched before any of the
+  // event-shaped work below runs.
+  //
+  // Done HERE rather than at each call site because there are four of them
+  // (webhook, poller, payment controller, manual retry) and a fifth added later
+  // would silently settle a cinema order as an event. One funnel, one branch.
+  //
+  // Absent salesContext means EVENT, so every payment written before the field
+  // existed keeps its behaviour exactly.
+  if (payment.salesContext === "CINEMA") {
+    return require("./cinemaCheckoutController").settleCinemaPayment(payment);
+  }
+
   const startTime = Date.now();
   console.log(`\n[TICKET-CREATE] ============================================`);
   console.log(`[TICKET-CREATE] Starting ticket creation for txn: ${payment.transactionId}`);

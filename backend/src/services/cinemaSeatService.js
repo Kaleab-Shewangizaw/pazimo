@@ -256,6 +256,17 @@ const confirmHold = async ({ reference, seatKey, ticketId }) => {
   return confirmed;
 };
 
+/**
+ * Point a confirmed hold at the ticket it became.
+ *
+ * Separate from confirmHold because the ticket does not exist yet when the hold
+ * is confirmed — the seat has to be locked BEFORE the ticket is written, or a
+ * failure between the two would leave a ticket for a chair nothing holds.
+ */
+const attachTicketToHold = async ({ holdId, ticketId }) => {
+  await CinemaSeatHold.updateOne({ _id: holdId }, { $set: { ticket: ticketId } });
+};
+
 /** Release a sold seat on refund, so it can be sold again. */
 const releaseSoldSeat = async ({ showtimeId, seatKey }) => {
   await CinemaSeatHold.deleteOne({
@@ -272,5 +283,6 @@ module.exports = {
   holdSeats,
   releaseHolds,
   confirmHold,
+  attachTicketToHold,
   releaseSoldSeat,
 };

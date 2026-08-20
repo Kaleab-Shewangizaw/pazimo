@@ -5,6 +5,7 @@ const router = express.Router();
 const cinemaController = require("../controllers/cinemaController");
 const programmeController = require("../controllers/cinemaProgrammeController");
 const ticketController = require("../controllers/cinemaTicketController");
+const checkoutController = require("../controllers/cinemaCheckoutController");
 const beverageController = require("../controllers/cinemaBeverageController");
 const financeController = require("../controllers/cinemaFinanceController");
 const upload = require("../middlewares/upload");
@@ -14,6 +15,7 @@ const {
   restrictTo,
   requireCinemaAccount,
 } = require("../middlewares/auth");
+const { rsvpPublicReadLimiter, cinemaCheckoutLimiter } = require("../middlewares/rateLimiters");
 
 // The cinema channel's API.
 //
@@ -68,6 +70,31 @@ router.get("/public/:cinemaId/concessions", beverageController.listPublicLineup)
 
 // A ticket is readable by whoever holds its code — that is how a guest checkout
 // works. optionalAuth so a signed-in customer is recognised without requiring it.
+// --- Online checkout ------------------------------------------------------
+//
+// Rate-limited because these are unauthenticated and each one does real work:
+// the quote prices a basket, and the checkout takes seat locks and calls a
+// payment provider. Without a limit, a script could hold every seat in a
+// sold-out screening by starting checkouts it never pays for.
+router.get(
+  "/public/showtimes/:showtimeId/seats",
+  rsvpPublicReadLimiter,
+  checkoutController.getShowtimeSeats
+);
+router.post(
+  "/public/checkout/quote",
+  rsvpPublicReadLimiter,
+  optionalAuth,
+  checkoutController.quoteCheckout
+);
+router.post(
+  "/public/checkout",
+  cinemaCheckoutLimiter,
+  optionalAuth,
+  checkoutController.startCheckout
+);
+router.get("/public/orders/:transactionId", optionalAuth, checkoutController.getOrder);
+
 router.get("/public/tickets/:ticketId", optionalAuth, ticketController.getPublicTicket);
 router.get("/public/tickets/:ticketId/qr.svg", ticketController.getTicketQr);
 router.get("/public/tickets/:ticketId/qr.png", (req, res) => {

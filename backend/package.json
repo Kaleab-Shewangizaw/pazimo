@@ -20,7 +20,8 @@
     "backfill:platform-fees": "node src/scripts/backfillPlatformFees.js",
     "migrate:cinema-publication": "node src/scripts/migrateCinemaMoviePublication.js",
     "backfill:beverage-categories": "node src/scripts/backfillBeverageCategories.js",
-    "check:seats": "node src/scripts/checkSeatSelection.js"
+    "check:seats": "node src/scripts/checkSeatSelection.js",
+    "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js"
   },
   "keywords": [],
   "author": "",
