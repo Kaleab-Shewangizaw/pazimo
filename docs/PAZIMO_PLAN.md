@@ -235,7 +235,13 @@ that moment paying for.
 - [x] `failed` lines are RECORDED on the result and logged loudly with the
       reference, never swallowed. Money was taken for something not delivered,
       so it needs a human — the refund path is still P4.
-- [ ] Redemption at the counter marks a pre-bought item collected
+- [x] **Redemption at the counter.** Keyed to the ORDER, not a ticket — one
+      order can carry several tickets and a single popcorn. The handover is a
+      single findOneAndUpdate matching "outstanding", so two tills scanning at
+      once hand it over exactly once, and refusal names the time it was
+      collected because that is what settles a counter dispute. Surfaced in the
+      scanner's admission panel: the door is the one moment staff have the order
+      in front of them.
 - [ ] The same wiring for the EVENT channel — `fulfilBasket` is still uncalled
       there. Cinema now has the working shape to copy.
 
@@ -255,11 +261,22 @@ that moment paying for.
       breakdown. The summary endpoint already existed; nothing called it.
 - [ ] Bulk "schedule screenings" — one film, many showtimes
 - [ ] Customer-facing browse polish; the public API is in place
-- [ ] Backfill slugs on production (`npm run backfill:cinema-slugs`) so existing
-      films get readable URLs instead of falling back to their id
+- [x] Slugs — nothing to backfill; every film on the production mirror already
+      has one.
+- [ ] Seat-map editing for a hall that already has SOLD seats: today a category
+      rename or a removed row is refused outright once tickets exist. Correct
+      but blunt — a cinema cannot fix a typo mid-run.
 
-**Gate:** a customer can buy a cinema ticket online, receive it, and be admitted
-by the scanner — without an operator touching anything.
+**Gate: MET.** A customer picks seats, adds snacks, pays, and receives a QR per
+ticket; the scanner admits it and shows any snacks still to hand over. No
+operator touches it.
+
+Proven by `npm run check:cinema-checkout` (44 checks) and `npm run check:seats`
+(29), both against a scratch database they create and drop.
+
+Found and fixed while verifying the gate: refunding a ticket released the tier
+counter but not the seat lock, so a refunded chair could never be resold — the
+tier reported it free while the picker refused it.
 
 ---
 
