@@ -360,6 +360,21 @@ const refundTicket = async (ticketId, { adminId, reason } = {}) => {
     quantity: ticket.quantity,
   });
 
+  // And the chair itself, on an assigned-seating hall.
+  //
+  // TWO LOCKS, TWO RELEASES. releaseSeats above returns the tier's counter,
+  // which answers "is there A seat left". The seat hold answers "is K7 left",
+  // and without releasing it a refunded chair stays marked sold for ever: the
+  // tier would report a free seat while the picker refused that exact one, so
+  // the last buyer of every refunded screening would be told the seat is gone
+  // after the tier had already let them through.
+  if (ticket.seat?.seatKey) {
+    await seatService.releaseSoldSeat({
+      showtimeId: ticket.showtime,
+      seatKey: ticket.seat.seatKey,
+    });
+  }
+
   return ticket;
 };
 

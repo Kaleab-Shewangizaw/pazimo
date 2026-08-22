@@ -212,6 +212,27 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   const legacyBasket=await checkout.priceBasket({showtimeId:legacySt._id,seatKeys:['A-1','B-1']});
   check('a standard + a VIP seat price correctly (220 + 450)', legacyBasket.total===670, legacyBasket.total);
 
+  console.log('\n--- refund releases BOTH locks ---');
+  const ticketSvc2 = require("../services/cinemaTicketService");
+  const soldTicket = result.tickets.find((t) => t.seat?.seatKey === 'K-1');
+  const beforeTier = (await CinemaShowtime.findById(st._id)).ticketTypes
+    .find((t) => t.seatCategoryKey === 'vip').sold;
+  await ticketSvc2.refundTicket(soldTicket._id, { reason: 'test refund' });
+  const afterTier = (await CinemaShowtime.findById(st._id)).ticketTypes
+    .find((t) => t.seatCategoryKey === 'vip').sold;
+  check('refund returns the tier counter', afterTier === beforeTier - 1, `${beforeTier} -> ${afterTier}`);
+  check('refund releases the seat lock too',
+    (await CinemaSeatHold.countDocuments({ showtime: st._id, seatKey: 'K-1' })) === 0);
+
+  // The point of the pair: the freed chair has to be genuinely re-sellable.
+  // Returning only the tier counter leaves the picker refusing a seat the tier
+  // says is free, which is worse than not refunding at all.
+  let resold = null, resoldErr = null;
+  try {
+    resold = await checkout.startCheckout({ showtimeId: st._id, seatKeys: ['K-1'], reference: 'after-refund' });
+  } catch (e) { resoldErr = e; }
+  check('the refunded seat can be booked again', !!resold && !resoldErr, resoldErr && resoldErr.message);
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await m.connection.dropDatabase(); await m.disconnect();
   process.exit(fail?1:0);
