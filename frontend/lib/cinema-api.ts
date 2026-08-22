@@ -6,6 +6,8 @@
 // here, so the UI cannot construct a request aimed at another cinema even by
 // accident — the same rule venue-api follows, taken one step further.
 
+import { useAuthStore } from "@/store/authStore";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export type CinemaEligibility = "not_eligible" | "eligible";
@@ -238,6 +240,18 @@ export interface CinemaTicket {
   purchaseDate: string;
   movie?: { _id: string; title: string; poster?: string | null };
   hall?: { _id: string; name: string };
+  cinema?: { _id: string; name: string; city?: string; image?: string | null };
+  /**
+   * The chair, on an assigned-seating hall. A SNAPSHOT taken at sale time, so
+   * it keeps saying "Row K, seat 7, VIP" after the room is re-tiered.
+   */
+  seat?: {
+    row?: string;
+    number?: string;
+    seatKey?: string;
+    categoryKey?: string;
+    categoryLabel?: string;
+  } | null;
 }
 
 export interface CinemaConcession {
@@ -479,7 +493,7 @@ export const fetchConcessionSales = (token: string, query = "") =>
 // rather than cinemaRequest, which requires one.
 
 const publicGet = async <T,>(path: string): Promise<T> => {
-  const res = await fetch(`${API_URL}${path}`);
+  const res = await fetch(`${API_URL}${path}`, { headers: optionalAuthHeader() });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || body?.success === false) {
     throw new Error(body?.message || "Something went wrong");
@@ -487,10 +501,32 @@ const publicGet = async <T,>(path: string): Promise<T> => {
   return body.data as T;
 };
 
+/**
+ * The signed-in customer's token, when there is one.
+ *
+ * The public checkout routes run behind `optionalAuth`: they work for a guest,
+ * and they attach the account when a token is present. Without this header the
+ * server sees every buyer as a guest — so `Payment.userId` is never set, the
+ * ticket's `customer` is never set, and the ticket never appears in the account
+ * that bought it. That is exactly what was happening.
+ *
+ * Read from the store rather than passed in by each caller, so no call site can
+ * forget it and quietly orphan a ticket. Wrapped because a guest checkout must
+ * never break on an auth-store problem.
+ */
+const optionalAuthHeader = (): Record<string, string> => {
+  try {
+    const token = useAuthStore.getState().token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+};
+
 const publicPost = async <T,>(path: string, payload: unknown): Promise<T> => {
   const res = await fetch(`${API_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...optionalAuthHeader() },
     body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));
@@ -575,6 +611,23 @@ export const verifyPaymentStatus = async (transactionId: string) => {
   );
   return res.json().catch(() => null);
 };
+
+/**
+ * Give up on an order and release its seats immediately.
+ *
+ * Without this the chairs stay locked until the ten-minute hold expires, which
+ * on a busy screening means the best seats are unbuyable and nothing explains
+ * why. Refused for an order that has already been paid for.
+ */
+export const cancelCinemaCheckout = (transactionId: string) =>
+  publicPost<{ transactionId: string; released: number; status: string }>(
+    `/api/cinemas/public/checkout/${transactionId}/cancel`,
+    {}
+  );
+
+/** Every cinema ticket the signed-in customer holds. */
+export const fetchMyCinemaTickets = (token: string) =>
+  unwrap(cinemaRequest<{ data: CinemaTicket[] }>("/api/cinemas/my-tickets", token));
 
 /** Everything one paid order produced — tickets and snacks. */
 export const fetchCinemaOrder = (transactionId: string) =>

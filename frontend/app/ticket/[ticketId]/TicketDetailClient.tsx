@@ -2,6 +2,9 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
+import CinemaTicketView, {
+  type CinemaTicketData,
+} from "@/components/cinemas/cinema-ticket-view";
 import { Loader2, Download } from "lucide-react";
 import Image from "next/image";
 import { ticketQrUrl, downloadTicketQr } from "@/lib/ticketQr";
@@ -57,6 +60,10 @@ const formatEventDate = (isoDate: string) => {
 
 export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
   const [ticket, setTicket] = useState<TicketDetails | null>(null);
+  // A cinema ticket is a different shape entirely — a seat and a screening
+  // rather than an event and a wave — so it renders through its own component
+  // instead of being bent into the event shape below.
+  const [cinemaTicket, setCinemaTicket] = useState<CinemaTicketData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -73,9 +80,25 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
             ? data.data[0]
             : data.data;
           setTicket(ticketData);
-        } else {
-          setError(data.error || "Failed to load ticket");
+          return;
         }
+
+        // Not an event ticket — try the cinema ledger before giving up.
+        //
+        // /ticket/{id} is the link that goes out in every confirmation SMS and
+        // email, and a customer has no idea which collection their ticket lives
+        // in. One URL has to resolve either, or half the links we send lead to
+        // "Ticket not found".
+        const cinemaRes = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/cinemas/public/tickets/${ticketId}`
+        );
+        const cinemaData = await cinemaRes.json();
+        if (cinemaRes.ok && cinemaData.success) {
+          setCinemaTicket(cinemaData.data);
+          return;
+        }
+
+        setError(data.error || "Failed to load ticket");
       } catch (err) {
         setError("Something went wrong");
       } finally {
@@ -94,6 +117,10 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
         <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-500" />
       </div>
     );
+  }
+
+  if (cinemaTicket) {
+    return <CinemaTicketView ticket={cinemaTicket} />;
   }
 
   if (error || !ticket) {

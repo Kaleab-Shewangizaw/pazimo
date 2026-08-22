@@ -301,8 +301,11 @@ const getPublicTicket = async (req, res) => {
       .populate("cinema", "name address city image")
       .populate("movie", "title poster ageRating durationMinutes")
       .populate("hall", "name screenType")
+      // `seat` included: on an assigned-seating hall it is the first thing the
+      // customer looks for and what staff read at the door. Its absence was
+      // why a ticket page could show the film and the time but not the chair.
       .select(
-        "ticketId salesContext movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency status paymentStatus checkedIn checkedAt customerName purchaseDate cinema movie hall"
+        "ticketId salesContext movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency status paymentStatus checkedIn checkedAt customerName purchaseDate cinema movie hall seat"
       )
       .lean();
 

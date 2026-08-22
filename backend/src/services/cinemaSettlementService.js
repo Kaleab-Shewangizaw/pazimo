@@ -3,6 +3,7 @@ const CinemaShowtime = require("../models/CinemaShowtime");
 const cinemaTicketService = require("./cinemaTicketService");
 const cinemaBeverageSalesService = require("./cinemaBeverageSalesService");
 const seatService = require("./cinemaSeatService");
+const notificationService = require("./cinemaNotificationService");
 
 // Turning a paid cinema order into tickets and snacks.
 //
@@ -136,6 +137,29 @@ const settleCinemaOrder = async ({ order, reference, customer, customerName, cus
   // must not stay locked for the rest of the screening because one line failed.
   // Confirmed seats are already "sold" and are not touched by this.
   await seatService.releaseHolds(reference).catch(() => {});
+
+  // Tell the customer, once the tickets actually exist.
+  //
+  // Deliberately after everything above and deliberately not awaited for
+  // correctness: the tickets are already readable from the order page and from
+  // /ticket/{id}, so a slow SMS gateway must not hold the webhook open and a
+  // failed send must never look like a failed sale. One message per order.
+  if (tickets.length) {
+    notificationService
+      .sendCinemaOrderConfirmation({
+        tickets,
+        concessions,
+        reference,
+        customerName,
+        customerPhone,
+        customerEmail,
+      })
+      .catch((error) =>
+        console.error(
+          `[CINEMA-SETTLE] confirmation failed for ${reference}: ${error.message}`
+        )
+      );
+  }
 
   return {
     tickets,

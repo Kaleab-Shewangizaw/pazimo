@@ -93,6 +93,13 @@ router.post(
   optionalAuth,
   checkoutController.startCheckout
 );
+// Give the seats back the moment a customer walks away, rather than making the
+// next buyer wait out the ten-minute hold.
+router.post(
+  "/public/checkout/:transactionId/cancel",
+  cinemaCheckoutLimiter,
+  checkoutController.cancelCheckout
+);
 router.get("/public/orders/:transactionId", optionalAuth, checkoutController.getOrder);
 
 router.get("/public/tickets/:ticketId", optionalAuth, ticketController.getPublicTicket);

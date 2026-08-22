@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import {
   Armchair,
@@ -21,6 +22,7 @@ import {
   fetchPublicConcessions,
   quoteCinemaBasket,
   startCinemaCheckout,
+  cancelCinemaCheckout,
   type CinemaBasket,
   type CinemaConcession,
   type ShowtimeSeatMap,
@@ -69,6 +71,7 @@ export default function BookingFlow({
   // checkout reads. Hardcoding one here is what made cinema checkout the only
   // surface still calling SantimPay when it was unavailable, and the customer
   // saw a 500 rather than the other provider.
+  const { user } = useAuthStore();
   const [provider, setProvider] = useState<"SANTIM" | "CHAPA">("SANTIM");
   const [method, setMethod] = useState("");
 
@@ -164,6 +167,15 @@ export default function BookingFlow({
     setMethod(provider === "CHAPA" ? "telebirr" : "Telebirr");
   }, [provider]);
 
+  // Seed the paying number from the account as a starting point, not a lock:
+  // the phone that approves the payment is often not the account's number, so
+  // it stays editable and is only filled while still blank.
+  useEffect(() => {
+    if (user?.phoneNumber) {
+      setDetails((d) => (d.phone ? d : { ...d, phone: user.phoneNumber || "" }));
+    }
+  }, [user]);
+
   const toggleSeat = (seatKey: string, status: string) => {
     if (status !== "available") return;
     setSelected((current) =>
@@ -178,6 +190,24 @@ export default function BookingFlow({
   const setSnackQty = (id: string, next: number, max: number | null) => {
     const ceiling = max === null ? 20 : Math.min(max, 20);
     setSnacks((current) => ({ ...current, [id]: Math.max(0, Math.min(next, ceiling)) }));
+  };
+
+  // A started order that the customer walks away from.
+  //
+  // startCheckout locks the seats before calling the provider, so backing out
+  // of the pay step without this leaves them locked for the full ten minutes.
+  // Cleared on success too, so a paid order is never cancelled.
+  const [startedRef, setStartedRef] = useState<string | null>(null);
+
+  const abandonIfStarted = async () => {
+    if (!startedRef) return;
+    const ref = startedRef;
+    setStartedRef(null);
+    await cancelCinemaCheckout(ref).catch(() => {});
+    // The picker has to be refetched: those seats are free again, and showing
+    // them as still selected would be a lie.
+    fetchShowtimeSeats(showtimeId).then(setSeatMap).catch(() => {});
+    setSelected([]);
   };
 
   const pay = async () => {
@@ -196,18 +226,30 @@ export default function BookingFlow({
         seats: selected,
         concessions: snackLines,
         phoneNumber: details.phone.trim(),
-        customerName: details.name.trim() || undefined,
-        customerEmail: details.email.trim() || undefined,
+        // A signed-in customer's name and email come from the account rather
+        // than from fields they were not shown.
+        customerName:
+          (user
+            ? [user.firstName, user.lastName].filter(Boolean).join(" ")
+            : details.name.trim()) || undefined,
+        customerEmail: (user ? user.email : details.email.trim()) || undefined,
         method,
       });
       // Cards go to a hosted page; mobile money does not. A direct charge puts
       // the prompt on the customer's phone and never leaves the site, so
       // redirecting them to a checkout page for a charge they have already been
       // asked to approve is the wrong thing to do.
+      // Remembered only long enough for the Back button to release it. Cleared
+      // the moment we hand off to a provider, because from then on the order is
+      // in flight and cancelling it would strand a payment in progress.
+      setStartedRef(result.transactionId);
+
       if (result.action === "redirect" && result.checkoutUrl) {
+        setStartedRef(null);
         window.location.href = result.checkoutUrl;
         return;
       }
+      setStartedRef(null);
       toast.success("Approve the payment on your phone");
       window.location.href = `/cinema/order/${result.transactionId}`;
     } catch (error) {
@@ -470,32 +512,60 @@ export default function BookingFlow({
       {/* --- pay ------------------------------------------------------------ */}
       {step === "pay" && (
         <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <Label className="text-xs">Name</Label>
-              <Input
-                value={details.name}
-                onChange={(e) => setDetails({ ...details, name: e.target.value })}
-                placeholder="Your name"
-              />
+          {/* A signed-in customer is only asked for the paying number.
+              Their name and email are already known, and re-asking implies we
+              might send the ticket somewhere other than their account — which
+              we do not. The paying number still has to be asked for: it is the
+              wallet being charged, and it is often not the account's number. */}
+          {user ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
+                <span className="text-muted-foreground">Booking as</span>
+                <span className="font-medium">
+                  {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.email}
+                </span>
+              </div>
+              <div>
+                <Label className="text-xs">Phone to pay from</Label>
+                <Input
+                  value={details.phone}
+                  onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+                  placeholder="09…"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The number that will approve the payment. Your ticket goes to your
+                  account either way.
+                </p>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Phone (for payment)</Label>
-              <Input
-                value={details.phone}
-                onChange={(e) => setDetails({ ...details, phone: e.target.value })}
-                placeholder="09…"
-              />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label className="text-xs">Name</Label>
+                <Input
+                  value={details.name}
+                  onChange={(e) => setDetails({ ...details, name: e.target.value })}
+                  placeholder="Your name"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Phone (for payment)</Label>
+                <Input
+                  value={details.phone}
+                  onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+                  placeholder="09…"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Email (optional)</Label>
+                <Input
+                  value={details.email}
+                  onChange={(e) => setDetails({ ...details, email: e.target.value })}
+                  placeholder="you@example.com"
+                />
+              </div>
             </div>
-            <div>
-              <Label className="text-xs">Email (optional)</Label>
-              <Input
-                value={details.email}
-                onChange={(e) => setDetails({ ...details, email: e.target.value })}
-                placeholder="you@example.com"
-              />
-            </div>
-          </div>
+          )}
 
           {/* The same selector the event checkout uses, so the two flows offer
               the same methods and disable the same ones for a given number —
@@ -542,7 +612,13 @@ export default function BookingFlow({
           </p>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setStep(concessions.length ? "snacks" : "seats")}>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                await abandonIfStarted();
+                setStep(concessions.length ? "snacks" : "seats");
+              }}
+            >
               Back
             </Button>
             <Button

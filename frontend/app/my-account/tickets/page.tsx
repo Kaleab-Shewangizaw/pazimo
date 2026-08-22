@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { Event, TicketType } from "@/types/event";
 import { downloadTicketQr, ticketQrUrl } from "@/lib/ticketQr";
+import MyCinemaTickets from "@/components/cinemas/my-cinema-tickets";
 
 export default function TicketsPage() {
   const [visibleTickets, setVisibleTickets] = useState(2);
@@ -458,6 +459,11 @@ export default function TicketsPage() {
           Used Tickets
         </button>
       </div>
+
+      {/* Cinema tickets first and separate: a seat at a screening is a different
+          thing from an event ticket admitting a count, and the grouping below
+          has nothing to say about it. Renders nothing when there are none. */}
+      <MyCinemaTickets />
 
       {loading ? (
         <p className="text-center text-gray-500 mt-10">Loading tickets...</p>

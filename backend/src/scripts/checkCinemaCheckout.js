@@ -108,7 +108,7 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
 
   console.log('\n--- settlement ---');
   const result=await settle.settleCinemaOrder({order,reference:'order-1',
-    customerName:'Test Buyer',customerPhone:'0911',customerEmail:'t@x.com'});
+    customerName:'Test Buyer',customerPhone:'+14155550100',customerEmail:''});
   check('two tickets issued, one per seat', result.tickets.length===2, result.tickets.length);
   check('no failures', result.failedTickets.length===0 && result.failedConcessions.length===0,
         JSON.stringify([result.failedTickets,result.failedConcessions]));
@@ -274,6 +274,42 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   } catch (e) { crossErr = e; }
   check('another cinema cannot collect this order', !!crossErr && /not on this order/.test(crossErr.message),
     crossErr && crossErr.message);
+
+  console.log('\n--- cancelling releases the seats immediately ---');
+  const Payment = require("../models/Payment");
+  const { cancelCheckout } = require("../controllers/cinemaCheckoutController");
+
+  const cancelRef = 'cancel-me';
+  const cancelOrder = await checkout.startCheckout({
+    showtimeId: st._id, seatKeys: ['K-2'], reference: cancelRef });
+  await Payment.create({ transactionId: cancelRef, status: 'PENDING', salesContext: 'CINEMA',
+    provider: 'chapa', price: cancelOrder.total, currency: cancelOrder.currency });
+  check('seat is held while paying',
+    (await CinemaSeatHold.countDocuments({ reference: cancelRef, status: 'held' })) === 1);
+
+  const res = { _c: 200, status(c) { this._c = c; return this; }, json(b) { this.body = b; return this; } };
+  await cancelCheckout({ params: { transactionId: cancelRef } }, res);
+  check('cancel succeeds', res.body?.success === true, JSON.stringify(res.body));
+  check('the seat is free again, without waiting for the hold to expire',
+    (await CinemaSeatHold.countDocuments({ reference: cancelRef })) === 0);
+  check('the order is marked cancelled',
+    (await Payment.findOne({ transactionId: cancelRef })).status === 'CANCELLED');
+
+  // The same seat must be immediately bookable by the next customer.
+  let rebook = null;
+  try { rebook = await checkout.startCheckout({ showtimeId: st._id, seatKeys: ['K-2'], reference: 'next-buyer' }); } catch (e) { rebook = null; }
+  check('the next customer can take that seat right away', !!rebook);
+  await seats.releaseHolds('next-buyer');
+
+  // A paid order must never be cancellable this way — that is a refund, which
+  // returns money as well as a seat.
+  await Payment.create({ transactionId: 'paid-order-x', status: 'PAID', salesContext: 'CINEMA',
+    provider: 'chapa', price: 100, currency: 'ETB' });
+  const paidRes = { _c: 200, status(c) { this._c = c; return this; }, json(b) { this.body = b; return this; } };
+  await cancelCheckout({ params: { transactionId: 'paid-order-x' } }, paidRes);
+  check('a PAID order cannot be cancelled from the page',
+    paidRes.body?.success === false && /already been paid/.test(paidRes.body?.message || ''),
+    JSON.stringify(paidRes.body));
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await m.connection.dropDatabase(); await m.disconnect();

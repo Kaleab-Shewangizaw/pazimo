@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckCircle2, Clock, Loader2, Popcorn, Ticket, XCircle } from "lucide-react";
-import { fetchCinemaOrder, verifyPaymentStatus } from "@/lib/cinema-api";
+import {
+  cancelCinemaCheckout,
+  fetchCinemaOrder,
+  verifyPaymentStatus,
+} from "@/lib/cinema-api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -37,6 +41,7 @@ export default function CinemaOrderPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [waited, setWaited] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -145,9 +150,30 @@ export default function CinemaOrderPage() {
             keep this reference and refresh in a moment —{" "}
             <span className="font-mono text-xs">{order.transactionId}</span>
           </p>
-          <Button className="mt-6" onClick={() => window.location.reload()}>
-            Check again
-          </Button>
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <Button onClick={() => window.location.reload()}>Check again</Button>
+            {/* The way out. Without it the only way to free the seats is to
+                wait out the hold, and the customer has no idea that is what
+                they are waiting for. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={cancelling}
+              onClick={async () => {
+                setCancelling(true);
+                try {
+                  await cancelCinemaCheckout(transactionId);
+                  await load();
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setCancelling(false);
+                }
+              }}
+            >
+              {cancelling ? "Releasing…" : "Cancel and release my seats"}
+            </Button>
+          </div>
         </div>
       ) : settled ? (
         <div className="mb-8 text-center">

@@ -484,6 +484,63 @@ const settleCinemaPayment = async (payment) => {
 };
 
 /**
+ * Give up on an order and hand the seats straight back.
+ *
+ * WHY THIS EXISTS
+ *
+ * Seats are locked when a customer reaches the payment step and released by a
+ * TTL ten minutes later. That TTL is the safety net for a browser closed
+ * mid-payment — it is not an acceptable answer for someone who pressed Back,
+ * because on a busy screening it means ten minutes where the best seats in the
+ * house are unbuyable and nothing on the page explains why.
+ *
+ * Deliberately public and unauthenticated, like the rest of the checkout: a
+ * guest has no account, and the transaction id is the only thing tying them to
+ * the order. That id is a v4 UUID, so it is not guessable — but the real guard
+ * is below: a PAID order is never cancelled here, so the worst a leaked id can
+ * do is release seats nobody has paid for yet, which the TTL was about to do
+ * anyway.
+ */
+const cancelCheckout = async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const payment = await Payment.findOne({
+      transactionId,
+      salesContext: "CINEMA",
+    });
+    if (!payment) throw new NotFoundError("Order not found");
+
+    // A paid order is not cancellable by walking back to the page. The money
+    // moved; releasing the chair now would resell a seat someone owns, and
+    // undoing a settled sale is a refund, which returns money as well as a seat.
+    if (payment.status === "PAID") {
+      throw new BadRequestError(
+        "This order has already been paid for. Contact the cinema for a refund."
+      );
+    }
+
+    const released = await seatService.releaseHolds(transactionId);
+
+    // Only a still-pending payment is marked cancelled. One that already
+    // FAILED keeps that status: how it ended is more informative than the fact
+    // that someone later looked at it.
+    if (payment.status === "PENDING") {
+      payment.status = "CANCELLED";
+      await payment.save();
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: { transactionId, released, status: payment.status },
+    });
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error cancelling cinema checkout:", error);
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * Everything one paid order produced — the tickets and the snacks.
  *
  * This is what the success page reads. Keyed by transaction id rather than by
@@ -552,6 +609,7 @@ module.exports = {
   getShowtimeSeats,
   quoteCheckout,
   startCheckout,
+  cancelCheckout,
   settleCinemaPayment,
   getOrder,
 };
