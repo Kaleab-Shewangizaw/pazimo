@@ -2,6 +2,7 @@ const { StatusCodes } = require("http-status-codes");
 const CinemaTicket = require("../models/CinemaTicket");
 const CinemaShowtime = require("../models/CinemaShowtime");
 const cinemaTicketService = require("../services/cinemaTicketService");
+const cinemaBeverageSalesService = require("../services/cinemaBeverageSalesService");
 const { renderQrSvg, renderQrPng } = require("../utils/qrRenderer");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { resolveCinema } = require("../utils/cinemaAccess");
@@ -236,7 +237,30 @@ const checkIn = async (req, res) => {
       checkedInBy: req.user.userId,
     });
 
-    res.status(StatusCodes.OK).json({ success: true, data: ticket });
+    // Anything pre-bought on the same order, returned with the admission.
+    //
+    // The door is where the customer physically is, and it is the one moment
+    // staff have their order in front of them — asking them to look it up again
+    // at the counter is how pre-bought popcorn quietly never gets collected.
+    // Best effort: a failure here must not stop someone being let in.
+    let outstandingConcessions = [];
+    try {
+      outstandingConcessions =
+        await cinemaBeverageSalesService.listOutstandingForOrder({
+          paymentReference: ticket.paymentReference,
+          cinemaId: cinema._id,
+        });
+    } catch (error) {
+      console.error(
+        `[CINEMA] could not read pre-bought items for ${ticket.paymentReference}: ${error.message}`
+      );
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: ticket,
+      outstandingConcessions,
+    });
   } catch (error) {
     console.error("Error checking in cinema ticket:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;

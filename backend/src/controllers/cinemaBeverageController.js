@@ -377,6 +377,45 @@ const getSalesSummary = async (req, res) => {
   }
 };
 
+/**
+ * Mark a pre-bought item handed over.
+ *
+ * Cinema staff, not admin: this is a counter action performed while the
+ * customer is standing there, and routing it through an admin would make
+ * collecting popcorn slower than buying it.
+ */
+const redeemSale = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    const sale = await cinemaBeverageSalesService.redeemSale({
+      saleId: req.params.saleId,
+      cinemaId: cinema._id,
+      redeemedBy: req.user.userId,
+    });
+    res.status(StatusCodes.OK).json({ success: true, data: sale });
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error redeeming concession:", error);
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/** What one order still owes a customer at the counter. */
+const listOutstandingForOrder = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    const items = await cinemaBeverageSalesService.listOutstandingForOrder({
+      paymentReference: req.params.reference,
+      cinemaId: cinema._id,
+    });
+    res.status(StatusCodes.OK).json({ success: true, data: items });
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error listing outstanding concessions:", error);
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 /** Admin-only: reverse a sale and return the stock. */
 const refundSale = async (req, res) => {
   try {
@@ -439,6 +478,8 @@ module.exports = {
   recordSale,
   listSales,
   getSalesSummary,
+  redeemSale,
+  listOutstandingForOrder,
   refundSale,
   listPublicLineup,
 };

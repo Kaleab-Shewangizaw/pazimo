@@ -168,6 +168,22 @@ const CinemaBeverageSaleSchema = new mongoose.Schema(
       sparse: true,
     },
 
+    // --- Collection at the counter -----------------------------------------
+    //
+    // A sale made AT the counter is handed over as it is rung up, so it needs no
+    // record of collection. A sale bought online is a promise: the customer has
+    // paid, and at some later point walks up and asks for it. Without a record
+    // of that handover there is nothing to stop the same popcorn being claimed
+    // twice, and no way for staff to know whether an order is outstanding.
+    //
+    // Absent on counter sales by design — see `needsRedemption` below, which is
+    // what every reader should ask rather than testing these fields directly.
+    redeemedAt: Date,
+    redeemedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
     soldAt: {
       type: Date,
       default: Date.now,
@@ -175,6 +191,29 @@ const CinemaBeverageSaleSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+/**
+ * "Still owed to a customer", as a query filter.
+ *
+ * ONE definition, because "is there popcorn to hand over" is asked by the
+ * scanner, the order page and the counter list, and three spellings of it would
+ * eventually disagree about whether a refunded line still needs collecting.
+ *
+ * Shaped as a filter rather than a virtual because almost every read of this
+ * collection is `.lean()`, and a virtual silently evaluates to undefined on a
+ * lean document — the failure mode being that every line reads as "already
+ * collected". `redeemedAt: null` matches an absent field as well as an explicit
+ * null, so rows written before redemption existed are correctly outstanding.
+ */
+CinemaBeverageSaleSchema.statics.OUTSTANDING = {
+  channel: "online",
+  status: "confirmed",
+  redeemedAt: null,
+};
+
+/** The same question about one already-loaded row, lean or not. */
+CinemaBeverageSaleSchema.statics.isOutstanding = (sale) =>
+  sale?.channel === "online" && sale?.status === "confirmed" && !sale?.redeemedAt;
 
 // Dashboards read by cinema, by product and by screening, newest-first, almost
 // always filtered to confirmed sales.

@@ -5,14 +5,28 @@ import { Scanner } from "@yudiel/react-qr-scanner";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, XCircle, ScanLine } from "lucide-react";
+import { CheckCircle2, XCircle, ScanLine, Popcorn } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+/** A pre-bought item this order has not collected yet. */
+type OwedItem = {
+  _id: string;
+  beverageName: string;
+  beverageCategory?: string;
+  quantity: number;
+  totalAmount: number;
+};
 
 type Outcome = {
   kind: "ok" | "error";
   title: string;
   detail: string;
+  // Anything the customer paid for online and has not picked up. Shown at the
+  // door because that is the one moment staff have the order in front of them —
+  // sending them to look it up at the counter is how pre-bought popcorn quietly
+  // never gets collected.
+  owed?: OwedItem[];
 } | null;
 
 /**
@@ -63,10 +77,39 @@ export default function CinemaScanner() {
   const { token } = useAuthStore();
   const [outcome, setOutcome] = useState<Outcome>(null);
   const [manual, setManual] = useState("");
+  const [collecting, setCollecting] = useState<string | null>(null);
+  const [collectError, setCollectError] = useState<string | null>(null);
   // A ref rather than state: the camera fires many frames per second and state
   // would not have committed before the next one arrived, so the same ticket
   // would be submitted several times.
   const busyRef = useRef(false);
+
+  // Hand one pre-bought item over. Removed from the list on success so the
+  // panel always shows what is still owed rather than what was ordered.
+  const collect = async (item: OwedItem) => {
+    setCollecting(item._id);
+    try {
+      const res = await fetch(
+        `${API_URL}/api/cinemas/me/concession-sales/${item._id}/redeem`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.success === false) {
+        // The server's message is specific on purpose ("Already collected
+        // at 19:42"), which is what settles a dispute at the counter.
+        setCollectError(data?.message || "Could not mark that collected.");
+        return;
+      }
+      setCollectError(null);
+      setOutcome((prev) =>
+        prev ? { ...prev, owed: (prev.owed || []).filter((o) => o._id !== item._id) } : prev
+      );
+    } catch {
+      setCollectError("Could not reach Pazimo.");
+    } finally {
+      setCollecting(null);
+    }
+  };
 
   const admit = async (code: string) => {
     if (!code || busyRef.current) return;
@@ -89,9 +132,10 @@ export default function CinemaScanner() {
         setOutcome({
           kind: "ok",
           title: "Admitted",
-          detail: `${t.movieTitle} · ${t.ticketType} × ${t.quantity}${
-            t.hallName ? ` · ${t.hallName}` : ""
-          }`,
+          detail: `${t.movieTitle} · ${t.ticketType}${
+            t.seat?.row ? ` · Row ${t.seat.row} seat ${t.seat.number}` : ` × ${t.quantity}`
+          }${t.hallName ? ` · ${t.hallName}` : ""}`,
+          owed: data.outstandingConcessions || [],
         });
       }
     } catch {
@@ -168,9 +212,44 @@ export default function CinemaScanner() {
               ) : (
                 <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-400" />
               )}
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold">{outcome.title}</p>
                 <p className="mt-0.5 text-sm text-white/80">{outcome.detail}</p>
+
+                {/* Pre-bought items on the same order. One tap each, because
+                    a customer may collect a drink now and popcorn later. */}
+                {outcome.kind === "ok" && (outcome.owed?.length ?? 0) > 0 && (
+                  <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-950/60 p-3">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-300">
+                      <Popcorn className="h-3.5 w-3.5" />
+                      Paid for, not collected
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {outcome.owed!.map((item) => (
+                        <div key={item._id} className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-sm text-white/90">
+                            {item.quantity} × {item.beverageName}
+                          </span>
+                          <Button
+                            size="sm"
+                            onClick={() => collect(item)}
+                            disabled={collecting === item._id}
+                            className="h-7 shrink-0 bg-amber-500 px-2 text-xs text-black hover:bg-amber-400"
+                          >
+                            {collecting === item._id ? "…" : "Handed over"}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    {collectError && (
+                      <p className="mt-2 text-xs text-red-300">{collectError}</p>
+                    )}
+                  </div>
+                )}
+
+                {outcome.kind === "ok" && outcome.owed && outcome.owed.length === 0 && (
+                  <p className="mt-2 text-xs text-white/50">Nothing to collect.</p>
+                )}
               </div>
             </div>
           </div>

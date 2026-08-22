@@ -187,4 +187,78 @@ const refundSale = async (saleId, { adminId, reason } = {}) => {
   return sale;
 };
 
-module.exports = { recordSale, refundSale };
+/**
+ * What a customer has paid for online and not yet collected, for one order.
+ *
+ * Keyed by the payment reference rather than by ticket, because one order can
+ * carry several tickets and a single popcorn — collection belongs to the order,
+ * not to whichever ticket staff happened to scan.
+ */
+const listOutstandingForOrder = async ({ paymentReference, cinemaId }) => {
+  if (!paymentReference) return [];
+  return CinemaBeverageSale.find({
+    paymentReference,
+    ...(cinemaId ? { cinema: cinemaId } : {}),
+    ...CinemaBeverageSale.OUTSTANDING,
+  })
+    .select("referenceNumber beverageName beverageCategory quantity unitPrice totalAmount soldAt")
+    .lean();
+};
+
+/**
+ * Hand a pre-bought item over.
+ *
+ * The guard is a single findOneAndUpdate matching OUTSTANDING: the "has this
+ * already been collected?" check and the write happen in one operation, so two
+ * staff scanning the same order at two tills cannot both hand over the same
+ * popcorn. A read-then-write here would do exactly that, and this is the one
+ * moment where the whole point is that it happens once.
+ *
+ * Refusal is deliberately specific — "already collected at 19:42" is what lets
+ * staff resolve a dispute at the counter, where a generic failure would not.
+ */
+const redeemSale = async ({ saleId, cinemaId, redeemedBy }) => {
+  if (!mongoose.Types.ObjectId.isValid(saleId)) {
+    throw new NotFoundError("That item is not on this order");
+  }
+
+  const redeemed = await CinemaBeverageSale.findOneAndUpdate(
+    {
+      _id: saleId,
+      // Scoped in the query, so a cinema cannot collect against another's sale
+      // even if a route is later mis-wired.
+      ...(cinemaId ? { cinema: cinemaId } : {}),
+      ...CinemaBeverageSale.OUTSTANDING,
+    },
+    { $set: { redeemedAt: new Date(), redeemedBy: redeemedBy || undefined } },
+    { new: true }
+  );
+
+  if (redeemed) return redeemed;
+
+  // Nothing matched. Say why, from the row's actual state.
+  const sale = await CinemaBeverageSale.findOne({
+    _id: saleId,
+    ...(cinemaId ? { cinema: cinemaId } : {}),
+  }).lean();
+
+  if (!sale) throw new NotFoundError("That item is not on this order");
+  if (sale.status === "refunded") {
+    throw new BadRequestError("That item was refunded and is not owed");
+  }
+  if (sale.channel !== "online") {
+    throw new BadRequestError(
+      "That was sold at the counter and was handed over at the time"
+    );
+  }
+  throw new BadRequestError(
+    `Already collected at ${sale.redeemedAt ? new Date(sale.redeemedAt).toLocaleString() : "an earlier time"}`
+  );
+};
+
+module.exports = {
+  recordSale,
+  refundSale,
+  listOutstandingForOrder,
+  redeemSale,
+};

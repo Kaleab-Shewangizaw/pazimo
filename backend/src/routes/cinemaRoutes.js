@@ -155,6 +155,18 @@ router.delete("/me/concessions/:itemId", ...cinemaSelf, beverageController.remov
 router.get("/me/concession-sales", ...cinemaSelf, beverageController.listSales);
 router.get("/me/concession-sales/summary", ...cinemaSelf, beverageController.getSalesSummary);
 router.post("/me/concession-sales", ...cinemaSelf, beverageController.recordSale);
+// Collection at the counter. A pre-bought item is a promise until someone hands
+// it over, and without a record of that the same popcorn can be claimed twice.
+router.get(
+  "/me/orders/:reference/concessions",
+  ...cinemaSelf,
+  beverageController.listOutstandingForOrder
+);
+router.post(
+  "/me/concession-sales/:saleId/redeem",
+  ...cinemaSelf,
+  beverageController.redeemSale
+);
 
 // Money
 router.get("/me/finance", ...cinemaSelf, financeController.getCinemaBalance);

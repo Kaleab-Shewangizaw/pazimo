@@ -233,6 +233,48 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   } catch (e) { resoldErr = e; }
   check('the refunded seat can be booked again', !!resold && !resoldErr, resoldErr && resoldErr.message);
 
+  console.log('\n--- collecting pre-bought snacks at the counter ---');
+  const bevSvc = require("../services/cinemaBeverageSalesService");
+  const CinemaBeverageSale = require("../models/CinemaBeverageSale");
+
+  // A fresh paid order carrying popcorn.
+  const order2 = await checkout.startCheckout({ showtimeId: st._id, seatKeys: ['A-3'],
+    concessions: [{ cinemaBeverage: String(pop._id), quantity: 2 }], reference: 'collect-me' });
+  await settle.settleCinemaOrder({ order: order2, reference: 'collect-me', customerName: 'Snacker' });
+
+  let owed = await bevSvc.listOutstandingForOrder({ paymentReference: 'collect-me', cinemaId: cinema._id });
+  check('the order shows one item owed at the counter', owed.length === 1 && owed[0].quantity === 2,
+    JSON.stringify(owed.map(o => ({ n: o.beverageName, q: o.quantity }))));
+
+  // Two tills scanning the same order at once must hand it over ONCE.
+  const saleId = (await CinemaBeverageSale.findOne({ paymentReference: 'collect-me' }))._id;
+  const both = await Promise.allSettled([
+    bevSvc.redeemSale({ saleId, cinemaId: cinema._id }),
+    bevSvc.redeemSale({ saleId, cinemaId: cinema._id }),
+  ]);
+  const handedOver = both.filter(r => r.status === 'fulfilled').length;
+  check('two tills collecting at once hand it over exactly once', handedOver === 1, handedOver + ' succeeded');
+  check('the loser is told when it was collected',
+    both.some(r => r.status === 'rejected' && /Already collected/.test(r.reason.message)),
+    JSON.stringify(both.filter(r=>r.status==='rejected').map(r=>r.reason.message)));
+
+  owed = await bevSvc.listOutstandingForOrder({ paymentReference: 'collect-me', cinemaId: cinema._id });
+  check('nothing outstanding once collected', owed.length === 0);
+
+  // A counter sale was handed over as it was rung up; it must never appear owed.
+  await bevSvc.recordSale({ cinemaBeverageId: pop._id, quantity: 1, channel: 'manual',
+    paymentReference: 'walk-up', cinemaId: cinema._id });
+  const counterOwed = await bevSvc.listOutstandingForOrder({ paymentReference: 'walk-up', cinemaId: cinema._id });
+  check('a counter sale is never owed at collection', counterOwed.length === 0);
+
+  // Another cinema must not be able to collect against this one's sale.
+  let crossErr = null;
+  try {
+    await bevSvc.redeemSale({ saleId, cinemaId: new m.Types.ObjectId() });
+  } catch (e) { crossErr = e; }
+  check('another cinema cannot collect this order', !!crossErr && /not on this order/.test(crossErr.message),
+    crossErr && crossErr.message);
+
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await m.connection.dropDatabase(); await m.disconnect();
   process.exit(fail?1:0);
