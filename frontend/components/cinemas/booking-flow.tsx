@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
 import {
   Armchair,
   Loader2,
@@ -62,6 +63,14 @@ export default function BookingFlow({
   const [quoting, setQuoting] = useState(false);
   const [paying, setPaying] = useState(false);
   const [details, setDetails] = useState({ name: "", phone: "", email: "" });
+  // Which provider the platform is on, and which method the customer picked.
+  //
+  // The provider is a PLATFORM setting read from the same endpoint the event
+  // checkout reads. Hardcoding one here is what made cinema checkout the only
+  // surface still calling SantimPay when it was unavailable, and the customer
+  // saw a 500 rather than the other provider.
+  const [provider, setProvider] = useState<"SANTIM" | "CHAPA">("SANTIM");
+  const [method, setMethod] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +140,30 @@ export default function BookingFlow({
     return () => clearTimeout(timer);
   }, [refreshQuote]);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/config/payment/active`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const active = data?.data?.activeProvider;
+        if (active === "CHAPA" || active === "SANTIM") setProvider(active);
+      })
+      // A failure here leaves the default. The server decides the provider
+      // anyway — this only picks which method list to show, so being wrong
+      // costs a re-pick, not a failed payment.
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // The method ids differ per provider ("Telebirr" vs "telebirr"), so a method
+  // chosen under one is meaningless under the other.
+  useEffect(() => {
+    setMethod(provider === "CHAPA" ? "telebirr" : "Telebirr");
+  }, [provider]);
+
   const toggleSeat = (seatKey: string, status: string) => {
     if (status !== "available") return;
     setSelected((current) =>
@@ -152,6 +185,10 @@ export default function BookingFlow({
       toast.error("A phone number is needed to pay");
       return;
     }
+    if (!method) {
+      toast.error("Choose how you want to pay");
+      return;
+    }
     setPaying(true);
     try {
       const result = await startCinemaCheckout({
@@ -161,6 +198,7 @@ export default function BookingFlow({
         phoneNumber: details.phone.trim(),
         customerName: details.name.trim() || undefined,
         customerEmail: details.email.trim() || undefined,
+        method,
       });
       if (result.checkoutUrl) {
         window.location.href = result.checkoutUrl;
@@ -457,6 +495,20 @@ export default function BookingFlow({
             </div>
           </div>
 
+          {/* The same selector the event checkout uses, so the two flows offer
+              the same methods and disable the same ones for a given number —
+              a Telebirr prompt on an 07 line simply never arrives. */}
+          <div>
+            <Label className="mb-2 block text-xs">How do you want to pay?</Label>
+            <PaymentMethodSelector
+              phoneNumber={details.phone}
+              selectedMethod={method}
+              onSelect={setMethod}
+              provider={provider}
+              currency={currency === "USD" ? "USD" : "ETB"}
+            />
+          </div>
+
           {basket && (
             <div className="space-y-1 rounded-lg border border-border p-4 text-sm">
               {basket.tickets.map((t) => (
@@ -494,7 +546,7 @@ export default function BookingFlow({
             <Button
               className="flex-1"
               size="lg"
-              disabled={paying || !basket || !details.phone.trim()}
+              disabled={paying || !basket || !details.phone.trim() || !method}
               onClick={pay}
             >
               {paying ? (

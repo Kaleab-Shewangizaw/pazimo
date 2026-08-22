@@ -530,12 +530,21 @@ export const startCinemaCheckout = (payload: {
   phoneNumber: string;
   customerName?: string;
   customerEmail?: string;
-  provider?: "santim" | "chapa";
-  paymentMethod?: string;
+  /**
+   * Which method the customer picked — "Telebirr", "CBEBirr", "mpesa", …
+   *
+   * Required by the server. The PROVIDER is not sent: that is a platform
+   * setting the server reads for itself, so a client cannot route a payment
+   * through a provider the platform has turned off.
+   */
+  method: string;
 }) =>
   publicPost<{
     transactionId: string;
     checkoutUrl: string | null;
+    // "chapa" redirects to checkoutUrl; "santim" pushes a prompt to the phone
+    // and the order page polls.
+    provider: "santim" | "chapa";
     total: number;
     currency: string;
     expiresAt: string | null;

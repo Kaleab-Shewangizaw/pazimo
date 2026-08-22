@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const { StatusCodes } = require("http-status-codes");
 const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
+const PaymentConfig = require("../models/PaymentConfig");
 const CinemaTicket = require("../models/CinemaTicket");
 const checkoutService = require("../services/cinemaCheckoutService");
 const settlementService = require("../services/cinemaSettlementService");
@@ -26,8 +27,78 @@ const { BadRequestError, NotFoundError } = require("../errors");
 // The price is decided here and nowhere else. A `total` arriving in a request
 // body is never read — see cinemaCheckoutService.
 
-const resolveWebhookBaseUrl = () =>
-  process.env.BACKEND_URL || "https://pazimoapp.testserveret.com";
+/**
+ * The base URL a payment provider can actually reach us on.
+ *
+ * Copied in behaviour from ticketRoutes rather than simplified: a webhook URL
+ * that resolves to localhost is accepted by the provider and then never called,
+ * so the payment succeeds and the order never settles — the worst possible
+ * failure, because the customer has paid.
+ */
+const resolveWebhookBaseUrl = (req) => {
+  const explicitPublicUrl =
+    process.env.CHAPA_WEBHOOK_BASE_URL || process.env.BACKEND_PUBLIC_URL;
+  if (explicitPublicUrl) return explicitPublicUrl.replace(/\/$/, "");
+
+  const configuredBackendUrl = process.env.BACKEND_URL;
+  if (configuredBackendUrl && !/localhost|127\.0\.0\.1/i.test(configuredBackendUrl)) {
+    return configuredBackendUrl.replace(/\/$/, "");
+  }
+
+  const forwardedHost = req?.headers?.["x-forwarded-host"];
+  if (forwardedHost && !/localhost|127\.0\.0\.1/i.test(forwardedHost)) {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+    return `${protocol}://${forwardedHost}`.replace(/\/$/, "");
+  }
+
+  return (process.env.BACKEND_URL || "http://localhost:5000").replace(/\/$/, "");
+};
+
+/**
+ * Turn whatever a payment provider threw into a sentence a customer can read.
+ *
+ * Chapa reports validation failures as an OBJECT keyed by field
+ * ({ email: ["validation.email"] }), and SantimPay as { reason }. Passing
+ * either straight through produces the literal string "[object Object]" on the
+ * checkout page — which is what this endpoint was doing, and which tells a
+ * customer nothing and a developer almost nothing.
+ */
+const describePaymentError = (error) => {
+  if (!error) return null;
+  if (typeof error === "string") return error;
+
+  // Candidates in order of usefulness. `error.message` is checked but NOT
+  // trusted: when Chapa's message is an object, `new Error(obj)` stringifies it
+  // to the literal "[object Object]", which is a non-empty string and would
+  // therefore win any ?? chain while carrying no information at all. Each
+  // candidate is judged on what it says, not on merely existing.
+  const candidates = [
+    error.message,
+    error.data?.message,
+    error.response?.data?.message,
+    error.reason,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string") {
+      const text = candidate.trim();
+      if (text && text !== "[object Object]") return text;
+      continue;
+    }
+    // { email: ["validation.email"], amount: [...] } -> "email: validation.email"
+    if (candidate && typeof candidate === "object") {
+      const parts = Object.entries(candidate).map(
+        ([field, detail]) =>
+          `${field}: ${Array.isArray(detail) ? detail.join(", ") : detail}`
+      );
+      if (parts.length) {
+        return `The payment provider rejected the request (${parts.join("; ")})`;
+      }
+    }
+  }
+
+  return null;
+};
 
 /** The seat map for a screening, with what is already taken. */
 const getShowtimeSeats = async (req, res) => {
@@ -89,7 +160,28 @@ const startCheckout = async (req, res) => {
       reference: transactionId,
     });
 
-    const provider = req.body.provider === "chapa" ? "chapa" : "santim";
+    // WHICH PROVIDER, decided the way the event checkout decides it.
+    //
+    // The platform picks one in Admin → Payment config; a cinema order must not
+    // hardcode a different one, or turning SantimPay off for maintenance would
+    // leave cinema checkout the only surface still calling it — which is exactly
+    // the "service is currently unavailable" failure this replaces.
+    //
+    // USD forces Chapa regardless: SantimPay settles Ethiopian mobile money and
+    // has no path for an international card.
+    const paymentConfig = await PaymentConfig.findOne();
+    const activeProvider =
+      order.currency === "USD" ? "CHAPA" : paymentConfig?.activeProvider || "SANTIM";
+    const provider = activeProvider === "CHAPA" ? "chapa" : "santim";
+
+    // WHICH METHOD the customer picked — Telebirr, CBE Birr, M-Pesa, a card.
+    // Required rather than defaulted: silently sending "Telebirr" for someone
+    // who chose M-Pesa produces a payment prompt on a wallet they do not have,
+    // and the failure looks like a platform outage rather than a wrong choice.
+    const method = String(req.body.method || "").trim();
+    if (!method) {
+      throw new BadRequestError("Choose how you want to pay");
+    }
 
     await Payment.create({
       transactionId,
@@ -116,31 +208,74 @@ const startCheckout = async (req, res) => {
       },
     });
 
-    const notifyUrl = `${resolveWebhookBaseUrl()}/api/payment/santimpay/webhook`;
+    const webhookBaseUrl = resolveWebhookBaseUrl(req);
+    const reason = `Cinema tickets — ${order.movieTitle || "screening"}`;
     let checkoutUrl = null;
 
     if (provider === "chapa") {
+      // Where the customer lands after paying. Their order — with every
+      // ticket's QR and the snacks to collect — rather than a generic success
+      // page, because the QR is the thing they came for.
+      const frontendUrl = (
+        process.env.FRONTEND_URL ||
+        req.body.origin ||
+        "http://localhost:3000"
+      ).replace(/\/$/, "");
+
+      // The payload Chapa actually accepts, shaped exactly as the event
+      // checkout shapes it. Each of these is a rejection Chapa returns as an
+      // opaque validation error rather than an explanation:
+      //   amount must be a STRING
+      //   phone_number must be 09…/07… — 10 digits, no +251, omitted entirely
+      //     for an international number rather than sent in a rejected format
+      //   customization.title is capped at 16 characters
+      //   email is required, so a guest checkout needs a stand-in
+      let chapaPhone = null;
+      if (phoneNumber) {
+        let stripped = String(phoneNumber).replace(/[\s+]/g, "");
+        if (stripped.startsWith("251")) stripped = `0${stripped.substring(3)}`;
+        if (stripped.startsWith("09") || stripped.startsWith("07")) {
+          chapaPhone = stripped;
+        }
+      }
+
+      const [firstName, ...restOfName] = String(customerName || "Cinema Guest")
+        .trim()
+        .split(/\s+/);
+
       const response = await ChapaService.initialize({
-        amount: order.total,
+        amount: String(order.total),
         currency: order.currency,
         tx_ref: transactionId,
-        email: customerEmail || undefined,
-        first_name: customerName || "Customer",
-        phone_number: phoneNumber,
-        callback_url: `${resolveWebhookBaseUrl()}/api/webhooks/chapa`,
+        email: customerEmail || "guest@example.com",
+        first_name: firstName || "Cinema",
+        last_name: restOfName.join(" ") || "Guest",
+        ...(chapaPhone && { phone_number: chapaPhone }),
+        callback_url: `${webhookBaseUrl}/api/webhooks/chapa`,
+        return_url: `${frontendUrl}/cinema/order/${transactionId}`,
+        customization: {
+          title: "Cinema tickets",
+          description: (order.movieTitle || "Screening").substring(0, 50),
+        },
       });
       checkoutUrl = response?.data?.checkout_url || null;
       if (!checkoutUrl) {
-        throw new BadRequestError(response?.message || "Payment could not be started");
+        throw new BadRequestError(
+          describePaymentError(response) || "Payment could not be started"
+        );
       }
     } else {
+      // The route SantimPay actually calls back on. This previously pointed at
+      // /api/payment/santimpay/webhook, which does not exist — a paid order
+      // would never have settled.
+      const notifyUrl = `${webhookBaseUrl}/api/webhook/santimpay`;
       await SantimPayService.directPayment(
         transactionId,
         order.total,
-        `Cinema tickets — ${order.movieTitle || "screening"}`,
+        reason,
         notifyUrl,
         phoneNumber,
-        req.body.paymentMethod || "Telebirr"
+        method
       );
     }
 
@@ -149,6 +284,9 @@ const startCheckout = async (req, res) => {
       data: {
         transactionId,
         checkoutUrl,
+        // So the client knows whether to redirect (Chapa) or to poll while the
+        // customer approves a prompt on their phone (SantimPay).
+        provider,
         total: order.total,
         currency: order.currency,
         // So the page can show a countdown rather than failing silently when
@@ -169,7 +307,18 @@ const startCheckout = async (req, res) => {
     }
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     if (status >= 500) console.error("Error starting cinema checkout:", error);
-    res.status(status).json({ success: false, message: error.message });
+
+    // A provider being unreachable is not the customer's fault and not a bug in
+    // their basket, so it reads as a payment problem they can retry rather than
+    // as a raw SDK object.
+    const described = describePaymentError(error);
+    res.status(status).json({
+      success: false,
+      message:
+        status >= 500
+          ? described || "Payment could not be started. Please try again."
+          : described || error.message,
+    });
   }
 };
 
@@ -250,6 +399,10 @@ const getOrder = async (req, res) => {
 };
 
 module.exports = {
+  // Exported for testing: turning provider errors into readable text is easy to
+  // get subtly wrong (see the "[object Object]" note above) and is worth
+  // asserting rather than eyeballing.
+  describePaymentError,
   getShowtimeSeats,
   quoteCheckout,
   startCheckout,
