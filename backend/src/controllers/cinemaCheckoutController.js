@@ -9,6 +9,7 @@ const settlementService = require("../services/cinemaSettlementService");
 const seatService = require("../services/cinemaSeatService");
 const SantimPayService = require("../services/santimPayService");
 const ChapaService = require("../services/chapaService");
+const ChapaGiftCardService = require("../services/chapaGiftCardService");
 const { BadRequestError, NotFoundError } = require("../errors");
 
 // Buying a cinema ticket online.
@@ -98,6 +99,48 @@ const describePaymentError = (error) => {
   }
 
   return null;
+};
+
+/**
+ * Map the method a customer picked onto what Chapa calls it.
+ *
+ * Two very different flows hide behind this:
+ *
+ *   MOBILE MONEY (telebirr, M-Pesa, CBE, Awash) is a DIRECT CHARGE. Chapa
+ *   pushes a prompt to the customer's phone and the browser never leaves the
+ *   site — so there is no URL to redirect to, and the page has to poll.
+ *
+ *   CARDS (Visa, Mastercard) need Chapa's hosted page, because card entry and
+ *   3-D Secure cannot happen on our form.
+ *
+ * Treating a mobile-money payment as a redirect leaves the customer staring at
+ * a checkout page for a charge already sitting on their phone — which is what
+ * this replaces.
+ */
+const resolveChapaMethod = (method) => {
+  const input = String(method || "").toLowerCase().trim();
+
+  if (input === "visa" || input === "mastercard" || input === "card") {
+    // Web checkout handles every card type, so it needs no specific type.
+    return { useWebCheckout: true, chapaType: null };
+  }
+  if (input === "mpesa") return { useWebCheckout: false, chapaType: "mpesa" };
+  if (input === "telebirr") return { useWebCheckout: false, chapaType: "telebirr" };
+  if (input.includes("cbe")) return { useWebCheckout: false, chapaType: "cbebirr" };
+  if (input.includes("awash")) return { useWebCheckout: false, chapaType: "awashbirr" };
+  if (input === "amole") return { useWebCheckout: false, chapaType: "Amole" };
+  if (input.includes("boa") || input.includes("abyssinia")) {
+    return { useWebCheckout: false, chapaType: "boa_ussd" };
+  }
+  // Same default the event checkout uses for an unrecognised method.
+  return { useWebCheckout: false, chapaType: "telebirr" };
+};
+
+/** Chapa wants 09…/07…, never +251… — used for both charge shapes. */
+const toEthiopianMobile = (phone) => {
+  let mobile = String(phone || "").replace(/[\s+]/g, "");
+  if (mobile.startsWith("251")) mobile = `0${mobile.substring(3)}`;
+  return mobile;
 };
 
 /** The seat map for a screening, with what is already taken. */
@@ -192,6 +235,10 @@ const startCheckout = async (req, res) => {
       guestName: customerName,
       contact: phoneNumber,
       paymentPhone: phoneNumber,
+      // Read by the status poller to tell a direct charge from a web checkout:
+      // a direct charge is not worth retrying inside one request, because Chapa
+      // cannot resolve a prompt sitting on someone's phone in under a second.
+      method,
       price: order.total,
       currency: order.currency,
       userId: req.user?.userId || undefined,
@@ -210,59 +257,114 @@ const startCheckout = async (req, res) => {
 
     const webhookBaseUrl = resolveWebhookBaseUrl(req);
     const reason = `Cinema tickets — ${order.movieTitle || "screening"}`;
+    // Null for a direct charge, which never leaves the site. Its presence is
+    // what tells the client to redirect rather than poll.
     let checkoutUrl = null;
+    // Set only when the payment is routed into a Chapa Link gift card — the
+    // poller verifies those through the Link reference rather than through
+    // Chapa's transaction API, so both have to be recorded on the Payment.
+    let giftCardLinkReference = null;
+    let giftCardNumber = null;
+    let settledProvider = provider;
 
     if (provider === "chapa") {
-      // Where the customer lands after paying. Their order — with every
+      const { useWebCheckout, chapaType } = resolveChapaMethod(method);
+      const chapaMobile = toEthiopianMobile(phoneNumber);
+
+      // Where the customer lands after a HOSTED payment. Their order — every
       // ticket's QR and the snacks to collect — rather than a generic success
-      // page, because the QR is the thing they came for.
+      // page, because the QR is what they came for. Unused by a direct charge,
+      // which never leaves the site.
       const frontendUrl = (
         process.env.FRONTEND_URL ||
         req.body.origin ||
         "http://localhost:3000"
       ).replace(/\/$/, "");
-
-      // The payload Chapa actually accepts, shaped exactly as the event
-      // checkout shapes it. Each of these is a rejection Chapa returns as an
-      // opaque validation error rather than an explanation:
-      //   amount must be a STRING
-      //   phone_number must be 09…/07… — 10 digits, no +251, omitted entirely
-      //     for an international number rather than sent in a rejected format
-      //   customization.title is capped at 16 characters
-      //   email is required, so a guest checkout needs a stand-in
-      let chapaPhone = null;
-      if (phoneNumber) {
-        let stripped = String(phoneNumber).replace(/[\s+]/g, "");
-        if (stripped.startsWith("251")) stripped = `0${stripped.substring(3)}`;
-        if (stripped.startsWith("09") || stripped.startsWith("07")) {
-          chapaPhone = stripped;
-        }
-      }
+      const returnUrl = `${frontendUrl}/cinema/order/${transactionId}`;
 
       const [firstName, ...restOfName] = String(customerName || "Cinema Guest")
         .trim()
         .split(/\s+/);
 
-      const response = await ChapaService.initialize({
+      // Each of these is a rejection Chapa returns as an opaque validation
+      // error rather than an explanation: amount must be a STRING, phone must
+      // be 09…/07…, title is capped at 16 characters, and email is required so
+      // a guest checkout needs a stand-in.
+      const common = {
         amount: String(order.total),
         currency: order.currency,
-        tx_ref: transactionId,
         email: customerEmail || "guest@example.com",
         first_name: firstName || "Cinema",
         last_name: restOfName.join(" ") || "Guest",
-        ...(chapaPhone && { phone_number: chapaPhone }),
+        tx_ref: transactionId,
         callback_url: `${webhookBaseUrl}/api/webhooks/chapa`,
-        return_url: `${frontendUrl}/cinema/order/${transactionId}`,
+        return_url: returnUrl,
         customization: {
           title: "Cinema tickets",
           description: (order.movieTitle || "Screening").substring(0, 50),
         },
-      });
-      checkoutUrl = response?.data?.checkout_url || null;
-      if (!checkoutUrl) {
+      };
+
+      // Gift-card routing, mirrored from the event checkout.
+      //
+      // When the platform is in gift-card mode, ticket money settles into a
+      // Chapa Link card rather than the merchant balance. Cinema MUST follow
+      // the same setting: if it did not, cinema takings would land somewhere
+      // else entirely and no reconciliation would balance.
+      const giftCardTarget = paymentConfig?.giftCardMode
+        ? paymentConfig.giftCardRouting?.[order.currency]
+        : null;
+
+      if (paymentConfig?.giftCardMode && !giftCardTarget) {
         throw new BadRequestError(
-          describePaymentError(response) || "Payment could not be started"
+          `Gift card routing is on but no ${order.currency} card is configured. Set one in Admin → Finance.`
         );
+      }
+
+      if (giftCardTarget) {
+        // The Link API works in cents.
+        const cents = Math.round(order.total * 100);
+        if (useWebCheckout) {
+          const result = await ChapaGiftCardService.topUpHosted({
+            card_number: giftCardTarget,
+            amount: cents,
+            merchant_reference: transactionId,
+          });
+          checkoutUrl = result?.checkout_url || null;
+          giftCardLinkReference = result?.link_reference || null;
+        } else {
+          const result = await ChapaGiftCardService.topUpDirectCharge({
+            card_number: giftCardTarget,
+            amount: cents,
+            phone_number: chapaMobile,
+            payment_method: chapaType,
+            merchant_reference: transactionId,
+          });
+          giftCardLinkReference = result?.link_reference || null;
+        }
+        // The poller verifies a gift-card payment through the Link reference,
+        // not through Chapa's transaction API, so the provider has to say so.
+        settledProvider = "chapa_giftcard";
+        giftCardNumber = giftCardTarget;
+      } else if (useWebCheckout) {
+        const response = await ChapaService.initialize({
+          ...common,
+          ...(/^0[79]/.test(chapaMobile) && { phone_number: chapaMobile }),
+        });
+        checkoutUrl = response?.data?.checkout_url || null;
+        if (!checkoutUrl) {
+          throw new BadRequestError(
+            describePaymentError(response) || "Payment could not be started"
+          );
+        }
+      } else {
+        // DIRECT CHARGE. Chapa pushes a prompt to the phone; nothing to
+        // redirect to, so checkoutUrl stays null and the client polls.
+        await ChapaService.directCharge({
+          ...common,
+          mobile: chapaMobile,
+          type: chapaType,
+        });
       }
     } else {
       // The route SantimPay actually calls back on. This previously pointed at
@@ -279,14 +381,41 @@ const startCheckout = async (req, res) => {
       );
     }
 
+    // Record what the payment actually became.
+    //
+    // The row is created PENDING before the provider is called, so a charge can
+    // never exist without a record of it. What the provider turns out to be —
+    // and, in gift-card mode, which card and which Link reference — is only
+    // known afterwards, and the poller needs all three to verify it.
+    if (
+      settledProvider !== provider ||
+      giftCardLinkReference ||
+      giftCardNumber
+    ) {
+      await Payment.updateOne(
+        { transactionId },
+        {
+          $set: {
+            provider: settledProvider,
+            ...(giftCardNumber && { giftCardNumber }),
+            ...(giftCardLinkReference && { giftCardLinkReference }),
+          },
+        }
+      );
+    }
+
     res.status(StatusCodes.CREATED).json({
       success: true,
       data: {
         transactionId,
         checkoutUrl,
-        // So the client knows whether to redirect (Chapa) or to poll while the
-        // customer approves a prompt on their phone (SantimPay).
-        provider,
+        provider: settledProvider,
+        // What the client should DO next, rather than making it infer that
+        // from the provider name and the presence of a URL.
+        //   "redirect" — send the customer to checkoutUrl (cards)
+        //   "prompt"   — a charge is on their phone; poll until it settles
+        //                (mobile money, and every SantimPay payment)
+        action: checkoutUrl ? "redirect" : "prompt",
         total: order.total,
         currency: order.currency,
         // So the page can show a countdown rather than failing silently when
@@ -369,6 +498,23 @@ const getOrder = async (req, res) => {
       salesContext: "CINEMA",
     }).lean();
     if (!payment) throw new NotFoundError("Order not found");
+
+    // A payment that will never settle should not go on holding chairs.
+    //
+    // The TTL would free them within ten minutes anyway, but on a busy screening
+    // ten minutes of dead locks on the best seats is real: nobody else can book
+    // them and nothing visibly explains why. Reading the failed order is the
+    // moment we know for certain, so it is the moment to let go.
+    //
+    // Only ever releases holds still marked `held` — a sold seat belongs to a
+    // paid customer and is not this function's to touch.
+    if (["FAILED", "CANCELLED"].includes(payment.status)) {
+      await seatService.releaseHolds(transactionId).catch((error) =>
+        console.error(
+          `[CINEMA] could not release seats for failed order ${transactionId}: ${error.message}`
+        )
+      );
+    }
 
     const tickets = await CinemaTicket.find({ paymentReference: transactionId })
       .populate("movie", "title poster")

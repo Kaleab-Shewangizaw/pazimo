@@ -542,14 +542,39 @@ export const startCinemaCheckout = (payload: {
   publicPost<{
     transactionId: string;
     checkoutUrl: string | null;
-    // "chapa" redirects to checkoutUrl; "santim" pushes a prompt to the phone
-    // and the order page polls.
-    provider: "santim" | "chapa";
+    provider: "santim" | "chapa" | "chapa_giftcard";
+    /**
+     * What to do next, stated by the server rather than inferred.
+     *
+     *   "redirect" — send the customer to checkoutUrl (card payments)
+     *   "prompt"   — a charge is already on their phone; go to the order page
+     *                and poll (mobile money, and every SantimPay payment)
+     */
+    action: "redirect" | "prompt";
     total: number;
     currency: string;
     expiresAt: string | null;
     seats: string[];
   }>("/api/cinemas/public/checkout", payload);
+
+/**
+ * Nudge the server to verify a pending payment with the provider.
+ *
+ * Settlement normally runs from the provider's webhook. This is the fallback
+ * for when that webhook is slow, blocked, or never sent — it verifies against
+ * Chapa or SantimPay and settles on success. Shared with the event checkout, so
+ * a cinema order is verified by exactly the code that has been settling event
+ * tickets in production.
+ *
+ * Deliberately untyped in its response and safe to ignore: the order read that
+ * follows it is what decides what the customer is shown.
+ */
+export const verifyPaymentStatus = async (transactionId: string) => {
+  const res = await fetch(
+    `${API_URL}/api/payments/status?txn=${encodeURIComponent(transactionId)}`
+  );
+  return res.json().catch(() => null);
+};
 
 /** Everything one paid order produced — tickets and snacks. */
 export const fetchCinemaOrder = (transactionId: string) =>

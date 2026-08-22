@@ -200,13 +200,15 @@ export default function BookingFlow({
         customerEmail: details.email.trim() || undefined,
         method,
       });
-      if (result.checkoutUrl) {
+      // Cards go to a hosted page; mobile money does not. A direct charge puts
+      // the prompt on the customer's phone and never leaves the site, so
+      // redirecting them to a checkout page for a charge they have already been
+      // asked to approve is the wrong thing to do.
+      if (result.action === "redirect" && result.checkoutUrl) {
         window.location.href = result.checkoutUrl;
         return;
       }
-      // SantimPay pushes to the phone rather than redirecting, so the customer
-      // is sent to the order page to wait for the webhook to land.
-      toast.success("Check your phone to approve the payment");
+      toast.success("Approve the payment on your phone");
       window.location.href = `/cinema/order/${result.transactionId}`;
     } catch (error) {
       toast.error((error as Error).message);
