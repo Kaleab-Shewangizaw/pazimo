@@ -122,7 +122,11 @@ export const movieToBannerEvent = (movie: FeaturedMovie) => ({
   endTime: "",
   location: movie.cinema?.city || movie.cinema?.name || "",
   venue: movie.cinema?.name || "",
+  // The wide crop behind the hero, and the upright one for the card over it.
+  // Each falls back to the other so a film with only one image still renders,
+  // but a film with both gets the crop each slot was designed for.
   image: posterUrl(movie.coverImage) || posterUrl(movie.poster) || "",
+  posterImage: posterUrl(movie.poster) || posterUrl(movie.coverImage) || "",
   price: movie.upcomingCount > 0 ? "Book now" : "Coming soon",
   rating: 0,
   attendees: 0,

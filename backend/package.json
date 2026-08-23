@@ -22,6 +22,8 @@
     "backfill:beverage-categories": "node src/scripts/backfillBeverageCategories.js",
     "check:seats": "node src/scripts/checkSeatSelection.js",
     "reconcile:seats": "node src/scripts/reconcileCinemaSeats.js",
+    "migrate:beverage-ownership": "node src/scripts/migrateBeverageOwnership.js",
+    "check:cinema-products": "node src/scripts/checkCinemaProducts.js",
     "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js",
     "clone:prod": "node src/scripts/cloneProductionDb.js"
   },

@@ -155,6 +155,26 @@ router.post("/me/check-in/:ticketId", ...cinemaSelf, ticketController.checkIn);
 
 // Concessions
 router.get("/me/concessions/catalog", ...cinemaSelf, beverageController.listSellableCatalog);
+// A cinema's OWN products — coke, pepsi, water, a brand of crisps nobody else
+// stocks. Owned by this cinema, invisible to every other, and still visible to
+// an admin, who can deactivate or block one.
+router.post(
+  "/me/concessions/products",
+  ...cinemaSelf,
+  upload.single("image"),
+  beverageController.createOwnProduct
+);
+router.patch(
+  "/me/concessions/products/:productId",
+  ...cinemaSelf,
+  upload.single("image"),
+  beverageController.updateOwnProduct
+);
+router.delete(
+  "/me/concessions/products/:productId",
+  ...cinemaSelf,
+  beverageController.removeOwnProduct
+);
 router.get("/me/concessions", ...cinemaSelf, beverageController.listLineup);
 router.post("/me/concessions", ...cinemaSelf, beverageController.addLineupItem);
 router.patch("/me/concessions/:itemId", ...cinemaSelf, beverageController.updateLineupItem);
@@ -235,6 +255,26 @@ router.get("/admin/:cinemaId/ticket-sales", ...adminOnly, ticketController.listT
 router.get("/admin/:cinemaId/ticket-sales/summary", ...adminOnly, ticketController.getTicketSummary);
 router.get("/admin/:cinemaId/concessions", ...adminOnly, beverageController.listLineup);
 router.get("/admin/:cinemaId/concessions/catalog", ...adminOnly, beverageController.listSellableCatalog);
+// Same handlers as the cinema routes above: they resolve the cinema from the
+// URL and apply that cinema's ownership, so an admin acting for a cinema cannot
+// create a product the cinema itself could not.
+router.post(
+  "/admin/:cinemaId/concessions/products",
+  ...adminOnly,
+  upload.single("image"),
+  beverageController.createOwnProduct
+);
+router.patch(
+  "/admin/:cinemaId/concessions/products/:productId",
+  ...adminOnly,
+  upload.single("image"),
+  beverageController.updateOwnProduct
+);
+router.delete(
+  "/admin/:cinemaId/concessions/products/:productId",
+  ...adminOnly,
+  beverageController.removeOwnProduct
+);
 router.post("/admin/:cinemaId/concessions", ...adminOnly, beverageController.addLineupItem);
 router.patch("/admin/:cinemaId/concessions/:itemId", ...adminOnly, beverageController.updateLineupItem);
 router.delete("/admin/:cinemaId/concessions/:itemId", ...adminOnly, beverageController.removeLineupItem);

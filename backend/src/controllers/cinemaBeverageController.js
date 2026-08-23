@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const mongoose = require("mongoose");
 const { StatusCodes } = require("http-status-codes");
 const Beverage = require("../models/Beverage");
@@ -17,6 +19,54 @@ const {
 // can only ever reach its own rows and an admin reaches the one named in the
 // URL. No handler takes a cinema id from a request body.
 
+// The same definitions beverageController uses for the platform catalogue.
+//
+// Duplicated rather than imported because beverageController does not export
+// them, and a cinema adding a product must be validated EXACTLY as an admin
+// adding one — a second, subtly different notion of "a valid colour" would show
+// up later as two products that look identical and behave differently.
+const normalizeText = (value) => {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const UPLOADS_DIR = path.join(__dirname, "../../uploads");
+
+const removeUploadedImage = (imagePath) => {
+  if (!imagePath || typeof imagePath !== "string") return;
+  const filename = path.basename(imagePath);
+  if (!filename || filename === "." || filename === "..") return;
+  fs.unlink(path.join(UPLOADS_DIR, filename), (error) => {
+    if (error && error.code !== "ENOENT") {
+      console.error("Failed to remove product image:", error.message);
+    }
+  });
+};
+
+// undefined for "not supplied", null for "explicitly cleared", so an update can
+// tell the two apart.
+const parseColor = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === "" || value === "null") return null;
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value.trim())) {
+    throw new BadRequestError("color must be a hex value like #1f7a3f");
+  }
+  return value.trim().toLowerCase();
+};
+
+// Rejected rather than silently defaulted: an operator who typed "snacks" needs
+// to be told, not have it filed as a drink and reported in the wrong group.
+const CATEGORIES = ["drink", "snack", "combo"];
+const parseCategory = (value) => {
+  if (value === undefined || value === null || value === "") return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (!CATEGORIES.includes(normalized)) {
+    throw new BadRequestError(`category must be one of: ${CATEGORIES.join(", ")}`);
+  }
+  return normalized;
+};
+
 const parseBoolean = (value, fallback) => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
@@ -31,9 +81,23 @@ const parseBoolean = (value, fallback) => {
 // The set of catalogue products a given cinema may sell. An empty deny list
 // means the whole active catalogue — see Cinema.blockedBeverages for why it is
 // a deny list rather than an allow list.
+/**
+ * What this cinema may put on its counter.
+ *
+ * The platform catalogue plus anything this cinema added itself, minus anything
+ * an admin has blocked for them. `ownerCinema: null` also matches rows written
+ * before ownership existed, which is what makes every legacy product platform-
+ * wide rather than invisible.
+ *
+ * Another cinema's own products are never in this list — not filtered out
+ * afterwards, but never selected, so no later edit can leak them.
+ */
 const sellableQuery = (cinema) => {
   const blocked = cinema?.blockedBeverages || [];
-  const query = { isActive: true };
+  const query = {
+    isActive: true,
+    $or: [{ ownerCinema: null }, { ownerCinema: cinema._id }],
+  };
   if (blocked.length > 0) query._id = { $nin: blocked };
   return query;
 };
@@ -52,7 +116,7 @@ const listSellableCatalog = async (req, res) => {
     if (category) query.category = category;
 
     const [catalog, lineup] = await Promise.all([
-      Beverage.find(query).select("name image color category").sort("name").lean(),
+      Beverage.find(query).select("name image color category ownerCinema").sort("name").lean(),
       CinemaBeverage.find({ cinema: cinema._id }).select("beverage").lean(),
     ]);
 
@@ -65,11 +129,178 @@ const listSellableCatalog = async (req, res) => {
         // Lets the picker grey out what is already in the line-up rather than
         // letting the unique index reject it after the fact.
         inLineup: alreadyListed.has(String(b._id)),
+        // Whether this cinema may edit or remove it. A platform product is the
+        // admin's; only what the cinema added is theirs to change.
+        isOwn: String(b.ownerCinema || "") === String(cinema._id),
       })),
     });
   } catch (error) {
     console.error("Error listing cinema catalogue:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Add a product this cinema sells that the platform catalogue does not have.
+ *
+ * Owned by the cinema, so it never appears in another cinema's picker and never
+ * touches the platform list. Admins still see it, can deactivate it, and can
+ * block it for this cinema — control without standing between an operator and
+ * their own till.
+ */
+const createOwnProduct = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    assertBeverageEligible(cinema, req);
+
+    const name = normalizeText(req.body.name);
+    if (!name) throw new BadRequestError("Give the product a name");
+
+    // Refused against everything this cinema can already SEE, not just what it
+    // owns. Letting a cinema add its own "Coke" while the platform already
+    // offers one would put two identical rows in their picker with no way to
+    // tell them apart.
+    const clash = await Beverage.findOne({
+      name,
+      $or: [{ ownerCinema: null }, { ownerCinema: cinema._id }],
+    })
+      .collation({ locale: "en", strength: 2 })
+      .lean();
+    if (clash) {
+      throw new BadRequestError(
+        clash.ownerCinema
+          ? `You already have a product called "${clash.name}"`
+          : `"${clash.name}" is already in the platform catalogue — add it from there`
+      );
+    }
+
+    const product = await Beverage.create({
+      name,
+      image: req.file ? `/uploads/${req.file.filename}` : null,
+      color: parseColor(req.body.color) ?? null,
+      category: parseCategory(req.body.category) ?? "drink",
+      isActive: true,
+      // From the resolved cinema, never the body — a cinema cannot create a
+      // product owned by someone else.
+      ownerCinema: cinema._id,
+      createdBy: req.user.userId,
+      updatedBy: req.user.userId,
+    });
+
+    res.status(StatusCodes.CREATED).json({ success: true, data: product });
+  } catch (error) {
+    if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
+    const normalized =
+      error?.code === 11000
+        ? new BadRequestError("You already have a product with that name")
+        : error;
+    const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error creating cinema product:", error);
+    res.status(status).json({ success: false, message: normalized.message });
+  }
+};
+
+/** Rename or restyle a product this cinema owns. */
+const updateOwnProduct = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    assertBeverageEligible(cinema, req);
+
+    // Ownership is part of the QUERY, so a platform product or another
+    // cinema's simply does not match — the check cannot be forgotten by a
+    // later edit to this handler.
+    const product = await Beverage.findOne({
+      _id: req.params.productId,
+      ownerCinema: cinema._id,
+    });
+    if (!product) {
+      throw new NotFoundError("That product is not one you added");
+    }
+
+    const name = normalizeText(req.body.name);
+    if (req.body.name !== undefined && !name) {
+      throw new BadRequestError("A product needs a name");
+    }
+    if (name) product.name = name;
+
+    const color = parseColor(req.body.color);
+    if (color !== undefined) product.color = color;
+
+    const category = parseCategory(req.body.category);
+    if (category !== undefined) product.category = category;
+
+    const previousImage = product.image;
+    if (req.file) product.image = `/uploads/${req.file.filename}`;
+
+    product.updatedBy = req.user.userId;
+    await product.save();
+
+    // Only once the save succeeded, so a failed rename does not delete the
+    // picture of a product that still exists.
+    if (req.file && previousImage) removeUploadedImage(previousImage);
+
+    res.status(StatusCodes.OK).json({ success: true, data: product });
+  } catch (error) {
+    if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
+    const normalized =
+      error?.code === 11000
+        ? new BadRequestError("You already have a product with that name")
+        : error;
+    const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error updating cinema product:", error);
+    res.status(status).json({ success: false, message: normalized.message });
+  }
+};
+
+/**
+ * Retire a product this cinema added.
+ *
+ * Deactivated rather than deleted when it has ever been sold: the sales ledger
+ * references it, and a deleted row would leave past revenue pointing at
+ * nothing. A product that never sold anything is genuinely removed, because
+ * keeping a typo around for ever helps nobody.
+ */
+const removeOwnProduct = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    assertBeverageEligible(cinema, req);
+
+    const product = await Beverage.findOne({
+      _id: req.params.productId,
+      ownerCinema: cinema._id,
+    });
+    if (!product) {
+      throw new NotFoundError("That product is not one you added");
+    }
+
+    const sold = await CinemaBeverageSale.countDocuments({
+      beverage: product._id,
+    });
+
+    if (sold > 0) {
+      product.isActive = false;
+      product.updatedBy = req.user.userId;
+      await product.save();
+      // The line-up row goes too, or the counter keeps offering it.
+      await CinemaBeverage.deleteOne({ cinema: cinema._id, beverage: product._id });
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        message: `${product.name} has been retired. Its ${sold} past sale${sold === 1 ? "" : "s"} stay in your records.`,
+      });
+    }
+
+    await CinemaBeverage.deleteOne({ cinema: cinema._id, beverage: product._id });
+    await Beverage.deleteOne({ _id: product._id });
+    if (product.image) removeUploadedImage(product.image);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: `${product.name} removed.`,
+    });
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error removing cinema product:", error);
     res.status(status).json({ success: false, message: error.message });
   }
 };
@@ -471,6 +702,9 @@ const listPublicLineup = async (req, res) => {
 
 module.exports = {
   listSellableCatalog,
+  createOwnProduct,
+  updateOwnProduct,
+  removeOwnProduct,
   listLineup,
   addLineupItem,
   updateLineupItem,

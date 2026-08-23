@@ -60,24 +60,58 @@ const BeverageSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Who this product belongs to.
+    //
+    // NULL means the platform catalogue — the admin-curated list every channel
+    // can sell from, and what every row created before this field existed is.
+    //
+    // Set to a cinema means the cinema added it themselves. A counter sells
+    // whatever it sells: Coke, Pepsi, water, a brand of crisps nobody else
+    // stocks. Making an operator wait for an admin to add each one would either
+    // stop them trading or push them into recording it as something it is not,
+    // and both are worse than letting them list it.
+    //
+    // It is still ADMIN-CONTROLLED, just not admin-gated: an admin sees every
+    // cinema-owned product, can deactivate one, and can block it for that cinema
+    // through the existing blockedBeverages list. What a cinema cannot do is
+    // reach into another cinema's products or into the platform catalogue —
+    // ownership is checked on every write.
+    ownerCinema: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Cinema",
+      default: null,
+      index: true,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin",
+      // Left unrefed: a platform product is created by an Admin and a
+      // cinema-owned one by a User, and those live in different collections.
     },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin",
     },
   },
   { timestamps: true }
 );
 
-// Case-insensitive uniqueness on name: "Heineken" and "heineken" must not both
-// exist, otherwise the organizer-facing picker shows apparent duplicates.
+// Case-insensitive uniqueness on name WITHIN AN OWNER: "Heineken" and
+// "heineken" must not both exist in the same catalogue, or the picker shows
+// apparent duplicates.
+//
+// Scoped by owner rather than global, because one cinema listing its own
+// "Popcorn" must not stop another cinema listing theirs — they are different
+// products at different prices that happen to share a word. Platform rows all
+// have ownerCinema null, so they keep exactly the global uniqueness they had.
+//
+// Replacing a global unique index is not something Mongoose does on its own:
+// see scripts/migrateBeverageOwnership.js.
 BeverageSchema.index(
-  { name: 1 },
+  { ownerCinema: 1, name: 1 },
   { unique: true, collation: { locale: "en", strength: 2 } }
 );
 BeverageSchema.index({ isActive: 1, name: 1 });
+// The catalogue read is "everything the platform offers plus everything this
+// cinema added", which is this index twice.
+BeverageSchema.index({ ownerCinema: 1, isActive: 1, name: 1 });
 
 module.exports = mongoose.model("Beverage", BeverageSchema);
