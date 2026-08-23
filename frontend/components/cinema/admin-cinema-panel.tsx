@@ -14,9 +14,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
 import AdminMovieCuration from "@/components/cinema/admin-movie-curation";
+import CinemaConcessionsGrant from "@/components/cinema/cinema-concessions-grant";
 import {
+  AlertTriangle,
   Clapperboard,
-  Film,
   Plus,
   Pencil,
   RefreshCw,
@@ -24,6 +25,7 @@ import {
   ShieldCheck,
   ShieldOff,
   Store,
+  Popcorn,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -49,6 +51,12 @@ interface CinemaRow {
   isActive: boolean;
   beverageEligibility: CinemaEligibility;
   eligibilityNotes?: string | null;
+  /**
+   * Catalogue products this cinema may sell. An ALLOW list: empty means it can
+   * sell nothing, which is why an empty one is called out as needing attention
+   * rather than read as "no restrictions".
+   */
+  allowedBeverages?: string[];
   ticketCommissionRate?: number;
   beverageCommissionRate?: number;
   coversCinemaVat?: boolean;
@@ -109,6 +117,8 @@ export default function AdminCinemaPanel() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // The cinema whose concession grants are being edited, or null.
+  const [granting, setGranting] = useState<CinemaRow | null>(null);
 
   const fetchCinemas = useCallback(async () => {
     if (!token) return;
@@ -281,81 +291,91 @@ export default function AdminCinemaPanel() {
     [cinemas]
   );
 
+  // What actually needs an admin's attention. Empty means nothing does.
+  //
+  // This replaces five equal-weight counters — total, active, suspended,
+  // eligible, average cut — which were true and useless: at any realistic
+  // number of cinemas an admin already knows the totals, and none of them said
+  // what to DO. Only the exceptions are worth the top of the page, and when
+  // there are none the strip disappears rather than announcing "0 problems".
+  const attention = useMemo(() => {
+    const items: { key: string; text: string }[] = [];
+    const suspended = cinemas.filter((c) => !c.isActive);
+    if (suspended.length) {
+      items.push({
+        key: "suspended",
+        text: `${suspended.length} ${suspended.length === 1 ? "cinema is" : "cinemas are"} suspended`,
+      });
+    }
+    // A cinema approved for concessions but granted nothing has a counter it
+    // cannot use — the exact trap an allow list sets, so it is called out.
+    const ungranted = cinemas.filter(
+      (c) => c.beverageEligibility === "eligible" && (c.allowedBeverages || []).length === 0
+    );
+    if (ungranted.length) {
+      items.push({
+        key: "ungranted",
+        text: `${ungranted.length} ${ungranted.length === 1 ? "cinema has" : "cinemas have"} no products granted and cannot sell concessions`,
+      });
+    }
+    return items;
+  }, [cinemas]);
+
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="dashboard" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[480px]">
-          <TabsTrigger value="dashboard">
-            <Film className="mr-1.5 h-4 w-4" /> Dashboard
-          </TabsTrigger>
+      <Tabs defaultValue="cinemas" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[320px]">
           <TabsTrigger value="cinemas">
             <Store className="mr-1.5 h-4 w-4" /> Cinemas
           </TabsTrigger>
           <TabsTrigger value="movies">
-            <Clapperboard className="mr-1.5 h-4 w-4" /> Movies
+            <Clapperboard className="mr-1.5 h-4 w-4" /> Films
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="dashboard" className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Cinemas</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.total}</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Active</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.active}</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Suspended</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.inactive}</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Concession eligible</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">{summary.eligible}</p>
-              </CardContent>
-            </Card>
-            <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
-              <CardContent className="p-5">
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Avg ticket cut</p>
-                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">{formatRate(summary.avgTicketRate)}</p>
-              </CardContent>
-            </Card>
+        <TabsContent value="cinemas" className="space-y-5">
+          {/* One honest line instead of five counters. It says the size of the
+              channel and the only exception worth stating up front. */}
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Cinemas
+              </h2>
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+                {summary.total === 0
+                  ? "No cinemas yet."
+                  : `${summary.total} ${summary.total === 1 ? "partner" : "partners"}` +
+                    (summary.inactive ? ` · ${summary.inactive} suspended` : "") +
+                    ` · avg cut ${formatRate(summary.avgTicketRate)} tickets, ${formatRate(summary.avgBeverageRate)} concessions`}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="outline" onClick={fetchCinemas}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+              </Button>
+              <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" /> Add cinema
+              </Button>
+            </div>
           </div>
 
-          <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
-            <CardContent className="grid gap-4 p-6 lg:grid-cols-[1.2fr_0.8fr]">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Cinema management</p>
-                <h2 className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">Cinema channel dashboard</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400">
-                  Manage cinema accounts, upload branding, switch activation, and control whether a cinema can sell
-                  concessions. Ticket and beverage commission rates are editable here as admin-controlled business
-                  settings.
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900/50">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Avg beverage cut</p>
-                  <p className="mt-2 text-xl font-semibold text-gray-900 dark:text-gray-100">{formatRate(summary.avgBeverageRate)}</p>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900/50">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Access</p>
-                  <p className="mt-2 text-xl font-semibold text-gray-900 dark:text-gray-100">Admin-managed</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+          {/* Only what needs doing, and gone entirely when nothing does. */}
+          {attention.length > 0 && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Needs attention
+              </p>
+              <ul className="mt-1.5 space-y-0.5">
+                {attention.map((item) => (
+                  <li key={item.key} className="text-sm text-amber-900 dark:text-amber-200">
+                    {item.text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-        <TabsContent value="cinemas" className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative w-full sm:w-80">
@@ -387,14 +407,6 @@ export default function AdminCinemaPanel() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={fetchCinemas}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Refresh
-              </Button>
-              <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={openCreate}>
-                <Plus className="mr-2 h-4 w-4" /> Add cinema
-              </Button>
-            </div>
           </div>
 
           <Card className="border border-gray-200 dark:border-gray-800 dark:bg-gray-950/50">
@@ -420,6 +432,7 @@ export default function AdminCinemaPanel() {
                         <th className="px-5 py-3">Status</th>
                         <th className="px-5 py-3 text-right">Ticket cut</th>
                         <th className="px-5 py-3 text-right">Beverage cut</th>
+                        <th className="px-5 py-3 text-right">Can sell</th>
                         <th className="px-5 py-3 text-right">Actions</th>
                       </tr>
                     </thead>
@@ -464,6 +477,26 @@ export default function AdminCinemaPanel() {
                           </td>
                           <td className="px-5 py-4 text-right tabular-nums text-gray-600 dark:text-gray-400">
                             {formatRate(cinema.beverageCommissionRate)}
+                          </td>
+                          {/* Granted products, as a control rather than a
+                              number: the count is the thing an admin wants to
+                              change, so reading it and changing it are the same
+                              click. */}
+                          <td className="px-5 py-4 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setGranting(cinema)}
+                              className={`rounded-md px-2 py-1 text-xs font-medium tabular-nums transition-colors ${
+                                (cinema.allowedBeverages || []).length === 0
+                                  ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
+                                  : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                              }`}
+                            >
+                              <Popcorn className="mr-1 inline h-3.5 w-3.5" />
+                              {(cinema.allowedBeverages || []).length === 0
+                                ? "None granted"
+                                : `${(cinema.allowedBeverages || []).length} granted`}
+                            </button>
                           </td>
                           <td className="px-5 py-4 text-right">
                             <div className="flex justify-end gap-2">
@@ -520,6 +553,27 @@ export default function AdminCinemaPanel() {
           <AdminMovieCuration />
         </TabsContent>
       </Tabs>
+
+      {granting && (
+        <CinemaConcessionsGrant
+          cinemaId={granting._id}
+          cinemaName={granting.name}
+          granted={granting.allowedBeverages || []}
+          open={!!granting}
+          onOpenChange={(open) => !open && setGranting(null)}
+          // Patched in place rather than refetching the page: the server has
+          // just confirmed this exact list, so a round trip would only risk
+          // showing something older.
+          onSaved={(next) => {
+            setCinemas((rows) =>
+              rows.map((row) =>
+                row._id === granting._id ? { ...row, allowedBeverages: next } : row
+              )
+            );
+            setGranting(null);
+          }}
+        />
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-3xl">
