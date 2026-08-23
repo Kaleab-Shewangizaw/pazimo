@@ -1,9 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, Clock, Film, MapPin, PlayCircle } from "lucide-react";
+import Image from "next/image";
+import {
+  Calendar,
+  Clock,
+  Film,
+  MapPin,
+  PlayCircle,
+  Share2,
+  UserCheck,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { clockLabel, dayLabel, posterUrl, runtimeLabel } from "./cinema-format";
 import BookingFlow from "./booking-flow";
 import {
@@ -19,36 +28,18 @@ const money = (n: number, currency = "ETB") =>
   `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`;
 
 /**
- * One film, and the path to a seat.
+ * One film, laid out as the event detail page lays out an event.
  *
- * THE PAGE HAS ONE JOB — get someone from "I want to see this" to "I have a
- * seat" — and the layout says so: a hero that is mostly the film's own artwork,
- * one column of decisions in the order they are made (which day, which time),
- * and a commit button that is always reachable.
+ * The two are the same kind of page — an image, what it is, and a panel you buy
+ * from — so they share a structure rather than each inventing one: full-bleed
+ * hero with the title over it, a meta row of icon facts, then a two-thirds
+ * column of description beside a sticky bordered card. A customer who has
+ * bought an event ticket already knows how to read this.
  *
- * WHY THE ARTWORK CARRIES THE COLOUR
- *
- * A film already has a designed identity, so the page borrows it rather than
- * competing: the landscape cover is blurred and scaled behind the hero like the
- * light spill off a projector, and the poster sits crisp in front of it. Every
- * film's page therefore looks different without a single per-film rule, and the
- * page's own palette stays neutral so it never fights the poster.
- *
- * WHY THERE ARE ALMOST NO CARDS
- *
- * This was four stacked cards of identical weight — synopsis, screenings,
- * prices, order — which flattens everything to the same importance and is what
- * made it read as generated. Structure now comes from rules, spacing and type
- * scale. A card is used only where something IS a discrete object you choose
- * between: the time tiles.
- *
- * THE HEADER
- *
- * The site header is `fixed` and transparent on mobile and `md:relative` on
- * desktop. A fixed top margin was wrong in both: it double-spaced desktop,
- * where the header already takes its own room, and wasted the transparency on
- * mobile. The hero is full-bleed and runs underneath it; only the hero's inner
- * content is padded, and only on mobile.
+ * The film's two crops earn their keep here. The landscape cover fills the
+ * desktop hero, where a 2:3 poster would letterbox; the portrait poster is what
+ * mobile shows, where the wide crop would be a stripe. The event page has only
+ * one image and has to use it for both.
  */
 export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) {
   const { movie, cinema, days, fromPrice } = detail;
@@ -59,12 +50,9 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
 
   const day = days[dayIndex];
 
-  // The chosen screening — or the only one there is.
-  //
-  // A day with a single showtime has no choice to make, so asking for a click
-  // before the button will work is friction that buys nothing: the customer
-  // sees one time, a disabled button, and no explanation of what connects them.
-  // Selecting it outright is what they were going to do anyway.
+  // The chosen screening — or the only one there is. A day with a single
+  // showtime has no choice to make, so asking for a click before the button
+  // works is friction that buys nothing.
   const showtime: PublicShowtime | undefined = useMemo(() => {
     const bookable = (day?.showtimes || []).filter((s) => !s.soldOut);
     if (showtimeId) return bookable.find((s) => s._id === showtimeId);
@@ -80,291 +68,376 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
   const poster = posterUrl(movie.poster);
   const cover = posterUrl(movie.coverImage) || poster;
   const runtime = runtimeLabel(movie.durationMinutes);
-
-  // The one line under the title. Joined from what exists rather than rendered
-  // as a row of badges: six outline pills was noise, and none of them was more
-  // important than the others.
-  const facts = [movie.ageRating, runtime, movie.language, movie.genre?.[0]]
-    .filter(Boolean)
-    .join("  ·  ");
-
   const hasScreenings = days.some((d) => d.showtimes.length > 0);
+  const address = [cinema.address, cinema.city].filter(Boolean).join(", ");
 
-  return (
-    <div className="bg-background">
-      {/* ---------------------------------------------------------------- */}
-      {/* Hero                                                             */}
-      {/* ---------------------------------------------------------------- */}
-      <header className="relative isolate overflow-hidden">
-        {/* The film's own cover, blurred and oversized. `scale-110` hides the
-            blur's soft edge; without it the backdrop shows a pale halo at the
-            viewport edges. aria-hidden because it carries no information the
-            poster and title do not already give. */}
-        {cover && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={cover}
-            alt=""
-            aria-hidden
-            className="absolute inset-0 h-full w-full scale-125 object-cover opacity-70 blur-3xl saturate-150 dark:opacity-60"
-          />
-        )}
+  const details = [
+    { label: "Runtime", value: runtime },
+    { label: "Rating", value: movie.ageRating },
+    { label: "Language", value: movie.language },
+    { label: "Subtitles", value: movie.subtitles },
+    { label: "Genre", value: movie.genre?.join(", ") },
+    {
+      label: "Screenings",
+      value: hasScreenings
+        ? `${days.reduce((n, d) => n + d.showtimes.length, 0)} upcoming`
+        : undefined,
+    },
+  ].filter((d): d is { label: string; value: string } => Boolean(d.value));
 
-        {/* One scrim, and only enough of it.
-            The first pass stacked a flat 70-80% wash under a full-height
-            gradient, which took the artwork to near-black and lost the whole
-            point of using it. Now the flat layer is light — just enough for
-            text contrast — and the gradient does its work only at the bottom
-            edge, where the hero has to meet the page. */}
-        <div className="absolute inset-0 bg-background/55 dark:bg-background/45" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-background to-transparent" />
+  const share = async () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: movie.title, url });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied");
+    } catch {
+      // A cancelled share sheet rejects too — nothing to report.
+    }
+  };
 
-        <div className="relative mx-auto max-w-5xl px-4 pb-10 pt-24 sm:px-6 md:pb-14 md:pt-12">
-          <Link
-            href="/cinemas"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            All cinemas
-          </Link>
-
-          <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-end sm:gap-8">
-            {/* Poster. A fixed 2:3 box so a wrongly-cropped upload cannot
-                distort the layout, and a ring rather than a border so it reads
-                as a printed object rather than a UI panel. */}
-            <div className="w-36 shrink-0 sm:w-44 md:w-52">
-              <div className="aspect-[2/3] overflow-hidden rounded-xl bg-muted shadow-2xl ring-1 ring-black/10 dark:ring-white/10">
-                {poster ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={poster}
-                    alt={movie.title}
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center">
-                    <Film className="h-8 w-8 text-muted-foreground/30" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-                {movie.status === "coming_soon" ? "Coming soon" : "Now showing"}
-              </p>
-
-              <h1 className="mt-2 text-balance font-display text-4xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-5xl md:text-6xl">
-                {movie.title}
-              </h1>
-
-              {facts && (
-                <p className="mt-3 text-sm text-muted-foreground">{facts}</p>
-              )}
-
-              <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-                <span className="font-medium text-foreground">{cinema.name}</span>
-                {[cinema.address, cinema.city].filter(Boolean).length > 0 && (
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    {[cinema.address, cinema.city].filter(Boolean).join(", ")}
-                  </span>
-                )}
-                {movie.trailerUrl && (
-                  <a
-                    href={movie.trailerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 font-medium text-primary hover:underline"
-                  >
-                    <PlayCircle className="h-4 w-4" />
-                    Trailer
-                  </a>
-                )}
-              </div>
+  // The booking panel is identical on both layouts, so it is written once.
+  const bookingPanel = (
+    <div className="space-y-5">
+      {!hasScreenings ? (
+        <div className="rounded-xl border border-gray-200 py-10 text-center dark:border-white/10">
+          <Clock className="mx-auto mb-3 h-6 w-6 text-gray-400 dark:text-gray-600" />
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Nothing scheduled yet. Check back soon.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Select a day:
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {days.map((d, i) => (
+                <Button
+                  key={d.date}
+                  type="button"
+                  variant={i === dayIndex ? "default" : "outline"}
+                  onClick={() => selectDay(i)}
+                  className={`flex-1 ${
+                    i === dayIndex
+                      ? "bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black"
+                      : ""
+                  }`}
+                >
+                  {dayLabel(d.date)}
+                </Button>
+              ))}
             </div>
           </div>
-        </div>
-      </header>
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Body                                                             */}
-      {/* ---------------------------------------------------------------- */}
-      <main className="mx-auto max-w-5xl px-4 pb-28 sm:px-6 md:pb-0">
-        {movie.description && (
-          <section className="border-b border-border/60 pb-8">
-            <p className="max-w-2xl text-[15px] leading-relaxed text-muted-foreground">
-              {movie.description}
-            </p>
-            {movie.subtitles && (
-              <p className="mt-3 text-xs text-muted-foreground/70">
-                Subtitles · {movie.subtitles}
-              </p>
-            )}
-          </section>
-        )}
-
-        <section className="pt-8">
-          <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-            Pick a time
-          </h2>
-
-          {!hasScreenings ? (
-            <div className="mt-6 rounded-xl border border-dashed border-border py-16 text-center">
-              <Clock className="mx-auto mb-3 h-6 w-6 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                Nothing scheduled yet. Check back soon.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Day rail. Underline rather than filled pills: this is a filter
-                  above the times, not a set of equal choices beside them, and
-                  an underline says "you are here" without competing with the
-                  time tiles below for weight. */}
-              <div className="mt-4 -mx-4 flex gap-1 overflow-x-auto border-b border-border/60 px-4 sm:mx-0 sm:px-0">
-                {days.map((d, i) => {
-                  const active = i === dayIndex;
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Select a time:
+            </h3>
+            {day?.showtimes.length ? (
+              <div className="grid grid-cols-2 gap-2">
+                {day.showtimes.map((s) => {
+                  // Reads the resolved showtime, not the raw id, so a single
+                  // screening chosen for the customer still looks chosen.
+                  const selected = s._id === showtime?._id;
                   return (
                     <button
-                      key={d.date}
-                      onClick={() => selectDay(i)}
-                      className={`shrink-0 border-b-2 px-4 py-3 text-sm transition-colors ${
-                        active
-                          ? "border-primary font-semibold text-foreground"
-                          : "border-transparent text-muted-foreground hover:text-foreground"
+                      key={s._id}
+                      disabled={s.soldOut}
+                      onClick={() => setShowtimeId(s._id)}
+                      aria-pressed={selected}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        s.soldOut
+                          ? "cursor-not-allowed border-gray-200 opacity-40 dark:border-white/10"
+                          : selected
+                            ? "border-[#0D47A1] bg-[#0D47A1]/5 dark:border-yellow-400 dark:bg-yellow-400/10"
+                            : "border-gray-200 hover:border-gray-400 dark:border-white/10 dark:hover:border-white/30"
                       }`}
                     >
-                      {dayLabel(d.date)}
-                      <span className="ml-1.5 text-xs tabular-nums opacity-60">
-                        {d.showtimes.length}
+                      <span className="block text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+                        {clockLabel(s.startsAt)}
+                      </span>
+                      <span className="block truncate text-xs text-gray-500 dark:text-gray-400">
+                        {s.soldOut ? "Sold out" : s.hall?.name || "Screen"}
                       </span>
                     </button>
                   );
                 })}
               </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No screenings on {dayLabel(day.date)}.
+              </p>
+            )}
+          </div>
 
-              {/* Times. The one place a card is right: each is a discrete
-                  object you choose between, and the clock face is the thing
-                  being compared, so it gets the size and the tabular figures. */}
-              {/* A wrapping row rather than a fixed grid: a cinema with one
-                  screening left should not get a single tile stranded in a
-                  four-column layout with three empty cells beside it. */}
-              {day?.showtimes.length ? (
-                <div className="mt-6 flex flex-wrap gap-2.5">
-                  {day.showtimes.map((s) => {
-                    // Reads from the resolved showtime, not the raw id, so an
-                    // auto-selected single screening looks selected too.
-                    const selected = s._id === showtime?._id;
-                    return (
-                      <button
-                        key={s._id}
-                        disabled={s.soldOut}
-                        onClick={() => setShowtimeId(s._id)}
-                        aria-pressed={selected}
-                        className={`group relative min-w-[9.5rem] flex-1 rounded-xl border p-4 text-left transition-all sm:max-w-[13rem] sm:flex-none ${
-                          s.soldOut
-                            ? "cursor-not-allowed border-border/60 opacity-40"
-                            : selected
-                              ? "border-primary bg-primary/5 ring-1 ring-primary"
-                              : "border-border hover:border-foreground/30 hover:bg-muted/40"
-                        }`}
-                      >
-                        <span className="block text-2xl font-semibold tabular-nums tracking-tight text-foreground">
-                          {clockLabel(s.startsAt)}
-                        </span>
-                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                          {s.soldOut ? "Sold out" : s.hall?.name || "Screen"}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="mt-6 text-sm text-muted-foreground">
-                  No screenings on {dayLabel(day.date)}.
-                </p>
-              )}
-            </>
-          )}
-        </section>
-
-        {/* Prices, once a screening is chosen. A plain definition list rather
-            than a card: it is reference, not a decision — the seat picker is
-            where the choice happens. */}
-        {showtime && showtime.ticketTypes.length > 0 && (
-          <section className="mt-10 border-t border-border/60 pt-8">
-            <h2 className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-              Prices
-            </h2>
-            <dl className="mt-4 max-w-md divide-y divide-border/60">
+          {showtime && showtime.ticketTypes.length > 0 && (
+            <div className="space-y-2 border-t border-gray-200 pt-4 dark:border-white/10">
               {showtime.ticketTypes.map((tier) => (
-                <div key={tier._id} className="flex items-baseline justify-between gap-4 py-3">
-                  <dt className="min-w-0">
-                    <span className="block truncate text-sm text-foreground">{tier.name}</span>
-                    {tier.description && (
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {tier.description}
-                      </span>
-                    )}
-                  </dt>
-                  <dd className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                <div
+                  key={tier._id}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="min-w-0 truncate text-sm text-gray-700 dark:text-gray-300">
+                    {tier.name}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
                     {money(tier.price, currency)}
-                  </dd>
+                  </span>
                 </div>
               ))}
-            </dl>
-            <p className="mt-3 text-xs text-muted-foreground">
-              The seat you pick sets the price.
-            </p>
-          </section>
-        )}
-      </main>
-
-      {/* ---------------------------------------------------------------- */}
-      {/* Commit                                                           */}
-      {/* ---------------------------------------------------------------- */}
-      {/* Fixed on mobile, where the decisions above can run past a screen and
-          the page's one action must never scroll away. Static on desktop,
-          where it does not need to float over anything. */}
-      {hasScreenings && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 py-3 backdrop-blur-xl md:static md:mx-auto md:my-10 md:max-w-5xl md:border-0 md:bg-transparent md:px-6 md:py-0 md:backdrop-blur-none">
-          <div className="mx-auto flex max-w-5xl items-center gap-4 md:px-0">
-            {/* On a phone the bar is split: what you are buying on the left,
-                the action on the right. The button said the price too, which on
-                a 390px screen squeezed the left side until the time truncated —
-                two halves competing to say the same thing. */}
-            <div className="min-w-0 flex-1 md:hidden">
-              <p className="truncate text-sm font-medium text-foreground">
-                {showtime
-                  ? `${dayLabel(day.date)} · ${clockLabel(showtime.startsAt)}`
-                  : "Pick a time"}
+              <p className="pt-1 text-xs text-gray-500 dark:text-gray-400">
+                The seat you pick sets the price.
               </p>
-              {typeof fromPrice === "number" && (
-                <p className="text-xs text-muted-foreground">
-                  from {money(fromPrice)}
-                </p>
-              )}
             </div>
+          )}
 
-            <Button
-              size="lg"
-              disabled={!showtime}
-              onClick={() => setBooking(true)}
-              className="shrink-0 md:min-w-[16rem]"
-            >
-              <span className="md:hidden">
-                {showtime ? "Choose seats" : "Pick a time"}
+          <Button
+            size="lg"
+            disabled={!showtime}
+            onClick={() => setBooking(true)}
+            className="w-full bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-400/90"
+          >
+            {showtime ? "Choose seats" : "Select a time"}
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-white dark:bg-[#0A0A0A]">
+      {/* ── Hero (desktop) ── */}
+      <section className="relative hidden bg-gray-300 transition-colors dark:bg-[#1A1D24] md:block">
+        <div className="relative mx-auto h-[50vh] w-full overflow-hidden bg-gray-600 dark:bg-[#0A0A0A] md:h-[75vh]">
+          {cover ? (
+            <Image
+              src={cover}
+              alt={`${movie.title} — banner`}
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+              quality={90}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <Film className="h-12 w-12 text-white/20" />
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/30 to-transparent dark:from-[#0A0A0A] dark:via-[#0A0A0A]/40" />
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 z-10 px-5 pb-6 md:px-10 md:pb-10 lg:px-16 lg:pb-14">
+          <h1 className="mb-3 text-2xl font-bold leading-tight text-black dark:text-white sm:text-4xl md:text-5xl lg:text-6xl">
+            {movie.title}
+          </h1>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-black/90 dark:text-white/90 md:gap-5">
+            <span className="flex items-center gap-1.5">
+              <MapPin className="h-4 w-4 shrink-0 text-blue-300 dark:text-blue-400" />
+              {cinema.name}
+              {address ? `, ${address}` : ""}
+            </span>
+            {runtime && (
+              <span className="flex items-center gap-1.5">
+                <Clock className="h-4 w-4 shrink-0 text-blue-300 dark:text-blue-400" />
+                {runtime}
               </span>
-              <span className="hidden md:inline">
-                {showtime
-                  ? `Choose seats${typeof fromPrice === "number" ? ` · from ${money(fromPrice)}` : ""}`
-                  : "Pick a time first"}
+            )}
+            {movie.ageRating && (
+              <span className="flex items-center gap-1.5">
+                <UserCheck className="h-4 w-4 shrink-0 text-blue-300 dark:text-blue-400" />
+                {movie.ageRating}
               </span>
-            </Button>
+            )}
+            {movie.language && (
+              <span className="flex items-center gap-1.5">
+                <Film className="h-4 w-4 shrink-0 text-blue-300 dark:text-blue-400" />
+                {movie.language}
+              </span>
+            )}
           </div>
         </div>
-      )}
+
+        <div className="absolute bottom-10 right-4 z-10 flex items-center gap-2 md:right-10">
+          <button
+            onClick={share}
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/30 backdrop-blur-sm transition-colors hover:bg-black/50 dark:hover:bg-white/10"
+            aria-label="Share this film"
+          >
+            <Share2 className="h-4 w-4 text-white" />
+          </button>
+        </div>
+      </section>
+
+      {/* ── Hero (mobile) ── */}
+      {/* The portrait poster in a contained card, the way the event page shows
+          its banner on a phone: a full-bleed landscape crop at this width is a
+          stripe, and the poster is the film's own designed identity. */}
+      <div className="px-4 pt-6 md:hidden">
+        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-gray-200 shadow-md dark:bg-[#1A1D24]">
+          {poster ? (
+            <Image
+              src={poster}
+              alt={movie.title}
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <Film className="h-10 w-10 text-gray-400" />
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-start justify-between gap-3">
+          <h1 className="text-xl font-bold leading-tight text-gray-900 dark:text-white">
+            {movie.title}
+          </h1>
+          <button
+            onClick={share}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white transition-colors hover:bg-gray-50 dark:border-white/10 dark:bg-[#1A1D24] dark:hover:bg-white/5"
+            aria-label="Share this film"
+          >
+            <Share2 className="h-4 w-4 text-gray-700 dark:text-white" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-2 text-sm">
+          <p className="flex items-start gap-2">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-500 dark:text-blue-400" />
+            <span>
+              <span className="font-medium text-[#0D47A1] dark:text-blue-400">
+                {cinema.name}
+              </span>
+              {address && (
+                <span className="block text-gray-500 dark:text-gray-400">{address}</span>
+              )}
+            </span>
+          </p>
+          {(runtime || movie.ageRating || movie.language) && (
+            <p className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+              <Clock className="h-4 w-4 shrink-0 text-gray-400" />
+              {[runtime, movie.ageRating, movie.language].filter(Boolean).join(" · ")}
+            </p>
+          )}
+          {showtime && (
+            <p className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+              <Calendar className="h-4 w-4 shrink-0 text-gray-400" />
+              {dayLabel(day.date)}, {clockLabel(showtime.startsAt)}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* ── Content ── */}
+      <section className="py-8 md:py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 gap-10 lg:grid-cols-3 lg:gap-14">
+            <div className="space-y-12 lg:col-span-2">
+              {movie.description && (
+                <div>
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                    About This Film
+                  </h2>
+                  <div className="space-y-4 leading-relaxed text-gray-600 dark:text-gray-400">
+                    <p className="whitespace-pre-line">{movie.description}</p>
+                  </div>
+                  {movie.subtitles && (
+                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-500">
+                      Subtitles · {movie.subtitles}
+                    </p>
+                  )}
+                  {movie.trailerUrl && (
+                    <a
+                      href={movie.trailerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 flex items-center gap-1 text-sm font-medium text-[#0D47A1] hover:underline dark:text-blue-400"
+                    >
+                      <PlayCircle className="h-4 w-4" />
+                      Watch trailer
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Always present, unlike the description, so the column is
+                  never a single card floating beside a full panel. These are
+                  the questions a customer actually asks about a screening —
+                  how long, what rating, what language, subtitled or not. */}
+              {details.length > 0 && (
+                <div>
+                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                    Details
+                  </h2>
+                  <dl className="grid grid-cols-1 gap-x-10 gap-y-3 sm:grid-cols-2">
+                    {details.map(({ label, value }) => (
+                      <div
+                        key={label}
+                        className="flex items-baseline justify-between gap-4 border-b border-gray-200 pb-3 dark:border-white/10"
+                      >
+                        <dt className="text-sm text-gray-500 dark:text-gray-400">{label}</dt>
+                        <dd className="text-right text-sm font-medium text-gray-900 dark:text-white">
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+
+              <div>
+                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
+                  Cinema
+                </h2>
+                <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1A1D24]">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0D47A1] text-lg font-bold text-white">
+                    {cinema.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-gray-900 dark:text-white">
+                      {cinema.name}
+                    </p>
+                    <p className="truncate text-sm text-gray-500 dark:text-gray-400">
+                      {address || "Cinema"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-1">
+              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-md transition-colors dark:border-white/10 dark:bg-[#1A1D24] lg:sticky lg:top-6">
+                <div className="mb-6 flex items-baseline justify-between gap-3">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                    Select Tickets
+                  </h2>
+                  {/* The entry price, before a screening is chosen. It is the
+                      first thing anyone wants from this panel and the seat
+                      picker is two clicks away, so withholding it until then
+                      makes people guess. */}
+                  {typeof fromPrice === "number" && (
+                    <span className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
+                      from{" "}
+                      <span className="font-semibold text-gray-900 dark:text-white">
+                        {money(fromPrice)}
+                      </span>
+                    </span>
+                  )}
+                </div>
+                {bookingPanel}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <Dialog open={booking} onOpenChange={setBooking}>
         <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
