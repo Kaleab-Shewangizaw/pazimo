@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Popcorn, Clock, Trash2, TrendingUp } from "lucide-react";
+import { Popcorn, Clock, Trash2, TrendingUp, Plus } from "lucide-react";
 
 const CATEGORY_LABEL: Record<string, string> = {
   drink: "Drink",
@@ -76,6 +76,57 @@ function ConcessionsContent({
     stockTotal: "",
     unlimitedStock: false,
   });
+
+  // Creating a product this cinema sells that the platform catalogue lacks.
+  //
+  // Separate from `form` above, which prices an EXISTING product onto this
+  // cinema's counter. The two are different actions — "what is this thing" and
+  // "what do I charge for it" — and sharing one form would make the picker's
+  // meaning depend on whether another field was filled in.
+  const [newProduct, setNewProduct] = useState({ name: "", category: "snack" });
+  const [creating, setCreating] = useState(false);
+  const [showNewProduct, setShowNewProduct] = useState(false);
+
+  const createProduct = async () => {
+    setCreating(true);
+    try {
+      const body = new FormData();
+      body.append("name", newProduct.name.trim());
+      body.append("category", newProduct.category);
+
+      const res = await cinemaRequest<{ data: CinemaCatalogItem }>(
+        "/api/cinemas/me/concessions/products",
+        token,
+        { method: "POST", body }
+      );
+      toast.success(`${newProduct.name.trim()} added to your products`);
+      setNewProduct({ name: "", category: "snack" });
+      setShowNewProduct(false);
+      await reload();
+      // Selected straight away, because the only reason to create a product is
+      // to put it on the counter — making the operator find it again in a list
+      // they just added to is a pointless second step.
+      setForm((f) => ({ ...f, beverage: res.data._id }));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteProduct = async (productId: string, name: string) => {
+    try {
+      const res = await cinemaRequest<{ message?: string }>(
+        `/api/cinemas/me/concessions/products/${productId}`,
+        token,
+        { method: "DELETE" }
+      );
+      toast.success(res.message || `${name} removed`);
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
 
   const addItem = async () => {
     setBusy(true);
@@ -189,9 +240,87 @@ function ConcessionsContent({
                 Add a product
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Products come from Pazimo&apos;s catalogue; the price is yours and
-                applies only at this cinema.
+                Pick a product and set your price — it applies only at this
+                cinema. If what you sell isn&apos;t listed, add it yourself.
               </p>
+
+              {/* The way out of "it's not in the list".
+                  Placed with the picker rather than on a separate screen: the
+                  moment an operator discovers the catalogue is missing their
+                  brand of crisps is the moment they are looking at this select,
+                  and sending them elsewhere to come back is how a counter ends
+                  up ringing everything up as "Popcorn". */}
+              {!showNewProduct ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowNewProduct(true)}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Add a product that isn&apos;t listed
+                </Button>
+              ) : (
+                <div className="space-y-3 rounded-lg border border-dashed border-indigo-300 bg-indigo-50/50 p-4 dark:border-indigo-800 dark:bg-indigo-950/20">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    New product for this cinema
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs">Name</Label>
+                      <Input
+                        autoFocus
+                        value={newProduct.name}
+                        placeholder="Coke, Pepsi, Water, Popcorn…"
+                        onChange={(e) =>
+                          setNewProduct({ ...newProduct, name: e.target.value })
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newProduct.name.trim()) createProduct();
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Kind</Label>
+                      <select
+                        className={selectClass}
+                        value={newProduct.category}
+                        onChange={(e) =>
+                          setNewProduct({ ...newProduct, category: e.target.value })
+                        }
+                      >
+                        <option value="drink">Drink</option>
+                        <option value="snack">Snack</option>
+                        <option value="combo">Combo</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={creating || !newProduct.name.trim()}
+                      onClick={createProduct}
+                    >
+                      {creating ? "Adding…" : "Create product"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowNewProduct(false);
+                        setNewProduct({ name: "", category: "snack" });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Only this cinema sees it. You still set the price below.
+                  </p>
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
                   <Label className="text-xs">Product</Label>
@@ -204,6 +333,7 @@ function ConcessionsContent({
                     {available.map((c) => (
                       <option key={c._id} value={c._id}>
                         {c.name} ({CATEGORY_LABEL[c.category] || c.category})
+                        {c.isOwn ? " — yours" : ""}
                       </option>
                     ))}
                   </select>
@@ -337,6 +467,52 @@ function ConcessionsContent({
               </Card>
             ))}
           </div>
+
+          {/* Products this cinema created.
+              Listed separately from the line-up above, because they are a
+              different thing: the line-up is what is ON SALE and at what price,
+              this is what EXISTS. A product created and not yet priced would
+              otherwise be invisible — and, having no line-up row, impossible to
+              remove. */}
+          {catalog.some((c) => c.isOwn) && (
+            <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+              <CardContent className="space-y-3 p-5">
+                <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                  Products you added
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Only this cinema sees these. Removing one that has never sold
+                  deletes it; one that has sold is retired instead, so your past
+                  sales keep their record.
+                </p>
+                <div className="space-y-2">
+                  {catalog
+                    .filter((c) => c.isOwn)
+                    .map((c) => (
+                      <div
+                        key={c._id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-gray-200 px-3 py-2 dark:border-gray-800"
+                      >
+                        <span className="min-w-0 truncate text-sm">
+                          {c.name}
+                          <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                            {CATEGORY_LABEL[c.category] || c.category}
+                            {c.inLineup ? " · on sale" : " · not priced yet"}
+                          </span>
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteProduct(c._id, c.name)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="sales" className="space-y-6">
