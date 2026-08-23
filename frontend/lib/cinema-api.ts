@@ -201,6 +201,14 @@ export interface CinemaTicketType {
   allocation: number;
   sold: number;
   isAvailable: boolean;
+  /**
+   * Which seat category on the hall this tier prices.
+   *
+   * Present only on an assigned-seating hall, where the seat a customer picks
+   * decides the price and the allocation comes from the map rather than being
+   * typed. Absent means the older shape: a tier with its own seat count.
+   */
+  seatCategoryKey?: string;
 }
 
 export interface CinemaShowtime {

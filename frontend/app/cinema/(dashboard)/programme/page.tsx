@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Film, CalendarDays, DoorOpen, LayoutGrid } from "lucide-react";
+import { Plus, Trash2, Film, CalendarDays, DoorOpen, LayoutGrid, Pencil } from "lucide-react";
 import SeatMapEditor from "@/components/cinema/seat-map-editor";
 import {
   Dialog,
@@ -155,7 +155,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   };
 
   // --- Movies --------------------------------------------------------------
-  const [movieForm, setMovieForm] = useState({
+  const EMPTY_MOVIE_FORM = {
     title: "",
     durationMinutes: "",
     ageRating: "",
@@ -166,9 +166,43 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     releaseDate: "",
     status: "now_showing",
     description: "",
-  });
+  };
+  const [movieForm, setMovieForm] = useState(EMPTY_MOVIE_FORM);
   const [poster, setPoster] = useState<File | null>(null);
   const [cover, setCover] = useState<File | null>(null);
+  // Null while adding, a film id while correcting one. The same form does both:
+  // a separate edit form would drift from the add form, and the fields are
+  // identical.
+  const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
+
+  const beginEditMovie = (movie: CinemaMovie) => {
+    setEditingMovieId(movie._id);
+    setMovieForm({
+      title: movie.title || "",
+      durationMinutes: movie.durationMinutes ? String(movie.durationMinutes) : "",
+      ageRating: movie.ageRating || "",
+      language: movie.language || "",
+      subtitles: movie.subtitles || "",
+      genre: (movie.genre || []).join(", "),
+      trailerUrl: movie.trailerUrl || "",
+      // The date input wants YYYY-MM-DD; the API returns an ISO timestamp.
+      releaseDate: movie.releaseDate ? String(movie.releaseDate).slice(0, 10) : "",
+      status: movie.status || "now_showing",
+      description: movie.description || "",
+    });
+    // Images are deliberately left unset: an edit that sends no file keeps the
+    // existing poster rather than clearing it.
+    setPoster(null);
+    setCover(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEditMovie = () => {
+    setEditingMovieId(null);
+    setMovieForm(EMPTY_MOVIE_FORM);
+    setPoster(null);
+    setCover(null);
+  };
 
   const addMovie = async () => {
     setBusy(true);
@@ -182,23 +216,23 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
       if (poster) body.append("poster", poster);
       if (cover) body.append("coverImage", cover);
 
-      await cinemaRequest("/api/cinemas/me/movies", token, {
-        method: "POST",
-        body,
-      });
-      toast.success("Film added");
-      setMovieForm({
-        title: "",
-        durationMinutes: "",
-        ageRating: "",
-        language: "",
-        subtitles: "",
-        genre: "",
-        trailerUrl: "",
-        releaseDate: "",
-        status: "now_showing",
-        description: "",
-      });
+      await cinemaRequest(
+        editingMovieId
+          ? `/api/cinemas/me/movies/${editingMovieId}`
+          : "/api/cinemas/me/movies",
+        token,
+        { method: editingMovieId ? "PATCH" : "POST", body }
+      );
+      // Editing a customer-facing field sends a published film back to the
+      // admin queue. Said out loud, because otherwise it silently disappears
+      // from the public listing and looks like a bug.
+      toast.success(
+        editingMovieId
+          ? "Film updated. Listing changes go back to the admin for review."
+          : "Film added"
+      );
+      setEditingMovieId(null);
+      setMovieForm(EMPTY_MOVIE_FORM);
       setPoster(null);
       setCover(null);
       await reload();
@@ -250,11 +284,46 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     );
   }, [showForm.hall, assignedSeating, selectedHall]);
 
+  // Null while scheduling, a showtime id while correcting one.
+  const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
+
+  const beginEditShowtime = (showtime: CinemaShowtime) => {
+    setEditingShowtimeId(showtime._id);
+    setShowForm({
+      movie: typeof showtime.movie === "string" ? showtime.movie : showtime.movie?._id || "",
+      hall: typeof showtime.hall === "string" ? showtime.hall : showtime.hall?._id || "",
+      // datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time. Slicing the ISO
+      // string would silently shift the screening by the UTC offset — a 19:30
+      // showing becoming 16:30 is exactly the mistake this form exists to fix.
+      startsAt: toLocalDateTimeInput(showtime.startsAt),
+    });
+    setTiers(
+      (showtime.ticketTypes || []).map((t) => ({
+        name: t.name,
+        price: String(t.price ?? ""),
+        allocation: String(t.allocation ?? ""),
+        seatCategoryKey: t.seatCategoryKey || undefined,
+      }))
+    );
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEditShowtime = () => {
+    setEditingShowtimeId(null);
+    setShowForm({ movie: "", hall: "", startsAt: "" });
+    setTiers([{ name: "Regular", price: "", allocation: "" }]);
+  };
+
   const addShowtime = async () => {
     setBusy(true);
     try {
-      await cinemaRequest("/api/cinemas/me/showtimes", token, {
-        method: "POST",
+      await cinemaRequest(
+        editingShowtimeId
+          ? `/api/cinemas/me/showtimes/${editingShowtimeId}`
+          : "/api/cinemas/me/showtimes",
+        token,
+        {
+        method: editingShowtimeId ? "PATCH" : "POST",
         body: JSON.stringify({
           movie: showForm.movie,
           hall: showForm.hall,
@@ -270,8 +339,10 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
               : { allocation: Number(t.allocation) }),
           })),
         }),
-      });
-      toast.success("Screening scheduled");
+      }
+      );
+      toast.success(editingShowtimeId ? "Screening updated" : "Screening scheduled");
+      setEditingShowtimeId(null);
       setShowForm({ movie: "", hall: "", startsAt: "" });
       setTiers([{ name: "Regular", price: "", allocation: "" }]);
       await reload();
@@ -327,7 +398,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
             <CardContent className="space-y-4 p-5">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                 <CalendarDays className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                Schedule a screening
+                {editingShowtimeId ? "Edit screening" : "Schedule a screening"}
               </h2>
 
               {halls.length === 0 || movies.length === 0 ? (
@@ -468,14 +539,21 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                     )}
                   </div>
 
-                  <Button
-                    onClick={addShowtime}
-                    disabled={
-                      busy || !showForm.movie || !showForm.hall || !showForm.startsAt
-                    }
-                  >
-                    Schedule screening
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={addShowtime}
+                      disabled={
+                        busy || !showForm.movie || !showForm.hall || !showForm.startsAt
+                      }
+                    >
+                      {editingShowtimeId ? "Save changes" : "Schedule screening"}
+                    </Button>
+                    {editingShowtimeId && (
+                      <Button variant="ghost" onClick={cancelEditShowtime} disabled={busy}>
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </>
               )}
             </CardContent>
@@ -517,13 +595,23 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                       ))}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => cancelShowtime(s._id)}
-                  >
-                    <Trash2 className="mr-1 h-4 w-4" /> Remove
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Correct this screening"
+                      onClick={() => beginEditShowtime(s)}
+                    >
+                      <Pencil className="mr-1 h-4 w-4" /> Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => cancelShowtime(s._id)}
+                    >
+                      <Trash2 className="mr-1 h-4 w-4" /> Remove
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -536,7 +624,9 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
             <CardContent className="space-y-4 p-5">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
                 <Film className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                Add a film
+                {/* An operator who clicked Edit is scrolled up to a pre-filled
+                    form; the heading is what tells them why it is pre-filled. */}
+                {editingMovieId ? "Edit film" : "Add a film"}
               </h2>
               <div className="grid gap-3 sm:grid-cols-4">
                 <Input
@@ -647,9 +737,16 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                 Runtime is used to warn you when two screenings would overlap in
                 the same hall — set it, or conflicts cannot be checked.
               </p>
-              <Button onClick={addMovie} disabled={busy || !movieForm.title}>
-                Add film
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={addMovie} disabled={busy || !movieForm.title}>
+                  {editingMovieId ? "Save changes" : "Add film"}
+                </Button>
+                {editingMovieId && (
+                  <Button variant="ghost" onClick={cancelEditMovie} disabled={busy}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -677,9 +774,19 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                         .join(" · ")}
                     </p>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeMovie(m._id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Edit this film"
+                      onClick={() => beginEditMovie(m)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => removeMovie(m._id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -827,6 +934,21 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     </div>
   );
 }
+
+/**
+ * An ISO timestamp as `datetime-local` wants it: local time, no zone.
+ *
+ * `iso.slice(0, 16)` is the obvious version and is wrong — it hands the input a
+ * UTC wall-clock, so a 19:30 screening in Addis (UTC+3) loads as 16:30 and is
+ * saved back three hours early. The whole point of an edit form is fixing
+ * mistakes, not introducing one.
+ */
+const toLocalDateTimeInput = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 export default function CinemaProgrammePage() {
   return (
