@@ -9,6 +9,7 @@ import {
   MapPin,
   PlayCircle,
   Share2,
+  Ticket,
   UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PublicMovieDetail, PublicShowtime } from "./public-cinema-types";
 
 const money = (n: number, currency = "ETB") =>
@@ -209,6 +211,104 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
     </div>
   );
 
+  // Three blocks of content, written once and read twice: stacked in a column
+  // on a desktop, split across the bottom tabs on a phone. The event page keeps
+  // two copies of its content and they have drifted apart; this keeps one.
+  const aboutSection = movie.description ? (
+    <div>
+      <h2 className="mb-4 text-xl font-bold text-gray-900 dark:text-white md:text-2xl">
+        About This Film
+      </h2>
+      <div className="space-y-4 leading-relaxed text-gray-600 dark:text-gray-400">
+        <p className="whitespace-pre-line">{movie.description}</p>
+      </div>
+      {movie.subtitles && (
+        <p className="mt-3 text-sm text-gray-500 dark:text-gray-500">
+          Subtitles · {movie.subtitles}
+        </p>
+      )}
+      {movie.trailerUrl && (
+        <a
+          href={movie.trailerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex items-center gap-1 text-sm font-medium text-[#0D47A1] hover:underline dark:text-blue-400"
+        >
+          <PlayCircle className="h-4 w-4" />
+          Watch trailer
+        </a>
+      )}
+    </div>
+  ) : null;
+
+  // Always present, unlike the description, so the column is never a single
+  // card floating beside a full panel. These are the questions a customer
+  // actually asks about a screening — how long, what rating, what language,
+  // subtitled or not.
+  const detailsSection = details.length > 0 ? (
+    <div>
+      <h2 className="mb-4 text-xl font-bold text-gray-900 dark:text-white md:text-2xl">
+        Details
+      </h2>
+      <dl className="grid grid-cols-1 gap-x-10 gap-y-3 sm:grid-cols-2">
+        {details.map(({ label, value }) => (
+          <div
+            key={label}
+            className="flex items-baseline justify-between gap-4 border-b border-gray-200 pb-3 dark:border-white/10"
+          >
+            <dt className="text-sm text-gray-500 dark:text-gray-400">{label}</dt>
+            <dd className="text-right text-sm font-medium text-gray-900 dark:text-white">
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  ) : null;
+
+  const cinemaSection = (
+    <div>
+      <h2 className="mb-4 text-xl font-bold text-gray-900 dark:text-white md:text-2xl">
+        Cinema
+      </h2>
+      <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1A1D24]">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0D47A1] text-lg font-bold text-white dark:bg-yellow-400 dark:text-black">
+          {cinema.name.charAt(0).toUpperCase()}
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-gray-900 dark:text-white">
+            {cinema.name}
+          </p>
+          <p className="truncate text-sm text-gray-500 dark:text-gray-400">
+            {address || "Cinema"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const ticketsCard = (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-md transition-colors dark:border-white/10 dark:bg-[#1A1D24] md:p-6">
+      <div className="mb-6 flex items-baseline justify-between gap-3">
+        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+          Select Tickets
+        </h2>
+        {/* The entry price, before a screening is chosen. It is the first
+            thing anyone wants from this panel and the seat picker is two
+            clicks away, so withholding it until then makes people guess. */}
+        {typeof fromPrice === "number" && (
+          <span className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
+            from{" "}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              {money(fromPrice)}
+            </span>
+          </span>
+        )}
+      </div>
+      {bookingPanel}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-white dark:bg-[#0A0A0A]">
       {/* ── Hero (desktop) ── */}
@@ -336,114 +436,78 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
         </div>
       </div>
 
-      {/* ── Content ── */}
-      <section className="py-8 md:py-16">
+      {/* ── Content (desktop) ── */}
+      <section className="hidden py-16 md:block">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-3 lg:gap-14">
             <div className="space-y-12 lg:col-span-2">
-              {movie.description && (
-                <div>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                    About This Film
-                  </h2>
-                  <div className="space-y-4 leading-relaxed text-gray-600 dark:text-gray-400">
-                    <p className="whitespace-pre-line">{movie.description}</p>
-                  </div>
-                  {movie.subtitles && (
-                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-500">
-                      Subtitles · {movie.subtitles}
-                    </p>
-                  )}
-                  {movie.trailerUrl && (
-                    <a
-                      href={movie.trailerUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-3 flex items-center gap-1 text-sm font-medium text-[#0D47A1] hover:underline dark:text-blue-400"
-                    >
-                      <PlayCircle className="h-4 w-4" />
-                      Watch trailer
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {/* Always present, unlike the description, so the column is
-                  never a single card floating beside a full panel. These are
-                  the questions a customer actually asks about a screening —
-                  how long, what rating, what language, subtitled or not. */}
-              {details.length > 0 && (
-                <div>
-                  <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                    Details
-                  </h2>
-                  <dl className="grid grid-cols-1 gap-x-10 gap-y-3 sm:grid-cols-2">
-                    {details.map(({ label, value }) => (
-                      <div
-                        key={label}
-                        className="flex items-baseline justify-between gap-4 border-b border-gray-200 pb-3 dark:border-white/10"
-                      >
-                        <dt className="text-sm text-gray-500 dark:text-gray-400">{label}</dt>
-                        <dd className="text-right text-sm font-medium text-gray-900 dark:text-white">
-                          {value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              )}
-
-              <div>
-                <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">
-                  Cinema
-                </h2>
-                <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1A1D24]">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0D47A1] text-lg font-bold text-white">
-                    {cinema.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate font-semibold text-gray-900 dark:text-white">
-                      {cinema.name}
-                    </p>
-                    <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-                      {address || "Cinema"}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              {aboutSection}
+              {detailsSection}
+              {cinemaSection}
             </div>
 
             <div className="lg:col-span-1">
-              <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-md transition-colors dark:border-white/10 dark:bg-[#1A1D24] lg:sticky lg:top-6">
-                <div className="mb-6 flex items-baseline justify-between gap-3">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                    Select Tickets
-                  </h2>
-                  {/* The entry price, before a screening is chosen. It is the
-                      first thing anyone wants from this panel and the seat
-                      picker is two clicks away, so withholding it until then
-                      makes people guess. */}
-                  {typeof fromPrice === "number" && (
-                    <span className="shrink-0 text-sm text-gray-500 dark:text-gray-400">
-                      from{" "}
-                      <span className="font-semibold text-gray-900 dark:text-white">
-                        {money(fromPrice)}
-                      </span>
-                    </span>
-                  )}
-                </div>
-                {bookingPanel}
-              </div>
+              <div className="lg:sticky lg:top-6">{ticketsCard}</div>
             </div>
           </div>
         </div>
       </section>
 
+      {/* ── Content (mobile) ── */}
+      {/* A phone gets the same three tabs the event page gets, in the same bar
+          at the same height, because it is the same decision being made: buy,
+          read about it, or find out where it is. Tickets opens first — the
+          customer arrived from a poster, not from a synopsis. */}
+      <div className="mx-auto max-w-7xl px-4 py-6 md:hidden">
+        <Tabs defaultValue="tickets" className="w-full">
+          <TabsList className="fixed bottom-0 left-0 right-0 z-30 flex h-14 w-full justify-around rounded-none border-t border-gray-200 bg-white p-0 dark:border-white/10 dark:bg-[#1A1D24]">
+            {(
+              [
+                ["tickets", "Tickets", Ticket],
+                ["about", "About", Film],
+                ["cinema", "Cinema", MapPin],
+              ] as const
+            ).map(([value, label, Icon]) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="flex h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-none px-0 text-xs text-gray-600 dark:text-gray-400 data-[state=active]:border-t-2 data-[state=active]:border-[#0D47A1] data-[state=active]:bg-blue-50 data-[state=active]:text-[#0D47A1] dark:data-[state=active]:border-yellow-400 dark:data-[state=active]:bg-yellow-400/10 dark:data-[state=active]:text-yellow-400"
+              >
+                <Icon className="h-4 w-4" />
+                <span>{label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          <div className="pb-20">
+            <TabsContent value="tickets" className="mt-0">
+              {ticketsCard}
+            </TabsContent>
+            <TabsContent value="about" className="mt-0 space-y-10">
+              {aboutSection || (
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  No synopsis yet for this film.
+                </p>
+              )}
+              {detailsSection}
+            </TabsContent>
+            <TabsContent value="cinema" className="mt-0">
+              {cinemaSection}
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+
       <Dialog open={booking} onOpenChange={setBooking}>
-        <DialogContent className="max-h-[92vh] max-w-3xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{movie.title}</DialogTitle>
-            <DialogDescription>
+        {/* A sheet that owns the whole screen on a phone, a framed panel on a
+            desktop. Either way the header and the price bar stay put and only
+            the room scrolls, so the way forward is never scrolled off. */}
+        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl sm:border">
+          <DialogHeader className="shrink-0 space-y-0.5 border-b border-border px-4 py-4 text-left sm:px-6">
+            <DialogTitle className="pr-8 text-base font-semibold sm:text-lg">
+              {movie.title}
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               {showtime
                 ? `${dayLabel(day.date)} · ${clockLabel(showtime.startsAt)}${
                     showtime.hall?.name ? ` · ${showtime.hall.name}` : ""

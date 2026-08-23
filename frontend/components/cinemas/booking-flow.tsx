@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
   Popcorn,
   ShoppingBasket,
   Ticket,
+  X,
 } from "lucide-react";
 import {
   fetchShowtimeSeats,
@@ -44,6 +45,11 @@ const money = (n: number, currency = "ETB") =>
   `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`;
 
 type Step = "seats" | "snacks" | "pay";
+
+// The film page's own accent, so the sheet reads as part of the page it opened
+// from rather than as a generic dialog dropped on top of it.
+const ACCENT =
+  "bg-[#0D47A1] text-white hover:bg-[#0D47A1]/90 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-300";
 
 export default function BookingFlow({
   showtimeId,
@@ -293,16 +299,19 @@ export default function BookingFlow({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16 text-muted-foreground">
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading the room…
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-2 px-6 py-20 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading the room…
       </div>
     );
   }
 
   if (!seatMap?.assignedSeating) {
     return (
-      <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-        This screening sells general admission — seat selection is not available for it.
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-16">
+        <p className="max-w-sm text-center text-sm text-muted-foreground">
+          This screening sells general admission — seat selection is not available
+          for it.
+        </p>
       </div>
     );
   }
@@ -312,423 +321,563 @@ export default function BookingFlow({
   // refuse to be added; saying so beats a room where nothing works.
   if (seatMap.needsRepricing) {
     return (
-      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-6 text-center text-sm dark:border-amber-800 dark:bg-amber-950/30">
-        <p className="font-medium text-amber-900 dark:text-amber-200">
-          This screening isn&apos;t open for seat booking yet
-        </p>
-        <p className="mt-1 text-amber-800 dark:text-amber-300">
-          The cinema has just set up seating for this hall and needs to set a price
-          for each type of seat. Try another screening, or buy at the box office.
-        </p>
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-16">
+        <div className="max-w-sm rounded-2xl border border-amber-300 bg-amber-50 p-6 text-center text-sm dark:border-amber-900/60 dark:bg-amber-950/30">
+          <p className="font-semibold text-amber-900 dark:text-amber-200">
+            This screening isn&apos;t open for seat booking yet
+          </p>
+          <p className="mt-1.5 leading-relaxed text-amber-800 dark:text-amber-300/90">
+            The cinema has just set up seating for this hall and needs to set a
+            price for each type of seat. Try another screening, or buy at the box
+            office.
+          </p>
+        </div>
       </div>
     );
   }
 
   const currency = seatMap.currency || "ETB";
+  const seatCount = selected.length;
+
+  const goBack =
+    step === "seats"
+      ? { label: "Cancel", run: onClose }
+      : step === "snacks"
+        ? { label: "Back", run: () => setStep("seats") }
+        : {
+            label: "Back",
+            run: async () => {
+              await abandonIfStarted();
+              setStep(concessions.length ? "snacks" : "seats");
+            },
+          };
+
+  const goNext =
+    step === "seats"
+      ? {
+          label: concessions.length ? "Add snacks" : "Continue",
+          run: () => setStep(concessions.length ? "snacks" : "pay"),
+          disabled: seatCount === 0 || !basket,
+        }
+      : step === "snacks"
+        ? {
+            label: "Continue to payment",
+            run: () => setStep("pay"),
+            disabled: !basket,
+          }
+        : null;
 
   return (
-    <div className="space-y-6">
-      {/* --- step indicator ------------------------------------------------ */}
-      <div className="flex items-center gap-2 text-xs">
-        {(
-          [
-            ["seats", "Seats", Armchair],
-            ["snacks", "Snacks", Popcorn],
-            ["pay", "Pay", Ticket],
-          ] as [Step, string, typeof Armchair][]
-        ).map(([value, label, Icon], index) => {
-          const active = step === value;
-          const done =
-            (value === "seats" && step !== "seats") ||
-            (value === "snacks" && step === "pay");
-          return (
-            <div key={value} className="flex items-center gap-2">
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 ${
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : done
-                      ? "bg-primary/15 text-primary"
-                      : "bg-muted text-muted-foreground"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </span>
-              {index < 2 && <span className="h-px w-4 bg-border" />}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* --- seats ---------------------------------------------------------- */}
-      {step === "seats" && (
-        <div className="space-y-4">
-          <div className="overflow-x-auto rounded-xl border border-border bg-gradient-to-b from-muted/40 to-background p-5">
-            <div className="mx-auto mb-6 w-2/3 min-w-[220px]">
-              <div className="h-2 rounded-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
-              <p className="mt-1 text-center text-[10px] uppercase tracking-[0.3em] text-muted-foreground">
-                Screen
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {(seatMap.rows || []).map((row) => (
-                <div key={row.label} className="flex items-center gap-2">
-                  <span className="w-6 shrink-0 text-center text-xs font-semibold text-muted-foreground">
-                    {row.label}
-                  </span>
-                  <div
-                    className="flex flex-1 items-center justify-center gap-1"
-                    style={{
-                      transform: `translateY(${row.curve * 0.35}px) translateX(${row.offset * 0.5}px)`,
-                    }}
-                  >
-                    {row.seats.map((seat) => {
-                      const isSelected = selected.includes(seat.seatKey);
-                      const category = priceByCategory.get(seat.categoryKey);
-                      if (seat.status === "gap") {
-                        return <span key={seat.seatKey} className="h-6 w-6" />;
-                      }
-                      const unavailable =
-                        seat.status === "sold" ||
-                        seat.status === "held" ||
-                        seat.status === "blocked";
-                      return (
-                        <button
-                          key={seat.seatKey}
-                          type="button"
-                          disabled={unavailable}
-                          onClick={() => toggleSeat(seat.seatKey, seat.status)}
-                          title={
-                            unavailable
-                              ? `${seat.seatKey} — unavailable`
-                              : `${seat.seatKey} · ${category?.label ?? ""} · ${money(category?.price ?? 0, currency)}`
-                          }
-                          className={`h-6 w-6 rounded-t-md text-[9px] font-semibold transition ${
-                            unavailable
-                              ? "cursor-not-allowed bg-muted text-muted-foreground/50"
-                              : isSelected
-                                ? "scale-110 text-white ring-2 ring-offset-1 ring-primary"
-                                : "text-white hover:scale-110"
-                          }`}
-                          style={
-                            unavailable
-                              ? undefined
-                              : { backgroundColor: category?.color || "#6366f1" }
-                          }
-                        >
-                          {seat.number}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-            {(seatMap.categories || []).map((category) => (
-              <span key={category.key} className="inline-flex items-center gap-1.5">
-                <span
-                  className="h-3 w-3 rounded"
-                  style={{ backgroundColor: category.color || "#6366f1" }}
-                />
-                {category.label} · {money(category.price ?? 0, currency)}
-              </span>
-            ))}
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded bg-muted" /> Taken
-            </span>
-          </div>
-
-          <StepFooter
-            basket={basket}
-            quoting={quoting}
-            currency={currency}
-            disabled={selected.length === 0}
-            label={
-              concessions.length ? "Add snacks" : "Continue to payment"
-            }
-            onNext={() => setStep(concessions.length ? "snacks" : "pay")}
-            onBack={onClose}
-            backLabel="Cancel"
-          />
-        </div>
-      )}
-
-      {/* --- snacks --------------------------------------------------------- */}
-      {step === "snacks" && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <ShoppingBasket className="h-4 w-4 text-primary" />
-            <p className="text-sm font-medium">
-              Anything from the counter? Collect it on the night.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {concessions.map((item) => {
-              const qty = snacks[item._id] || 0;
-              // No sold-out state here: the public listing only returns items
-              // that are on sale and have something left, so anything rendered
-              // is buyable. It used to derive one from `stockRemaining`, which
-              // this endpoint does not send.
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* --- step rail ------------------------------------------------------ */}
+      <div className="shrink-0 border-b border-border px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {(
+            [
+              ["seats", "Seats", Armchair],
+              ["snacks", "Snacks", Popcorn],
+              ["pay", "Pay", Ticket],
+            ] as [Step, string, typeof Armchair][]
+          )
+            .filter(([value]) => value !== "snacks" || concessions.length > 0)
+            .map(([value, label, Icon], index, list) => {
+              const order: Step[] = ["seats", "snacks", "pay"];
+              const active = step === value;
+              const done = order.indexOf(step) > order.indexOf(value);
               return (
-                <div
-                  key={item._id}
-                  className="flex items-center gap-3 rounded-lg border border-border p-3"
-                >
-                  {/* The artwork the admin uploaded for this product.
-                      Falls back to the brand colour with an icon, which is what
-                      this always showed — so a product with no image still
-                      renders as something rather than an empty box. */}
-                  <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md"
-                    style={{
-                      backgroundColor: item.beverage?.image
-                        ? undefined
-                        : item.beverage?.color || "#6366f1",
-                    }}
+                <div key={value} className="flex flex-1 items-center gap-1.5 last:flex-none sm:gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3 ${
+                      active
+                        ? "bg-[#0D47A1] text-white dark:bg-yellow-400 dark:text-black"
+                        : done
+                          ? "bg-[#0D47A1]/10 text-[#0D47A1] dark:bg-yellow-400/15 dark:text-yellow-300"
+                          : "bg-muted text-muted-foreground"
+                    }`}
                   >
-                    {item.beverage?.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={`${process.env.NEXT_PUBLIC_API_URL}${item.beverage.image}`}
-                        alt={item.beverage.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <Popcorn className="h-5 w-5 text-white" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {item.beverage?.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {money(item.price, currency)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="h-7 w-7"
-                      disabled={qty === 0}
-                      onClick={() => setSnackQty(item._id, qty - 1)}
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-6 text-center text-sm tabular-nums">{qty}</span>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="h-7 w-7"
-                      disabled={qty >= MAX_PER_LINE}
-                      onClick={() => setSnackQty(item._id, qty + 1)}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </span>
+                  {index < list.length - 1 && (
+                    <span
+                      className={`h-px flex-1 ${done ? "bg-[#0D47A1]/40 dark:bg-yellow-400/40" : "bg-border"}`}
+                    />
+                  )}
                 </div>
               );
             })}
-          </div>
-
-          <StepFooter
-            basket={basket}
-            quoting={quoting}
-            currency={currency}
-            label="Continue to payment"
-            onNext={() => setStep("pay")}
-            onBack={() => setStep("seats")}
-            backLabel="Back to seats"
-          />
         </div>
-      )}
+      </div>
 
-      {/* --- pay ------------------------------------------------------------ */}
-      {step === "pay" && (
-        <div className="space-y-4">
-          {/* A signed-in customer is only asked for the paying number.
-              Their name and email are already known, and re-asking implies we
-              might send the ticket somewhere other than their account — which
-              we do not. The paying number still has to be asked for: it is the
-              wallet being charged, and it is often not the account's number. */}
-          {user ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
-                <span className="text-muted-foreground">Booking as</span>
-                <span className="font-medium">
-                  {[user.firstName, user.lastName].filter(Boolean).join(" ") || user.email}
-                </span>
-              </div>
-              <div>
-                <Label className="text-xs">Phone to pay from</Label>
-                <Input
-                  value={details.phone}
-                  onChange={(e) => setDetails({ ...details, phone: e.target.value })}
-                  placeholder="09…"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  The number that will approve the payment. Your ticket goes to your
-                  account either way.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <Label className="text-xs">Name</Label>
-                <Input
-                  value={details.name}
-                  onChange={(e) => setDetails({ ...details, name: e.target.value })}
-                  placeholder="Your name"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Phone (for payment)</Label>
-                <Input
-                  value={details.phone}
-                  onChange={(e) => setDetails({ ...details, phone: e.target.value })}
-                  placeholder="09…"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Email (optional)</Label>
-                <Input
-                  value={details.email}
-                  onChange={(e) => setDetails({ ...details, email: e.target.value })}
-                  placeholder="you@example.com"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* The same selector the event checkout uses, so the two flows offer
-              the same methods and disable the same ones for a given number —
-              a Telebirr prompt on an 07 line simply never arrives. */}
-          <div>
-            <Label className="mb-2 block text-xs">How do you want to pay?</Label>
-            <PaymentMethodSelector
-              phoneNumber={details.phone}
-              selectedMethod={method}
-              onSelect={setMethod}
-              provider={provider}
-              currency={currency === "USD" ? "USD" : "ETB"}
+      {/* --- the step itself ------------------------------------------------ */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+        {step === "seats" && (
+          <div className="space-y-4">
+            <SeatPlan
+              seatMap={seatMap}
+              selected={selected}
+              onToggle={toggleSeat}
+              priceByCategory={priceByCategory}
+              currency={currency}
             />
-          </div>
 
-          {basket && (
-            <div className="space-y-1 rounded-lg border border-border p-4 text-sm">
-              {basket.tickets.map((t) => (
-                <div key={t.seatKey} className="flex justify-between">
-                  <span>
-                    Seat {t.seatKey}{" "}
-                    <span className="text-muted-foreground">({t.categoryLabel})</span>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              {(seatMap.categories || []).map((category) => (
+                <span key={category.key} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-[3px]"
+                    style={{ backgroundColor: category.color || "#6366f1" }}
+                  />
+                  {category.label}
+                  <span className="font-medium text-foreground">
+                    {money(category.price ?? 0, currency)}
                   </span>
-                  <span className="tabular-nums">{money(t.price, currency)}</span>
-                </div>
+                </span>
               ))}
-              {basket.concessions.map((c) => (
-                <div key={c.cinemaBeverage} className="flex justify-between">
-                  <span>
-                    {c.name} <span className="text-muted-foreground">× {c.quantity}</span>
-                  </span>
-                  <span className="tabular-nums">{money(c.lineTotal, currency)}</span>
-                </div>
-              ))}
-              <div className="mt-2 flex justify-between border-t border-border pt-2 font-semibold">
-                <span>Total</span>
-                <span className="tabular-nums">{money(basket.total, currency)}</span>
-              </div>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-[3px] bg-muted-foreground/30" />
+                Taken
+              </span>
             </div>
-          )}
 
-          <p className="text-xs text-muted-foreground">
-            Your seats are held for {seatMap.holdMinutes ?? 10} minutes while you pay.
-          </p>
+            {/* What you have picked, with a way to drop one without hunting
+                for it back in the grid. */}
+            {seatCount > 0 && (
+              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                {selected.map((seatKey) => (
+                  <button
+                    key={seatKey}
+                    type="button"
+                    onClick={() => toggleSeat(seatKey, "available")}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 py-1 pl-3 pr-2 text-xs font-medium transition-colors hover:border-destructive/50 hover:text-destructive"
+                  >
+                    {seatKey}
+                    <X className="h-3 w-3 opacity-50 transition-opacity group-hover:opacity-100" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === "snacks" && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-2.5">
+              <ShoppingBasket className="mt-0.5 h-4 w-4 shrink-0 text-[#0D47A1] dark:text-yellow-400" />
+              <p className="text-sm text-muted-foreground">
+                Anything from the counter? Collect it on the night — no queue.
+              </p>
+            </div>
+
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {concessions.map((item) => {
+                const qty = snacks[item._id] || 0;
+                // No sold-out state here: the public listing only returns items
+                // that are on sale and have something left, so anything rendered
+                // is buyable. It used to derive one from `stockRemaining`, which
+                // this endpoint does not send.
+                return (
+                  <div
+                    key={item._id}
+                    className={`flex items-center gap-3 rounded-xl border p-2.5 transition-colors ${
+                      qty > 0
+                        ? "border-[#0D47A1] bg-[#0D47A1]/5 dark:border-yellow-400/60 dark:bg-yellow-400/5"
+                        : "border-border"
+                    }`}
+                  >
+                    {/* The artwork the admin uploaded for this product.
+                        Falls back to the brand colour with an icon, which is what
+                        this always showed — so a product with no image still
+                        renders as something rather than an empty box. */}
+                    <div
+                      className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                      style={{
+                        backgroundColor: item.beverage?.image
+                          ? undefined
+                          : item.beverage?.color || "#6366f1",
+                      }}
+                    >
+                      {item.beverage?.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`${process.env.NEXT_PUBLIC_API_URL}${item.beverage.image}`}
+                          alt={item.beverage.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <Popcorn className="h-5 w-5 text-white" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {item.beverage?.name}
+                      </p>
+                      <p className="text-xs tabular-nums text-muted-foreground">
+                        {money(item.price, currency)}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8 rounded-full"
+                        disabled={qty === 0}
+                        onClick={() => setSnackQty(item._id, qty - 1)}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                        <span className="sr-only">One fewer {item.beverage?.name}</span>
+                      </Button>
+                      <span className="w-5 text-center text-sm font-medium tabular-nums">
+                        {qty}
+                      </span>
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-8 w-8 rounded-full"
+                        disabled={qty >= MAX_PER_LINE}
+                        onClick={() => setSnackQty(item._id, qty + 1)}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        <span className="sr-only">One more {item.beverage?.name}</span>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {step === "pay" && (
+          <div className="space-y-5">
+            {/* A signed-in customer is only asked for the paying number.
+                Their name and email are already known, and re-asking implies we
+                might send the ticket somewhere other than their account — which
+                we do not. The paying number still has to be asked for: it is the
+                wallet being charged, and it is often not the account's number. */}
+            {user ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">Booking as</span>
+                  <span className="truncate font-medium">
+                    {[user.firstName, user.lastName].filter(Boolean).join(" ") ||
+                      user.email}
+                  </span>
+                </div>
+                <div>
+                  <Label className="text-xs">Phone to pay from</Label>
+                  <Input
+                    className="mt-1.5"
+                    inputMode="tel"
+                    value={details.phone}
+                    onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+                    placeholder="09…"
+                  />
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    The number that will approve the payment. Your ticket goes to
+                    your account either way.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label className="text-xs">Name</Label>
+                  <Input
+                    className="mt-1.5"
+                    value={details.name}
+                    onChange={(e) => setDetails({ ...details, name: e.target.value })}
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Phone (for payment)</Label>
+                  <Input
+                    className="mt-1.5"
+                    inputMode="tel"
+                    value={details.phone}
+                    onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+                    placeholder="09…"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Email (optional)</Label>
+                  <Input
+                    className="mt-1.5"
+                    inputMode="email"
+                    value={details.email}
+                    onChange={(e) => setDetails({ ...details, email: e.target.value })}
+                    placeholder="you@example.com"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* The same selector the event checkout uses, so the two flows offer
+                the same methods and disable the same ones for a given number —
+                a Telebirr prompt on an 07 line simply never arrives. */}
+            <div>
+              <Label className="mb-2 block text-xs">How do you want to pay?</Label>
+              <PaymentMethodSelector
+                phoneNumber={details.phone}
+                selectedMethod={method}
+                onSelect={setMethod}
+                provider={provider}
+                currency={currency === "USD" ? "USD" : "ETB"}
+              />
+            </div>
+
+            {basket && (
+              <div className="space-y-1.5 rounded-xl border border-border p-4 text-sm">
+                {basket.tickets.map((t) => (
+                  <div key={t.seatKey} className="flex justify-between gap-3">
+                    <span>
+                      Seat {t.seatKey}{" "}
+                      <span className="text-muted-foreground">({t.categoryLabel})</span>
+                    </span>
+                    <span className="tabular-nums">{money(t.price, currency)}</span>
+                  </div>
+                ))}
+                {basket.concessions.map((c) => (
+                  <div key={c.cinemaBeverage} className="flex justify-between gap-3">
+                    <span>
+                      {c.name}{" "}
+                      <span className="text-muted-foreground">× {c.quantity}</span>
+                    </span>
+                    <span className="tabular-nums">{money(c.lineTotal, currency)}</span>
+                  </div>
+                ))}
+                <div className="mt-2.5 flex justify-between gap-3 border-t border-border pt-2.5 text-base font-semibold">
+                  <span>Total</span>
+                  <span className="tabular-nums">{money(basket.total, currency)}</span>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              Your seats are held for {seatMap.holdMinutes ?? 10} minutes while you
+              pay.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* --- what it costs, and the way on -------------------------------- */}
+      <div className="shrink-0 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-baseline gap-2 text-sm">
+            {basket ? (
+              <>
+                <span className="text-lg font-semibold tabular-nums">
+                  {money(basket.total, currency)}
+                </span>
+                <span className="text-muted-foreground">
+                  {basket.tickets.length} seat{basket.tickets.length === 1 ? "" : "s"}
+                  {basket.concessions.length
+                    ? ` · ${basket.concessions.length} item${basket.concessions.length === 1 ? "" : "s"}`
+                    : ""}
+                </span>
+                {quoting && (
+                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                )}
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                Pick your seats to see the price
+              </span>
+            )}
+          </div>
 
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={async () => {
-                await abandonIfStarted();
-                setStep(concessions.length ? "snacks" : "seats");
-              }}
+              className="flex-1 sm:flex-none"
+              onClick={goBack.run}
             >
-              Back
+              {goBack.label}
             </Button>
-            <Button
-              className="flex-1"
-              size="lg"
-              disabled={paying || !basket || !details.phone.trim() || !method}
-              onClick={pay}
-            >
-              {paying ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting payment…
-                </>
-              ) : (
-                `Pay ${basket ? money(basket.total, currency) : ""}`
-              )}
-            </Button>
+            {goNext ? (
+              <Button
+                className={`flex-1 sm:flex-none ${ACCENT}`}
+                onClick={goNext.run}
+                disabled={goNext.disabled}
+              >
+                {goNext.label}
+              </Button>
+            ) : (
+              <Button
+                className={`flex-1 sm:flex-none ${ACCENT}`}
+                disabled={paying || !basket || !details.phone.trim() || !method}
+                onClick={pay}
+              >
+                {paying ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Starting…
+                  </>
+                ) : (
+                  `Pay ${basket ? money(basket.total, currency) : ""}`
+                )}
+              </Button>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function StepFooter({
-  basket,
-  quoting,
+/**
+ * The room, drawn to fit.
+ *
+ * A hall is as wide as it is; a phone is not. Rather than let the grid run off
+ * the edge — which is what it used to do, silently hiding the back columns —
+ * the seat size is derived from the space actually available, so the whole
+ * plan is on screen at once. Only a genuinely enormous hall falls back to
+ * sideways scrolling, and it is told to scroll.
+ */
+function SeatPlan({
+  seatMap,
+  selected,
+  onToggle,
+  priceByCategory,
   currency,
-  label,
-  onNext,
-  onBack,
-  backLabel,
-  disabled,
 }: {
-  basket: CinemaBasket | null;
-  quoting: boolean;
+  seatMap: ShowtimeSeatMap;
+  selected: string[];
+  onToggle: (seatKey: string, status: string) => void;
+  priceByCategory: Map<string, { label: string; price: number; color?: string }>;
   currency: string;
-  label: string;
-  onNext: () => void;
-  onBack?: () => void;
-  backLabel?: string;
-  disabled?: boolean;
 }) {
+  const viewport = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+
+  useEffect(() => {
+    const node = viewport.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setWidth(entry.contentRect.width)
+    );
+    observer.observe(node);
+    setWidth(node.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+
+  const rows = seatMap.rows || [];
+  const columns = rows.reduce((widest, row) => Math.max(widest, row.seats.length), 0);
+
+  // 20px of row letter, then whatever is left shared between the seats. The
+  // floor stops seats shrinking into targets no thumb can hit; the ceiling
+  // stops a four-seat screening-room drawing armchairs the size of a hand.
+  const GAP = 4;
+  const LABEL = 22;
+  const fitted = columns
+    ? Math.floor((width - LABEL * 2 - GAP * columns) / columns)
+    : 28;
+  const seat = Math.max(18, Math.min(34, fitted || 28));
+  const scrolls = width > 0 && fitted < 18;
+  const showNumbers = seat >= 24;
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-      <div className="text-sm">
-        {basket ? (
-          <>
-            <span className="text-muted-foreground">
-              {basket.tickets.length} seat{basket.tickets.length === 1 ? "" : "s"}
-              {basket.concessions.length ? ` · ${basket.concessions.length} item(s)` : ""}
-            </span>
-            <span className="ml-2 font-semibold tabular-nums">
-              {money(basket.total, currency)}
-            </span>
-            {quoting && <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />}
-          </>
-        ) : (
-          <span className="text-muted-foreground">Pick your seats to see the price</span>
-        )}
+    <div className="rounded-2xl border border-border bg-gradient-to-b from-muted/50 to-transparent p-3 dark:from-[#12161d] dark:to-[#0d1015] sm:p-5">
+      {/* The screen, and the light coming off it. Front rows sit in the glow. */}
+      <div className="relative mx-auto mb-5 w-[70%] min-w-[180px] max-w-sm">
+        <div
+          className="h-1.5 bg-gradient-to-r from-transparent via-foreground/40 to-transparent dark:via-yellow-200/70"
+          style={{ borderRadius: "50% 50% 6px 6px / 90% 90% 6px 6px" }}
+        />
+        <div className="absolute left-1/2 top-1.5 h-14 w-[130%] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,theme(colors.foreground/12%),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_top,rgba(250,204,21,0.16),transparent_70%)]" />
+        <p className="relative mt-2 text-center text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+          Screen
+        </p>
       </div>
-      <div className="flex gap-2">
-        {onBack && (
-          <Button variant="outline" onClick={onBack}>
-            {backLabel || "Back"}
-          </Button>
-        )}
-        <Button onClick={onNext} disabled={disabled || !basket}>
-          {label}
-        </Button>
+
+      <div
+        ref={viewport}
+        className={scrolls ? "overflow-x-auto pb-2" : "overflow-hidden"}
+      >
+        <div
+          className="mx-auto flex flex-col items-center"
+          style={{ gap: GAP, width: scrolls ? "max-content" : undefined }}
+        >
+          {rows.map((row) => (
+            <div key={row.label} className="flex items-center" style={{ gap: GAP }}>
+              <span
+                className="shrink-0 text-center text-[10px] font-semibold uppercase text-muted-foreground"
+                style={{ width: LABEL }}
+              >
+                {row.label}
+              </span>
+              <div
+                className="flex items-center"
+                style={{
+                  gap: GAP,
+                  transform: `translateY(${row.curve * 0.35}px) translateX(${row.offset * 0.5}px)`,
+                }}
+              >
+                {row.seats.map((s) => {
+                  if (s.status === "gap") {
+                    return (
+                      <span
+                        key={s.seatKey}
+                        style={{ width: seat, height: seat }}
+                        aria-hidden
+                      />
+                    );
+                  }
+                  const isSelected = selected.includes(s.seatKey);
+                  const category = priceByCategory.get(s.categoryKey);
+                  const unavailable =
+                    s.status === "sold" ||
+                    s.status === "held" ||
+                    s.status === "blocked";
+                  return (
+                    <button
+                      key={s.seatKey}
+                      type="button"
+                      disabled={unavailable}
+                      aria-pressed={isSelected}
+                      onClick={() => onToggle(s.seatKey, s.status)}
+                      title={
+                        unavailable
+                          ? `${s.seatKey} — taken`
+                          : `${s.seatKey} · ${category?.label ?? ""} · ${money(category?.price ?? 0, currency)}`
+                      }
+                      className={`relative flex items-center justify-center rounded-t-[7px] rounded-b-sm font-semibold leading-none transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
+                        unavailable
+                          ? "cursor-not-allowed bg-muted-foreground/25 text-transparent"
+                          : isSelected
+                            ? "text-white ring-2 ring-foreground ring-offset-2 ring-offset-background motion-safe:scale-110"
+                            : "text-white/90 motion-safe:hover:-translate-y-0.5"
+                      }`}
+                      style={{
+                        width: seat,
+                        height: seat,
+                        fontSize: Math.max(8, Math.round(seat * 0.36)),
+                        ...(unavailable
+                          ? {}
+                          : { backgroundColor: category?.color || "#6366f1" }),
+                      }}
+                    >
+                      {showNumbers && !unavailable && <span>{s.number}</span>}
+                      <span className="sr-only">
+                        Row {row.label} seat {s.number}
+                        {unavailable ? " (taken)" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="shrink-0" style={{ width: LABEL }} aria-hidden />
+            </div>
+          ))}
+        </div>
       </div>
+
+      {scrolls && (
+        <p className="mt-1 text-center text-[10px] text-muted-foreground">
+          Swipe sideways to see the whole row
+        </p>
+      )}
     </div>
   );
 }
