@@ -15,6 +15,7 @@ import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
 import AdminMovieCuration from "@/components/cinema/admin-movie-curation";
 import CinemaConcessionsGrant from "@/components/cinema/cinema-concessions-grant";
+import AdminConcessionCatalogue from "@/components/cinema/admin-concession-catalogue";
 import {
   AlertTriangle,
   Clapperboard,
@@ -26,6 +27,8 @@ import {
   ShieldOff,
   Store,
   Popcorn,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -324,12 +327,15 @@ export default function AdminCinemaPanel() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="cinemas" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[320px]">
+        <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[440px]">
           <TabsTrigger value="cinemas">
             <Store className="mr-1.5 h-4 w-4" /> Cinemas
           </TabsTrigger>
           <TabsTrigger value="movies">
             <Clapperboard className="mr-1.5 h-4 w-4" /> Films
+          </TabsTrigger>
+          <TabsTrigger value="snacks">
+            <Popcorn className="mr-1.5 h-4 w-4" /> Snacks
           </TabsTrigger>
         </TabsList>
 
@@ -424,65 +430,96 @@ export default function AdminCinemaPanel() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  {/* Fixed layout with explicit widths.
+                      An auto-layout table re-measures every column against its
+                      content, so one long cinema name or a missing description
+                      shifted every other column and made the rates and actions
+                      sit at a different x on each row. The widths below are the
+                      alignment fix; min-width keeps them from collapsing before
+                      the container scrolls. */}
+                  <table className="w-full min-w-[900px] table-fixed text-sm">
+                    <colgroup>
+                      <col className="w-[26%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[9%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[12%]" />
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                        <th className="px-5 py-3">Cinema</th>
-                        <th className="px-5 py-3">Account</th>
-                        <th className="px-5 py-3">Status</th>
-                        <th className="px-5 py-3 text-right">Ticket cut</th>
-                        <th className="px-5 py-3 text-right">Beverage cut</th>
-                        <th className="px-5 py-3 text-right">Can sell</th>
-                        <th className="px-5 py-3 text-right">Actions</th>
+                        <th className="px-5 py-3 font-medium">Cinema</th>
+                        <th className="px-5 py-3 font-medium">Account</th>
+                        <th className="px-5 py-3 font-medium">Status</th>
+                        <th className="px-5 py-3 text-right font-medium">Ticket cut</th>
+                        <th className="px-5 py-3 text-right font-medium">Beverage cut</th>
+                        <th className="px-5 py-3 text-right font-medium">Can sell</th>
+                        <th className="px-5 py-3 text-right font-medium">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {cinemas.map((cinema) => (
-                        <tr key={cinema._id} className="border-b border-gray-100 last:border-0 dark:border-gray-800">
+                        <tr
+                          key={cinema._id}
+                          className="border-b border-gray-100 align-middle last:border-0 dark:border-gray-800"
+                        >
                           <td className="px-5 py-4">
                             <div className="flex items-center gap-3">
                               {buildImageUrl(cinema.image) ? (
                                 <img
                                   src={buildImageUrl(cinema.image)!}
                                   alt={cinema.name}
-                                  className="h-12 w-12 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-800"
+                                  className="h-11 w-11 shrink-0 rounded-lg object-cover ring-1 ring-gray-200 dark:ring-gray-800"
                                 />
                               ) : (
-                                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-500 dark:bg-gray-900 dark:text-gray-400">
-                                  CN
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs font-semibold text-gray-500 dark:bg-gray-900 dark:text-gray-400">
+                                  {cinema.name.slice(0, 2).toUpperCase()}
                                 </div>
                               )}
-                              <div>
-                                <p className="font-medium text-gray-900 dark:text-gray-100">{cinema.name}</p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">
-                                  {[cinema.city, cinema.description].filter(Boolean).join(" • ") || "Cinema"}
+                              {/* min-w-0 so the truncation below actually
+                                  applies — a flex child will not shrink past
+                                  its content without it, and a long name pushed
+                                  the column wider than its share. */}
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-gray-900 dark:text-gray-100">
+                                  {cinema.name}
+                                </p>
+                                <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                                  {[cinema.city, cinema.description].filter(Boolean).join(" · ") || "Cinema"}
                                 </p>
                               </div>
                             </div>
                           </td>
                           <td className="px-5 py-4 text-gray-600 dark:text-gray-400">
-                            <p>{cinema.account?.email || cinema.email || "—"}</p>
-                            <p className="text-xs">{cinema.phoneNumber || cinema.account?.phoneNumber || ""}</p>
-                          </td>
-                          <td className="px-5 py-4">
-                            <Badge variant={cinema.isActive ? "secondary" : "outline"}>
-                              {cinema.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              {cinema.beverageEligibility === "eligible" ? "Concessions enabled" : "Concessions blocked"}
+                            <p className="truncate">{cinema.account?.email || cinema.email || "—"}</p>
+                            <p className="truncate text-xs">
+                              {cinema.phoneNumber || cinema.account?.phoneNumber || "—"}
                             </p>
                           </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                          <td className="px-5 py-4">
+                            {/* Both lines always render, so every row is the
+                                same height whether or not a value is present. */}
+                            <Badge variant={cinema.isActive ? "secondary" : "outline"}>
+                              {cinema.isActive ? "Active" : "Suspended"}
+                            </Badge>
+                            <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                              {cinema.beverageEligibility === "eligible"
+                                ? "Concessions approved"
+                                : "Concessions blocked"}
+                            </p>
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4 text-right tabular-nums text-gray-600 dark:text-gray-400">
                             {formatRate(cinema.ticketCommissionRate)}
                           </td>
-                          <td className="px-5 py-4 text-right tabular-nums text-gray-600 dark:text-gray-400">
+                          <td className="whitespace-nowrap px-5 py-4 text-right tabular-nums text-gray-600 dark:text-gray-400">
                             {formatRate(cinema.beverageCommissionRate)}
                           </td>
                           {/* Granted products, as a control rather than a
                               number: the count is the thing an admin wants to
                               change, so reading it and changing it are the same
                               click. */}
-                          <td className="px-5 py-4 text-right">
+                          <td className="whitespace-nowrap px-5 py-4 text-right">
                             <button
                               type="button"
                               onClick={() => setGranting(cinema)}
@@ -498,21 +535,52 @@ export default function AdminCinemaPanel() {
                                 : `${(cinema.allowedBeverages || []).length} granted`}
                             </button>
                           </td>
-                          <td className="px-5 py-4 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="outline" size="sm" onClick={() => openEdit(cinema)}>
-                                <Pencil className="mr-1 h-4 w-4" /> Edit
+                          <td className="px-5 py-4">
+                            {/* Icon buttons on a fixed grid rather than three
+                                labelled ones: the labels changed per row
+                                ("Revoke"/"Approve", "Suspend"/"Activate"), so
+                                every row's buttons were a different width and
+                                nothing lined up down the column. Each keeps its
+                                label as a tooltip. */}
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                title="Edit this cinema"
+                                onClick={() => openEdit(cinema)}
+                              >
+                                <Pencil className="h-4 w-4" />
                               </Button>
-                              <Button variant="outline" size="sm" onClick={() => toggleEligibility(cinema)}>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                title={
+                                  cinema.beverageEligibility === "eligible"
+                                    ? "Block concessions"
+                                    : "Approve concessions"
+                                }
+                                onClick={() => toggleEligibility(cinema)}
+                              >
                                 {cinema.beverageEligibility === "eligible" ? (
-                                  <ShieldOff className="mr-1 h-4 w-4" />
+                                  <ShieldOff className="h-4 w-4" />
                                 ) : (
-                                  <ShieldCheck className="mr-1 h-4 w-4" />
+                                  <ShieldCheck className="h-4 w-4" />
                                 )}
-                                {cinema.beverageEligibility === "eligible" ? "Revoke" : "Approve"}
                               </Button>
-                              <Button variant="outline" size="sm" onClick={() => toggleStatus(cinema)}>
-                                {cinema.isActive ? "Suspend" : "Activate"}
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
+                                title={cinema.isActive ? "Suspend this cinema" : "Activate this cinema"}
+                                onClick={() => toggleStatus(cinema)}
+                              >
+                                {cinema.isActive ? (
+                                  <PauseCircle className="h-4 w-4" />
+                                ) : (
+                                  <PlayCircle className="h-4 w-4" />
+                                )}
                               </Button>
                             </div>
                           </td>
@@ -551,6 +619,20 @@ export default function AdminCinemaPanel() {
             </p>
           </div>
           <AdminMovieCuration />
+        </TabsContent>
+
+        <TabsContent value="snacks" className="space-y-5">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Snacks and drinks
+            </h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              The products cinemas can sell, and the artwork customers see. Adding
+              one here does not put it on sale — grant it to a cinema on the
+              Cinemas tab.
+            </p>
+          </div>
+          <AdminConcessionCatalogue />
         </TabsContent>
       </Tabs>
 
