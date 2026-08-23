@@ -87,7 +87,15 @@ export default function BookingFlow({
       .then(([map, lineup]) => {
         if (cancelled) return;
         setSeatMap(map);
-        setConcessions(lineup.filter((l) => l.isAvailable));
+        // NOT filtered again here.
+        //
+        // The public endpoint already returns only what is on sale and in
+        // stock. This used to re-filter on `l.isAvailable`, a field that
+        // endpoint does not send — so every item read as undefined, the list
+        // came out empty, and the snacks step was skipped for every customer at
+        // every cinema. A second filter over a projection you do not control is
+        // a bug waiting for someone to trim a field.
+        setConcessions(lineup);
       })
       .catch((error) => !cancelled && toast.error((error as Error).message))
       .finally(() => !cancelled && setLoading(false));

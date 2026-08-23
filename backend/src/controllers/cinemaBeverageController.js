@@ -681,14 +681,27 @@ const listPublicLineup = async (req, res) => {
       success: true,
       data: lineup
         .filter((l) => l.beverage?.isActive)
-        .filter((l) => (l.stockTotal || 0) - (l.sold || 0) > 0)
+        // An unlimited line is not counted, so there is nothing to compare.
+        // Without this it is dropped from every customer-facing list: its
+        // stockTotal is 0 by definition, so `0 - sold > 0` is never true and a
+        // product the cinema deliberately marked "always available" would be
+        // the one product customers could never see.
+        .filter((l) => l.unlimitedStock || (l.stockTotal || 0) - (l.sold || 0) > 0)
         .map((l) => ({
           _id: l._id,
           beverage: l.beverage,
           price: l.price,
           currency: l.currency,
-          // Availability without exposing the sales figures behind it.
+          // Availability without exposing the sales figures behind it. Every
+          // row that reaches here is on sale and has something left, so this is
+          // always true — it exists so a client can say "in stock" without
+          // being handed the numbers.
           inStock: true,
+          // Restated for the client, which cannot infer it: the server has
+          // already filtered on availability, so a client that filters again on
+          // a field it was never sent drops everything. That is exactly what
+          // was happening — see the note in booking-flow.
+          isAvailable: true,
         })),
     });
   } catch (error) {
