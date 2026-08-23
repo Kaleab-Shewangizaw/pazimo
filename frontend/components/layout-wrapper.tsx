@@ -49,6 +49,14 @@ export default function LayoutWrapper({
     pathname === "/cinema" ||
     (cinemaSegment !== undefined &&
       CINEMA_DASHBOARD_SECTIONS.includes(cinemaSegment));
+  // A PUBLIC film page: under /cinema/ but not one of the dashboard sections.
+  // It keeps the site header, and drops the footer for the same reason the
+  // event detail page does — it carries its own persistent booking button at
+  // the bottom of the screen, and the footer's floating pill lands directly on
+  // top of it on a phone.
+  const isPublicMoviePage =
+    cinemaSegment !== undefined &&
+    !CINEMA_DASHBOARD_SECTIONS.includes(cinemaSegment);
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isRsvpForm = pathname?.startsWith("/rsvp-form/");
   const isTicketPage = pathname?.startsWith("/ticket/");
@@ -79,9 +87,11 @@ export default function LayoutWrapper({
     <>
       {!hideGlobalHeaderFooter && !isSignIn && <Header />}
       <main className="flex-1">{children}</main>
-      {!hideGlobalHeaderFooter && !isSignIn && !isEventDetail && !isRsvpForm && (
-        <Footer />
-      )}
+      {!hideGlobalHeaderFooter &&
+        !isSignIn &&
+        !isEventDetail &&
+        !isRsvpForm &&
+        !isPublicMoviePage && <Footer />}
     </>
   );
 }
