@@ -310,10 +310,14 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
   );
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0A0A0A]">
+    // The layout parks a 48px spacer under the header to keep ordinary pages
+    // clear of it. This page does not want it: the header is transparent and
+    // fixed, and the backdrop is meant to run all the way to the top edge
+    // behind it — the same trick, and the same numbers, as the event page.
+    <div className="-mt-1 min-h-screen bg-white transition-colors duration-300 dark:bg-[#0A0A0A] md:-mt-12">
       {/* ── Hero (desktop) ── */}
       <section className="relative hidden bg-gray-300 transition-colors dark:bg-[#1A1D24] md:block">
-        <div className="relative mx-auto h-[50vh] w-full overflow-hidden bg-gray-600 dark:bg-[#0A0A0A] md:h-[75vh]">
+        <div className="relative mx-auto h-[50vh] min-h-[420px] w-full overflow-hidden bg-gray-600 dark:bg-[#0A0A0A] md:h-[88vh]">
           {cover ? (
             <Image
               src={cover}
@@ -378,7 +382,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
       {/* The portrait poster in a contained card, the way the event page shows
           its banner on a phone: a full-bleed landscape crop at this width is a
           stripe, and the poster is the film's own designed identity. */}
-      <div className="px-4 pt-6 md:hidden">
+      <div className="px-4 pt-4 md:hidden">
         <div className="relative aspect-[3/4] w-full overflow-hidden rounded-2xl bg-gray-200 shadow-md dark:bg-[#1A1D24]">
           {poster ? (
             <Image
