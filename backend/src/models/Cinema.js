@@ -106,11 +106,40 @@ const CinemaSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Concessions this cinema may NOT sell — a deny list, for the same reason
-    // OrganizerBeverageProfile.blockedBeverages and Venue.blockedBeverages are
-    // ones: with an allow list every product added to the catalogue later would
-    // be invisible to every cinema an admin had ever narrowed, until someone
-    // reopened each record.
+    // Concessions this cinema MAY sell — an allow list.
+    //
+    // The other two channels (OrganizerBeverageProfile, Venue) use deny lists,
+    // and the reason is worth stating because this deliberately differs: with a
+    // deny list, a product added to the catalogue later is immediately sellable
+    // by everyone, which is the right default when the catalogue is a general
+    // one. Cinema concessions are curated per site — a cinema sells the brands
+    // it has a supply deal for — so the admin grants them explicitly.
+    //
+    // The cost is real and is the reason this is not the platform-wide default:
+    // a new product is invisible to every cinema until it is granted, and a new
+    // cinema can sell nothing until someone grants it something. Both are admin
+    // work that grows with the number of cinemas.
+    //
+    // An EMPTY list therefore means "nothing", not "everything" — the opposite
+    // of how blockedBeverages read, and the migration seeds it accordingly so
+    // no cinema loses what it was already selling.
+    allowedBeverages: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Beverage",
+      },
+    ],
+    allowedBeveragesSetBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+    },
+    allowedBeveragesSetAt: {
+      type: Date,
+    },
+
+    // The previous deny list. Retained, unread, until the allow list has been
+    // seeded on every environment — deleting it in the same change that starts
+    // ignoring it would leave nothing to migrate FROM.
     blockedBeverages: [
       {
         type: mongoose.Schema.Types.ObjectId,

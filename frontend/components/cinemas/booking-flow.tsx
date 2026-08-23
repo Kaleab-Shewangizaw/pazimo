@@ -480,11 +480,28 @@ export default function BookingFlow({
                   key={item._id}
                   className="flex items-center gap-3 rounded-lg border border-border p-3"
                 >
+                  {/* The artwork the admin uploaded for this product.
+                      Falls back to the brand colour with an icon, which is what
+                      this always showed — so a product with no image still
+                      renders as something rather than an empty box. */}
                   <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md"
-                    style={{ backgroundColor: item.beverage?.color || "#6366f1" }}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-md"
+                    style={{
+                      backgroundColor: item.beverage?.image
+                        ? undefined
+                        : item.beverage?.color || "#6366f1",
+                    }}
                   >
-                    <Popcorn className="h-5 w-5 text-white" />
+                    {item.beverage?.image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={`${process.env.NEXT_PUBLIC_API_URL}${item.beverage.image}`}
+                        alt={item.beverage.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Popcorn className="h-5 w-5 text-white" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">

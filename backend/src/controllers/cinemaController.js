@@ -572,6 +572,61 @@ const setBlockedBeverages = async (req, res) => {
   }
 };
 
+/**
+ * Grant this cinema the products it may sell.
+ *
+ * An ALLOW list, so the full set is sent every time rather than a delta —
+ * "these are the products, replace what was there". A delta API would need a
+ * second call to revoke and would make two admins editing at once produce a
+ * union of both intentions rather than the last one to save.
+ *
+ * Ids are validated against the catalogue, not merely for shape: a granted id
+ * that matches no product is silently unsellable, and an admin who mistyped
+ * would see the grant "succeed" and the cinema still unable to sell.
+ */
+const setAllowedBeverages = async (req, res) => {
+  try {
+    const cinema = await Cinema.findById(req.params.cinemaId);
+    if (!cinema) throw new NotFoundError("Cinema not found");
+
+    const ids = Array.isArray(req.body.allowedBeverages)
+      ? req.body.allowedBeverages.map(String)
+      : [];
+    if (ids.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      throw new BadRequestError("allowedBeverages must be beverage ids");
+    }
+
+    const unique = [...new Set(ids)];
+    if (unique.length) {
+      const Beverage = require("../models/Beverage");
+      const found = await Beverage.countDocuments({ _id: { $in: unique } });
+      if (found !== unique.length) {
+        throw new BadRequestError(
+          "One of those products does not exist in the catalogue"
+        );
+      }
+    }
+
+    cinema.allowedBeverages = unique;
+    cinema.allowedBeveragesSetBy = req.user.userId;
+    cinema.allowedBeveragesSetAt = new Date();
+    await cinema.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        _id: cinema._id,
+        name: cinema.name,
+        allowedBeverages: cinema.allowedBeverages,
+      },
+    });
+  } catch (error) {
+    console.error("Error setting cinema allowed beverages:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Halls
 // ---------------------------------------------------------------------------
@@ -808,6 +863,7 @@ module.exports = {
   setCinemaStatus,
   setBeverageEligibility,
   setBlockedBeverages,
+  setAllowedBeverages,
   listHalls,
   createHall,
   updateHall,

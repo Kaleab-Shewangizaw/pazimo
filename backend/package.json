@@ -24,6 +24,7 @@
     "reconcile:seats": "node src/scripts/reconcileCinemaSeats.js",
     "migrate:beverage-ownership": "node src/scripts/migrateBeverageOwnership.js",
     "check:cinema-products": "node src/scripts/checkCinemaProducts.js",
+    "migrate:cinema-allowed": "node src/scripts/migrateCinemaAllowedBeverages.js",
     "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js",
     "clone:prod": "node src/scripts/cloneProductionDb.js"
   },

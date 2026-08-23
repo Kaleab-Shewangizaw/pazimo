@@ -291,11 +291,6 @@ export interface CinemaCatalogItem {
   color?: string | null;
   category: "drink" | "snack" | "combo";
   inLineup: boolean;
-  /**
-   * True when THIS cinema added the product rather than picking it from the
-   * platform catalogue. Only its own are editable or removable by it.
-   */
-  isOwn?: boolean;
 }
 
 export interface CinemaConcessionSale {
