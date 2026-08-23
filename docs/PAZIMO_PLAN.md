@@ -259,6 +259,21 @@ that moment paying for.
 - [x] Admin review queue UI on Admin → Cinema, opening on the backlog.
 - [x] Cinema concessions report what has been sold — totals plus a per-product
       breakdown. The summary endpoint already existed; nothing called it.
+- [x] **Cinemas stock their own counter.** Beverage.ownerCinema — null is the
+      platform catalogue, a cinema id means that cinema added it. Uniqueness
+      moved from global to per-owner, so two cinemas can each list "Popcorn".
+      Still admin-controlled (an admin sees, deactivates and blocks) but not
+      admin-gated, because waiting on an admin to add a soda either stops a
+      counter trading or pushes them to record it as something else.
+- [x] **Correcting a film or a screening**, in the cinema dashboard. It was
+      delete-and-recreate before, which is not an option once tickets are sold.
+- [x] Banner uses both crops: landscape behind the hero, the 2:3 poster on the
+      card over it. It was using the landscape for both.
+- [ ] **Admin-side editing of a cinema's films, halls and screenings.** The API
+      already has it (`/admin/:cinemaId/movies/:movieId` and siblings, same
+      handlers as the cinema routes); only the admin UI is missing. The admin
+      Cinema page today covers curation — publish, reject, display slots — not
+      correction.
 - [ ] Bulk "schedule screenings" — one film, many showtimes
 - [ ] Customer-facing browse polish; the public API is in place
 - [x] Slugs — nothing to backfill; every film on the production mirror already
