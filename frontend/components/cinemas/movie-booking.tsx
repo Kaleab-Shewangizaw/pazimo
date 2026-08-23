@@ -7,8 +7,6 @@ import {
   Clock,
   Film,
   MapPin,
-  Minus,
-  Plus,
   PlayCircle,
   Ticket,
 } from "lucide-react";
@@ -47,7 +45,6 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
 
   const [dayIndex, setDayIndex] = useState(0);
   const [showtimeId, setShowtimeId] = useState<string | null>(null);
-  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [booking, setBooking] = useState(false);
 
   const day = days[dayIndex];
@@ -56,35 +53,13 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
     [day, showtimeId]
   );
 
-  const selectShowtime = (id: string) => {
-    setShowtimeId(id);
-    // Reset: tier ids differ per screening, so carrying quantities across would
-    // point at rows that do not exist on the new one.
-    setQuantities({});
-  };
+  const selectShowtime = (id: string) => setShowtimeId(id);
 
   const selectDay = (index: number) => {
     setDayIndex(index);
     setShowtimeId(null);
-    setQuantities({});
   };
 
-  const setQty = (tierId: string, next: number, max: number) => {
-    // Capped at what is actually left, so the UI cannot ask for seats the
-    // server would reject — and never below zero.
-    const clamped = Math.max(0, Math.min(next, max, 10));
-    setQuantities((q) => ({ ...q, [tierId]: clamped }));
-  };
-
-  const lines = useMemo(() => {
-    if (!showtime) return [];
-    return showtime.ticketTypes
-      .map((t) => ({ tier: t, qty: quantities[t._id] || 0 }))
-      .filter((l) => l.qty > 0);
-  }, [showtime, quantities]);
-
-  const seatCount = lines.reduce((n, l) => n + l.qty, 0);
-  const total = lines.reduce((n, l) => n + l.qty * l.tier.price, 0);
   const currency = showtime?.currency || "ETB";
 
   const poster = posterUrl(movie.poster);
@@ -252,74 +227,48 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
               </CardContent>
             </Card>
 
-            {/* Tickets — only once a screening is chosen, because prices and
-                availability belong to the screening, not the film. */}
+            {/* What a seat costs, for information only.
+                This used to be a quantity picker per tier. It had no effect:
+                on an assigned-seating hall the SEAT decides the tier, so a
+                customer set quantities, watched a total build, then opened the
+                picker and had it replaced by whatever they actually chose.
+                Prices still belong here — knowing the range before committing
+                is the reason to look — but choosing happens once, at the seat. */}
             {showtime && (
               <Card>
                 <CardContent className="p-5">
-                  <h2 className="mb-1 font-semibold text-foreground">Tickets</h2>
+                  <h2 className="mb-1 font-semibold text-foreground">Prices</h2>
                   <p className="mb-4 text-sm text-muted-foreground">
                     {dayLabel(day.date)} at {clockLabel(showtime.startsAt)}
                     {showtime.hall?.name ? ` · ${showtime.hall.name}` : ""}
                   </p>
 
-                  <div className="space-y-3">
-                    {showtime.ticketTypes.map((tier) => {
-                      const qty = quantities[tier._id] || 0;
-                      const out = tier.seatsRemaining === 0;
-                      return (
-                        <div
-                          key={tier._id}
-                          className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium text-foreground">{tier.name}</p>
-                            {tier.description && (
-                              <p className="text-xs text-muted-foreground">
-                                {tier.description}
-                              </p>
-                            )}
-                            <p className="text-sm text-muted-foreground">
-                              {money(tier.price, showtime.currency)}
-                              {out ? (
-                                <span className="ml-2 text-destructive">Sold out</span>
-                              ) : tier.seatsRemaining <= 10 ? (
-                                <span className="ml-2 text-amber-600 dark:text-amber-400">
-                                  Only {tier.seatsRemaining} left
-                                </span>
-                              ) : null}
+                  <div className="space-y-2">
+                    {showtime.ticketTypes.map((tier) => (
+                      <div
+                        key={tier._id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {tier.name}
+                          </p>
+                          {tier.description && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {tier.description}
                             </p>
-                          </div>
-
-                          <div className="flex flex-shrink-0 items-center gap-2">
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              disabled={qty === 0}
-                              onClick={() => setQty(tier._id, qty - 1, tier.seatsRemaining)}
-                              aria-label={`Fewer ${tier.name}`}
-                            >
-                              <Minus className="h-3.5 w-3.5" />
-                            </Button>
-                            <span className="w-6 text-center font-medium tabular-nums">
-                              {qty}
-                            </span>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-8 w-8"
-                              disabled={out || qty >= Math.min(tier.seatsRemaining, 10)}
-                              onClick={() => setQty(tier._id, qty + 1, tier.seatsRemaining)}
-                              aria-label={`More ${tier.name}`}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
+                          )}
                         </div>
-                      );
-                    })}
+                        <span className="shrink-0 tabular-nums text-sm font-semibold text-foreground">
+                          {money(tier.price, currency)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
+
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    The seat you pick sets the price.
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -336,47 +285,19 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
 
                 {!showtime ? (
                   <p className="py-6 text-center text-sm text-muted-foreground">
-                    Pick a day and a time to see tickets.
-                  </p>
-                ) : lines.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">
-                    Choose how many tickets you want.
+                    Pick a day and a time to get started.
                   </p>
                 ) : (
-                  <>
-                    <div className="mb-3 rounded-lg bg-muted/50 p-3 text-sm">
-                      <p className="font-medium text-foreground">{movie.title}</p>
-                      <p className="text-muted-foreground">
-                        {cinema.name}
-                        {showtime.hall?.name ? ` · ${showtime.hall.name}` : ""}
-                      </p>
-                      <p className="text-muted-foreground">
-                        {dayLabel(day.date)}, {clockLabel(showtime.startsAt)}
-                      </p>
-                    </div>
-
-                    <ul className="space-y-2 text-sm">
-                      {lines.map(({ tier, qty }) => (
-                        <li key={tier._id} className="flex justify-between gap-2">
-                          <span className="text-muted-foreground">
-                            {qty} × {tier.name}
-                          </span>
-                          <span className="tabular-nums text-foreground">
-                            {money(qty * tier.price, currency)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-
-                    <div className="mt-3 flex justify-between border-t border-border pt-3 font-semibold">
-                      <span className="text-foreground">
-                        Total · {seatCount} {seatCount === 1 ? "seat" : "seats"}
-                      </span>
-                      <span className="tabular-nums text-foreground">
-                        {money(total, currency)}
-                      </span>
-                    </div>
-                  </>
+                  <div className="mb-3 rounded-lg bg-muted/50 p-3 text-sm">
+                    <p className="font-medium text-foreground">{movie.title}</p>
+                    <p className="text-muted-foreground">
+                      {cinema.name}
+                      {showtime.hall?.name ? ` · ${showtime.hall.name}` : ""}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {dayLabel(day.date)}, {clockLabel(showtime.startsAt)}
+                    </p>
+                  </div>
                 )}
 
                 <Button

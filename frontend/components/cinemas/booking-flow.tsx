@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/authStore";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
@@ -195,9 +194,30 @@ export default function BookingFlow({
     );
   };
 
-  const setSnackQty = (id: string, next: number, max: number | null) => {
-    const ceiling = max === null ? 20 : Math.min(max, 20);
-    setSnacks((current) => ({ ...current, [id]: Math.max(0, Math.min(next, ceiling)) }));
+  // The per-line cap the server enforces. Kept in step with
+  // cinemaCheckoutService.MAX_QUANTITY_PER_LINE.
+  const MAX_PER_LINE = 20;
+
+  /**
+   * Set how many of one item the customer wants.
+   *
+   * Capped ONLY at the per-line maximum, never at a stock figure, because the
+   * public listing deliberately does not expose one — it returns what is in
+   * stock and withholds the sales numbers behind it. Depending on a figure that
+   * is not sent is what broke this: `Math.min(undefined, 20)` is NaN, every
+   * quantity became NaN, `qty > 0` filtered them all out, and no snack ever
+   * reached the order however many times it was clicked.
+   *
+   * Running out between here and payment is handled where it can be handled
+   * atomically — the stock claim at fulfilment — not by a number the browser
+   * read some seconds ago.
+   */
+  const setSnackQty = (id: string, next: number) => {
+    const wanted = Number.isFinite(next) ? next : 0;
+    setSnacks((current) => ({
+      ...current,
+      [id]: Math.max(0, Math.min(wanted, MAX_PER_LINE)),
+    }));
   };
 
   // A started order that the customer walks away from.
@@ -451,14 +471,14 @@ export default function BookingFlow({
           <div className="grid gap-3 sm:grid-cols-2">
             {concessions.map((item) => {
               const qty = snacks[item._id] || 0;
-              const remaining = item.stockRemaining;
-              const soldOut = remaining !== null && remaining <= 0;
+              // No sold-out state here: the public listing only returns items
+              // that are on sale and have something left, so anything rendered
+              // is buyable. It used to derive one from `stockRemaining`, which
+              // this endpoint does not send.
               return (
                 <div
                   key={item._id}
-                  className={`flex items-center gap-3 rounded-lg border border-border p-3 ${
-                    soldOut ? "opacity-50" : ""
-                  }`}
+                  className="flex items-center gap-3 rounded-lg border border-border p-3"
                 >
                   <div
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md"
@@ -472,11 +492,6 @@ export default function BookingFlow({
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {money(item.price, currency)}
-                      {soldOut
-                        ? " · sold out"
-                        : remaining !== null && remaining <= 10
-                          ? ` · only ${remaining} left`
-                          : ""}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -485,7 +500,7 @@ export default function BookingFlow({
                       variant="outline"
                       className="h-7 w-7"
                       disabled={qty === 0}
-                      onClick={() => setSnackQty(item._id, qty - 1, remaining)}
+                      onClick={() => setSnackQty(item._id, qty - 1)}
                     >
                       <Minus className="h-3 w-3" />
                     </Button>
@@ -494,8 +509,8 @@ export default function BookingFlow({
                       size="icon"
                       variant="outline"
                       className="h-7 w-7"
-                      disabled={soldOut}
-                      onClick={() => setSnackQty(item._id, qty + 1, remaining)}
+                      disabled={qty >= MAX_PER_LINE}
+                      onClick={() => setSnackQty(item._id, qty + 1)}
                     >
                       <Plus className="h-3 w-3" />
                     </Button>
