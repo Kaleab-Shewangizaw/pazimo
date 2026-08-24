@@ -546,32 +546,6 @@ const setBeverageEligibility = async (req, res) => {
   }
 };
 
-/** Admin: narrow which catalogue products a cinema may sell. */
-const setBlockedBeverages = async (req, res) => {
-  try {
-    const cinema = await Cinema.findById(req.params.cinemaId);
-    if (!cinema) throw new NotFoundError("Cinema not found");
-
-    const ids = Array.isArray(req.body.blockedBeverages)
-      ? req.body.blockedBeverages
-      : [];
-    if (ids.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
-      throw new BadRequestError("blockedBeverages must be beverage ids");
-    }
-
-    cinema.blockedBeverages = ids;
-    cinema.blockedBeveragesSetBy = req.user.userId;
-    cinema.blockedBeveragesSetAt = new Date();
-    await cinema.save();
-
-    res.status(StatusCodes.OK).json({ success: true, data: cinema });
-  } catch (error) {
-    console.error("Error setting cinema blocked beverages:", error);
-    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
-    res.status(status).json({ success: false, message: error.message });
-  }
-};
-
 /**
  * Grant this cinema the products it may sell.
  *
@@ -580,26 +554,26 @@ const setBlockedBeverages = async (req, res) => {
  * second call to revoke and would make two admins editing at once produce a
  * union of both intentions rather than the last one to save.
  *
- * Ids are validated against the catalogue, not merely for shape: a granted id
- * that matches no product is silently unsellable, and an admin who mistyped
- * would see the grant "succeed" and the cinema still unable to sell.
+ * Ids are validated against ConcessionProduct, not merely for shape: a granted
+ * id that matches no product is silently unsellable, and an admin who
+ * mistyped would see the grant "succeed" and the cinema still unable to sell.
  */
-const setAllowedBeverages = async (req, res) => {
+const setAllowedConcessions = async (req, res) => {
   try {
     const cinema = await Cinema.findById(req.params.cinemaId);
     if (!cinema) throw new NotFoundError("Cinema not found");
 
-    const ids = Array.isArray(req.body.allowedBeverages)
-      ? req.body.allowedBeverages.map(String)
+    const ids = Array.isArray(req.body.allowedConcessions)
+      ? req.body.allowedConcessions.map(String)
       : [];
     if (ids.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
-      throw new BadRequestError("allowedBeverages must be beverage ids");
+      throw new BadRequestError("allowedConcessions must be product ids");
     }
 
     const unique = [...new Set(ids)];
     if (unique.length) {
-      const Beverage = require("../models/Beverage");
-      const found = await Beverage.countDocuments({ _id: { $in: unique } });
+      const ConcessionProduct = require("../models/ConcessionProduct");
+      const found = await ConcessionProduct.countDocuments({ _id: { $in: unique } });
       if (found !== unique.length) {
         throw new BadRequestError(
           "One of those products does not exist in the catalogue"
@@ -607,9 +581,9 @@ const setAllowedBeverages = async (req, res) => {
       }
     }
 
-    cinema.allowedBeverages = unique;
-    cinema.allowedBeveragesSetBy = req.user.userId;
-    cinema.allowedBeveragesSetAt = new Date();
+    cinema.allowedConcessions = unique;
+    cinema.allowedConcessionsSetBy = req.user.userId;
+    cinema.allowedConcessionsSetAt = new Date();
     await cinema.save();
 
     res.status(StatusCodes.OK).json({
@@ -617,11 +591,11 @@ const setAllowedBeverages = async (req, res) => {
       data: {
         _id: cinema._id,
         name: cinema.name,
-        allowedBeverages: cinema.allowedBeverages,
+        allowedConcessions: cinema.allowedConcessions,
       },
     });
   } catch (error) {
-    console.error("Error setting cinema allowed beverages:", error);
+    console.error("Error setting cinema allowed concessions:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
   }
@@ -862,8 +836,7 @@ module.exports = {
   updateCinema,
   setCinemaStatus,
   setBeverageEligibility,
-  setBlockedBeverages,
-  setAllowedBeverages,
+  setAllowedConcessions,
   listHalls,
   createHall,
   updateHall,

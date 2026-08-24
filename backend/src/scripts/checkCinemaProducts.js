@@ -32,7 +32,7 @@ const baseUri = () => {
 };
 
 const m = mongoose;
-const Beverage = require("../models/Beverage");
+const ConcessionProduct = require("../models/ConcessionProduct");
 const Cinema = require("../models/Cinema");
 const ctrl = require("../controllers/cinemaBeverageController");
 
@@ -44,16 +44,16 @@ const call=async(fn,req)=>{let out={};const res={status(c){out.code=c;return thi
   await m.connect(baseUri(), { serverSelectionTimeoutMS: 8000 });
   console.log(`\nScratch database: ${m.connection.name}`);
   await m.connection.dropDatabase();
-  await Beverage.syncIndexes();
+  await ConcessionProduct.syncIndexes();
 
   const mk = (name) => Cinema.create({ name, account: new m.Types.ObjectId(),
     city: 'Addis', address: 'x', phoneNumber: '09', beverageEligibility: 'eligible' });
   const a = await mk('Cinema A');
   const b = await mk('Cinema B');
 
-  const coke = await Beverage.create({ name: 'Coke', category: 'drink', image: '/uploads/coke.png' });
-  const popcorn = await Beverage.create({ name: 'Popcorn', category: 'snack', image: '/uploads/pop.png' });
-  const retired = await Beverage.create({ name: 'Old Stock', category: 'drink', isActive: false });
+  const coke = await ConcessionProduct.create({ name: 'Coke', category: 'drink', image: '/uploads/coke.png' });
+  const popcorn = await ConcessionProduct.create({ name: 'Popcorn', category: 'snack', image: '/uploads/pop.png' });
+  const retired = await ConcessionProduct.create({ name: 'Old Stock', category: 'drink', isActive: false });
 
   const reqFor = (cinema, body = {}, params = {}) => ({
     cinema, params, body, query: {},
@@ -73,18 +73,18 @@ const call=async(fn,req)=>{let out={};const res={status(c){out.code=c;return thi
     JSON.stringify(await catalogue(a)));
 
   console.log('\n--- the admin grants, and only what was granted appears ---');
-  a.allowedBeverages = [coke._id];
+  a.allowedConcessions = [coke._id];
   await a.save();
   check('Cinema A sees only Coke', (await catalogue(a)).join(',') === 'Coke', JSON.stringify(await catalogue(a)));
   check('Cinema B still sees nothing', (await catalogue(b)).length === 0);
 
-  b.allowedBeverages = [popcorn._id];
+  b.allowedConcessions = [popcorn._id];
   await b.save();
   check('one grant says nothing about another cinema',
     (await catalogue(a)).join(',') === 'Coke' && (await catalogue(b)).join(',') === 'Popcorn');
 
   console.log('\n--- an inactive product stays out even when granted ---');
-  a.allowedBeverages = [coke._id, retired._id];
+  a.allowedConcessions = [coke._id, retired._id];
   await a.save();
   check('a retired product is not offered', (await catalogue(a)).join(',') === 'Coke',
     JSON.stringify(await catalogue(a)));

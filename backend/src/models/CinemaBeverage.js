@@ -1,14 +1,14 @@
 const mongoose = require("mongoose");
 
 // One row per product a cinema offers, carrying the price that cinema sells it
-// at. The cinema-channel twin of EventBeverage and VenueBeverage, and it exists
-// for the same reason: it keeps Beverage itself channel-agnostic. The catalogue
-// entry knows nothing about cinemas, events or venues, and each channel
-// assembles its own line-up here.
+// at. Its own catalogue behind it — ConcessionProduct — not the Beverage table
+// events and venues use: a cinema counter and an event bar sell, price and
+// report on completely different things, and the two catalogues share nothing
+// on purpose.
 //
-// The same Beverage can therefore be 150 ETB at an event, 180 at a club and 200
-// at a cinema, without the catalogue row ever being duplicated or mutated. This
-// is why cinema pricing must never be written onto Beverage.
+// The same ConcessionProduct can be 80 ETB at one cinema and 100 at another,
+// without the catalogue row ever being duplicated or mutated. This is why
+// cinema pricing must never be written onto ConcessionProduct.
 const CinemaBeverageSchema = new mongoose.Schema(
   {
     cinema: {
@@ -18,7 +18,7 @@ const CinemaBeverageSchema = new mongoose.Schema(
     },
     beverage: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Beverage",
+      ref: "ConcessionProduct",
       required: true,
     },
     // The cinema's selling price, in the currency below.

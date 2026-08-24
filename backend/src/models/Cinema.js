@@ -13,12 +13,16 @@ const {
 // runs continuously rather than per occasion, so the cinema itself IS the sales
 // context and carries those settings.
 //
-//   Beverage ─┬─ EventBeverage  ── Event  ── Organizer        (event channel)
-//             ├─ VenueBeverage  ── Venue  ── Venue account    (venue channel)
-//             └─ CinemaBeverage ── Cinema ── Cinema account   (cinema channel)
+//   Beverage         ─┬─ EventBeverage  ── Event  ── Organizer  (event channel)
+//                      └─ VenueBeverage  ── Venue  ── Venue account (venue channel)
+//   ConcessionProduct ── CinemaBeverage ── Cinema ── Cinema account (cinema channel)
 //
 //   Ticket        ── Event   ── Organizer                     (event channel)
 //   CinemaTicket  ── CinemaShowtime ── CinemaMovie ── Cinema  (cinema channel)
+//
+// Cinema concessions deliberately do NOT hang off Beverage. A cinema counter
+// and an event bar sell, price and report on completely different things, so
+// they read from a completely different catalogue — see ConcessionProduct.
 //
 // A cinema is deliberately NOT modelled as an organizer with a permanent event,
 // and a screening is NOT an Event. A dummy event per showing would put cinema
@@ -106,51 +110,32 @@ const CinemaSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Concessions this cinema MAY sell — an allow list.
+    // Products from ConcessionProduct this cinema MAY sell — an allow list.
     //
-    // The other two channels (OrganizerBeverageProfile, Venue) use deny lists,
-    // and the reason is worth stating because this deliberately differs: with a
-    // deny list, a product added to the catalogue later is immediately sellable
-    // by everyone, which is the right default when the catalogue is a general
-    // one. Cinema concessions are curated per site — a cinema sells the brands
-    // it has a supply deal for — so the admin grants them explicitly.
+    // The event and venue channels (OrganizerBeverageProfile, Venue) use deny
+    // lists, and the reason is worth stating because this deliberately differs:
+    // with a deny list, a product added to the catalogue later is immediately
+    // sellable by everyone, which is the right default when the catalogue is a
+    // general one. Cinema concessions are curated per site — a cinema sells the
+    // brands it has a supply deal for — so the admin grants them explicitly.
     //
     // The cost is real and is the reason this is not the platform-wide default:
     // a new product is invisible to every cinema until it is granted, and a new
     // cinema can sell nothing until someone grants it something. Both are admin
     // work that grows with the number of cinemas.
     //
-    // An EMPTY list therefore means "nothing", not "everything" — the opposite
-    // of how blockedBeverages read, and the migration seeds it accordingly so
-    // no cinema loses what it was already selling.
-    allowedBeverages: [
+    // An EMPTY list therefore means "nothing", not "everything".
+    allowedConcessions: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Beverage",
+        ref: "ConcessionProduct",
       },
     ],
-    allowedBeveragesSetBy: {
+    allowedConcessionsSetBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",
     },
-    allowedBeveragesSetAt: {
-      type: Date,
-    },
-
-    // The previous deny list. Retained, unread, until the allow list has been
-    // seeded on every environment — deleting it in the same change that starts
-    // ignoring it would leave nothing to migrate FROM.
-    blockedBeverages: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Beverage",
-      },
-    ],
-    blockedBeveragesSetBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin",
-    },
-    blockedBeveragesSetAt: {
+    allowedConcessionsSetAt: {
       type: Date,
     },
 

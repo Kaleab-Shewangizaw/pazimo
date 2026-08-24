@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
 const { StatusCodes } = require("http-status-codes");
-const Beverage = require("../models/Beverage");
+const ConcessionProduct = require("../models/ConcessionProduct");
 const CinemaBeverage = require("../models/CinemaBeverage");
 const CinemaBeverageSale = require("../models/CinemaBeverageSale");
 const cinemaBeverageSalesService = require("../services/cinemaBeverageSalesService");
@@ -12,19 +12,20 @@ const {
   getCinemaBeverageRevenue,
 } = require("../utils/cinemaBeverageRevenueQuery");
 
-// The cinema channel's concession surface — the twin of the event-side line-up
-// routes in beverageController and the venue-side ones in venueController.
+// The cinema channel's concession surface — this cinema's line-up and sales,
+// drawn from the ConcessionProduct catalogue (see concessionProductController
+// for the catalogue itself). Not a variant of the event/venue beverage routes:
+// the two channels share no model, no admin screen and no uniqueness rule.
 //
 // Every handler resolves its cinema through resolveCinema, so a cinema account
 // can only ever reach its own rows and an admin reaches the one named in the
 // URL. No handler takes a cinema id from a request body.
 
-// The same definitions beverageController uses for the platform catalogue.
-//
-// Duplicated rather than imported because beverageController does not export
-// them, and a cinema adding a product must be validated EXACTLY as an admin
-// adding one — a second, subtly different notion of "a valid colour" would show
-// up later as two products that look identical and behave differently.
+// Kept local rather than imported from concessionProductController, which does
+// not export them: a cinema adding a product to its line-up must be validated
+// EXACTLY as an admin editing the catalogue — a second, subtly different
+// notion of "a valid colour" would show up later as data that looks identical
+// and behaves differently.
 const normalizeText = (value) => {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -78,22 +79,15 @@ const parseBoolean = (value, fallback) => {
   return fallback;
 };
 
-// The set of catalogue products a given cinema may sell. An empty deny list
-// means the whole active catalogue — see Cinema.blockedBeverages for why it is
-// a deny list rather than an allow list.
 /**
  * What this cinema may put on its counter.
  *
  * An ALLOW list: only products an admin has explicitly granted to this cinema,
- * and only while they are still active in the catalogue.
- *
- * An empty list means NOTHING, which is the opposite of how the old deny list
- * read. That is the whole point of the change and also its sharp edge — a
- * cinema granted nothing sells nothing — so the migration seeds every existing
- * cinema with what it could already sell.
+ * and only while they are still active in the catalogue. An empty list means
+ * NOTHING — a cinema granted nothing sells nothing.
  */
 const sellableQuery = (cinema) => {
-  const allowed = cinema?.allowedBeverages || [];
+  const allowed = cinema?.allowedConcessions || [];
   // Short-circuited rather than querying with an empty $in, which matches
   // nothing anyway but reads as though it might match everything.
   if (allowed.length === 0) return null;
@@ -117,7 +111,7 @@ const listSellableCatalog = async (req, res) => {
       // Nothing granted means nothing to offer — answered without a query
       // rather than with one that cannot match.
       query
-        ? Beverage.find(query).select("name image color category").sort("name").lean()
+        ? ConcessionProduct.find(query).select("name image color category").sort("name").lean()
         : [],
       CinemaBeverage.find({ cinema: cinema._id }).select("beverage").lean(),
     ]);
@@ -191,7 +185,7 @@ const addLineupItem = async (req, res) => {
     // Re-checked against the cinema's own permissions rather than trusting that
     // the picker only offered allowed products — an admin editing a cinema's
     // line-up must not be able to add something that cinema is blocked from.
-    const beverage = await Beverage.findOne({
+    const beverage = await ConcessionProduct.findOne({
       _id: beverageId,
       ...sellableQuery(cinema),
     }).lean();

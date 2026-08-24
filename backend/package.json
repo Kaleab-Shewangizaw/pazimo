@@ -26,6 +26,7 @@
     "check:cinema-products": "node src/scripts/checkCinemaProducts.js",
     "migrate:cinema-allowed": "node src/scripts/migrateCinemaAllowedBeverages.js",
     "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js",
+    "migrate:cinema-catalog": "node src/scripts/migrateCinemaConcessionCatalog.js",
     "clone:prod": "node src/scripts/cloneProductionDb.js"
   },
   "keywords": [],

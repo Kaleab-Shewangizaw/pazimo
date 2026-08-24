@@ -53,7 +53,7 @@ const CinemaBeverageSaleSchema = new mongoose.Schema(
     },
     beverage: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Beverage",
+      ref: "ConcessionProduct",
       required: true,
     },
 

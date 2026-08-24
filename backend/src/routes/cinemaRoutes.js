@@ -7,6 +7,7 @@ const programmeController = require("../controllers/cinemaProgrammeController");
 const ticketController = require("../controllers/cinemaTicketController");
 const checkoutController = require("../controllers/cinemaCheckoutController");
 const beverageController = require("../controllers/cinemaBeverageController");
+const concessionProductController = require("../controllers/concessionProductController");
 const financeController = require("../controllers/cinemaFinanceController");
 const upload = require("../middlewares/upload");
 const {
@@ -202,6 +203,31 @@ router.patch("/admin/movies/:movieId/publication", ...adminOnly, programmeContro
 router.patch("/admin/ticket-sales/:ticketId/refund", ...adminOnly, ticketController.refund);
 router.patch("/admin/concession-sales/:saleId/refund", ...adminOnly, beverageController.refundSale);
 
+// The concession CATALOGUE — what a cinema counter can sell, and its artwork.
+// Its own model (ConcessionProduct) and its own admin surface: it shares
+// nothing with the event/venue beverages catalogue at /api/beverages. Literal
+// second segment, so declared before /admin/:cinemaId.
+router.get("/admin/products", ...adminOnly, concessionProductController.listProducts);
+router.post(
+  "/admin/products",
+  ...adminOnly,
+  upload.single("image"),
+  concessionProductController.createProduct
+);
+router.get("/admin/products/:id", ...adminOnly, concessionProductController.getProduct);
+router.patch(
+  "/admin/products/:id",
+  ...adminOnly,
+  upload.single("image"),
+  concessionProductController.updateProduct
+);
+router.patch(
+  "/admin/products/:id/status",
+  ...adminOnly,
+  concessionProductController.setProductStatus
+);
+router.delete("/admin/products/:id", ...adminOnly, concessionProductController.deleteProduct);
+
 router.get("/admin", ...adminOnly, cinemaController.listCinemas);
 router.post("/admin", ...adminOnly, upload.single("image"), cinemaController.createCinema);
 
@@ -212,11 +238,10 @@ router.patch("/admin/:cinemaId/beverage-eligibility", ...adminOnly, cinemaContro
 // Which catalogue products this cinema may sell. An ALLOW list: empty means
 // nothing, so this is how a cinema gets a counter at all.
 router.patch(
-  "/admin/:cinemaId/allowed-beverages",
+  "/admin/:cinemaId/allowed-concessions",
   ...adminOnly,
-  cinemaController.setAllowedBeverages
+  cinemaController.setAllowedConcessions
 );
-router.patch("/admin/:cinemaId/beverages", ...adminOnly, cinemaController.setBlockedBeverages);
 
 // Halls
 router.get("/admin/:cinemaId/halls", ...adminOnly, cinemaController.listHalls);
@@ -240,8 +265,6 @@ router.delete("/admin/:cinemaId/showtimes/:showtimeId", ...adminOnly, programmeC
 // Sales
 router.get("/admin/:cinemaId/ticket-sales", ...adminOnly, ticketController.listTickets);
 router.get("/admin/:cinemaId/ticket-sales/summary", ...adminOnly, ticketController.getTicketSummary);
-router.get("/admin/:cinemaId/concessions", ...adminOnly, beverageController.listLineup);
-router.get("/admin/:cinemaId/concessions/catalog", ...adminOnly, beverageController.listSellableCatalog);
 router.get("/admin/:cinemaId/concessions", ...adminOnly, beverageController.listLineup);
 router.get("/admin/:cinemaId/concessions/catalog", ...adminOnly, beverageController.listSellableCatalog);
 router.post("/admin/:cinemaId/concessions", ...adminOnly, beverageController.addLineupItem);
