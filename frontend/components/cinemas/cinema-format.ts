@@ -31,6 +31,28 @@ export const posterUrl = (poster?: string | null) => {
 };
 
 /**
+ * The 11-character id out of whatever shape of YouTube URL a cinema pasted in
+ * — watch?v=, youtu.be/, embed/, shorts/, with or without extra query params.
+ *
+ * `trailerUrl` also accepts Vimeo links and direct files (see CinemaMovie), so
+ * this returns null rather than throwing on anything that isn't recognisably
+ * YouTube — the caller falls back to a plain "Watch trailer" link for those,
+ * rather than a video player with nothing to play.
+ */
+export const youtubeVideoId = (url?: string | null): string | null => {
+  if (!url) return null;
+  const trimmed = url.trim();
+  const patterns = [
+    /(?:youtube(?:-nocookie)?\.com\/(?:watch\?v=|embed\/|shorts\/|v\/)|youtu\.be\/)([\w-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+};
+
+/**
  * "Today 19:30" / "Tomorrow 14:00" / "Sat 12 Oct, 19:30".
  *
  * Relative for the next two days because that is the window a customer is

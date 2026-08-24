@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { clockLabel, dayLabel, posterUrl, runtimeLabel } from "./cinema-format";
+import { clockLabel, dayLabel, posterUrl, runtimeLabel, youtubeVideoId } from "./cinema-format";
 import BookingFlow from "./booking-flow";
+import TrailerPlayer from "./trailer-player";
 import {
   Dialog,
   DialogContent,
@@ -69,9 +70,11 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
   const currency = showtime?.currency || "ETB";
   const poster = posterUrl(movie.poster);
   const cover = posterUrl(movie.coverImage) || poster;
+  const cinemaLogo = posterUrl(cinema.image);
   const runtime = runtimeLabel(movie.durationMinutes);
   const hasScreenings = days.some((d) => d.showtimes.length > 0);
   const address = [cinema.address, cinema.city].filter(Boolean).join(", ");
+  const trailerVideoId = youtubeVideoId(movie.trailerUrl);
 
   const details = [
     { label: "Runtime", value: runtime },
@@ -214,6 +217,15 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
   // Three blocks of content, written once and read twice: stacked in a column
   // on a desktop, split across the bottom tabs on a phone. The event page keeps
   // two copies of its content and they have drifted apart; this keeps one.
+  const trailerSection = trailerVideoId ? (
+    <div>
+      <h2 className="mb-4 text-xl font-bold text-gray-900 dark:text-white md:text-2xl">
+        Trailer
+      </h2>
+      <TrailerPlayer videoId={trailerVideoId} title={movie.title} />
+    </div>
+  ) : null;
+
   const aboutSection = movie.description ? (
     <div>
       <h2 className="mb-4 text-xl font-bold text-gray-900 dark:text-white md:text-2xl">
@@ -227,7 +239,10 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
           Subtitles · {movie.subtitles}
         </p>
       )}
-      {movie.trailerUrl && (
+      {/* A trailer link is only shown here as a fallback — a recognised
+          YouTube link gets the full player in trailerSection instead, so this
+          would otherwise be a second, redundant way to reach the same video. */}
+      {movie.trailerUrl && !trailerVideoId && (
         <a
           href={movie.trailerUrl}
           target="_blank"
@@ -272,9 +287,18 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
         Cinema
       </h2>
       <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#1A1D24]">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0D47A1] text-lg font-bold text-white dark:bg-yellow-400 dark:text-black">
-          {cinema.name.charAt(0).toUpperCase()}
-        </div>
+        {/* The cinema's own logo where it has one — the site's identity, not
+            ours, is what should greet a customer here. Falls back to initials
+            on the brand accent, which is what this always showed. */}
+        {cinemaLogo ? (
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full ring-1 ring-gray-200 dark:ring-white/10">
+            <Image src={cinemaLogo} alt={cinema.name} fill className="object-cover" sizes="48px" />
+          </div>
+        ) : (
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#0D47A1] text-lg font-bold text-white dark:bg-yellow-400 dark:text-black">
+            {cinema.name.charAt(0).toUpperCase()}
+          </div>
+        )}
         <div className="min-w-0">
           <p className="truncate font-semibold text-gray-900 dark:text-white">
             {cinema.name}
@@ -445,6 +469,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-3 lg:gap-14">
             <div className="space-y-12 lg:col-span-2">
+              {trailerSection}
               {aboutSection}
               {detailsSection}
               {cinemaSection}
@@ -488,6 +513,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
               {ticketsCard}
             </TabsContent>
             <TabsContent value="about" className="mt-0 space-y-10">
+              {trailerSection}
               {aboutSection || (
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   No synopsis yet for this film.
