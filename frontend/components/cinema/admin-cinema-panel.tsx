@@ -59,7 +59,7 @@ interface CinemaRow {
    * sell nothing, which is why an empty one is called out as needing attention
    * rather than read as "no restrictions".
    */
-  allowedBeverages?: string[];
+  allowedConcessions?: string[];
   ticketCommissionRate?: number;
   beverageCommissionRate?: number;
   coversCinemaVat?: boolean;
@@ -313,7 +313,7 @@ export default function AdminCinemaPanel() {
     // A cinema approved for concessions but granted nothing has a counter it
     // cannot use — the exact trap an allow list sets, so it is called out.
     const ungranted = cinemas.filter(
-      (c) => c.beverageEligibility === "eligible" && (c.allowedBeverages || []).length === 0
+      (c) => c.beverageEligibility === "eligible" && (c.allowedConcessions || []).length === 0
     );
     if (ungranted.length) {
       items.push({
@@ -325,7 +325,7 @@ export default function AdminCinemaPanel() {
   }, [cinemas]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <Tabs defaultValue="cinemas" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[440px]">
           <TabsTrigger value="cinemas">
@@ -437,15 +437,15 @@ export default function AdminCinemaPanel() {
                       sit at a different x on each row. The widths below are the
                       alignment fix; min-width keeps them from collapsing before
                       the container scrolls. */}
-                  <table className="w-full min-w-[900px] table-fixed text-sm">
+                  <table className="w-full min-w-[960px] table-fixed text-sm">
                     <colgroup>
-                      <col className="w-[26%]" />
-                      <col className="w-[20%]" />
-                      <col className="w-[14%]" />
-                      <col className="w-[9%]" />
-                      <col className="w-[9%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[12%]" />
+                      <col className="w-[23%]" />
+                      <col className="w-[17%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[18%]" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:text-gray-400">
@@ -524,15 +524,15 @@ export default function AdminCinemaPanel() {
                               type="button"
                               onClick={() => setGranting(cinema)}
                               className={`rounded-md px-2 py-1 text-xs font-medium tabular-nums transition-colors ${
-                                (cinema.allowedBeverages || []).length === 0
+                                (cinema.allowedConcessions || []).length === 0
                                   ? "bg-amber-100 text-amber-800 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-300"
                                   : "text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                               }`}
                             >
                               <Popcorn className="mr-1 inline h-3.5 w-3.5" />
-                              {(cinema.allowedBeverages || []).length === 0
+                              {(cinema.allowedConcessions || []).length === 0
                                 ? "None granted"
-                                : `${(cinema.allowedBeverages || []).length} granted`}
+                                : `${(cinema.allowedConcessions || []).length} granted`}
                             </button>
                           </td>
                           <td className="px-5 py-4">
@@ -542,7 +542,7 @@ export default function AdminCinemaPanel() {
                                 every row's buttons were a different width and
                                 nothing lined up down the column. Each keeps its
                                 label as a tooltip. */}
-                            <div className="flex justify-end gap-1">
+                            <div className="flex justify-end gap-1.5">
                               <Button
                                 variant="outline"
                                 size="icon"
@@ -640,7 +640,7 @@ export default function AdminCinemaPanel() {
         <CinemaConcessionsGrant
           cinemaId={granting._id}
           cinemaName={granting.name}
-          granted={granting.allowedBeverages || []}
+          granted={granting.allowedConcessions || []}
           open={!!granting}
           onOpenChange={(open) => !open && setGranting(null)}
           // Patched in place rather than refetching the page: the server has
@@ -649,7 +649,7 @@ export default function AdminCinemaPanel() {
           onSaved={(next) => {
             setCinemas((rows) =>
               rows.map((row) =>
-                row._id === granting._id ? { ...row, allowedBeverages: next } : row
+                row._id === granting._id ? { ...row, allowedConcessions: next } : row
               )
             );
             setGranting(null);
@@ -658,7 +658,7 @@ export default function AdminCinemaPanel() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit cinema" : "Add cinema"}</DialogTitle>
             <DialogDescription>

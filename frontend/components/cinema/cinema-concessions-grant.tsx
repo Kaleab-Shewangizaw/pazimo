@@ -24,9 +24,9 @@ import { Search, Check, Popcorn } from "lucide-react";
  * footer states the consequence in words rather than leaving an admin to infer
  * it from an empty list.
  *
- * Products and their artwork belong to the platform catalogue (Admin →
- * Beverages). This screen only decides who may sell them, which is why there is
- * no create control here — adding a product and granting it are different
+ * Products and their artwork belong to the concession catalogue (the Snacks
+ * tab). This screen only decides who may sell them, which is why there is no
+ * create control here — adding a product and granting it are different
  * decisions with different consequences.
  */
 
@@ -75,7 +75,7 @@ export default function CinemaConcessionsGrant({
     if (!token) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/api/beverages/admin?limit=200`, {
+      const res = await fetch(`${API_URL}/api/cinemas/admin/products?limit=200`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
@@ -114,14 +114,14 @@ export default function CinemaConcessionsGrant({
     setSaving(true);
     try {
       const res = await fetch(
-        `${API_URL}/api/cinemas/admin/${cinemaId}/allowed-beverages`,
+        `${API_URL}/api/cinemas/admin/${cinemaId}/allowed-concessions`,
         {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ allowedBeverages: [...selected] }),
+          body: JSON.stringify({ allowedConcessions: [...selected] }),
         }
       );
       const data = await res.json();
@@ -179,7 +179,7 @@ export default function CinemaConcessionsGrant({
             <p className="py-12 text-center text-sm text-gray-500 dark:text-gray-400">
               {search
                 ? "Nothing in the catalogue matches that."
-                : "The catalogue is empty. Add products in Admin → Beverages first."}
+                : "The catalogue is empty. Add products on the Snacks tab first."}
             </p>
           ) : (
             <div className="space-y-1.5">
