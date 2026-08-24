@@ -313,6 +313,12 @@ CinemaMovieSchema.pre("save", function requeueOnCustomerFacingEdit(next) {
   // part of this same save, that is the review landing, not a cinema edit.
   if (this.isModified("publicationStatus")) return next();
   if (this.publicationStatus !== "published") return next();
+  // Nor must an admin's own EDIT undo their earlier decision — an admin fixing
+  // a typo or swapping a poster on a film they already approved is still the
+  // reviewing authority acting, not the cinema trying to sneak a rewrite past
+  // review. The controller sets this only when req.user.role is "admin"; a
+  // cinema's own save never touches $locals, so it is always undefined there.
+  if (this.$locals.skipRequeue) return next();
 
   if (CUSTOMER_FACING_FIELDS.some((field) => this.isModified(field))) {
     this.publicationStatus = "pending";

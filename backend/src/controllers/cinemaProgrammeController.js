@@ -281,6 +281,15 @@ const updateMovie = async (req, res) => {
       }
     }
 
+    // A published film goes back into the review queue when the CINEMA edits
+    // what a customer sees (CinemaMovie.requeueOnCustomerFacingEdit) — that is
+    // the whole point of the gate. It must not fire here when the editor is an
+    // admin: the admin is the reviewing authority, so their own edit to a film
+    // they already approved is not a rewrite that needs re-approving.
+    if (req.user.role === "admin") {
+      movie.$locals.skipRequeue = true;
+    }
+
     await movie.save();
 
     // A runtime change moves every future screening's end, and endsAt is what
