@@ -8,10 +8,26 @@ const {
 } = require("./paymentHold");
 
 // How long a checkout-initiation stock hold is allowed to sit unconfirmed
-// before it's given back. Generous enough to cover a slow mobile-money/USSD
-// confirmation or a customer sitting on a hosted card-payment page; short
-// enough that an abandoned checkout doesn't choke off real sales for long.
-const HOLD_TTL_MS = 15 * 60 * 1000;
+// before it's given back, for whichever buyer never explicitly cancelled
+// (an explicit cancel — the checkout screen's "Cancel" button, wired to
+// paymentController.cancelPayment — releases immediately regardless of this
+// value; this is only the backstop for someone who just closes the tab or
+// walks away).
+//
+// Deliberately short (product decision): on a ticket type down to its last
+// few units, a stuck-but-not-cancelled checkout should give the unit back to
+// other buyers quickly rather than sitting on it for the full lifetime of a
+// slow payment. The trade-off, accepted: a genuinely slow but real payment
+// (a card 3-D Secure challenge, or a buyer who takes a while to approve a
+// USSD prompt — both can legitimately take longer than this) can have its
+// hold released before it confirms. That does not oversell or lose money —
+// the fallback re-claim in processSuccessfulPayment/generateTicketsForTransaction
+// still runs, and if the unit was already taken by someone else, the payment
+// is flagged with needsManualReview instead of silently minting or dropping
+// a ticket — but it does mean that specific buyer needs manual follow-up
+// instead of getting their ticket automatically. If needsManualReview cases
+// turn out to be common in practice, raise this value.
+const HOLD_TTL_MS = 60 * 1000;
 
 let isSweepRunning = false;
 
@@ -120,18 +136,25 @@ const sweepExpiredHolds = async () => {
   }
 };
 
+// How often the sweep runs. With a 60s TTL, a sweep tick this frequent keeps
+// the worst-case actual hold time close to the stated 1 minute (TTL + up to
+// one tick) rather than diluting it with a slower cadence.
+const SWEEP_INTERVAL_MS = 15 * 1000;
+
 /**
- * Start the stock-hold expiry sweep, on the same 60s cadence as the wave
- * availability scheduler.
+ * Start the stock-hold expiry sweep.
  */
 const startStockHoldExpirySweep = () => {
   sweepExpiredHolds();
-  setInterval(sweepExpiredHolds, 60000);
-  console.log("Stock hold expiry sweep started - running every minute");
+  setInterval(sweepExpiredHolds, SWEEP_INTERVAL_MS);
+  console.log(
+    `Stock hold expiry sweep started - running every ${SWEEP_INTERVAL_MS / 1000}s, ${HOLD_TTL_MS / 1000}s TTL`
+  );
 };
 
 module.exports = {
   sweepExpiredHolds,
   startStockHoldExpirySweep,
   HOLD_TTL_MS,
+  SWEEP_INTERVAL_MS,
 };
