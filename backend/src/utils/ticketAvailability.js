@@ -187,11 +187,15 @@ const hasNestedWaves = (ticket) =>
  * Unlike the legacy sibling chain, only the *currently active* wave has any
  * live state — earlier waves are, by definition, already finished, and later
  * waves haven't started, so there is nothing to track for them beyond their
- * static config. That live state (remaining quantity, in particular) lives
- * solely on the ticket type's own `quantity`, because that is the field
- * claimTicketStock's atomic $inc decrements — never re-derive it from
- * `waves[idx].quantity` after the wave has gone live, or a concurrent sale
- * would be silently reverted on the next scheduler tick.
+ * static config. That live state is exactly two things: `quantity` (because
+ * it's the field claimTicketStock's atomic $inc decrements — never re-derive
+ * it from `waves[idx].quantity` after the wave has gone live, or a concurrent
+ * sale would be silently reverted on the next tick) and `currentWaveIndex`
+ * itself. Everything else about a wave — name, price, description, its sale
+ * window — is just configuration, not sale-tracked state, so it is kept in
+ * sync with `waves[idx]` on *every* evaluation: an organizer correcting a
+ * typo in the active wave's name mid-sale must take effect immediately, not
+ * only the next time the chain happens to advance.
  */
 const applyNestedWaveChain = (ticket, now) => {
   let changed = false;
@@ -219,16 +223,43 @@ const applyNestedWaveChain = (ticket, now) => {
     }
   }
 
-  if (isFirstActivation || idx !== ticket.currentWaveIndex) {
-    const wave = waves[idx];
+  const transitioned = isFirstActivation || idx !== ticket.currentWaveIndex;
+  const wave = waves[idx];
+  const nextStartDate = idx === 0 ? undefined : wave.startDate;
+
+  if (ticket.name !== wave.name) {
     ticket.name = wave.name;
+    changed = true;
+  }
+  if (ticket.price !== wave.price) {
     ticket.price = wave.price;
+    changed = true;
+  }
+  if (ticket.priceETB !== wave.priceETB) {
     ticket.priceETB = wave.priceETB;
+    changed = true;
+  }
+  if (ticket.priceUSD !== wave.priceUSD) {
     ticket.priceUSD = wave.priceUSD;
+    changed = true;
+  }
+  if (ticket.description !== wave.description) {
     ticket.description = wave.description;
-    ticket.quantity = wave.quantity;
-    ticket.startDate = idx === 0 ? undefined : wave.startDate;
+    changed = true;
+  }
+  if (String(ticket.startDate || "") !== String(nextStartDate || "")) {
+    ticket.startDate = nextStartDate;
+    changed = true;
+  }
+  if (String(ticket.endDate || "") !== String(wave.endDate || "")) {
     ticket.endDate = wave.endDate;
+    changed = true;
+  }
+
+  if (transitioned) {
+    // Seed exactly once, on the transition itself — never on a later tick,
+    // or a partially-sold wave's remaining stock would be reset to full.
+    ticket.quantity = wave.quantity;
     ticket.currentWaveIndex = idx;
     changed = true;
   }

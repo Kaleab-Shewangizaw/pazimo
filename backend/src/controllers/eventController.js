@@ -357,24 +357,23 @@ const applyManualAvailabilityOverrides = (
         ? ticket.manualDisabled
         : Boolean(existing?.manualDisabled);
 
-    // A nested-wave ticket type's own top-level name/price/quantity/dates are
-    // engine-owned, mirroring whichever wave is currently live — an edit to
-    // (say) the event description must never reset live-tracked sale state
-    // back to a wave's static starting config. Only `waves` itself, plus
-    // ordinary organizer-editable metadata, comes from the submitted payload;
-    // the mirrored fields and the chain position are carried over untouched.
+    // A nested-wave ticket type's own top-level `quantity` is the one
+    // genuinely live, sale-tracked field — applyTicketAvailabilityRules only
+    // ever seeds it from the active wave's config on an actual transition,
+    // so it must never be reset here to whatever (possibly stale) value the
+    // client happened to submit. name/price/description/dates are just
+    // config and get freshly re-synced from `waves[currentWaveIndex]` by
+    // applyTicketAvailabilityRules right after this runs regardless of what
+    // is returned here, so they pass straight through from the submission —
+    // that's what lets an organizer's edit to an already-active wave's name
+    // or price actually take effect. Only the chain *position* needs to be
+    // explicitly carried over (re-resolved in case the wave list was
+    // reordered), so a save with no real change can't accidentally rewind it.
     if (existing && hasNestedWaves(existing) && hasNestedWaves(ticket)) {
       return {
         ...ticket,
         _id: existing._id,
-        name: existing.name,
-        price: existing.price,
-        priceETB: existing.priceETB,
-        priceUSD: existing.priceUSD,
         quantity: existing.quantity,
-        description: existing.description,
-        startDate: existing.startDate,
-        endDate: existing.endDate,
         currentWaveIndex: resolveCarriedWaveIndex(existing, ticket.waves),
         manualDisabled,
         available: manualDisabled ? false : existing.available,
