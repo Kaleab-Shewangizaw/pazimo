@@ -160,14 +160,10 @@ const processSuccessfulPayment = async (payment) => {
   } else {
     // No live hold (legacy payment from before this existed, or the expiry
     // sweep already released it) — fall back to claiming now, same as this
-    // function always did.
-    if (
-      !ticketTypeInfo.available ||
-      ticketTypeInfo.quantity < (ticketCount || 1)
-    ) {
-      throw new BadRequestError("Ticket type is not available or sold out");
-    }
-
+    // function always did. No pre-check here: claimTicketStock's atomic
+    // claim is the authoritative check, and a failure is handled gracefully
+    // right below — a separate pre-check that throws would bypass that for
+    // the exact case it exists to handle (the customer already paid).
     const stockClaim = await claimTicketStock({
       eventId,
       ticketTypeId: ticketTypeInfo._id,

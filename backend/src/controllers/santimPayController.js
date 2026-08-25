@@ -795,4 +795,7 @@ module.exports = {
   getPaymentStatus,
   savePendingTransaction,
   fulfillPayment,
+  // Exported for direct testing — no route calls these by name.
+  processTransactionFulfillment,
+  generateTicketsForTransaction,
 };

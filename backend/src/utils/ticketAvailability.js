@@ -208,12 +208,23 @@ const applyNestedWaveChain = (ticket, now) => {
   // walk forward from there once real sales state exists.
   const isFirstActivation =
     ticket.currentWaveIndex === null || ticket.currentWaveIndex === undefined;
-  let idx = isFirstActivation ? 0 : ticket.currentWaveIndex;
+  const startIndex = isFirstActivation ? 0 : ticket.currentWaveIndex;
+  let idx = startIndex;
 
   if (!isFirstActivation) {
     while (idx < waves.length - 1) {
-      const currentFinished =
-        ticket.manualDisabled === true || toSafeNumber(ticket.quantity) <= 0;
+      // Only the wave actually recorded as active has live, sale-tracked
+      // state on the parent's own `quantity`. A wave the walk is merely
+      // passing through within this same evaluation — one step past the
+      // real current position — has never gone live, so its own starting
+      // allocation (waves[idx].quantity, never decremented) is what decides
+      // whether it's "finished", not the stale top-level field left over
+      // from the wave actually being walked away from. Using the top-level
+      // field unconditionally here used to let a single sale skip an entire
+      // untouched wave.
+      const currentQuantity =
+        idx === startIndex ? toSafeNumber(ticket.quantity) : toSafeNumber(waves[idx].quantity);
+      const currentFinished = ticket.manualDisabled === true || currentQuantity <= 0;
       const next = waves[idx + 1];
       const nextIsTimeTriggered = normalizeWaveMode(next.waveSwitchMode) !== "quantity";
       const nextTimeReached = nextIsTimeTriggered && hasWaveStartArrived(next, now);
