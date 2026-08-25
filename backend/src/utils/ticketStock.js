@@ -22,6 +22,11 @@ const refreshEventAvailability = async (eventId, now = new Date()) => {
 const matchTicketType = (event, { ticketTypeId, ticketTypeName }) => {
   if (!event || !Array.isArray(event.ticketTypes)) return null;
 
+  // Name matching alone breaks once a wave ticket type has renamed itself —
+  // a ticket bought during "Wave 2" needs its purchase-time id to find the
+  // right subdocument once the chain has since moved on to "Wave 3". Try
+  // that first; fall back to name for historical tickets bought before
+  // Ticket.ticketTypeId existed.
   if (ticketTypeId) {
     const byId = event.ticketTypes.find(
       (type) => String(type._id) === String(ticketTypeId)

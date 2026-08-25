@@ -278,6 +278,7 @@ class PaymentService {
             const ticket = new Ticket({
                 event: eventId,
                 ticketType: ticketTypeDoc.name,
+                ticketTypeId: ticketTypeDoc._id,
                 user: userId,
                 price: ticketTypeDoc.price,
                 status: 'active',

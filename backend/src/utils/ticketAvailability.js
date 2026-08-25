@@ -173,6 +173,79 @@ const applyWaveGroup = (waveTickets, now) => {
 const sortWaveChain = (items) =>
   [...items].sort((a, b) => a.order - b.order || a.position - b.position);
 
+/**
+ * A ticket type that owns its own wave chain (one document, mutated in
+ * place) rather than being one sibling in the older per-entry chain.
+ */
+const hasNestedWaves = (ticket) =>
+  Array.isArray(ticket && ticket.waves) && ticket.waves.length > 0;
+
+/**
+ * Walk one ticket type's own `waves` array forward and mirror whichever wave
+ * should be live right now onto the ticket type's own top-level fields.
+ *
+ * Unlike the legacy sibling chain, only the *currently active* wave has any
+ * live state — earlier waves are, by definition, already finished, and later
+ * waves haven't started, so there is nothing to track for them beyond their
+ * static config. That live state (remaining quantity, in particular) lives
+ * solely on the ticket type's own `quantity`, because that is the field
+ * claimTicketStock's atomic $inc decrements — never re-derive it from
+ * `waves[idx].quantity` after the wave has gone live, or a concurrent sale
+ * would be silently reverted on the next scheduler tick.
+ */
+const applyNestedWaveChain = (ticket, now) => {
+  let changed = false;
+
+  const waves = ticket.waves;
+
+  // A brand-new chain has no live state on the parent yet (quantity is
+  // whatever the client submitted, not necessarily wave 0's), so it can't be
+  // judged "finished" — always activate wave 0 first and let a later tick
+  // walk forward from there once real sales state exists.
+  const isFirstActivation =
+    ticket.currentWaveIndex === null || ticket.currentWaveIndex === undefined;
+  let idx = isFirstActivation ? 0 : ticket.currentWaveIndex;
+
+  if (!isFirstActivation) {
+    while (idx < waves.length - 1) {
+      const currentFinished =
+        ticket.manualDisabled === true || toSafeNumber(ticket.quantity) <= 0;
+      const next = waves[idx + 1];
+      const nextIsTimeTriggered = normalizeWaveMode(next.waveSwitchMode) !== "quantity";
+      const nextTimeReached = nextIsTimeTriggered && hasWaveStartArrived(next, now);
+
+      if (!currentFinished && !nextTimeReached) break;
+      idx += 1;
+    }
+  }
+
+  if (isFirstActivation || idx !== ticket.currentWaveIndex) {
+    const wave = waves[idx];
+    ticket.name = wave.name;
+    ticket.price = wave.price;
+    ticket.priceETB = wave.priceETB;
+    ticket.priceUSD = wave.priceUSD;
+    ticket.description = wave.description;
+    ticket.quantity = wave.quantity;
+    ticket.startDate = idx === 0 ? undefined : wave.startDate;
+    ticket.endDate = wave.endDate;
+    ticket.currentWaveIndex = idx;
+    changed = true;
+  }
+
+  const shouldBeAvailable =
+    ticket.manualDisabled !== true &&
+    toSafeNumber(ticket.quantity) > 0 &&
+    hasNotEnded(ticket, now);
+
+  if (ticket.available !== shouldBeAvailable) {
+    ticket.available = shouldBeAvailable;
+    changed = true;
+  }
+
+  return changed;
+};
+
 const applyTicketAvailabilityRules = (event, now = new Date()) => {
   let changed = false;
 
@@ -180,12 +253,23 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     return { changed: false };
   }
 
+  // Nested-wave ticket types own their chain entirely; keep them out of the
+  // legacy sibling scan below so a stale waveGroup string left over from
+  // before migration can never sweep one into someone else's chain.
+  const nestedWaveTickets = event.ticketTypes.filter(hasNestedWaves);
+  nestedWaveTickets.forEach((ticket) => {
+    if (applyNestedWaveChain(ticket, now)) changed = true;
+  });
+  const nestedManaged = new Set(nestedWaveTickets);
+
   // Group wave tickets by waveGroup so each ticket type's chain is evaluated
   // independently — "Regular" waves must never interact with "VIP" waves.
   const namedGroups = new Map();
   const legacyWaves = [];
 
   event.ticketTypes.forEach((ticket, position) => {
+    if (nestedManaged.has(ticket)) return;
+
     const order = detectWaveOrder(ticket);
     if (order === null) return;
 
@@ -217,7 +301,7 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
   chains.forEach((items) => items.forEach(({ ticket }) => chainManaged.add(ticket)));
 
   event.ticketTypes.forEach((ticket) => {
-    if (chainManaged.has(ticket)) return;
+    if (chainManaged.has(ticket) || nestedManaged.has(ticket)) return;
 
     if (ticket.manualDisabled === true) {
       if (ticket.available !== false) {

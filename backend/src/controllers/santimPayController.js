@@ -264,6 +264,7 @@ const generateTicketsForTransaction = async (transaction) => {
             event: event._id,
             user: userId || null,
             ticketType: selectedType.name,
+            ticketTypeId: selectedType._id,
             price: selectedType.price * qty, // Total price
             paymentReference: transaction.transactionId,
             status: "active",

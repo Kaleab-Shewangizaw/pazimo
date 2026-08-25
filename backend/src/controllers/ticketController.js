@@ -166,6 +166,7 @@ const processSuccessfulPayment = async (payment) => {
     ticketId,
     event: eventId,
     ticketType: ticketTypeInfo.name, // Ensure we store the name
+    ticketTypeId: ticketTypeInfo._id,
     ticketCount: ticketCount || 1,
     purchaseQuantity: ticketCount || 1,
     price: unitPrice * (ticketCount || 1),
@@ -589,9 +590,11 @@ const createGuestTicket = async (req, res) => {
     }
 
     // Check if ticketType exists and update quantity if so
+    let ticketTypeId;
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
       if (typeInfo) {
+        ticketTypeId = typeInfo._id;
         // Invitations draw down the same allocation as sales, so the decrement
         // has to be atomic too — otherwise a burst of invitations can push a
         // wave below zero and corrupt the sell-out signal the chain relies on.
@@ -617,6 +620,7 @@ const createGuestTicket = async (req, res) => {
       guestEmail,
       guestPhone,
       ticketType: ticketType || "Regular",
+      ticketTypeId,
       ticketCount: ticketCount || 1,
       purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
@@ -1013,9 +1017,11 @@ const createInvitationTicket = async (req, res) => {
     }
 
     // Check if ticketType exists and update quantity if so
+    let ticketTypeId;
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
       if (typeInfo) {
+        ticketTypeId = typeInfo._id;
         // Invitations draw down the same allocation as sales, so the decrement
         // has to be atomic too — otherwise a burst of invitations can push a
         // wave below zero and corrupt the sell-out signal the chain relies on.
@@ -1042,6 +1048,7 @@ const createInvitationTicket = async (req, res) => {
       guestEmail,
       guestPhone,
       ticketType: ticketType || "Regular", // Default or from body
+      ticketTypeId,
       ticketCount: ticketCount || 1,
       purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
@@ -1767,6 +1774,7 @@ const cancelTicket = async (req, res) => {
     // cancellation can reopen a wave that had just sold out.
     await releaseTicketStock({
       eventId: ticket.event,
+      ticketTypeId: ticket.ticketTypeId,
       ticketTypeName: ticket.ticketType,
       count: 1,
     });
@@ -1816,6 +1824,7 @@ const deleteTicket = async (req, res) => {
     if (event && ticket.status === "active") {
       await releaseTicketStock({
         eventId: event._id,
+        ticketTypeId: ticket.ticketTypeId,
         ticketTypeName: ticket.ticketType,
         count: ticket.purchaseQuantity || ticket.ticketCount || 1,
       });
@@ -2397,6 +2406,7 @@ const createOnDoorTicket = async (req, res) => {
       ticketId,
       event: eventId,
       ticketType: ticketType.name,
+      ticketTypeId: ticketType._id,
       ticketCount: quantity,
       purchaseQuantity: quantity,
       price: totalPrice,

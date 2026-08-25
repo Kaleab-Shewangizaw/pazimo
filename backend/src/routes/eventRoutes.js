@@ -10,7 +10,10 @@ router.get("/public-events", eventController.getPublicEvents);
 // anonymous callers only get published + public events with sanitized fields.
 router.get("/", optionalAuth, eventController.getAllEvents);
 router.get("/short/:shortId", eventController.getEventDetailsByShortId);
-router.get("/details/:id", eventController.getEventDetails);
+// optionalAuth: the event's own organizer (or an admin) gets the full,
+// unsanitized ticketTypes shape (wave config included) for the edit forms;
+// anonymous callers on the public event page still get the sanitized one.
+router.get("/details/:id", optionalAuth, eventController.getEventDetails);
 
 // Protected routes
 router.use(authenticateUser);

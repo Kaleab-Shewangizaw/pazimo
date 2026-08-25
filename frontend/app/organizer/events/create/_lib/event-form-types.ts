@@ -35,6 +35,8 @@ export interface AgeRestriction {
 }
 
 export interface TicketType {
+  /** Present once the ticket type has been saved to the backend at least once. */
+  _id?: string;
   name: string;
   price: string;
   priceETB: string;
@@ -50,6 +52,14 @@ export interface TicketType {
   waveOrder?: number;
   waveSwitchMode?: WaveSwitchMode;
   waveGroup?: string;
+  /**
+   * The wave chain owned by this ticket type. When present, this ticket
+   * type's own name/price/quantity mutate in place as the chain advances —
+   * waves are never separate ticket types. `waves[0]` is always the
+   * currently-mirrored state's origin; the server is the source of truth for
+   * which wave is actually live.
+   */
+  waves?: WaveDraft[];
 }
 
 export interface EventFormData {
