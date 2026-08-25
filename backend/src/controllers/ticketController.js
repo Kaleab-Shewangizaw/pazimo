@@ -26,6 +26,7 @@ const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
 const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
+const { markPaymentTerminal } = require("../utils/paymentHold");
 const { isPhoneBanned } = require("../utils/fraudGuard");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
@@ -128,39 +129,75 @@ const processSuccessfulPayment = async (payment) => {
     throw new BadRequestError("Invalid ticket type");
   }
 
-  // Check if ticket is available
-  if (
-    !ticketTypeInfo.available ||
-    ticketTypeInfo.quantity < (ticketCount || 1)
-  ) {
-    throw new BadRequestError("Ticket type is not available or sold out");
-  }
-
-  // ⚡ Atomically claim the stock. The check above reads a snapshot that can
-  // go stale if two purchases for the same wave land at the same moment —
-  // both could read "enough left" before either writes. The shared helper
-  // re-verifies quantity/availability inside a single DB operation; if a
-  // concurrent purchase already took the remaining tickets, it claims nothing
-  // and we abort instead of overselling. It also advances the wave chain as
-  // soon as this claim empties the current wave.
-  const stockClaim = await claimTicketStock({
-    eventId,
-    ticketTypeId: ticketTypeInfo._id,
-    ticketTypeName: ticketTypeInfo.name,
-    count: ticketCount || 1,
-    now,
-  });
-
-  if (!stockClaim.claimed) {
-    throw new BadRequestError("Ticket type is not available or sold out");
-  }
-
-  // Prepare ticket data
   const paymentCurrency = payment.currency === "USD" ? "USD" : "ETB";
-  const unitPrice =
-    paymentCurrency === "USD"
-      ? Number(ticketTypeInfo.priceUSD ?? ticketTypeInfo.price ?? 0)
-      : Number(ticketTypeInfo.priceETB ?? ticketTypeInfo.price ?? 0);
+
+  // Stock is normally already reserved — claimTicketStock now runs at
+  // checkout-initiation (ticketRoutes.js), not here at confirmation. Trust
+  // that hold instead of re-claiming (which would double-decrement).
+  //
+  // The in-memory `payment` this function was called with can be stale — a
+  // caller may have loaded it before the expiry sweep concurrently released
+  // an abandoned hold. Re-reading just the hold fields fresh from the DB
+  // right before branching is what makes this safe: a sweep-set
+  // `stockReleasedAt` is guaranteed visible here even though the poll/
+  // webhook caller's own `payment.status = "PAID"; payment.save()` a moment
+  // earlier only ever writes the paths that specific document considers
+  // modified (status/paidAt), never touching stockReleasedAt.
+  const holdState = await Payment.findById(payment._id).select(
+    "stockHeldAt stockReleasedAt"
+  );
+  const holdStillValid =
+    holdState?.stockHeldAt && !holdState?.stockReleasedAt;
+
+  let totalPrice;
+
+  if (holdStillValid) {
+    // Trust the reservation: no claim here, and price comes from what was
+    // actually verified and captured at initiate time — never re-read live,
+    // or a wave transition between initiate and confirm could mint a ticket
+    // at a different price than what the customer was charged.
+    totalPrice = Number(payment.price || 0);
+  } else {
+    // No live hold (legacy payment from before this existed, or the expiry
+    // sweep already released it) — fall back to claiming now, same as this
+    // function always did.
+    if (
+      !ticketTypeInfo.available ||
+      ticketTypeInfo.quantity < (ticketCount || 1)
+    ) {
+      throw new BadRequestError("Ticket type is not available or sold out");
+    }
+
+    const stockClaim = await claimTicketStock({
+      eventId,
+      ticketTypeId: ticketTypeInfo._id,
+      ticketTypeName: ticketTypeInfo.name,
+      count: ticketCount || 1,
+      now,
+    });
+
+    if (!stockClaim.claimed) {
+      // The customer has already paid — do not throw into a caller with no
+      // catch for this. Flag for manual follow-up (no refund automation
+      // exists yet) instead of leaving the payment PAID with no ticket and
+      // no trace of why.
+      console.error(
+        `[TICKET-CREATE] ❌ Stock claim failed for already-PAID payment ${payment.transactionId} — flagging for manual review.`
+      );
+      await Payment.updateOne(
+        { _id: payment._id },
+        { $set: { needsManualReview: true } }
+      );
+      console.log(`[TICKET-CREATE] ============================================\n`);
+      return null;
+    }
+
+    const unitPrice =
+      paymentCurrency === "USD"
+        ? Number(ticketTypeInfo.priceUSD ?? ticketTypeInfo.price ?? 0)
+        : Number(ticketTypeInfo.priceETB ?? ticketTypeInfo.price ?? 0);
+    totalPrice = unitPrice * (ticketCount || 1);
+  }
 
   const ticketData = {
     ticketId,
@@ -169,7 +206,7 @@ const processSuccessfulPayment = async (payment) => {
     ticketTypeId: ticketTypeInfo._id,
     ticketCount: ticketCount || 1,
     purchaseQuantity: ticketCount || 1,
-    price: unitPrice * (ticketCount || 1),
+    price: totalPrice,
     currency: paymentCurrency,
     seatNumber,
     paymentReference: payment.transactionId,
@@ -2302,8 +2339,10 @@ const cancelPaymentIntent = async (req, res) => {
       });
     }
 
-    payment.status = "FAILED"; // Or 'CANCELLED' if you add that to enum
-    await payment.save();
+    // Releases any held stock atomically as part of the same update — this
+    // is the explicit "buyer backed out" path, so it shouldn't have to wait
+    // for the 15-minute expiry sweep to give the unit back.
+    await markPaymentTerminal({ paymentId: payment._id, status: "FAILED" });
 
     res.status(StatusCodes.OK).json({
       success: true,

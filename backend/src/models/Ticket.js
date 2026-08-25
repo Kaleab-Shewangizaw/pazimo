@@ -186,6 +186,7 @@ TicketSchema.index({ guestPhone: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
 TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
+TicketSchema.index({ status: 1, createdAt: 1 }); // Stock-hold expiry sweep (no event filter)
 
 TicketSchema.pre("save", async function (next) {
   if (this.qrCode) return next();

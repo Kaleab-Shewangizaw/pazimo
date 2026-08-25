@@ -8,6 +8,7 @@ const ChapaService = require("../services/chapaService");
 const ChapaGiftCardService = require("../services/chapaGiftCardService");
 const { flagTamperAttempt } = require("../utils/fraudGuard");
 const { amountsMatch } = require("../utils/pricing");
+const { markPaymentTerminal } = require("../utils/paymentHold");
 
 const CHAPA_PAYMENT_GRACE_MS = 2 * 60 * 1000;
 
@@ -151,8 +152,14 @@ const chapaWebhook = async (req, res) => {
           normalizedStatus === "cancelled" || normalizedStatus === "canceled"
             ? "CANCELLED"
             : "FAILED";
-        payment.santimPayResponse = data;
-        await payment.save();
+        // markPaymentTerminal's atomic precondition needs status still
+        // PENDING in the DB, so it has to run before the plain save below
+        // that also records the raw provider response.
+        await markPaymentTerminal({ paymentId: payment._id, status: payment.status });
+        await Payment.updateOne(
+          { _id: payment._id },
+          { $set: { santimPayResponse: data } }
+        );
 
         return res.status(200).json({
           message: "Webhook processed with failed/cancelled status",
@@ -362,7 +369,7 @@ const chapaGiftCardWebhook = async (req, res) => {
         normalizedEvent === "payment.cancelled" || normalizedStatus === "cancelled"
           ? "CANCELLED"
           : "FAILED";
-      await payment.save();
+      await markPaymentTerminal({ paymentId: payment._id, status: payment.status });
 
       return res.status(200).json({
         message: "Webhook processed with failed/cancelled status",
