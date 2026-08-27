@@ -15,17 +15,27 @@ import {
   type CinemaTicket,
 } from "@/lib/cinema-api";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Ticket, Users, Search, Popcorn } from "lucide-react";
+import { Ticket, Users, Search, Popcorn, ListTree } from "lucide-react";
 import {
   concessionsFullText,
   concessionsSummary,
   groupIntoOrders,
+  keyOf,
   ORDER_STATUS_BADGE,
+  type BuyerOrder,
 } from "@/lib/cinemaTicketGrouping";
 
 const selectClass =
@@ -53,6 +63,9 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
   const [concessions, setConcessions] = useState<CinemaConcessionSale[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [search, setSearch] = useState("");
+  // The order whose raw tickets and concession lines are open in the detail
+  // dialog.
+  const [detailOrder, setDetailOrder] = useState<BuyerOrder | null>(null);
 
   // Movies with at least one screening — one with none is a dead end in the
   // schedule selector below it, so it is left off rather than shown empty.
@@ -135,6 +148,37 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
         (o.buyerPhone || "").toLowerCase().includes(q)
     );
   }, [orders, search]);
+
+  // Concession revenue for this screening, refunds excluded — the same
+  // question the per-ticket-type cards answer for seats.
+  const concessionTotals = useMemo(() => {
+    let revenue = 0;
+    let units = 0;
+    for (const c of concessions) {
+      if (c.status === "refunded") continue;
+      revenue += c.totalAmount || 0;
+      units += c.quantity || 0;
+    }
+    return { revenue, units };
+  }, [concessions]);
+
+  // The raw rows behind the order open in the detail dialog — filtered by
+  // the exact same key groupIntoOrders used, so this can never disagree with
+  // what the row it was opened from actually summarizes.
+  const detailTickets = useMemo(
+    () =>
+      detailOrder
+        ? tickets.filter((t, i) => keyOf(t.paymentReference, t._id, i) === detailOrder.key)
+        : [],
+    [tickets, detailOrder]
+  );
+  const detailConcessions = useMemo(
+    () =>
+      detailOrder
+        ? concessions.filter((c, i) => keyOf(c.paymentReference, c._id, i) === detailOrder.key)
+        : [],
+    [concessions, detailOrder]
+  );
 
   if (loadingMovies) {
     return (
@@ -234,6 +278,21 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
                 This screening has no ticket types priced yet.
               </p>
             )}
+
+            <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <Popcorn className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  Concessions
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {money(concessionTotals.revenue, selectedShowtime.currency)}
+                </p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {concessionTotals.units} item{concessionTotals.units === 1 ? "" : "s"} sold
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* --- who bought them -------------------------------------- */}
@@ -265,20 +324,21 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
                       <th className="py-2 pr-4 text-right">Amount</th>
                       <th className="py-2 pr-4">Channel</th>
                       <th className="py-2 pr-4">Status</th>
-                      <th className="py-2">Purchased</th>
+                      <th className="py-2 pr-4">Purchased</th>
+                      <th className="py-2" />
                     </tr>
                   </thead>
                   <tbody>
                     {loadingTickets ? (
                       <tr>
-                        <td colSpan={7} className="py-8">
+                        <td colSpan={8} className="py-8">
                           <Skeleton className="h-24 w-full" />
                         </td>
                       </tr>
                     ) : filteredOrders.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={7}
+                          colSpan={8}
                           className="py-6 text-center text-gray-500 dark:text-gray-400"
                         >
                           {tickets.length === 0 && concessions.length === 0
@@ -361,8 +421,18 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
                             <td className="py-2 pr-4">
                               <Badge variant={badge.variant}>{badge.label}</Badge>
                             </td>
-                            <td className="py-2 text-xs text-gray-500 dark:text-gray-400">
+                            <td className="py-2 pr-4 text-xs text-gray-500 dark:text-gray-400">
                               {new Date(o.purchaseDate).toLocaleString()}
+                            </td>
+                            <td className="py-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setDetailOrder(o)}
+                              >
+                                <ListTree className="mr-1 h-3.5 w-3.5" /> Details
+                              </Button>
                             </td>
                           </tr>
                         );
@@ -375,6 +445,112 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
           </Card>
         </>
       )}
+
+      {/* One buyer's individual tickets and concession lines. */}
+      <Dialog open={!!detailOrder} onOpenChange={(open) => !open && setDetailOrder(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{detailOrder?.buyerName}</DialogTitle>
+            <DialogDescription>
+              {detailOrder && new Date(detailOrder.purchaseDate).toLocaleString()}
+              {detailOrder?.buyerPhone ? ` · ${detailOrder.buyerPhone}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {detailTickets.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Tickets ({detailTickets.length})
+                </h4>
+                <div className="space-y-1.5">
+                  {detailTickets.map((t) => (
+                    <div
+                      key={t._id}
+                      className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2 text-xs dark:border-gray-800"
+                    >
+                      <div>
+                        <span className="font-mono text-gray-900 dark:text-gray-100">
+                          {t.ticketId}
+                        </span>
+                        <span className="ml-2 text-gray-500 dark:text-gray-400">
+                          {t.ticketType}
+                          {t.seat?.seatKey ? ` · seat ${t.seat.seatKey}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="tabular-nums text-gray-500 dark:text-gray-400">
+                          {money(t.totalAmount, t.currency)}
+                        </span>
+                        <Badge
+                          variant={
+                            t.status === "refunded" || t.status === "cancelled"
+                              ? "secondary"
+                              : t.checkedIn
+                                ? "outline"
+                                : "default"
+                          }
+                          className="text-[10px]"
+                        >
+                          {t.checkedIn ? "admitted" : t.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {detailConcessions.length > 0 && (
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Concessions ({detailConcessions.length})
+                </h4>
+                <div className="space-y-1.5">
+                  {detailConcessions.map((c) => (
+                    <div
+                      key={c._id}
+                      className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2 text-xs dark:border-gray-800"
+                    >
+                      <div>
+                        <span className="font-mono text-gray-900 dark:text-gray-100">
+                          {c.referenceNumber}
+                        </span>
+                        <span className="ml-2 text-gray-500 dark:text-gray-400">
+                          {c.beverageName} ×{c.quantity}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="tabular-nums text-gray-500 dark:text-gray-400">
+                          {money(c.totalAmount, c.currency)}
+                        </span>
+                        <Badge
+                          variant={
+                            c.status === "refunded"
+                              ? "secondary"
+                              : c.channel === "online" && !c.redeemedAt
+                                ? "default"
+                                : "outline"
+                          }
+                          className="text-[10px]"
+                        >
+                          {c.status === "refunded"
+                            ? "refunded"
+                            : c.channel === "manual"
+                              ? "sold at counter"
+                              : c.redeemedAt
+                                ? "collected"
+                                : "awaiting pickup"}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

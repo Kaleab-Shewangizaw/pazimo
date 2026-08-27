@@ -200,6 +200,19 @@ export default function AdminCinemaTicketsPanel({ token }: { token: string | nul
     [tickets, concessions]
   );
 
+  // Concession revenue for this screening, refunds excluded — the same
+  // question the per-ticket-type cards answer for seats.
+  const concessionTotals = useMemo(() => {
+    let revenue = 0;
+    let units = 0;
+    for (const c of concessions) {
+      if (c.status === "refunded") continue;
+      revenue += c.totalAmount || 0;
+      units += c.quantity || 0;
+    }
+    return { revenue, units };
+  }, [concessions]);
+
   // The raw rows behind the order open in the detail dialog — filtered by
   // the exact same key groupIntoOrders used, so this can never disagree with
   // what the row it was opened from actually summarizes.
@@ -341,6 +354,21 @@ export default function AdminCinemaTicketsPanel({ token }: { token: string | nul
                 This screening has no ticket types priced yet.
               </p>
             )}
+
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <Popcorn className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  Concessions
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  {money(concessionTotals.revenue, selectedShowtime.currency)}
+                </p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  {concessionTotals.units} item{concessionTotals.units === 1 ? "" : "s"} sold
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* --- who bought them -------------------------------------- */}
