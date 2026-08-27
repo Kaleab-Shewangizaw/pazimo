@@ -19,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -132,6 +133,63 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
         toast.success("Seat map saved");
       }
       setEditingSeatMap(null);
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Which hall's plain details (name, capacity, screen type, turnaround,
+  // active) are open for editing. Separate from editingSeatMap: renaming a
+  // hall and re-drawing its seats are different jobs, and conflating them
+  // into one dialog would make a quick rename drag in the whole seat grid.
+  const [editingHall, setEditingHall] = useState<CinemaHall | null>(null);
+  const [hallEditForm, setHallEditForm] = useState({
+    name: "",
+    capacity: "",
+    screenType: "",
+    turnaroundMinutes: "",
+    isActive: true,
+  });
+
+  const openHallEdit = (h: CinemaHall) => {
+    setEditingHall(h);
+    setHallEditForm({
+      name: h.name,
+      capacity: String(h.capacity),
+      screenType: h.screenType || "",
+      turnaroundMinutes:
+        h.turnaroundMinutes === null || h.turnaroundMinutes === undefined
+          ? ""
+          : String(h.turnaroundMinutes),
+      isActive: h.isActive,
+    });
+  };
+
+  const saveHallDetails = async () => {
+    if (!editingHall) return;
+    setBusy(true);
+    try {
+      await cinemaRequest(`/api/cinemas/me/halls/${editingHall._id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: hallEditForm.name,
+          // Ignored by the server on a hall with a seat map — capacity
+          // there is derived from the map's sellable seats, not typed. The
+          // field stays disabled in that case so this is never surprising.
+          capacity: Number(hallEditForm.capacity),
+          screenType: hallEditForm.screenType || undefined,
+          turnaroundMinutes:
+            hallEditForm.turnaroundMinutes === ""
+              ? null
+              : Number(hallEditForm.turnaroundMinutes),
+          isActive: hallEditForm.isActive,
+        }),
+      });
+      toast.success("Hall updated");
+      setEditingHall(null);
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -884,9 +942,14 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                         </p>
                       )}
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => removeHall(h._id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openHallEdit(h)}>
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => removeHall(h._id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   <Button
@@ -904,6 +967,83 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!editingHall} onOpenChange={(open) => !open && setEditingHall(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit {editingHall?.name}</DialogTitle>
+            <DialogDescription>
+              The seat map is untouched by this — renaming or resizing the room never
+              disturbs a ticket already sold.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Name</Label>
+              <Input
+                value={hallEditForm.name}
+                onChange={(e) => setHallEditForm({ ...hallEditForm, name: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Capacity</Label>
+                <Input
+                  type="number"
+                  value={hallEditForm.capacity}
+                  disabled={editingHall?.hasAssignedSeating}
+                  onChange={(e) =>
+                    setHallEditForm({ ...hallEditForm, capacity: e.target.value })
+                  }
+                />
+                {editingHall?.hasAssignedSeating && (
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    Set by the seat map — edit seats to change it.
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs">Screen type</Label>
+                <Input
+                  value={hallEditForm.screenType}
+                  onChange={(e) =>
+                    setHallEditForm({ ...hallEditForm, screenType: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Turnaround (min) — blank uses the cinema default</Label>
+              <Input
+                type="number"
+                value={hallEditForm.turnaroundMinutes}
+                onChange={(e) =>
+                  setHallEditForm({ ...hallEditForm, turnaroundMinutes: e.target.value })
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-gray-200 px-3 py-2.5 dark:border-gray-800">
+              <div>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Active</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Off stops it being scheduled. Screenings already booked are unaffected.
+                </p>
+              </div>
+              <Switch
+                checked={hallEditForm.isActive}
+                onCheckedChange={(v) => setHallEditForm({ ...hallEditForm, isActive: v })}
+              />
+            </div>
+            <Button
+              className="w-full"
+              onClick={saveHallDetails}
+              disabled={busy || !hallEditForm.name.trim() || !hallEditForm.capacity}
+            >
+              {busy ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!editingSeatMap}

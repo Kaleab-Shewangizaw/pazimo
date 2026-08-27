@@ -18,6 +18,7 @@ import CinemaConcessionsGrant from "@/components/cinema/cinema-concessions-grant
 import AdminConcessionCatalogue from "@/components/cinema/admin-concession-catalogue";
 import AdminCinemaFinancePanel from "@/components/cinema/admin-cinema-finance-panel";
 import AdminCinemaTicketsPanel from "@/components/cinema/admin-cinema-tickets-panel";
+import AdminCinemaHalls from "@/components/cinema/admin-cinema-halls";
 import {
   AlertTriangle,
   Clapperboard,
@@ -33,6 +34,7 @@ import {
   PlayCircle,
   Wallet,
   Ticket,
+  DoorOpen,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -124,8 +126,13 @@ export default function AdminCinemaPanel() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // A direct reset, not the create-time password — see resetPassword below.
+  const [newPassword, setNewPassword] = useState("");
+  const [resettingPassword, setResettingPassword] = useState(false);
   // The cinema whose concession grants are being edited, or null.
   const [granting, setGranting] = useState<CinemaRow | null>(null);
+  // The cinema whose halls are being managed, or null.
+  const [managingHalls, setManagingHalls] = useState<CinemaRow | null>(null);
 
   const fetchCinemas = useCallback(async () => {
     if (!token) return;
@@ -161,11 +168,13 @@ export default function AdminCinemaPanel() {
     setForm(EMPTY_FORM);
     setImageFile(null);
     setImagePreview(null);
+    setNewPassword("");
     setDialogOpen(true);
   };
 
   const openEdit = (cinema: CinemaRow) => {
     setEditing(cinema);
+    setNewPassword("");
     setForm({
       name: cinema.name || "",
       description: cinema.description || "",
@@ -239,6 +248,37 @@ export default function AdminCinemaPanel() {
       toast.error(error instanceof Error ? error.message : "Failed to save cinema");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // A separate action from saveCinema, deliberately: setting a new password
+  // is not a field on the profile form, it is its own privileged operation,
+  // and bundling it into "Save changes" would reset it on every unrelated
+  // edit (or silently leave it typed-but-unsent if the admin forgot to hit
+  // save last).
+  const resetPassword = async () => {
+    if (!editing) return;
+    if (newPassword.length < 6) {
+      return toast.error("New password must be at least 6 characters");
+    }
+    setResettingPassword(true);
+    try {
+      const res = await fetch(`${API_URL}/api/cinemas/admin/${editing._id}/security`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token || ""}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ newPassword }),
+      });
+      const payload = await res.json();
+      if (!res.ok || !payload.success) throw new Error(payload.message || "Failed to reset password");
+      toast.success(`Password reset for ${editing.name}`);
+      setNewPassword("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to reset password");
+    } finally {
+      setResettingPassword(false);
     }
   };
 
@@ -566,6 +606,15 @@ export default function AdminCinemaPanel() {
                                 variant="outline"
                                 size="icon"
                                 className="h-8 w-8"
+                                title="Manage this cinema's halls"
+                                onClick={() => setManagingHalls(cinema)}
+                              >
+                                <DoorOpen className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8"
                                 title={
                                   cinema.beverageEligibility === "eligible"
                                     ? "Block concessions"
@@ -692,6 +741,15 @@ export default function AdminCinemaPanel() {
         />
       )}
 
+      {managingHalls && (
+        <AdminCinemaHalls
+          cinemaId={managingHalls._id}
+          cinemaName={managingHalls.name}
+          open={!!managingHalls}
+          onOpenChange={(open) => !open && setManagingHalls(null)}
+        />
+      )}
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
@@ -748,13 +806,38 @@ export default function AdminCinemaPanel() {
               <Textarea value={form.address} onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Email</Label>
+              <Label>Email {editing && "(also their sign-in email)"}</Label>
               <Input value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} />
             </div>
             {!editing && (
               <div className="space-y-1.5">
                 <Label>Password</Label>
                 <Input type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} />
+              </div>
+            )}
+            {editing && (
+              <div className="space-y-1.5 rounded-xl border border-gray-200 p-4 dark:border-gray-800 sm:col-span-2">
+                <Label>Reset password</Label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Sets what {editing.name} signs in with directly — no current password needed.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Input
+                    type="password"
+                    placeholder="New password"
+                    className="w-52"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={resettingPassword || newPassword.length < 6}
+                    onClick={resetPassword}
+                  >
+                    {resettingPassword ? "Resetting…" : "Reset password"}
+                  </Button>
+                </div>
               </div>
             )}
             <div className="space-y-1.5">

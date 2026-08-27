@@ -124,6 +124,7 @@ router.get("/my-tickets", authenticateUser, ticketController.listMyTickets);
 
 router.get("/me", ...cinemaSelf, cinemaController.getCinema);
 router.patch("/me", ...cinemaSelf, upload.single("image"), cinemaController.updateCinema);
+router.put("/me/security", ...cinemaSelf, cinemaController.updateCinemaPassword);
 
 // Halls
 router.get("/me/halls", ...cinemaSelf, cinemaController.listHalls);
@@ -233,6 +234,7 @@ router.post("/admin", ...adminOnly, upload.single("image"), cinemaController.cre
 
 router.get("/admin/:cinemaId", ...adminOnly, cinemaController.getCinema);
 router.patch("/admin/:cinemaId", ...adminOnly, upload.single("image"), cinemaController.updateCinema);
+router.put("/admin/:cinemaId/security", ...adminOnly, cinemaController.updateCinemaPassword);
 router.patch("/admin/:cinemaId/status", ...adminOnly, cinemaController.setCinemaStatus);
 router.patch("/admin/:cinemaId/beverage-eligibility", ...adminOnly, cinemaController.setBeverageEligibility);
 // Which catalogue products this cinema may sell. An ALLOW list: empty means

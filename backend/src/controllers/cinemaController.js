@@ -206,10 +206,16 @@ const normalizeValidationError = (error) => {
   return error;
 };
 
-const duplicateNameError = (error) =>
-  error?.code === 11000
-    ? new BadRequestError("A cinema with this name already exists")
-    : error;
+const duplicateNameError = (error) => {
+  if (error?.code !== 11000) return error;
+  // Two unique indexes can throw the same E11000 through this one catch —
+  // Cinema.name and, since updateCinema started keeping the account's login
+  // email in step with the cinema's, User.email too. keyPattern says which.
+  if (error.keyPattern && "email" in error.keyPattern) {
+    return new BadRequestError("An account with this email already exists");
+  }
+  return new BadRequestError("A cinema with this name already exists");
+};
 
 /**
  * A commission rate from admin input.
@@ -436,7 +442,21 @@ const updateCinema = async (req, res) => {
     assignIfPresent("city", normalizeText(req.body.city));
     assignIfPresent("address", normalizeText(req.body.address));
     assignIfPresent("phoneNumber", normalizeText(req.body.phoneNumber));
-    assignIfPresent("email", normalizeText(req.body.email)?.toLowerCase());
+
+    const email = normalizeText(req.body.email)?.toLowerCase();
+    if (email && email !== cinema.email) {
+      // The account's own login email, kept in step with the cinema's contact
+      // one. createCinema sets both to the same value; without this an edit
+      // here only ever touched the contact field, so "changing your email"
+      // silently never changed what you actually sign in with — you would
+      // change it, then be locked out the next time you tried the old one.
+      const account = await User.findById(cinema.account);
+      if (account && account.email !== email) {
+        account.email = email;
+        await account.save();
+      }
+      cinema.email = email;
+    }
 
     // An operational setting the cinema owns, unlike the commercial terms below
     // which stay admin-only: how long their own staff need to clean a hall is
@@ -494,6 +514,56 @@ const updateCinema = async (req, res) => {
     const normalized = duplicateNameError(error);
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
+  }
+};
+
+/**
+ * Change a cinema account's password.
+ *
+ * A cinema changing its own must prove it with the current one — the same
+ * rule every self-service password change follows. An admin resetting one on
+ * a cinema's behalf (a forgotten password, a compromised account) skips that
+ * proof, the same authority setCinemaStatus already has to act on the linked
+ * account directly rather than the cinema needing to be present.
+ */
+const updateCinemaPassword = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    const isAdmin = req.user.role === "admin";
+
+    const newPassword = req.body.newPassword;
+    if (!newPassword || String(newPassword).length < 6) {
+      throw new BadRequestError("New password must be at least 6 characters");
+    }
+
+    const account = await User.findById(cinema.account).select("+password");
+    if (!account) throw new NotFoundError("Cinema account not found");
+
+    if (!isAdmin) {
+      const currentPassword = req.body.currentPassword;
+      if (!currentPassword) {
+        throw new BadRequestError("Current password is required");
+      }
+      const correct = await account.comparePassword(currentPassword);
+      if (!correct) {
+        throw new BadRequestError("Current password is incorrect");
+      }
+    }
+
+    // The pre-save hook hashes it — every existing password-change path in
+    // the codebase (organizer's, the reset-token flow) relies on the same
+    // assignment rather than hashing here.
+    account.password = newPassword;
+    await account.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: "Password updated",
+    });
+  } catch (error) {
+    console.error("Error updating cinema password:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
   }
 };
 
@@ -844,6 +914,7 @@ module.exports = {
   createCinema,
   getCinema,
   updateCinema,
+  updateCinemaPassword,
   setCinemaStatus,
   setBeverageEligibility,
   setAllowedConcessions,

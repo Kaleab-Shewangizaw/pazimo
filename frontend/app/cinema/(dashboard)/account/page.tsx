@@ -10,7 +10,87 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Info } from "lucide-react";
+import { Info, KeyRound } from "lucide-react";
+
+/** Change the sign-in password — separate from the profile save above so a
+ * mistyped current password never blocks an unrelated profile edit. */
+function PasswordCard({ token }: { token: string }) {
+  const [form, setForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const change = async () => {
+    if (!form.currentPassword) return toast.error("Enter your current password");
+    if (form.newPassword.length < 6) {
+      return toast.error("New password must be at least 6 characters");
+    }
+    if (form.newPassword !== form.confirmPassword) {
+      return toast.error("New password and confirmation don't match");
+    }
+    setSaving(true);
+    try {
+      await cinemaRequest("/api/cinemas/me/security", token, {
+        method: "PUT",
+        body: JSON.stringify({
+          currentPassword: form.currentPassword,
+          newPassword: form.newPassword,
+        }),
+      });
+      toast.success("Password updated");
+      setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="mt-6 border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+      <CardContent className="space-y-4 p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+          <KeyRound className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          Password
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <Label className="text-xs">Current password</Label>
+            <Input
+              type="password"
+              autoComplete="current-password"
+              value={form.currentPassword}
+              onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">New password</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={form.newPassword}
+              onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Confirm new password</Label>
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={form.confirmPassword}
+              onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+            />
+          </div>
+        </div>
+        <Button onClick={change} disabled={saving}>
+          {saving ? "Updating…" : "Update password"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -100,7 +180,7 @@ function AccountContent({
               />
             </div>
             <div className="sm:col-span-2">
-              <Label className="text-xs">Contact email</Label>
+              <Label className="text-xs">Email (also your sign-in email)</Label>
               <Input
                 type="email"
                 value={form.email}
@@ -147,6 +227,8 @@ function AccountContent({
           </Button>
         </CardContent>
       </Card>
+
+      <PasswordCard token={token} />
 
       {/* Read-only on purpose: the backend ignores these fields from a cinema
           and accepts them only from an admin, so showing them as editable would
