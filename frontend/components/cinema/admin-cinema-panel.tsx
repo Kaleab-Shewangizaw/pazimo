@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordField } from "@/components/ui/password-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -128,6 +129,7 @@ export default function AdminCinemaPanel() {
   const [saving, setSaving] = useState(false);
   // A direct reset, not the create-time password — see resetPassword below.
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [resettingPassword, setResettingPassword] = useState(false);
   // The cinema whose concession grants are being edited, or null.
   const [granting, setGranting] = useState<CinemaRow | null>(null);
@@ -169,12 +171,14 @@ export default function AdminCinemaPanel() {
     setImageFile(null);
     setImagePreview(null);
     setNewPassword("");
+    setConfirmPassword("");
     setDialogOpen(true);
   };
 
   const openEdit = (cinema: CinemaRow) => {
     setEditing(cinema);
     setNewPassword("");
+    setConfirmPassword("");
     setForm({
       name: cinema.name || "",
       description: cinema.description || "",
@@ -261,6 +265,9 @@ export default function AdminCinemaPanel() {
     if (newPassword.length < 6) {
       return toast.error("New password must be at least 6 characters");
     }
+    if (newPassword !== confirmPassword) {
+      return toast.error("New password and confirmation don't match");
+    }
     setResettingPassword(true);
     try {
       const res = await fetch(`${API_URL}/api/cinemas/admin/${editing._id}/security`, {
@@ -275,6 +282,7 @@ export default function AdminCinemaPanel() {
       if (!res.ok || !payload.success) throw new Error(payload.message || "Failed to reset password");
       toast.success(`Password reset for ${editing.name}`);
       setNewPassword("");
+      setConfirmPassword("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to reset password");
     } finally {
@@ -811,33 +819,44 @@ export default function AdminCinemaPanel() {
             </div>
             {!editing && (
               <div className="space-y-1.5">
-                <Label>Password</Label>
-                <Input type="password" value={form.password} onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))} />
+                <PasswordField
+                  label="Password"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={(v) => setForm((prev) => ({ ...prev, password: v }))}
+                />
               </div>
             )}
             {editing && (
-              <div className="space-y-1.5 rounded-xl border border-gray-200 p-4 dark:border-gray-800 sm:col-span-2">
-                <Label>Reset password</Label>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Sets what {editing.name} signs in with directly — no current password needed.
-                </p>
-                <div className="flex flex-wrap items-end gap-2">
-                  <Input
-                    type="password"
-                    placeholder="New password"
-                    className="w-52"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={resettingPassword || newPassword.length < 6}
-                    onClick={resetPassword}
-                  >
-                    {resettingPassword ? "Resetting…" : "Reset password"}
-                  </Button>
+              <div className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-800 sm:col-span-2">
+                <div>
+                  <Label>Reset password</Label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Sets what {editing.name} signs in with directly — no current password needed.
+                  </p>
                 </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <PasswordField
+                    label="New password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={setNewPassword}
+                  />
+                  <PasswordField
+                    label="Confirm new password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={setConfirmPassword}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={resettingPassword || newPassword.length < 6}
+                  onClick={resetPassword}
+                >
+                  {resettingPassword ? "Resetting…" : "Reset password"}
+                </Button>
               </div>
             )}
             <div className="space-y-1.5">

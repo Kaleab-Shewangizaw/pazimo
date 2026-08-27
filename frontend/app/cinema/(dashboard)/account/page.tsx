@@ -9,47 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PasswordField } from "@/components/ui/password-field";
 import { toast } from "sonner";
-import { Info, KeyRound, Eye, EyeOff } from "lucide-react";
-
-/** A password input with its own show/hide toggle, so revealing the new
- * password to check for typos doesn't also reveal the other two fields. */
-function PasswordField({
-  label,
-  value,
-  onChange,
-  autoComplete,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  autoComplete: "off" | "new-password";
-}) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <div>
-      <Label className="text-xs">{label}</Label>
-      <div className="relative">
-        <Input
-          type={visible ? "text" : "password"}
-          autoComplete={autoComplete}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="pr-9"
-        />
-        <button
-          type="button"
-          onClick={() => setVisible((v) => !v)}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
-          tabIndex={-1}
-        >
-          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-        </button>
-      </div>
-    </div>
-  );
-}
+import { Info, KeyRound } from "lucide-react";
 
 /**
  * Change the sign-in password — separate from the profile save above so a
