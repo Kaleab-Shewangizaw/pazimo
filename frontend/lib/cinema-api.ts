@@ -246,6 +246,13 @@ export interface CinemaTicket {
   customerName?: string;
   customerPhone?: string;
   purchaseDate: string;
+  /**
+   * Shared by every ticket from the same purchase — the checkout's
+   * transaction id online, or a per-sale reference at the box office. The
+   * only way to tell "one buyer bought 3 seats" (3 rows on an
+   * assigned-seating hall) from "3 different buyers bought 1 seat each".
+   */
+  paymentReference?: string;
   movie?: { _id: string; title: string; poster?: string | null };
   hall?: { _id: string; name: string };
   cinema?: { _id: string; name: string; city?: string; image?: string | null };
