@@ -10,10 +10,60 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Info, KeyRound } from "lucide-react";
+import { Info, KeyRound, Eye, EyeOff } from "lucide-react";
 
-/** Change the sign-in password — separate from the profile save above so a
- * mistyped current password never blocks an unrelated profile edit. */
+/** A password input with its own show/hide toggle, so revealing the new
+ * password to check for typos doesn't also reveal the other two fields. */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: "off" | "new-password";
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div>
+      <Label className="text-xs">{label}</Label>
+      <div className="relative">
+        <Input
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="pr-9"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
+          tabIndex={-1}
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Change the sign-in password — separate from the profile save above so a
+ * mistyped current password never blocks an unrelated profile edit.
+ *
+ * The current password is required and verified server-side (PUT
+ * /api/cinemas/me/security compares it before writing anything) — an admin
+ * resetting one on the cinema's behalf is the only path that skips that
+ * check, from the admin panel. autoComplete="off" here (rather than the
+ * usual "current-password") is deliberate: that value is exactly what tells
+ * a browser to offer autofilling a saved credential into the field, and this
+ * one should always be typed, proving whoever is sitting at the keyboard
+ * actually knows it.
+ */
 function PasswordCard({ token }: { token: string }) {
   const [form, setForm] = useState({
     currentPassword: "",
@@ -56,33 +106,24 @@ function PasswordCard({ token }: { token: string }) {
           Password
         </h2>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <Label className="text-xs">Current password</Label>
-            <Input
-              type="password"
-              autoComplete="current-password"
-              value={form.currentPassword}
-              onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">New password</Label>
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={form.newPassword}
-              onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Confirm new password</Label>
-            <Input
-              type="password"
-              autoComplete="new-password"
-              value={form.confirmPassword}
-              onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
-            />
-          </div>
+          <PasswordField
+            label="Current password"
+            autoComplete="off"
+            value={form.currentPassword}
+            onChange={(v) => setForm({ ...form, currentPassword: v })}
+          />
+          <PasswordField
+            label="New password"
+            autoComplete="new-password"
+            value={form.newPassword}
+            onChange={(v) => setForm({ ...form, newPassword: v })}
+          />
+          <PasswordField
+            label="Confirm new password"
+            autoComplete="new-password"
+            value={form.confirmPassword}
+            onChange={(v) => setForm({ ...form, confirmPassword: v })}
+          />
         </div>
         <Button onClick={change} disabled={saving}>
           {saving ? "Updating…" : "Update password"}
@@ -233,7 +274,7 @@ function AccountContent({
       {/* Read-only on purpose: the backend ignores these fields from a cinema
           and accepts them only from an admin, so showing them as editable would
           be a form that silently does nothing. */}
-      <Card className="mt-6 border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+      {/* <Card className="mt-6 border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
         <CardContent className="p-5">
           <h2 className="mb-1 text-sm font-semibold text-gray-900 dark:text-gray-100">
             Commercial terms
@@ -289,7 +330,7 @@ function AccountContent({
             </div>
           </dl>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 }
