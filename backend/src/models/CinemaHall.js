@@ -99,7 +99,12 @@ const CinemaHallSchema = new mongoose.Schema(
           {
             // "A", "B", … Stored, not generated, so a room that skips "I"
             // (easily misread as "1") stays correct.
-            label: { type: String, required: true, trim: true },
+            //
+            // Empty string is a deliberate value, not a missing one: a row with
+            // no existing seats is a blank space between rows (a walkway), not
+            // an addressable row, so it carries no letter and is not required to
+            // have one — see the "space" handling in the validator below.
+            label: { type: String, trim: true, default: "" },
 
             // How far this row bows toward the screen, in arbitrary units the
             // renderer scales. 0 is a straight row. Purely presentational: it
@@ -231,21 +236,38 @@ CinemaHallSchema.pre("validate", function checkSeatMap(next) {
   // A row label must be unique, because "row + number" IS a seat's identity —
   // two rows called "A" would make A-5 ambiguous, and a hold on one would block
   // the other.
+  //
+  // Neither rule applies to a row with no existing seats: it is a blank space
+  // (a walkway between blocks of seating), not an addressable row, so it needs
+  // no label and any number of spacer rows may share the empty one.
   const rowLabels = new Set();
   const seenSeatKeys = new Set();
 
   for (const row of rows) {
-    if (rowLabels.has(row.label)) {
-      this.invalidate("seatMap", `Two rows are both labelled "${row.label}"`);
+    const rowHasSeats = (row.seats || []).some((s) => s.exists);
+
+    if (rowHasSeats) {
+      if (!row.label) {
+        this.invalidate("seatMap", "Every row with seats needs a label");
+      } else if (rowLabels.has(row.label)) {
+        this.invalidate("seatMap", `Two rows are both labelled "${row.label}"`);
+      } else {
+        rowLabels.add(row.label);
+      }
     }
-    rowLabels.add(row.label);
 
     for (const seat of row.seats || []) {
       const seatKey = `${row.label}-${seat.number}`;
-      if (seenSeatKeys.has(seatKey)) {
-        this.invalidate("seatMap", `Seat ${seatKey} appears twice`);
+
+      // Uniqueness only matters for a real seat — nobody can ever hold or buy
+      // a gap, so two gaps landing on the same key (routine once spacer rows
+      // share a blank label) is not a collision worth rejecting the save for.
+      if (seat.exists) {
+        if (seenSeatKeys.has(seatKey)) {
+          this.invalidate("seatMap", `Seat ${seatKey} appears twice`);
+        }
+        seenSeatKeys.add(seatKey);
       }
-      seenSeatKeys.add(seatKey);
 
       // Checked even for gaps: a gap that later becomes a seat would otherwise
       // carry a category nothing recognises, and the failure would surface at

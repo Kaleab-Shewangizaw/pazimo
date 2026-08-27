@@ -146,32 +146,42 @@ const parseSeatMap = (value) => {
   return {
     rows: rows.map((row, rowIndex) => {
       const label = String(row?.label ?? "").trim();
-      if (!label) throw new BadRequestError(`Row ${rowIndex + 1} needs a label`);
 
       const seats = Array.isArray(row?.seats) ? row.seats : [];
       if (seats.length > 80) {
-        throw new BadRequestError(`Row ${label} has more than 80 seats`);
+        throw new BadRequestError(`Row ${rowIndex + 1} has more than 80 seats`);
+      }
+
+      const mappedSeats = seats.map((seat, seatIndex) => {
+        const number = String(seat?.number ?? "").trim();
+        if (!number) {
+          throw new BadRequestError(
+            `Seat ${seatIndex + 1} in row ${rowIndex + 1} needs a number`
+          );
+        }
+        return {
+          number,
+          categoryKey: String(seat?.categoryKey ?? "").trim().toLowerCase(),
+          // Default TRUE: a seat sent without the flag is a seat, not a gap.
+          exists: seat?.exists === undefined ? true : parseBoolean(seat.exists, true),
+          blocked: parseBoolean(seat?.blocked, false),
+        };
+      });
+
+      // A row with no existing seats is a blank space between rows — a
+      // walkway, not an addressable row — so only a row that actually has a
+      // seat in it is required to carry a label. Mirrors the rule enforced
+      // again in CinemaHall's own validator for every other write path.
+      const hasSeats = mappedSeats.some((s) => s.exists);
+      if (hasSeats && !label) {
+        throw new BadRequestError(`Row ${rowIndex + 1} needs a label`);
       }
 
       return {
         label,
-        curve: asOffset(row?.curve, `Row ${label} curve`),
-        offset: asOffset(row?.offset, `Row ${label} offset`),
-        seats: seats.map((seat, seatIndex) => {
-          const number = String(seat?.number ?? "").trim();
-          if (!number) {
-            throw new BadRequestError(
-              `Seat ${seatIndex + 1} in row ${label} needs a number`
-            );
-          }
-          return {
-            number,
-            categoryKey: String(seat?.categoryKey ?? "").trim().toLowerCase(),
-            // Default TRUE: a seat sent without the flag is a seat, not a gap.
-            exists: seat?.exists === undefined ? true : parseBoolean(seat.exists, true),
-            blocked: parseBoolean(seat?.blocked, false),
-          };
-        }),
+        curve: asOffset(row?.curve, `Row ${rowIndex + 1} curve`),
+        offset: asOffset(row?.offset, `Row ${rowIndex + 1} offset`),
+        seats: mappedSeats,
       };
     }),
   };

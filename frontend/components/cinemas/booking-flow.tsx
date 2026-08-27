@@ -799,8 +799,11 @@ function SeatPlan({
           className="mx-auto flex flex-col items-center"
           style={{ gap: GAP, width: scrolls ? "max-content" : undefined }}
         >
-          {rows.map((row) => (
-            <div key={row.label} className="flex items-center" style={{ gap: GAP }}>
+          {rows.map((row, rowIndex) => (
+            // Keyed by position, not row.label: a row with no seats (a blank
+            // space between blocks of seating) carries no label at all, and
+            // more than one of those would collide on the label alone.
+            <div key={rowIndex} className="flex items-center" style={{ gap: GAP }}>
               <span
                 className="shrink-0 text-center text-[10px] font-semibold uppercase text-muted-foreground"
                 style={{ width: LABEL }}

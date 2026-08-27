@@ -38,16 +38,66 @@ const PALETTE = ["#6366f1", "#f59e0b", "#0ea5e9", "#10b981", "#ec4899", "#8b5cf6
 
 type Mode = "toggle" | "block" | "category";
 
-const nextRowLabel = (rows: SeatMapRow[]): string => {
-  const used = new Set(rows.map((r) => r.label));
-  for (const letter of LETTERS) if (!used.has(letter)) return letter;
-  // Past 24 rows, fall back to AA, AB… rather than refusing to add one.
-  for (const a of LETTERS) for (const b of LETTERS) {
-    const label = `${a}${b}`;
-    if (!used.has(label)) return label;
-  }
-  return `R${rows.length + 1}`;
+/** A row with no existing seat is a blank space between rows, not a real row. */
+const rowHasSeats = (row: SeatMapRow) => row.seats.some((s) => s.exists);
+
+/**
+ * Seat numbers, contiguous over only the seats that exist in this row.
+ *
+ * A gap keeps its stale number rather than losing it — that number is never
+ * shown (SeatButton doesn't render one for a gap) and never checked for
+ * uniqueness (see CinemaHall's validator), so leaving it alone is harmless and
+ * avoids one more field to reconcile. What matters is that every EXISTING
+ * seat counts only the existing seats before it: remove seat 6 for an aisle
+ * and the next real seat is 6, not 7 — the aisle is not "seat 6 that isn't
+ * there", it is nothing at all.
+ */
+const renumberSeats = (seats: SeatMapSeat[]): SeatMapSeat[] => {
+  let n = 0;
+  return seats.map((seat) => {
+    if (!seat.exists) return seat;
+    n += 1;
+    const number = String(n);
+    return seat.number === number ? seat : { ...seat, number };
+  });
 };
+
+// Past 24 rows, fall back to AA, AB… rather than refusing to add one; past
+// 24*24 that too runs out, so fall back again to a plain "R25".
+const labelForIndex = (i: number): string => {
+  if (i < LETTERS.length) return LETTERS[i];
+  const rest = i - LETTERS.length;
+  const first = LETTERS[Math.floor(rest / LETTERS.length)];
+  const second = LETTERS[rest % LETTERS.length];
+  return first !== undefined ? `${first}${second}` : `R${i + 1}`;
+};
+
+/**
+ * Row letters, assigned only to rows that still have a seat in them.
+ *
+ * A row emptied out entirely — every seat removed, to leave a walkway between
+ * two blocks of seating — is not a row any more, so it takes no letter of its
+ * own and every row after it shifts up to fill the gap: empty out row D and
+ * row E becomes the new row D. Always recomputed from scratch rather than
+ * patched incrementally, so there is exactly one place that decides what a
+ * row is called and it can never drift from "the row's actual seats".
+ */
+const relabelRows = (rows: SeatMapRow[]): SeatMapRow[] => {
+  let letterIndex = 0;
+  return rows.map((row) => {
+    if (!rowHasSeats(row)) {
+      return row.label === "" ? row : { ...row, label: "" };
+    }
+    const label = labelForIndex(letterIndex);
+    letterIndex += 1;
+    return row.label === label ? row : { ...row, label };
+  });
+};
+
+/** The one place both fixes apply, so no mutation can update seats or rows
+ * without also keeping numbers and letters honest. */
+const normalizeRows = (rows: SeatMapRow[]): SeatMapRow[] =>
+  relabelRows(rows.map((row) => ({ ...row, seats: renumberSeats(row.seats) })));
 
 export default function SeatMapEditor({
   initialCategories,
@@ -63,7 +113,13 @@ export default function SeatMapEditor({
   const [categories, setCategories] = useState<SeatCategory[]>(
     initialCategories?.length ? initialCategories : DEFAULT_CATEGORIES
   );
-  const [rows, setRows] = useState<SeatMapRow[]>(initialRows ?? []);
+  const [rows, setRawRows] = useState<SeatMapRow[]>(() => normalizeRows(initialRows ?? []));
+  // Every update to the grid goes through this, never setRawRows directly, so
+  // a row can never end up with a stale letter or a seat with a stale number.
+  const setRows = (updater: SeatMapRow[] | ((current: SeatMapRow[]) => SeatMapRow[])) =>
+    setRawRows((current) =>
+      normalizeRows(typeof updater === "function" ? updater(current) : updater)
+    );
   const [mode, setMode] = useState<Mode>("toggle");
   const [brush, setBrush] = useState<string>(
     initialCategories?.[0]?.key ?? DEFAULT_CATEGORIES[0].key
@@ -150,7 +206,8 @@ export default function SeatMapEditor({
     setRows((current) => [
       ...current,
       {
-        label: nextRowLabel(current),
+        // Overwritten immediately by setRows' own normalize pass.
+        label: "",
         curve: 0,
         offset: 0,
         seats: Array.from({ length: current[0]?.seats.length || 10 }, (_, i) => ({
@@ -165,13 +222,11 @@ export default function SeatMapEditor({
   const removeRow = (index: number) =>
     setRows((current) => current.filter((_, i) => i !== index));
 
-  const setRowField = (index: number, field: "label" | "curve" | "offset", value: string) =>
+  // "label" is not settable here — it is derived from which rows still have a
+  // seat in them (see relabelRows) rather than freely typed.
+  const setRowField = (index: number, field: "curve" | "offset", value: string) =>
     setRows((current) =>
-      current.map((row, i) =>
-        i !== index
-          ? row
-          : { ...row, [field]: field === "label" ? value : Number(value) }
-      )
+      current.map((row, i) => (i !== index ? row : { ...row, [field]: Number(value) }))
     );
 
   const addSeatToRow = (index: number, delta: number) =>
@@ -260,9 +315,13 @@ export default function SeatMapEditor({
       toast.error("This map has no sellable seats");
       return;
     }
-    const labels = rows.map((r) => r.label.trim());
+    // A row with no seats is a blank space and carries no label — see
+    // relabelRows — so only rows that actually seat someone need to be
+    // checked here. This should never actually fire (relabelRows guarantees
+    // it), but it is cheap insurance against the very-large-hall fallback.
+    const labels = rows.filter(rowHasSeats).map((r) => r.label.trim());
     if (labels.some((l) => !l)) {
-      toast.error("Every row needs a label");
+      toast.error("Every row with seats needs a label");
       return;
     }
     if (new Set(labels).size !== labels.length) {
@@ -421,13 +480,25 @@ export default function SeatMapEditor({
             </div>
 
             <div className="space-y-2">
-              {rows.map((row, rowIndex) => (
-                <div key={rowIndex} className="flex items-center gap-2">
-                  <Input
-                    className="h-7 w-12 shrink-0 text-center text-xs font-semibold"
-                    value={row.label}
-                    onChange={(e) => setRowField(rowIndex, "label", e.target.value)}
-                  />
+              {rows.map((row, rowIndex) => {
+                const hasSeats = rowHasSeats(row);
+                return (
+                <div key={rowIndex} className={`flex items-center gap-2 ${hasSeats ? "" : "opacity-60"}`}>
+                  {hasSeats ? (
+                    <span
+                      className="flex h-7 w-12 shrink-0 items-center justify-center rounded-md border border-gray-200 text-center text-xs font-semibold text-gray-900 dark:border-gray-700 dark:text-gray-100"
+                      title="Assigned automatically — rows with no seats take no letter"
+                    >
+                      {row.label}
+                    </span>
+                  ) : (
+                    <span
+                      className="flex h-7 w-12 shrink-0 items-center justify-center rounded-md border border-dashed border-gray-300 text-center text-[9px] uppercase tracking-wide text-gray-400 dark:border-gray-700"
+                      title="No seats — a blank space, not a row. Add a seat to turn it back into one."
+                    >
+                      space
+                    </span>
+                  )}
 
                   <div
                     className="flex flex-1 items-center justify-center gap-1"
@@ -467,10 +538,16 @@ export default function SeatMapEditor({
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
-            <div className="mt-6 flex justify-center">
+            <p className="mt-3 text-center text-[11px] text-gray-400 dark:text-gray-500">
+              Remove every seat in a row to turn it into a blank space instead of a row —
+              the rows below it relabel automatically.
+            </p>
+
+            <div className="mt-3 flex justify-center">
               <Button size="sm" variant="outline" onClick={addRow}>
                 <Plus className="mr-1 h-3 w-3" /> Add a row
               </Button>
