@@ -167,3 +167,29 @@ export const ORDER_STATUS_BADGE: Record<
   cancelled: { label: "Cancelled", variant: "secondary" },
   none: { label: "Snacks only", variant: "secondary" },
 };
+
+const lineText = (l: OrderConcessionLine) => `${l.name} ×${l.quantity}`;
+
+/**
+ * The full snack list, one line per product — for a tooltip/title, where
+ * space is not a table cell's few dozen pixels.
+ */
+export const concessionsFullText = (lines: OrderConcessionLine[]) =>
+  lines.map(lineText).join(", ");
+
+/**
+ * The snack list, shortened to fit a table cell.
+ *
+ * A buyer's order can hold as many distinct products as the counter sells —
+ * shown in full, a handful of long product names blows the row height past
+ * every other cell's and the column past the table's width. Capping at a
+ * fixed count and folding the rest into "+N more" keeps every row the same
+ * height regardless of how much someone bought; the full list still reaches
+ * the reader through the cell's title tooltip (concessionsFullText) or, on
+ * the admin screen, the order's detail dialog.
+ */
+export const concessionsSummary = (lines: OrderConcessionLine[], maxShown = 2): string => {
+  if (lines.length <= maxShown) return concessionsFullText(lines);
+  const shown = lines.slice(0, maxShown).map(lineText).join(", ");
+  return `${shown} +${lines.length - maxShown} more`;
+};

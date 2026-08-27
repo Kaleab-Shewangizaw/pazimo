@@ -27,6 +27,8 @@ import {
   type CinemaTicket,
 } from "@/lib/cinema-api";
 import {
+  concessionsFullText,
+  concessionsSummary,
   groupIntoOrders,
   keyOf,
   ORDER_STATUS_BADGE,
@@ -410,33 +412,39 @@ export default function AdminCinemaTicketsPanel({ token }: { token: string | nul
                                 </div>
                               )}
                             </td>
-                            <td className="py-2 pr-4">
+                            <td className="max-w-[180px] py-2 pr-4">
                               {o.totalQuantity > 0 ? (
                                 <>
                                   <span className="font-semibold text-gray-900 dark:text-gray-100">
                                     {o.totalQuantity}
                                   </span>
-                                  <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                                    {o.typeBreakdown
-                                      .map((b) => `${b.type} ×${b.quantity}`)
-                                      .join(", ")}
+                                  <span
+                                    className="ml-1 text-xs text-gray-500 dark:text-gray-400"
+                                    title={concessionsFullText(
+                                      o.typeBreakdown.map((b) => ({ name: b.type, quantity: b.quantity }))
+                                    )}
+                                  >
+                                    {concessionsSummary(
+                                      o.typeBreakdown.map((b) => ({ name: b.type, quantity: b.quantity }))
+                                    )}
                                   </span>
                                 </>
                               ) : (
                                 <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                               )}
                             </td>
-                            <td className="py-2 pr-4">
+                            <td className="max-w-[200px] py-2 pr-4">
                               {o.concessions.length === 0 ? (
                                 <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
                               ) : (
                                 <div className="flex items-start gap-1.5">
                                   <Popcorn className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                                  <div>
-                                    <span className="text-xs text-gray-700 dark:text-gray-300">
-                                      {o.concessions
-                                        .map((c) => `${c.name} ×${c.quantity}`)
-                                        .join(", ")}
+                                  <div className="min-w-0">
+                                    <span
+                                      className="block truncate text-xs text-gray-700 dark:text-gray-300"
+                                      title={concessionsFullText(o.concessions)}
+                                    >
+                                      {concessionsSummary(o.concessions)}
                                     </span>
                                     {o.concessionsOutstanding && (
                                       <div className="text-[11px] text-amber-600 dark:text-amber-400">
