@@ -314,8 +314,14 @@ export interface CinemaConcessionSale {
   status: "confirmed" | "refunded";
   channel: "online" | "manual";
   customerName?: string;
+  customerPhone?: string;
   soldAt: string;
   showtime?: { _id: string; startsAt: string } | null;
+  /** Shared with the ticket order it was bought alongside — see CinemaTicket. */
+  paymentReference?: string;
+  /** Set once staff hand it over at the counter. Absent on a counter sale by
+   * design (nothing to collect later) and on one never yet collected. */
+  redeemedAt?: string | null;
 }
 
 /**

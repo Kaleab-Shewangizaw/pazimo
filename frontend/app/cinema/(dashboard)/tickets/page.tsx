@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CinemaGate } from "@/components/cinema/cinema-gate";
 import {
+  fetchConcessionSales,
   fetchMovies,
   fetchShowtimes,
   fetchTicketSales,
   money,
+  type CinemaConcessionSale,
   type CinemaMovie,
   type CinemaProfile,
   type CinemaShowtime,
@@ -18,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Ticket, Users, Search } from "lucide-react";
+import { Ticket, Users, Search, Popcorn } from "lucide-react";
 import { groupIntoOrders, ORDER_STATUS_BADGE } from "@/lib/cinemaTicketGrouping";
 
 const selectClass =
@@ -43,6 +45,7 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
   const [loadingShowtimes, setLoadingShowtimes] = useState(false);
 
   const [tickets, setTickets] = useState<CinemaTicket[]>([]);
+  const [concessions, setConcessions] = useState<CinemaConcessionSale[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -87,17 +90,19 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
   const reloadTickets = useCallback(async () => {
     if (!selectedShowtimeId) {
       setTickets([]);
+      setConcessions([]);
       return;
     }
     setLoadingTickets(true);
     try {
       // A single screening's seat count is bounded by the hall — 1000 comfortably
-      // covers any real room, so this never needs its own pagination control.
-      const res = await fetchTicketSales(
-        token,
-        `?showtimeId=${selectedShowtimeId}&limit=1000`
-      );
-      setTickets(res.data);
+      // covers any real room, so neither of these ever needs its own pagination.
+      const [ticketRes, concessionRes] = await Promise.all([
+        fetchTicketSales(token, `?showtimeId=${selectedShowtimeId}&limit=1000`),
+        fetchConcessionSales(token, `?showtimeId=${selectedShowtimeId}&limit=1000`),
+      ]);
+      setTickets(ticketRes.data);
+      setConcessions(concessionRes.data);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -111,7 +116,10 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
 
   const selectedShowtime = showtimes.find((s) => s._id === selectedShowtimeId);
 
-  const orders = useMemo(() => groupIntoOrders(tickets), [tickets]);
+  const orders = useMemo(
+    () => groupIntoOrders(tickets, concessions),
+    [tickets, concessions]
+  );
 
   const filteredOrders = useMemo(() => {
     if (!search.trim()) return orders;
@@ -248,6 +256,7 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
                     <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:text-gray-400">
                       <th className="py-2 pr-4">Buyer</th>
                       <th className="py-2 pr-4">Tickets bought</th>
+                      <th className="py-2 pr-4">Snacks</th>
                       <th className="py-2 pr-4 text-right">Amount</th>
                       <th className="py-2 pr-4">Channel</th>
                       <th className="py-2 pr-4">Status</th>
@@ -257,18 +266,18 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
                   <tbody>
                     {loadingTickets ? (
                       <tr>
-                        <td colSpan={6} className="py-8">
+                        <td colSpan={7} className="py-8">
                           <Skeleton className="h-24 w-full" />
                         </td>
                       </tr>
                     ) : filteredOrders.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={6}
+                          colSpan={7}
                           className="py-6 text-center text-gray-500 dark:text-gray-400"
                         >
-                          {tickets.length === 0
-                            ? "No tickets sold for this screening yet."
+                          {tickets.length === 0 && concessions.length === 0
+                            ? "Nothing sold for this screening yet."
                             : "No buyer matches that search."}
                         </td>
                       </tr>
@@ -291,17 +300,49 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
                               )}
                             </td>
                             <td className="py-2 pr-4">
-                              <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                {o.totalQuantity}
-                              </span>
-                              <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
-                                {o.typeBreakdown
-                                  .map((b) => `${b.type} ×${b.quantity}`)
-                                  .join(", ")}
-                              </span>
+                              {o.totalQuantity > 0 ? (
+                                <>
+                                  <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                    {o.totalQuantity}
+                                  </span>
+                                  <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">
+                                    {o.typeBreakdown
+                                      .map((b) => `${b.type} ×${b.quantity}`)
+                                      .join(", ")}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                              )}
+                            </td>
+                            <td className="py-2 pr-4">
+                              {o.concessions.length === 0 ? (
+                                <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                              ) : (
+                                <div className="flex items-start gap-1.5">
+                                  <Popcorn className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                  <div>
+                                    <span className="text-xs text-gray-700 dark:text-gray-300">
+                                      {o.concessions
+                                        .map((c) => `${c.name} ×${c.quantity}`)
+                                        .join(", ")}
+                                    </span>
+                                    {o.concessionsOutstanding && (
+                                      <div className="text-[11px] text-amber-600 dark:text-amber-400">
+                                        Not yet collected
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </td>
                             <td className="py-2 pr-4 text-right tabular-nums">
                               {money(o.totalAmount, o.currency)}
+                              {o.concessionAmount > 0 && (
+                                <div className="text-[11px] font-normal text-gray-400 dark:text-gray-500">
+                                  incl. {money(o.concessionAmount, o.currency)} snacks
+                                </div>
+                              )}
                             </td>
                             <td className="py-2 pr-4 text-xs capitalize text-gray-500 dark:text-gray-400">
                               {o.channel === "box_office" ? "Box office" : "Online"}
