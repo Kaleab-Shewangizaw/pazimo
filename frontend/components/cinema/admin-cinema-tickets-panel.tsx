@@ -329,25 +329,21 @@ export default function AdminCinemaTicketsPanel({ token }: { token: string | nul
       {selectedShowtime && (
         <>
           {/* --- sales by ticket type ------------------------------------ */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-wrap gap-2">
             {selectedShowtime.ticketTypes.map((t) => (
-              <Card key={t._id}>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                    <Ticket className="h-3.5 w-3.5" />
-                    {t.name}
-                  </div>
-                  <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-                    {t.sold}
-                    <span className="ml-1 text-sm font-normal text-gray-400">
-                      / {t.allocation} sold
-                    </span>
-                  </p>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    {money(t.sold * t.price, selectedShowtime.currency)} · {money(t.price, selectedShowtime.currency)} each
-                  </p>
-                </CardContent>
-              </Card>
+              <div
+                key={t._id}
+                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs dark:border-gray-800 dark:bg-gray-950/50"
+              >
+                <Ticket className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                <span className="font-medium text-gray-900 dark:text-gray-100">{t.name}</span>
+                <span className="tabular-nums text-gray-400 dark:text-gray-500">
+                  {t.sold}/{t.allocation}
+                </span>
+                <span className="tabular-nums font-semibold text-gray-900 dark:text-gray-100">
+                  {money(t.sold * t.price, selectedShowtime.currency)}
+                </span>
+              </div>
             ))}
             {selectedShowtime.ticketTypes.length === 0 && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -355,20 +351,16 @@ export default function AdminCinemaTicketsPanel({ token }: { token: string | nul
               </p>
             )}
 
-            <Card>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  <Popcorn className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                  Concessions
-                </div>
-                <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-                  {money(concessionTotals.revenue, selectedShowtime.currency)}
-                </p>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  {concessionTotals.units} item{concessionTotals.units === 1 ? "" : "s"} sold
-                </p>
-              </CardContent>
-            </Card>
+            <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs dark:border-gray-800 dark:bg-gray-950/50">
+              <Popcorn className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <span className="font-medium text-gray-900 dark:text-gray-100">Concessions</span>
+              <span className="tabular-nums text-gray-400 dark:text-gray-500">
+                {concessionTotals.units} sold
+              </span>
+              <span className="tabular-nums font-semibold text-gray-900 dark:text-gray-100">
+                {money(concessionTotals.revenue, selectedShowtime.currency)}
+              </span>
+            </div>
           </div>
 
           {/* --- who bought them -------------------------------------- */}
