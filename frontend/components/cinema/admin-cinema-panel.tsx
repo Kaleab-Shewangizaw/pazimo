@@ -17,6 +17,7 @@ import AdminMovieCuration from "@/components/cinema/admin-movie-curation";
 import CinemaConcessionsGrant from "@/components/cinema/cinema-concessions-grant";
 import AdminConcessionCatalogue from "@/components/cinema/admin-concession-catalogue";
 import AdminCinemaFinancePanel from "@/components/cinema/admin-cinema-finance-panel";
+import AdminCinemaTicketsPanel from "@/components/cinema/admin-cinema-tickets-panel";
 import {
   AlertTriangle,
   Clapperboard,
@@ -31,6 +32,7 @@ import {
   PauseCircle,
   PlayCircle,
   Wallet,
+  Ticket,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -329,7 +331,7 @@ export default function AdminCinemaPanel() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <Tabs defaultValue="cinemas" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[560px]">
+        <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[680px]">
           <TabsTrigger value="cinemas">
             <Store className="mr-1.5 h-4 w-4" /> Cinemas
           </TabsTrigger>
@@ -341,6 +343,9 @@ export default function AdminCinemaPanel() {
           </TabsTrigger>
           <TabsTrigger value="money">
             <Wallet className="mr-1.5 h-4 w-4" /> Money
+          </TabsTrigger>
+          <TabsTrigger value="tickets">
+            <Ticket className="mr-1.5 h-4 w-4" /> Tickets
           </TabsTrigger>
         </TabsList>
 
@@ -651,6 +656,18 @@ export default function AdminCinemaPanel() {
             </p>
           </div>
           <AdminCinemaFinancePanel token={token} />
+        </TabsContent>
+
+        <TabsContent value="tickets" className="space-y-5">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Ticket sales
+            </h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              Pick a cinema, a film and a screening to see what it sold and who bought it.
+            </p>
+          </div>
+          <AdminCinemaTicketsPanel token={token} />
         </TabsContent>
       </Tabs>
 

@@ -1,25 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CinemaGate } from "@/components/cinema/cinema-gate";
 import {
-  fetchMovies,
-  fetchShowtimes,
-  fetchTicketSales,
-  money,
-  type CinemaMovie,
-  type CinemaProfile,
-  type CinemaShowtime,
-  type CinemaTicket,
-} from "@/lib/cinema-api";
+  Card,
+  CardContent,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Ticket, Users, Search } from "lucide-react";
+import { Ticket, Users, Search, Clapperboard } from "lucide-react";
+import { money, type CinemaMovie, type CinemaShowtime, type CinemaTicket } from "@/lib/cinema-api";
 import { groupIntoOrders, ORDER_STATUS_BADGE } from "@/lib/cinemaTicketGrouping";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const selectClass =
   "h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900";
@@ -33,10 +28,28 @@ const formatDateTime = (iso: string) =>
     minute: "2-digit",
   });
 
-function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
+interface CinemaOption {
+  _id: string;
+  name: string;
+  city?: string | null;
+  isActive: boolean;
+}
+
+/**
+ * The admin's read of one screening's sales: cinema -> film -> screening ->
+ * sales-by-ticket-type -> who bought it. The same report the cinema itself
+ * sees on its own Tickets page (same grouping, same cards), scoped by an
+ * extra cinema picker up front and reading the /admin/:cinemaId/* endpoints
+ * instead of /me/*.
+ */
+export default function AdminCinemaTicketsPanel({ token }: { token: string | null }) {
+  const [cinemas, setCinemas] = useState<CinemaOption[]>([]);
+  const [selectedCinemaId, setSelectedCinemaId] = useState("");
+  const [loadingCinemas, setLoadingCinemas] = useState(true);
+
   const [movies, setMovies] = useState<CinemaMovie[]>([]);
   const [selectedMovieId, setSelectedMovieId] = useState("");
-  const [loadingMovies, setLoadingMovies] = useState(true);
+  const [loadingMovies, setLoadingMovies] = useState(false);
 
   const [showtimes, setShowtimes] = useState<CinemaShowtime[]>([]);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState("");
@@ -46,64 +59,100 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [search, setSearch] = useState("");
 
-  // Movies with at least one screening — one with none is a dead end in the
-  // schedule selector below it, so it is left off rather than shown empty.
+  // Every cinema on the platform — including a suspended one, since a report
+  // is read looking backward and a cinema stopped selling today still sold
+  // something yesterday.
   useEffect(() => {
-    fetchMovies(token)
+    if (!token) return;
+    fetch(`${API_URL}/api/cinemas/admin?limit=200`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
       .then((data) => {
-        const withScreenings = data.filter((m) => (m.showtimeCount || 0) > 0);
-        setMovies(withScreenings);
-        if (withScreenings.length && !selectedMovieId) {
-          setSelectedMovieId(withScreenings[0]._id);
-        }
+        if (!data.success) throw new Error(data.message || "Failed to load cinemas");
+        const rows: CinemaOption[] = data.data || [];
+        setCinemas(rows);
+        if (rows.length && !selectedCinemaId) setSelectedCinemaId(rows[0]._id);
       })
-      .catch((e: Error) => toast.error(e.message))
-      .finally(() => setLoadingMovies(false));
-    // Runs once on mount — selecting a movie later never re-fetches the list.
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Failed to load cinemas"))
+      .finally(() => setLoadingCinemas(false));
+    // Runs once — the cinema list itself never changes while this tab is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  // This film's screenings, most recent first — a sales report is read
-  // looking backward far more often than forward.
+  // This cinema's films with at least one screening — one with none is a
+  // dead end in the schedule selector below it.
   useEffect(() => {
-    if (!selectedMovieId) {
+    if (!token || !selectedCinemaId) {
+      setMovies([]);
+      setSelectedMovieId("");
+      return;
+    }
+    setLoadingMovies(true);
+    fetch(`${API_URL}/api/cinemas/admin/${selectedCinemaId}/movies`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.success) throw new Error(data.message || "Failed to load films");
+        const withScreenings: CinemaMovie[] = (data.data || []).filter(
+          (m: CinemaMovie) => (m.showtimeCount || 0) > 0
+        );
+        setMovies(withScreenings);
+        setSelectedMovieId(withScreenings[0]?._id || "");
+      })
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Failed to load films"))
+      .finally(() => setLoadingMovies(false));
+  }, [token, selectedCinemaId]);
+
+  // This film's screenings, most recent first.
+  useEffect(() => {
+    if (!token || !selectedCinemaId || !selectedMovieId) {
       setShowtimes([]);
       setSelectedShowtimeId("");
       return;
     }
     setLoadingShowtimes(true);
-    fetchShowtimes(token, `?movieId=${selectedMovieId}`)
+    fetch(
+      `${API_URL}/api/cinemas/admin/${selectedCinemaId}/showtimes?movieId=${selectedMovieId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+      .then((r) => r.json())
       .then((data) => {
-        const sorted = [...data].sort(
+        if (!data.success) throw new Error(data.message || "Failed to load screenings");
+        const sorted: CinemaShowtime[] = [...(data.data || [])].sort(
           (a, b) => new Date(b.startsAt).getTime() - new Date(a.startsAt).getTime()
         );
         setShowtimes(sorted);
         setSelectedShowtimeId(sorted[0]?._id || "");
       })
-      .catch((e: Error) => toast.error(e.message))
+      .catch((e) => toast.error(e instanceof Error ? e.message : "Failed to load screenings"))
       .finally(() => setLoadingShowtimes(false));
-  }, [token, selectedMovieId]);
+  }, [token, selectedCinemaId, selectedMovieId]);
 
   const reloadTickets = useCallback(async () => {
-    if (!selectedShowtimeId) {
+    if (!token || !selectedCinemaId || !selectedShowtimeId) {
       setTickets([]);
       return;
     }
     setLoadingTickets(true);
     try {
-      // A single screening's seat count is bounded by the hall — 1000 comfortably
-      // covers any real room, so this never needs its own pagination control.
-      const res = await fetchTicketSales(
-        token,
-        `?showtimeId=${selectedShowtimeId}&limit=1000`
+      // A single screening's seat count is bounded by the hall — 1000
+      // comfortably covers any real room, so this never needs its own
+      // pagination control.
+      const res = await fetch(
+        `${API_URL}/api/cinemas/admin/${selectedCinemaId}/ticket-sales?showtimeId=${selectedShowtimeId}&limit=1000`,
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-      setTickets(res.data);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.message || "Failed to load tickets");
+      setTickets(data.data || []);
     } catch (e) {
-      toast.error((e as Error).message);
+      toast.error(e instanceof Error ? e.message : "Failed to load tickets");
     } finally {
       setLoadingTickets(false);
     }
-  }, [token, selectedShowtimeId]);
+  }, [token, selectedCinemaId, selectedShowtimeId]);
 
   useEffect(() => {
     reloadTickets();
@@ -123,32 +172,50 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
     );
   }, [orders, search]);
 
-  if (loadingMovies) {
+  if (loadingCinemas) {
     return (
-      <div className="container mx-auto max-w-6xl px-4 py-8">
-        <Skeleton className="mb-6 h-9 w-64" />
+      <div className="space-y-6">
+        <Skeleton className="h-24 rounded-xl" />
         <Skeleton className="h-64 rounded-xl" />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8">
-      <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Tickets
-      </h1>
-      <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
-        What one screening sold, and who bought it.
-      </p>
+    <div className="space-y-6">
+      {/* --- cinema + film + schedule pickers --------------------------- */}
+      <Card>
+        <CardContent className="grid gap-4 p-5 sm:grid-cols-3">
+          <div>
+            <Label className="text-xs">Cinema</Label>
+            {cinemas.length === 0 ? (
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                No cinema on the platform yet.
+              </p>
+            ) : (
+              <select
+                className={selectClass}
+                value={selectedCinemaId}
+                onChange={(e) => setSelectedCinemaId(e.target.value)}
+              >
+                {cinemas.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                    {c.city ? ` — ${c.city}` : ""}
+                    {!c.isActive ? " (suspended)" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
 
-      {/* --- movie + schedule pickers ---------------------------------- */}
-      <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
-        <CardContent className="grid gap-4 p-5 sm:grid-cols-2">
           <div>
             <Label className="text-xs">Film</Label>
-            {movies.length === 0 ? (
+            {loadingMovies ? (
+              <Skeleton className="mt-1 h-9 w-full" />
+            ) : movies.length === 0 ? (
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                No film has a screening yet. Schedule one under Programme.
+                No film has a screening yet.
               </p>
             ) : (
               <select
@@ -193,12 +260,9 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
       {selectedShowtime && (
         <>
           {/* --- sales by ticket type ------------------------------------ */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {selectedShowtime.ticketTypes.map((t) => (
-              <Card
-                key={t._id}
-                className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50"
-              >
+              <Card key={t._id}>
                 <CardContent className="p-4">
                   <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                     <Ticket className="h-3.5 w-3.5" />
@@ -224,7 +288,7 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
           </div>
 
           {/* --- who bought them -------------------------------------- */}
-          <Card className="mt-6 border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+          <Card>
             <CardContent className="p-5">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -323,14 +387,12 @@ function TicketsContent({ token }: { cinema: CinemaProfile; token: string }) {
           </Card>
         </>
       )}
-    </div>
-  );
-}
 
-export default function CinemaTicketsPage() {
-  return (
-    <CinemaGate>
-      {(cinema, token) => <TicketsContent cinema={cinema} token={token} />}
-    </CinemaGate>
+      {!selectedCinemaId && (
+        <p className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <Clapperboard className="h-4 w-4" /> Select a cinema to see its ticket sales.
+        </p>
+      )}
+    </div>
   );
 }
