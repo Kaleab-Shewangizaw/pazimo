@@ -305,19 +305,20 @@ const startCheckout = async (req, res) => {
         },
       };
 
-      // Gift-card routing, mirrored from the event checkout.
+      // Gift-card routing, cinema's own switch.
       //
-      // When the platform is in gift-card mode, ticket money settles into a
-      // Chapa Link card rather than the merchant balance. Cinema MUST follow
-      // the same setting: if it did not, cinema takings would land somewhere
-      // else entirely and no reconciliation would balance.
-      const giftCardTarget = paymentConfig?.giftCardMode
-        ? paymentConfig.giftCardRouting?.[order.currency]
+      // Independent of the event ticket toggle (giftCardMode/giftCardRouting):
+      // a cinema's takings route to their own dedicated card so cinema money
+      // and event ticket money never land in the same card's transaction
+      // history. Toggled from Admin → Cinema → Money; the card itself is
+      // picked in Admin → Finance → Gift Cards.
+      const giftCardTarget = paymentConfig?.cinemaGiftCardMode
+        ? paymentConfig.cinemaGiftCardRouting?.[order.currency]
         : null;
 
-      if (paymentConfig?.giftCardMode && !giftCardTarget) {
+      if (paymentConfig?.cinemaGiftCardMode && !giftCardTarget) {
         throw new BadRequestError(
-          `Gift card routing is on but no ${order.currency} card is configured. Set one in Admin → Finance.`
+          `Gift card routing is on but no ${order.currency} cinema card is configured. Set one in Admin → Finance.`
         );
       }
 

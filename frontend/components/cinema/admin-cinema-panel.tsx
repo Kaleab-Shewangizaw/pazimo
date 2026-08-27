@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import AdminMovieCuration from "@/components/cinema/admin-movie-curation";
 import CinemaConcessionsGrant from "@/components/cinema/cinema-concessions-grant";
 import AdminConcessionCatalogue from "@/components/cinema/admin-concession-catalogue";
+import AdminCinemaFinancePanel from "@/components/cinema/admin-cinema-finance-panel";
 import {
   AlertTriangle,
   Clapperboard,
@@ -29,6 +30,7 @@ import {
   Popcorn,
   PauseCircle,
   PlayCircle,
+  Wallet,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -327,7 +329,7 @@ export default function AdminCinemaPanel() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <Tabs defaultValue="cinemas" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[440px]">
+        <TabsList className="grid w-full grid-cols-4 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[560px]">
           <TabsTrigger value="cinemas">
             <Store className="mr-1.5 h-4 w-4" /> Cinemas
           </TabsTrigger>
@@ -336,6 +338,9 @@ export default function AdminCinemaPanel() {
           </TabsTrigger>
           <TabsTrigger value="snacks">
             <Popcorn className="mr-1.5 h-4 w-4" /> Snacks
+          </TabsTrigger>
+          <TabsTrigger value="money">
+            <Wallet className="mr-1.5 h-4 w-4" /> Money
           </TabsTrigger>
         </TabsList>
 
@@ -633,6 +638,19 @@ export default function AdminCinemaPanel() {
             </p>
           </div>
           <AdminConcessionCatalogue />
+        </TabsContent>
+
+        <TabsContent value="money" className="space-y-5">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Cinema money
+            </h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              What every cinema has taken, what they&apos;re owed, and where new
+              payments settle. Click a row for one cinema&apos;s full ledger.
+            </p>
+          </div>
+          <AdminCinemaFinancePanel token={token} />
         </TabsContent>
       </Tabs>
 

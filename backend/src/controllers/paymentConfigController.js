@@ -17,6 +17,11 @@ const serializeConfig = (config) => ({
     ETB: config.giftCardRouting?.ETB || null,
     USD: config.giftCardRouting?.USD || null,
   },
+  cinemaGiftCardMode: config.cinemaGiftCardMode,
+  cinemaGiftCardRouting: {
+    ETB: config.cinemaGiftCardRouting?.ETB || null,
+    USD: config.cinemaGiftCardRouting?.USD || null,
+  },
 });
 
 const getActiveProvider = async (req, res) => {
@@ -181,9 +186,128 @@ const updateGiftCardRouting = async (req, res) => {
   }
 };
 
+// PATCH /api/config/payment/cinema-giftcard-mode  { enabled: boolean }
+// Toggles whether CINEMA ticket/concession payments settle into a gift card
+// instead of the merchant balance. Independent of updateGiftCardMode, which
+// governs event ticket payments only.
+const updateCinemaGiftCardMode = async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean") {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "enabled must be a boolean",
+      });
+    }
+
+    const config = await getOrCreateConfig();
+
+    if (enabled) {
+      const missing = ["ETB", "USD"].filter(
+        (c) => !config.cinemaGiftCardRouting?.[c]
+      );
+      if (missing.length) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: `Set a cinema gift card for ${missing.join(" and ")} before enabling gift card mode`,
+        });
+      }
+    }
+
+    config.cinemaGiftCardMode = enabled;
+    if (req.user) config.updatedBy = req.user.userId;
+    await config.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: `Cinema gift card mode ${enabled ? "enabled" : "disabled"}`,
+      data: serializeConfig(config),
+    });
+  } catch (error) {
+    console.error("Error updating cinema gift card mode:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to update cinema gift card mode",
+    });
+  }
+};
+
+// PATCH /api/config/payment/cinema-giftcard-routing  { currency: "ETB"|"USD", cardNumber }
+// Sets which Chapa Link gift card receives CINEMA payments made in that currency.
+const updateCinemaGiftCardRouting = async (req, res) => {
+  try {
+    const { currency, cardNumber } = req.body;
+    if (!["ETB", "USD"].includes(currency)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "currency must be ETB or USD",
+      });
+    }
+    if (!cardNumber || typeof cardNumber !== "string") {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "cardNumber is required",
+      });
+    }
+
+    let card;
+    try {
+      card = await getCard(cardNumber);
+    } catch (error) {
+      return res.status(StatusCodes.BAD_GATEWAY).json({
+        success: false,
+        message: linkErrorMessage(error),
+        linkNotActivated: isLinkNotActivated(error) || undefined,
+      });
+    }
+
+    if (!card) {
+      return res.status(StatusCodes.NOT_FOUND).json({
+        success: false,
+        message: "Gift card not found",
+      });
+    }
+    if (card.currency !== currency) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Card ${cardNumber} is a ${card.currency} card, not ${currency}`,
+      });
+    }
+    if (card.status !== 1) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Card ${cardNumber} is disabled — enable it first`,
+      });
+    }
+
+    const config = await getOrCreateConfig();
+    config.cinemaGiftCardRouting = {
+      ETB: config.cinemaGiftCardRouting?.ETB || null,
+      USD: config.cinemaGiftCardRouting?.USD || null,
+      [currency]: cardNumber,
+    };
+    if (req.user) config.updatedBy = req.user.userId;
+    await config.save();
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: `${currency} cinema payments will route to card ${cardNumber}`,
+      data: serializeConfig(config),
+    });
+  } catch (error) {
+    console.error("Error updating cinema gift card routing:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to update cinema gift card routing",
+    });
+  }
+};
+
 module.exports = {
   getActiveProvider,
   updateActiveProvider,
   updateGiftCardMode,
   updateGiftCardRouting,
+  updateCinemaGiftCardMode,
+  updateCinemaGiftCardRouting,
 };

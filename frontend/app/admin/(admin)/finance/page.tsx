@@ -48,6 +48,7 @@ import { adminApi } from "@/lib/adminApi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import GiftCardsSection from "@/components/admin/GiftCardsSection";
 import GiftCardRouting from "@/components/admin/GiftCardRouting";
+import CinemaGiftCardRouting from "@/components/admin/CinemaGiftCardRouting";
 import ChapaV2Section from "@/components/admin/ChapaV2Section";
 import PlatformFeeSection from "@/components/admin/PlatformFeeSection";
 import FinanceOverviewCards from "@/components/admin/FinanceOverviewCards";
@@ -509,6 +510,7 @@ export default function ChapaFinancePage() {
 
             <TabsContent value="manage" className="mt-4 space-y-4">
               <GiftCardRouting />
+              <CinemaGiftCardRouting />
               <GiftCardsSection />
             </TabsContent>
 

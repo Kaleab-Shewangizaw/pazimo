@@ -98,7 +98,9 @@ const getAdminCinemaFinance = async (req, res) => {
   try {
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
     const cinemas = await Cinema.find({})
-      .select("name city isActive beverageEligibility")
+      .select(
+        "name city isActive beverageEligibility ticketCommissionRate beverageCommissionRate coversCinemaVat"
+      )
       .sort("name")
       .lean();
 

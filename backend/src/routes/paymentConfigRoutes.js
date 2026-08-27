@@ -5,6 +5,8 @@ const {
   updateActiveProvider,
   updateGiftCardMode,
   updateGiftCardRouting,
+  updateCinemaGiftCardMode,
+  updateCinemaGiftCardRouting,
 } = require("../controllers/paymentConfigController");
 const { authenticateUser, restrictTo } = require("../middlewares/auth");
 
@@ -33,6 +35,22 @@ router.patch(
   authenticateUser,
   restrictTo("admin"),
   updateGiftCardRouting
+);
+
+// Admin only: toggle direct-merchant-pay vs gift-card routing, cinema channel
+router.patch(
+  "/cinema-giftcard-mode",
+  authenticateUser,
+  restrictTo("admin"),
+  updateCinemaGiftCardMode
+);
+
+// Admin only: pick which gift card receives ETB / USD cinema payments
+router.patch(
+  "/cinema-giftcard-routing",
+  authenticateUser,
+  restrictTo("admin"),
+  updateCinemaGiftCardRouting
 );
 
 module.exports = router;

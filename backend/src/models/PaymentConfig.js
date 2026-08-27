@@ -19,6 +19,20 @@ const PaymentConfigSchema = new mongoose.Schema(
       ETB: { type: String, default: null },
       USD: { type: String, default: null },
     },
+    // The cinema channel's own version of the two fields above. Kept separate
+    // rather than reusing giftCardMode/giftCardRouting so a cinema's takings can
+    // be routed to their own dedicated card, distinct from event ticket money —
+    // otherwise the two channels' cash would be inseparable inside one card's
+    // transaction history. Read only by cinema checkout; event checkout
+    // (ticketRoutes.js) never looks at these.
+    cinemaGiftCardMode: {
+      type: Boolean,
+      default: false,
+    },
+    cinemaGiftCardRouting: {
+      ETB: { type: String, default: null },
+      USD: { type: String, default: null },
+    },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
