@@ -42,6 +42,34 @@ export interface CinemaSchedule {
   orphanedShowtimes: ScheduleShowtime[];
 }
 
+/** Hall metadata for the week view — hoisted out of each day, since it
+ * doesn't change day to day. */
+export interface ScheduleHallMeta {
+  _id: string;
+  name: string;
+  capacity: number;
+  screenType?: string;
+  isActive: boolean;
+  turnaroundMinutes: number;
+}
+
+export interface ScheduleDay {
+  /** YYYY-MM-DD, local to the cinema. */
+  date: string;
+  /** Keyed by hall id, so a week grid can look up a cell without scanning. */
+  halls: Record<string, ScheduleShowtime[]>;
+  orphanedShowtimes: ScheduleShowtime[];
+}
+
+export interface CinemaWeekSchedule {
+  from: string;
+  to: string;
+  cinema: { _id: string; name: string };
+  defaultTurnaroundMinutes: number;
+  halls: ScheduleHallMeta[];
+  days: ScheduleDay[];
+}
+
 export interface CinemaProfile {
   _id: string;
   name: string;
@@ -444,6 +472,50 @@ export const fetchShowtimes = (token: string, query = "") =>
     )
   );
 
+export interface ShowtimeTicketTypeInput {
+  name: string;
+  price: number;
+  /** Present for an assigned-seating hall; absent means `allocation` prices a
+   * plain seat count instead. */
+  seatCategoryKey?: string;
+  allocation?: number;
+}
+
+export interface ShowtimeInput {
+  movie: string;
+  hall: string;
+  startsAt: string;
+  ticketTypes: ShowtimeTicketTypeInput[];
+}
+
+export const createShowtime = (token: string, input: ShowtimeInput) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaShowtime }>("/api/cinemas/me/showtimes", token, {
+      method: "POST",
+      body: JSON.stringify(input),
+    })
+  );
+
+export const updateShowtime = (
+  token: string,
+  showtimeId: string,
+  input: ShowtimeInput
+) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaShowtime }>(
+      `/api/cinemas/me/showtimes/${showtimeId}`,
+      token,
+      { method: "PATCH", body: JSON.stringify(input) }
+    )
+  );
+
+export const deleteShowtime = (token: string, showtimeId: string) =>
+  cinemaRequest<{ message?: string }>(
+    `/api/cinemas/me/showtimes/${showtimeId}`,
+    token,
+    { method: "DELETE" }
+  );
+
 export const fetchTicketSales = (token: string, query = "") =>
   cinemaRequest<{ data: CinemaTicket[]; pagination: { total: number; page: number; pages: number } }>(
     `/api/cinemas/me/ticket-sales${query}`,
@@ -664,9 +736,12 @@ export const fetchCinemaOrder = (transactionId: string) =>
       hallName?: string;
       showtimeStartsAt: string;
       ticketType: string;
+      quantity: number;
       totalAmount: number;
       currency: string;
-      seat?: { row?: string; number?: string; categoryLabel?: string };
+      seat?: { row?: string; number?: string; seatKey?: string; categoryLabel?: string };
+      movie?: { title?: string; poster?: string | null };
+      cinema?: { name?: string; address?: string; city?: string };
     }[];
     concessions: CinemaBasketConcession[];
   }>(`/api/cinemas/public/orders/${transactionId}`);
@@ -676,6 +751,16 @@ export const fetchSchedule = (token: string, date: string) =>
   unwrap(
     cinemaRequest<{ data: CinemaSchedule }>(
       `/api/cinemas/me/schedule?date=${date}`,
+      token
+    )
+  );
+
+/** A week's schedule, grouped by day then hall. `from`/`to` are YYYY-MM-DD,
+ * `to` exclusive (so `from` Monday, `to` the following Monday for one week). */
+export const fetchWeekSchedule = (token: string, from: string, to: string) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaWeekSchedule }>(
+      `/api/cinemas/me/schedule?from=${from}&to=${to}`,
       token
     )
   );

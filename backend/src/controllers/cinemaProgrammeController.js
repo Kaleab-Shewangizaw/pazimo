@@ -9,6 +9,7 @@ const CinemaTicket = require("../models/CinemaTicket");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { resolveCinema } = require("../utils/cinemaAccess");
 const { extractShortIdFromEventSlug } = require("../utils/eventUrl");
+const { eatDateKey, eatDayBounds } = require("../services/platformFeeService");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -1265,8 +1266,27 @@ const setMovieDisplay = async (req, res) => {
   }
 };
 
+/** Projects a showtime into the compact row shape both schedule views render. */
+const toScheduleRow = (show) => ({
+  _id: show._id,
+  movie: show.movie,
+  startsAt: show.startsAt,
+  endsAt: show.endsAt,
+  status: show.status,
+  isPublished: show.isPublished,
+  seatsAllocated: (show.ticketTypes || []).reduce(
+    (sum, t) => sum + (t.allocation || 0),
+    0
+  ),
+  seatsSold: (show.ticketTypes || []).reduce((sum, t) => sum + (t.sold || 0), 0),
+});
+
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * One day's schedule, grouped by hall — what the calendar view renders.
+ * One day's schedule, grouped by hall — what the calendar view renders. Also
+ * answers a `from`/`to` range in one query, for the week view: same grouping,
+ * just bucketed by day as well as by hall.
  *
  * Grouped on the server rather than in the page because the grouping IS the
  * answer to the question being asked ("what is running in each room today"),
@@ -1282,70 +1302,130 @@ const getSchedule = async (req, res) => {
   try {
     const cinema = await resolveCinema(req, req.params.cinemaId);
 
-    // Local-time day boundaries from a YYYY-MM-DD, defaulting to today.
-    const dayParam = req.query.date;
-    const base = dayParam ? new Date(`${dayParam}T00:00:00`) : new Date();
-    if (Number.isNaN(base.getTime())) {
-      throw new BadRequestError("date must be YYYY-MM-DD");
+    const { from: fromParam, to: toParam, date: dayParam } = req.query;
+    const isRange = !!(fromParam && toParam);
+
+    let rangeStart;
+    let rangeEnd;
+    if (isRange) {
+      // Addis Ababa calendar-day boundaries, not the server's own timezone —
+      // the VPS runs in UTC while every cinema is in Ethiopia, and comparing
+      // server-local midnight against Addis midnight silently shifted
+      // screenings near the day boundary onto the wrong day. Same convention
+      // as platformFeeService's eatDayBounds.
+      if (!DATE_KEY_RE.test(fromParam) || !DATE_KEY_RE.test(toParam)) {
+        throw new BadRequestError("from/to must be YYYY-MM-DD");
+      }
+      rangeStart = eatDayBounds(fromParam).start;
+      rangeEnd = eatDayBounds(toParam).start;
+      if (rangeEnd <= rangeStart) {
+        throw new BadRequestError("to must be after from");
+      }
+      // Defense in depth — the UI only ever asks for a week.
+      if (Math.round((rangeEnd - rangeStart) / 86400000) > 31) {
+        throw new BadRequestError("Range cannot exceed 31 days");
+      }
+    } else {
+      // Addis Ababa day boundaries from a YYYY-MM-DD, defaulting to today.
+      if (dayParam !== undefined && !DATE_KEY_RE.test(dayParam)) {
+        throw new BadRequestError("date must be YYYY-MM-DD");
+      }
+      ({ start: rangeStart, end: rangeEnd } = eatDayBounds(dayParam || eatDateKey()));
     }
-    const dayStart = new Date(base.getFullYear(), base.getMonth(), base.getDate());
-    const dayEnd = new Date(dayStart.getTime() + 86400000);
 
     const [halls, showtimes] = await Promise.all([
       CinemaHall.find({ cinema: cinema._id }).sort("name").lean(),
       CinemaShowtime.find({
         cinema: cinema._id,
-        startsAt: { $gte: dayStart, $lt: dayEnd },
+        startsAt: { $gte: rangeStart, $lt: rangeEnd },
       })
         .populate("movie", "title poster durationMinutes ageRating")
         .sort("startsAt")
         .lean(),
     ]);
 
-    const byHall = new Map(halls.map((h) => [String(h._id), []]));
-    const orphaned = [];
+    const hallMeta = halls.map((hall) => ({
+      _id: hall._id,
+      name: hall.name,
+      capacity: hall.capacity,
+      screenType: hall.screenType,
+      isActive: hall.isActive,
+      // Resolved here so the UI can say "15 min gap" without re-deriving
+      // the inheritance rule.
+      turnaroundMinutes: turnaroundFor(hall, cinema),
+    }));
+
+    if (!isRange) {
+      const byHall = new Map(halls.map((h) => [String(h._id), []]));
+      const orphaned = [];
+      for (const show of showtimes) {
+        const key = String(show.hall);
+        const row = toScheduleRow(show);
+        // A screening whose hall was deleted still has to be visible
+        // somewhere, or it silently disappears from the schedule while still
+        // selling.
+        if (byHall.has(key)) byHall.get(key).push(row);
+        else orphaned.push(row);
+      }
+
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        data: {
+          date: rangeStart.toISOString(),
+          cinema: { _id: cinema._id, name: cinema.name },
+          defaultTurnaroundMinutes: cinema.turnaroundMinutes ?? 0,
+          halls: hallMeta.map((hall) => ({
+            ...hall,
+            showtimes: byHall.get(String(hall._id)) || [],
+          })),
+          orphanedShowtimes: orphaned,
+        },
+      });
+    }
+
+    // Range mode: bucket by day-key, then by hall within each day.
+    const hallIds = new Set(halls.map((h) => String(h._id)));
+    const byDay = new Map();
     for (const show of showtimes) {
-      const key = String(show.hall);
-      const row = {
-        _id: show._id,
-        movie: show.movie,
-        startsAt: show.startsAt,
-        endsAt: show.endsAt,
-        status: show.status,
-        isPublished: show.isPublished,
-        seatsAllocated: (show.ticketTypes || []).reduce(
-          (sum, t) => sum + (t.allocation || 0),
-          0
-        ),
-        seatsSold: (show.ticketTypes || []).reduce(
-          (sum, t) => sum + (t.sold || 0),
-          0
-        ),
-      };
-      // A screening whose hall was deleted still has to be visible somewhere,
-      // or it silently disappears from the schedule while still selling.
-      if (byHall.has(key)) byHall.get(key).push(row);
-      else orphaned.push(row);
+      const dayKey = eatDateKey(new Date(show.startsAt));
+      if (!byDay.has(dayKey)) byDay.set(dayKey, { halls: new Map(), orphaned: [] });
+      const bucket = byDay.get(dayKey);
+      const hallKey = String(show.hall);
+      const row = toScheduleRow(show);
+      if (hallIds.has(hallKey)) {
+        if (!bucket.halls.has(hallKey)) bucket.halls.set(hallKey, []);
+        bucket.halls.get(hallKey).push(row);
+      } else {
+        bucket.orphaned.push(row);
+      }
+    }
+
+    const days = [];
+    const dayCount = Math.round((rangeEnd - rangeStart) / 86400000);
+    for (let i = 0; i < dayCount; i += 1) {
+      const d = new Date(rangeStart.getTime() + i * 86400000);
+      const dayKey = eatDateKey(d);
+      const bucket = byDay.get(dayKey);
+      const hallsForDay = {};
+      for (const hallId of hallIds) {
+        hallsForDay[hallId] = bucket?.halls.get(hallId) || [];
+      }
+      days.push({
+        date: dayKey,
+        halls: hallsForDay,
+        orphanedShowtimes: bucket?.orphaned || [],
+      });
     }
 
     res.status(StatusCodes.OK).json({
       success: true,
       data: {
-        date: dayStart.toISOString(),
+        from: rangeStart.toISOString(),
+        to: rangeEnd.toISOString(),
         cinema: { _id: cinema._id, name: cinema.name },
         defaultTurnaroundMinutes: cinema.turnaroundMinutes ?? 0,
-        halls: halls.map((hall) => ({
-          _id: hall._id,
-          name: hall.name,
-          capacity: hall.capacity,
-          screenType: hall.screenType,
-          isActive: hall.isActive,
-          // Resolved here so the UI can say "15 min gap" without re-deriving
-          // the inheritance rule.
-          turnaroundMinutes: turnaroundFor(hall, cinema),
-          showtimes: byHall.get(String(hall._id)) || [],
-        })),
-        orphanedShowtimes: orphaned,
+        halls: hallMeta,
+        days,
       },
     });
   } catch (error) {

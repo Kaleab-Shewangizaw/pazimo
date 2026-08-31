@@ -4,16 +4,17 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { CheckCircle2, Clock, Loader2, Popcorn, Ticket, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, Popcorn, XCircle } from "lucide-react";
 import {
   cancelCinemaCheckout,
   fetchCinemaOrder,
   verifyPaymentStatus,
 } from "@/lib/cinema-api";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+import TicketPassCard from "@/components/tickets/ticket-pass-card";
+import { buildCinemaPassFields, cinemaPassTitle, cinemaPassWatermark } from "@/lib/cinemaTicketPass";
+import { cinemaTicketQrUrl, downloadCinemaTicketQr } from "@/lib/cinemaTicketQr";
+import { toast } from "sonner";
 
 /**
  * What one paid order produced — the tickets, their QR codes, and the snacks.
@@ -194,59 +195,34 @@ export default function CinemaOrderPage() {
         </div>
       )}
 
-      <div className="space-y-4">
-        {order.tickets.map((ticket) => (
-          <Card key={ticket._id} className="overflow-hidden border border-border">
-            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
-              <div className="shrink-0 rounded-lg bg-white p-2">
-                {/* Rendered on demand by the API from the ticket's own id, so
-                    nothing image-shaped is stored on the ticket — the same
-                    renderer the door scanner reads. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`${API_URL}/api/cinemas/public/tickets/${ticket.ticketId}/qr.svg`}
-                  alt={`QR code for ticket ${ticket.ticketId}`}
-                  className="h-32 w-32"
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold">{ticket.movieTitle}</p>
-                <p className="text-sm text-muted-foreground">
-                  {new Date(ticket.showtimeStartsAt).toLocaleString(undefined, {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                  {ticket.hallName ? ` · ${ticket.hallName}` : ""}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {ticket.seat?.row && (
-                    <Badge className="text-sm">
-                      Row {ticket.seat.row} · Seat {ticket.seat.number}
-                    </Badge>
-                  )}
-                  <Badge variant="outline">{ticket.ticketType}</Badge>
-                  <span className="text-sm tabular-nums text-muted-foreground">
-                    {money(ticket.totalAmount, ticket.currency)}
-                  </span>
-                </div>
-                <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-                  {ticket.ticketId}
-                </p>
-              </div>
-
-              <Button asChild variant="outline" size="sm" className="shrink-0">
-                <Link href={`/ticket/${ticket.ticketId}`}>
-                  <Ticket className="mr-1 h-3 w-3" /> Open
+      {order.tickets.length > 0 && (
+        <div className="mb-6 flex flex-wrap justify-center gap-6">
+          {order.tickets.map((ticket) => (
+            <div key={ticket._id} className="flex flex-col items-center gap-3">
+              <TicketPassCard
+                title={cinemaPassTitle(ticket)}
+                watermark={cinemaPassWatermark(ticket)}
+                fields={buildCinemaPassFields(ticket)}
+                qrSrc={cinemaTicketQrUrl(ticket.ticketId)}
+                qrAlt={`QR code for ticket ${ticket.ticketId}`}
+                onDownload={() =>
+                  downloadCinemaTicketQr(ticket.ticketId, `ticket-${ticket.ticketId}.png`).catch(
+                    () => toast.error("Could not download the QR code")
+                  )
+                }
+              />
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span className="tabular-nums">{money(ticket.totalAmount, ticket.currency)}</span>
+                <Link href={`/ticket/${ticket.ticketId}`} className="underline underline-offset-2">
+                  View ticket page
                 </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
+      <div className="space-y-4">
         {order.concessions.length > 0 && (
           <Card className="border border-border">
             <CardContent className="p-5">

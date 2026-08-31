@@ -765,114 +765,125 @@ function SeatPlan({
   const rows = seatMap.rows || [];
   const columns = rows.reduce((widest, row) => Math.max(widest, row.seats.length), 0);
 
-  // 20px of row letter, then whatever is left shared between the seats. The
+  // 22px of row letter, then whatever is left shared between the seats. The
   // floor stops seats shrinking into targets no thumb can hit; the ceiling
   // stops a four-seat screening-room drawing armchairs the size of a hand.
-  const GAP = 4;
+  const GAP = 5;
   const LABEL = 22;
   const fitted = columns
     ? Math.floor((width - LABEL * 2 - GAP * columns) / columns)
     : 28;
   const seat = Math.max(18, Math.min(34, fitted || 28));
+  const glyph = Math.round(seat * 0.8);
   const scrolls = width > 0 && fitted < 18;
-  const showNumbers = seat >= 24;
+
+  const selectedSet = new Set(selected);
 
   return (
     <div className="rounded-2xl border border-border bg-gradient-to-b from-muted/50 to-transparent p-3 dark:from-[#12161d] dark:to-[#0d1015] sm:p-5">
-      {/* The screen, and the light coming off it. Front rows sit in the glow. */}
-      <div className="relative mx-auto mb-5 w-[70%] min-w-[180px] max-w-sm">
-        <div
-          className="h-1.5 bg-gradient-to-r from-transparent via-foreground/40 to-transparent dark:via-yellow-200/70"
-          style={{ borderRadius: "50% 50% 6px 6px / 90% 90% 6px 6px" }}
-        />
-        <div className="absolute left-1/2 top-1.5 h-14 w-[130%] -translate-x-1/2 bg-[radial-gradient(ellipse_at_top,theme(colors.foreground/12%),transparent_70%)] dark:bg-[radial-gradient(ellipse_at_top,rgba(250,204,21,0.16),transparent_70%)]" />
-        <p className="relative mt-2 text-center text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
-          Screen
-        </p>
-      </div>
+      <CinemaScreen />
 
-      <div
-        ref={viewport}
-        className={scrolls ? "overflow-x-auto pb-2" : "overflow-hidden"}
-      >
+      <div ref={viewport} className={scrolls ? "overflow-x-auto pb-2" : undefined}>
         <div
           className="mx-auto flex flex-col items-center"
-          style={{ gap: GAP, width: scrolls ? "max-content" : undefined }}
+          style={{ gap: GAP + 3, width: scrolls ? "max-content" : undefined }}
         >
-          {rows.map((row, rowIndex) => (
-            // Keyed by position, not row.label: a row with no seats (a blank
-            // space between blocks of seating) carries no label at all, and
-            // more than one of those would collide on the label alone.
-            <div key={rowIndex} className="flex items-center" style={{ gap: GAP }}>
-              <span
-                className="shrink-0 text-center text-[10px] font-semibold uppercase text-muted-foreground"
-                style={{ width: LABEL }}
-              >
-                {row.label}
-              </span>
+          {rows.map((row, rowIndex) => {
+            const count = row.seats.length;
+            const center = (count - 1) / 2;
+            // A gap is never selectable and must never count as picked, even
+            // though its seatKey can coincide with the real seat right after
+            // it once a hall is edited — a gap keeps the stale number it had
+            // before that seat was renumbered into its old spot.
+            const pickedSeats = row.seats.filter((s) => s.exists && selectedSet.has(s.seatKey));
+            const pickedCategory = pickedSeats.length
+              ? priceByCategory.get(pickedSeats[0].categoryKey)
+              : undefined;
+
+            return (
+              // Keyed by position, not row.label: a row with no seats (a blank
+              // space between blocks of seating) carries no label at all, and
+              // more than one of those would collide on the label alone.
               <div
+                key={rowIndex}
                 className="flex items-center"
-                style={{
-                  gap: GAP,
-                  transform: `translateY(${row.curve * 0.35}px) translateX(${row.offset * 0.5}px)`,
-                }}
+                style={{ gap: GAP, marginLeft: row.offset * 0.5 }}
               >
-                {row.seats.map((s) => {
-                  if (s.status === "gap") {
+                <span
+                  className="shrink-0 text-center text-[10px] font-semibold uppercase text-muted-foreground"
+                  style={{ width: LABEL }}
+                >
+                  {row.label}
+                </span>
+
+                <div className="relative flex items-center" style={{ gap: GAP }}>
+                  {pickedSeats.length > 0 && (
+                    <div className="pointer-events-none absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-[calc(100%+8px)] items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-popover/95 px-3 py-1 text-[11px] font-medium text-popover-foreground shadow-md backdrop-blur">
+                      {pickedCategory?.color && (
+                        <span
+                          className="h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: pickedCategory.color }}
+                        />
+                      )}
+                      Row {row.label} · {pickedSeats.length} {pickedSeats.length === 1 ? "Seat" : "Seats"}
+                      {pickedCategory?.label ? ` (${pickedCategory.label})` : ""}
+                    </div>
+                  )}
+
+                  {row.seats.map((s, i) => {
+                    if (s.status === "gap") {
+                      // Not s.seatKey: a gap keeps whatever number it had
+                      // before a neighboring seat was removed, so it can
+                      // collide with a real seat's key. Position is unique.
+                      return <span key={i} style={{ width: seat, height: seat }} aria-hidden />;
+                    }
+                    // Bow the row into a gentle arc, seat by seat, instead of
+                    // shifting it as one rigid block — this is what makes the
+                    // curve read as a real auditorium and not a tilted strip.
+                    const t = center === 0 ? 0 : (i - center) / center;
+                    const translateY = -row.curve * 0.45 * (1 - t * t);
+                    const isSelected = selectedSet.has(s.seatKey);
+                    const category = priceByCategory.get(s.categoryKey);
+                    const unavailable =
+                      s.status === "sold" ||
+                      s.status === "held" ||
+                      s.status === "blocked";
                     return (
-                      <span
-                        key={s.seatKey}
-                        style={{ width: seat, height: seat }}
-                        aria-hidden
-                      />
+                      <button
+                        key={i}
+                        type="button"
+                        disabled={unavailable}
+                        aria-pressed={isSelected}
+                        onClick={() => onToggle(s.seatKey, s.status)}
+                        title={
+                          unavailable
+                            ? `${s.seatKey} — taken`
+                            : `${s.seatKey} · ${category?.label ?? ""} · ${money(category?.price ?? 0, currency)}`
+                        }
+                        style={{ width: seat, height: seat, transform: `translateY(${translateY}px)` }}
+                        className="flex shrink-0 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed"
+                      >
+                        <span className="flex h-full w-full items-center justify-center transition-transform motion-safe:hover:scale-110 motion-safe:active:scale-90">
+                          <SeatGlyph
+                            size={glyph}
+                            selected={isSelected}
+                            disabled={unavailable}
+                            categoryColor={category?.color}
+                          />
+                        </span>
+                        <span className="sr-only">
+                          Row {row.label} seat {s.number}
+                          {unavailable ? " (taken)" : ""}
+                        </span>
+                      </button>
                     );
-                  }
-                  const isSelected = selected.includes(s.seatKey);
-                  const category = priceByCategory.get(s.categoryKey);
-                  const unavailable =
-                    s.status === "sold" ||
-                    s.status === "held" ||
-                    s.status === "blocked";
-                  return (
-                    <button
-                      key={s.seatKey}
-                      type="button"
-                      disabled={unavailable}
-                      aria-pressed={isSelected}
-                      onClick={() => onToggle(s.seatKey, s.status)}
-                      title={
-                        unavailable
-                          ? `${s.seatKey} — taken`
-                          : `${s.seatKey} · ${category?.label ?? ""} · ${money(category?.price ?? 0, currency)}`
-                      }
-                      className={`relative flex items-center justify-center rounded-t-[7px] rounded-b-sm font-semibold leading-none transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${
-                        unavailable
-                          ? "cursor-not-allowed bg-muted-foreground/25 text-transparent"
-                          : isSelected
-                            ? "text-white ring-2 ring-foreground ring-offset-2 ring-offset-background motion-safe:scale-110"
-                            : "text-white/90 motion-safe:hover:-translate-y-0.5"
-                      }`}
-                      style={{
-                        width: seat,
-                        height: seat,
-                        fontSize: Math.max(8, Math.round(seat * 0.36)),
-                        ...(unavailable
-                          ? {}
-                          : { backgroundColor: category?.color || "#6366f1" }),
-                      }}
-                    >
-                      {showNumbers && !unavailable && <span>{s.number}</span>}
-                      <span className="sr-only">
-                        Row {row.label} seat {s.number}
-                        {unavailable ? " (taken)" : ""}
-                      </span>
-                    </button>
-                  );
-                })}
+                  })}
+                </div>
+
+                <span className="shrink-0" style={{ width: LABEL }} aria-hidden />
               </div>
-              <span className="shrink-0" style={{ width: LABEL }} aria-hidden />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -882,5 +893,98 @@ function SeatPlan({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * The curved cinema screen and the reflection it casts, drawn as two nested
+ * SVG paths that share one edge — so the glow reads as a single continuous
+ * surface rather than a bar sitting above a separate gradient block. Warm
+ * amber in dark mode (projector light), the page's own foreground in light
+ * mode (a screen is dark against a bright room).
+ */
+function CinemaScreen() {
+  return (
+    <div
+      aria-hidden
+      className="relative mx-auto mb-6 w-[78%] min-w-[180px] max-w-sm select-none text-foreground/70 dark:text-amber-200/80"
+    >
+      <svg viewBox="0 0 100 48" preserveAspectRatio="none" className="block h-16 w-full sm:h-20">
+        <defs>
+          <linearGradient id="cinema-screen-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
+            <stop offset="40%" stopColor="currentColor" stopOpacity="0.16" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.04" />
+          </linearGradient>
+        </defs>
+        <path d="M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z" fill="url(#cinema-screen-fill)" />
+      </svg>
+
+      <div className="relative -mt-7 h-11 overflow-hidden sm:-mt-9 sm:h-14">
+        <svg viewBox="0 44 100 22" preserveAspectRatio="none" className="block h-full w-full opacity-40">
+          <defs>
+            <linearGradient id="cinema-screen-reflection" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+              <stop offset="25%" stopColor="currentColor" stopOpacity="0.12" />
+              <stop offset="55%" stopColor="currentColor" stopOpacity="0.05" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d="M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z" fill="url(#cinema-screen-reflection)" />
+        </svg>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+      </div>
+
+      <p className="relative mt-2 text-center text-[10px] font-medium uppercase tracking-[0.35em] text-muted-foreground">
+        Screen
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The seat itself — an armchair, not a coloured square. A neutral shell reads
+ * as furniture at any size; the category shows up as a small dot instead of
+ * painting the whole seat, which is what let the grid turn into a wall of
+ * saturated colour once a hall had more than two tiers.
+ */
+function SeatGlyph({
+  size,
+  selected,
+  disabled,
+  categoryColor,
+}: {
+  size: number;
+  selected: boolean;
+  disabled: boolean;
+  categoryColor?: string;
+}) {
+  const shell = disabled
+    ? "fill-foreground/6 stroke-foreground/10"
+    : selected
+      ? "fill-[#0D47A1] stroke-[#0D47A1] dark:fill-yellow-400 dark:stroke-yellow-400"
+      : "fill-foreground/12 stroke-foreground/25";
+
+  return (
+    <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 24 24" width={size} height={size} strokeWidth={1} className={shell}>
+        {/* Backrest top bar */}
+        <rect x="4.5" y="2" width="15" height="4.5" rx="2" />
+        {/* Left armrest */}
+        <rect x="2" y="5.5" width="4" height="14.5" rx="2" />
+        {/* Right armrest */}
+        <rect x="18" y="5.5" width="4" height="14.5" rx="2" />
+        {/* Seat cushion */}
+        <rect x="4.5" y="9.5" width="15" height="10.5" rx="2.5" />
+        {/* Cushion notch cutout */}
+        <rect x="6.5" y="7" width="11" height="5" rx="1.5" className="fill-background stroke-none" />
+      </svg>
+      {!disabled && !selected && categoryColor && (
+        <span
+          className="absolute bottom-0 right-0 h-[6px] w-[6px] rounded-full border border-background"
+          style={{ backgroundColor: categoryColor }}
+        />
+      )}
+    </span>
   );
 }

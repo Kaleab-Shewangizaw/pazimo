@@ -214,6 +214,9 @@ const duplicateNameError = (error) => {
   if (error.keyPattern && "email" in error.keyPattern) {
     return new BadRequestError("An account with this email already exists");
   }
+  if (error.keyPattern && "phoneNumber" in error.keyPattern) {
+    return new BadRequestError("An account with this phone number already exists");
+  }
   return new BadRequestError("A cinema with this name already exists");
 };
 
@@ -360,6 +363,7 @@ const createCinema = async (req, res) => {
         "beverageCommissionRate"
       ),
       coversCinemaVat: parseBoolean(req.body.coversCinemaVat, false),
+      eligibilityNotes: normalizeText(req.body.eligibilityNotes),
       createdBy: req.user.userId,
       updatedBy: req.user.userId,
     });
@@ -381,7 +385,7 @@ const createCinema = async (req, res) => {
       );
     }
     if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
-    const normalized = duplicateNameError(error);
+    const normalized = normalizeValidationError(duplicateNameError(error));
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
   }
@@ -511,7 +515,7 @@ const updateCinema = async (req, res) => {
   } catch (error) {
     console.error("Error updating cinema:", error);
     if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
-    const normalized = duplicateNameError(error);
+    const normalized = normalizeValidationError(duplicateNameError(error));
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
   }

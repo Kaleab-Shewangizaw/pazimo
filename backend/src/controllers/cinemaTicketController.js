@@ -18,13 +18,15 @@ const {
 // they carry no eligibility check.
 
 /**
- * What a cinema ticket's QR encodes.
+ * What a cinema ticket's QR encodes: just enough to look the ticket up and
+ * tell it apart from an event ticket — nothing else. The scanner reads only
+ * `tid` and re-fetches the ticket, so there is no reason to carry the seat,
+ * type, or quantity in the code itself.
  *
- * Deliberately a different shape from the event payload (which carries `tid`,
- * `nm`, `tp`, `tip`, `qty`). The extra `ctx: "CINEMA"` and the cinema id mean a
- * scanner can tell the two apart before it looks anything up, so an event
- * scanner pointed at a cinema ticket rejects it as the wrong kind rather than
- * searching the wrong collection and reporting "not found".
+ * The `ctx: "CINEMA"` tag is what lets a scanner tell the two kinds apart
+ * before it looks anything up, so an event scanner pointed at a cinema
+ * ticket rejects it as the wrong kind rather than searching the wrong
+ * collection and reporting "not found".
  *
  * Derived entirely from fields already on the ticket, so it is deterministic and
  * can be re-rendered on demand — nothing is persisted, the same decision
@@ -34,10 +36,6 @@ const buildCinemaQrPayload = (ticket) =>
   JSON.stringify({
     ctx: "CINEMA",
     tid: ticket.ticketId,
-    cin: String(ticket.cinema),
-    sh: String(ticket.showtime),
-    tip: ticket.ticketType,
-    qty: ticket.quantity,
   });
 
 // ---------------------------------------------------------------------------
@@ -331,7 +329,14 @@ const getTicketQr = async (req, res) => {
     const wantsPng = req.params.ext === "png" || req.query.format === "png";
 
     if (wantsPng) {
-      const png = await renderQrPng(payload);
+      // Clamped: the width drives a bitmap allocation, so an unbounded value
+      // from the query string is a trivial way to burn memory and CPU.
+      const requested = parseInt(req.query.w, 10);
+      const width = Number.isFinite(requested)
+        ? Math.min(2048, Math.max(200, requested))
+        : 400;
+
+      const png = await renderQrPng(payload, width);
       res.setHeader("Content-Type", "image/png");
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       return res.send(png);

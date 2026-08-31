@@ -6,12 +6,9 @@ import {
   cinemaRequest,
   fetchHalls,
   fetchMovies,
-  fetchShowtimes,
-  money,
   type CinemaHall,
   type CinemaMovie,
   type CinemaProfile,
-  type CinemaShowtime,
 } from "@/lib/cinema-api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Film, CalendarDays, DoorOpen, LayoutGrid, Pencil } from "lucide-react";
+import { Trash2, Film, DoorOpen, LayoutGrid, Pencil } from "lucide-react";
 import SeatMapEditor from "@/components/cinema/seat-map-editor";
 import {
   Dialog,
@@ -33,34 +30,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-interface Tier {
-  name: string;
-  price: string;
-  allocation: string;
-  /**
-   * Set only on a hall with a seat map. Its presence is what switches this tier
-   * from "a count I typed" to "the price of a category", which is also how
-   * addShowtime decides what to send.
-   */
-  seatCategoryKey?: string;
-}
-
 function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   const [halls, setHalls] = useState<CinemaHall[]>([]);
   const [movies, setMovies] = useState<CinemaMovie[]>([]);
-  const [showtimes, setShowtimes] = useState<CinemaShowtime[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(async () => {
-    const [h, m, s] = await Promise.all([
-      fetchHalls(token),
-      fetchMovies(token),
-      fetchShowtimes(token),
-    ]);
+    const [h, m] = await Promise.all([fetchHalls(token), fetchMovies(token)]);
     setHalls(h);
     setMovies(m);
-    setShowtimes(s);
   }, [token]);
 
   useEffect(() => {
@@ -315,116 +294,6 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     }
   };
 
-  // --- Showtimes -----------------------------------------------------------
-  const [showForm, setShowForm] = useState({ movie: "", hall: "", startsAt: "" });
-  const [tiers, setTiers] = useState<Tier[]>([
-    { name: "Regular", price: "", allocation: "" },
-  ]);
-
-  // The hall being scheduled into. Its seat map decides whether the cinema is
-  // pricing CATEGORIES or typing seat counts by hand.
-  const selectedHall = halls.find((h) => h._id === showForm.hall);
-  const assignedSeating = !!selectedHall?.hasAssignedSeating;
-
-  // When an assigned-seating hall is picked, the tier list becomes exactly its
-  // categories: one price each, no more and no fewer. The server refuses any
-  // other shape — a category nobody prices, or two tiers pricing one category —
-  // so the form should not let it be built in the first place.
-  useEffect(() => {
-    if (!assignedSeating || !selectedHall?.seatCategories?.length) return;
-    setTiers(
-      selectedHall.seatCategories.map((category) => ({
-        name: category.label,
-        price: "",
-        allocation: "",
-        seatCategoryKey: category.key,
-      }))
-    );
-  }, [showForm.hall, assignedSeating, selectedHall]);
-
-  // Null while scheduling, a showtime id while correcting one.
-  const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
-
-  const beginEditShowtime = (showtime: CinemaShowtime) => {
-    setEditingShowtimeId(showtime._id);
-    setShowForm({
-      movie: typeof showtime.movie === "string" ? showtime.movie : showtime.movie?._id || "",
-      hall: typeof showtime.hall === "string" ? showtime.hall : showtime.hall?._id || "",
-      // datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time. Slicing the ISO
-      // string would silently shift the screening by the UTC offset — a 19:30
-      // showing becoming 16:30 is exactly the mistake this form exists to fix.
-      startsAt: toLocalDateTimeInput(showtime.startsAt),
-    });
-    setTiers(
-      (showtime.ticketTypes || []).map((t) => ({
-        name: t.name,
-        price: String(t.price ?? ""),
-        allocation: String(t.allocation ?? ""),
-        seatCategoryKey: t.seatCategoryKey || undefined,
-      }))
-    );
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const cancelEditShowtime = () => {
-    setEditingShowtimeId(null);
-    setShowForm({ movie: "", hall: "", startsAt: "" });
-    setTiers([{ name: "Regular", price: "", allocation: "" }]);
-  };
-
-  const addShowtime = async () => {
-    setBusy(true);
-    try {
-      await cinemaRequest(
-        editingShowtimeId
-          ? `/api/cinemas/me/showtimes/${editingShowtimeId}`
-          : "/api/cinemas/me/showtimes",
-        token,
-        {
-        method: editingShowtimeId ? "PATCH" : "POST",
-        body: JSON.stringify({
-          movie: showForm.movie,
-          hall: showForm.hall,
-          startsAt: showForm.startsAt,
-          ticketTypes: tiers.map((t) => ({
-            name: t.name,
-            price: Number(t.price),
-            // On an assigned-seating hall the seat map decides the allocation,
-            // so none is sent — sending one would be a number the server
-            // discards, and a reader of this code would think it mattered.
-            ...(t.seatCategoryKey
-              ? { seatCategoryKey: t.seatCategoryKey }
-              : { allocation: Number(t.allocation) }),
-          })),
-        }),
-      }
-      );
-      toast.success(editingShowtimeId ? "Screening updated" : "Screening scheduled");
-      setEditingShowtimeId(null);
-      setShowForm({ movie: "", hall: "", startsAt: "" });
-      setTiers([{ name: "Regular", price: "", allocation: "" }]);
-      await reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const cancelShowtime = async (id: string) => {
-    try {
-      const res = await cinemaRequest<{ message?: string }>(
-        `/api/cinemas/me/showtimes/${id}`,
-        token,
-        { method: "DELETE" }
-      );
-      toast.success(res.message || "Screening removed");
-      await reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -443,238 +312,11 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
         Programme
       </h1>
 
-      <Tabs defaultValue="showtimes" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[420px]">
-          <TabsTrigger value="showtimes">Screenings</TabsTrigger>
+      <Tabs defaultValue="movies" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[280px]">
           <TabsTrigger value="movies">Films</TabsTrigger>
           <TabsTrigger value="halls">Halls</TabsTrigger>
         </TabsList>
-
-        {/* Screenings ------------------------------------------------------ */}
-        <TabsContent value="showtimes" className="space-y-6">
-          <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
-            <CardContent className="space-y-4 p-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                <CalendarDays className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                {editingShowtimeId ? "Edit screening" : "Schedule a screening"}
-              </h2>
-
-              {halls.length === 0 || movies.length === 0 ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Add at least one hall and one film first.
-                </p>
-              ) : (
-                <>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <Label className="text-xs">Film</Label>
-                      <select
-                        className={selectClass}
-                        value={showForm.movie}
-                        onChange={(e) =>
-                          setShowForm({ ...showForm, movie: e.target.value })
-                        }
-                      >
-                        <option value="">Select…</option>
-                        {movies
-                          .filter((m) => m.isActive)
-                          .map((m) => (
-                            <option key={m._id} value={m._id}>
-                              {m.title}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Hall</Label>
-                      <select
-                        className={selectClass}
-                        value={showForm.hall}
-                        onChange={(e) =>
-                          setShowForm({ ...showForm, hall: e.target.value })
-                        }
-                      >
-                        <option value="">Select…</option>
-                        {halls
-                          .filter((h) => h.isActive)
-                          .map((h) => (
-                            <option key={h._id} value={h._id}>
-                              {h.name} ({h.capacity} seats)
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    <div>
-                      <Label className="text-xs">Starts at</Label>
-                      <Input
-                        type="datetime-local"
-                        value={showForm.startsAt}
-                        onChange={(e) =>
-                          setShowForm({ ...showForm, startsAt: e.target.value })
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs">
-                      Ticket types — prices are set per screening, so a matinee
-                      can differ from a premiere
-                    </Label>
-                    {assignedSeating && (
-                      <p className="rounded-md bg-indigo-50 px-3 py-2 text-xs text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300">
-                        {selectedHall?.name} has a seat map, so you set one price per
-                        seat category. How many of each there are comes from the map.
-                      </p>
-                    )}
-                    {tiers.map((tier, i) => (
-                      <div
-                        key={i}
-                        className={`grid gap-2 ${
-                          assignedSeating
-                            ? "sm:grid-cols-[1fr_1fr]"
-                            : "sm:grid-cols-[1fr_1fr_1fr_auto]"
-                        }`}
-                      >
-                        <Input
-                          placeholder="Name (Regular, VIP, Student…)"
-                          value={tier.name}
-                          // Locked on an assigned-seating hall: the name comes
-                          // from the seat category it prices, and letting them
-                          // drift would put one label on the map and another on
-                          // the ticket.
-                          readOnly={assignedSeating}
-                          onChange={(e) => {
-                            const next = [...tiers];
-                            next[i] = { ...tier, name: e.target.value };
-                            setTiers(next);
-                          }}
-                        />
-                        <Input
-                          type="number"
-                          placeholder="Price (ETB)"
-                          value={tier.price}
-                          onChange={(e) => {
-                            const next = [...tiers];
-                            next[i] = { ...tier, price: e.target.value };
-                            setTiers(next);
-                          }}
-                        />
-                        {!assignedSeating && (
-                          <>
-                            <Input
-                              type="number"
-                              placeholder="Seats"
-                              value={tier.allocation}
-                              onChange={(e) => {
-                                const next = [...tiers];
-                                next[i] = { ...tier, allocation: e.target.value };
-                                setTiers(next);
-                              }}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled={tiers.length === 1}
-                              onClick={() => setTiers(tiers.filter((_, x) => x !== i))}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                    {!assignedSeating && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          setTiers([...tiers, { name: "", price: "", allocation: "" }])
-                        }
-                      >
-                        <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={addShowtime}
-                      disabled={
-                        busy || !showForm.movie || !showForm.hall || !showForm.startsAt
-                      }
-                    >
-                      {editingShowtimeId ? "Save changes" : "Schedule screening"}
-                    </Button>
-                    {editingShowtimeId && (
-                      <Button variant="ghost" onClick={cancelEditShowtime} disabled={busy}>
-                        Cancel
-                      </Button>
-                    )}
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="space-y-3">
-            {showtimes.length === 0 && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                No screenings scheduled yet.
-              </p>
-            )}
-            {showtimes.map((s) => (
-              <Card
-                key={s._id}
-                className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50"
-              >
-                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">
-                      {s.movie?.title}
-                      {s.status !== "scheduled" && (
-                        <Badge variant="secondary" className="ml-2">
-                          {s.status}
-                        </Badge>
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(s.startsAt).toLocaleString()} · {s.hall?.name} ·{" "}
-                      {s.seatsSold ?? 0}/{s.seatsAllocated ?? 0} seats
-                    </p>
-                    <p className="mt-1 flex flex-wrap gap-2 text-xs text-gray-600 dark:text-gray-400">
-                      {s.ticketTypes.map((t) => (
-                        <span
-                          key={t._id}
-                          className="rounded bg-gray-100 px-1.5 py-0.5 dark:bg-gray-800"
-                        >
-                          {t.name} {money(t.price)} · {t.sold}/{t.allocation}
-                        </span>
-                      ))}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Correct this screening"
-                      onClick={() => beginEditShowtime(s)}
-                    >
-                      <Pencil className="mr-1 h-4 w-4" /> Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => cancelShowtime(s._id)}
-                    >
-                      <Trash2 className="mr-1 h-4 w-4" /> Remove
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
 
         {/* Films ----------------------------------------------------------- */}
         <TabsContent value="movies" className="space-y-6">
@@ -1074,21 +716,6 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     </div>
   );
 }
-
-/**
- * An ISO timestamp as `datetime-local` wants it: local time, no zone.
- *
- * `iso.slice(0, 16)` is the obvious version and is wrong — it hands the input a
- * UTC wall-clock, so a 19:30 screening in Addis (UTC+3) loads as 16:30 and is
- * saved back three hours early. The whole point of an edit form is fixing
- * mistakes, not introducing one.
- */
-const toLocalDateTimeInput = (iso: string) => {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
 
 export default function CinemaProgrammePage() {
   return (

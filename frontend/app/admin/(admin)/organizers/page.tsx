@@ -1488,7 +1488,7 @@ export default function OrganizersPage() {
                           Total Revenue
                         </p>
                         <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                          {selectedOrganizer.events
+                          {(selectedOrganizer.events || [])
                             .reduce(
                               (sum, event) =>
                                 sum + calculateRevenue(event.tickets || [], selectedCurrency),

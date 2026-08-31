@@ -185,11 +185,22 @@ const addLineupItem = async (req, res) => {
     // Re-checked against the cinema's own permissions rather than trusting that
     // the picker only offered allowed products — an admin editing a cinema's
     // line-up must not be able to add something that cinema is blocked from.
+    //
+    // Done as two explicit checks rather than spreading sellableQuery(cinema)
+    // into this findOne: that helper also returns an `_id` key ($in the allow
+    // list, for LISTING many products), and spreading it after `_id: beverageId`
+    // silently overwrote the requested id with the allow-list filter — so this
+    // always resolved to whichever allowed product sorted first, regardless of
+    // which one was actually picked, and every add of a second product collided
+    // with the first one's row.
     const beverage = await ConcessionProduct.findOne({
       _id: beverageId,
-      ...sellableQuery(cinema),
+      isActive: true,
     }).lean();
-    if (!beverage) {
+    const allowed = cinema?.allowedConcessions || [];
+    const isAllowed =
+      beverage && allowed.some((id) => String(id) === String(beverage._id));
+    if (!isAllowed) {
       throw new BadRequestError("That product is not available to this cinema");
     }
 

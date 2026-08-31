@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Popcorn, Clock, Trash2, TrendingUp } from "lucide-react";
+import { Popcorn, Clock, Trash2, TrendingUp, RotateCcw } from "lucide-react";
 
 const CATEGORY_LABEL: Record<string, string> = {
   drink: "Drink",
@@ -110,6 +110,25 @@ function ConcessionsContent({
         { method: "DELETE" }
       );
       toast.success(res.message || "Removed");
+      await reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
+  // A product with sales behind it is taken off sale rather than deleted (see
+  // removeLineupItem), so it still occupies its slot in the unique cinema+
+  // product index. Re-adding it from the catalogue always fails with "already
+  // in this cinema's line-up" — correctly, since a second row would duplicate
+  // it — so putting it back on sale has to go through the existing row rather
+  // than through Add.
+  const restoreItem = async (id: string) => {
+    try {
+      await cinemaRequest(`/api/cinemas/me/concessions/${id}`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ isAvailable: true }),
+      });
+      toast.success("Back on sale");
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -332,9 +351,26 @@ function ConcessionsContent({
                       {!l.isAvailable && " · off sale"}
                     </p>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeItem(l._id)}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {!l.isAvailable && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Put back on sale"
+                        onClick={() => restoreItem(l._id)}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Remove"
+                      onClick={() => removeItem(l._id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
