@@ -76,10 +76,10 @@ import {
   PieChart,
   Cell,
 } from "recharts";
-import QRCode from "qrcode";
 import { toast } from "sonner";
 import { buildEventUrl } from "@/lib/event-url";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { generateDottedQrDataUrl } from "@/lib/qrStyle";
 
 const SkeletonCard = () => (
   <Card className="overflow-hidden border-none shadow-md bg-white dark:bg-black relative">
@@ -890,14 +890,7 @@ export default function OrganizerDashboard() {
   const generateQRCode = async (event: any) => {
     try {
       const shareQrUrl = `${window.location.origin}${buildEventUrl(event)}`;
-      const qrDataUrl = await QRCode.toDataURL(shareQrUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: "#0D47A1",
-          light: "#FFFFFF",
-        },
-      });
+      const qrDataUrl = await generateDottedQrDataUrl(shareQrUrl);
       setShareQrDataUrl(qrDataUrl);
       setSelectedEvent(event);
     } catch (error) {

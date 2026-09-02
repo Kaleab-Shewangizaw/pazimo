@@ -110,6 +110,14 @@ router.get("/public/tickets/:ticketId/qr.png", (req, res) => {
   return ticketController.getTicketQr(req, res);
 });
 
+// One QR per ORDER — every seat bought in one checkout shares this code,
+// instead of each seat carrying its own.
+router.get("/public/orders/:reference/qr.svg", ticketController.getOrderQr);
+router.get("/public/orders/:reference/qr.png", (req, res) => {
+  req.query.format = "png";
+  return ticketController.getOrderQr(req, res);
+});
+
 // A signed-in customer's own cinema tickets. Any authenticated account may read
 // its OWN rows; the controller scopes by req.user.userId and takes no id.
 //
@@ -153,6 +161,11 @@ router.post("/me/ticket-sales", ...cinemaSelf, ticketController.sellAtBoxOffice)
 // Admission. The cinema is resolved from the account, so a cinema can only ever
 // validate its own screenings' tickets — and never an event ticket, which lives
 // in a collection this route does not read.
+//
+// Read-only lookups first, so the scanner can show what it found and let staff
+// confirm with a "Mark as used" tap rather than admitting the instant a camera
+// decodes a frame.
+router.get("/me/tickets/:ticketId", ...cinemaSelf, ticketController.getStaffTicket);
 router.post("/me/check-in/:ticketId", ...cinemaSelf, ticketController.checkIn);
 
 // Concessions
@@ -170,6 +183,14 @@ router.get(
   "/me/orders/:reference/concessions",
   ...cinemaSelf,
   beverageController.listOutstandingForOrder
+);
+// The whole order, for the scanner to review before admitting it, and the
+// single action that admits every eligible seat on it at once.
+router.get("/me/orders/:reference", ...cinemaSelf, ticketController.getStaffOrder);
+router.post(
+  "/me/orders/:reference/check-in",
+  ...cinemaSelf,
+  ticketController.checkInOrder
 );
 router.post(
   "/me/concession-sales/:saleId/redeem",

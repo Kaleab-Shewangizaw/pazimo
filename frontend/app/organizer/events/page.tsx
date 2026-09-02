@@ -56,7 +56,8 @@ import {
   Beer,
 } from "lucide-react";
 import Image from "next/image";
-import QRCode from "qrcode";
+import { generateDottedQrDataUrl } from "@/lib/qrStyle";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 export default function EventsPage() {
   const router = useRouter();
@@ -295,14 +296,7 @@ export default function EventsPage() {
       const baseUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
       const shareQrUrl = `${baseUrl}${buildEventUrl(event)}`;
-      const qrDataUrl = await QRCode.toDataURL(shareQrUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: "#0D47A1",
-          light: "#FFFFFF",
-        },
-      });
+      const qrDataUrl = await generateDottedQrDataUrl(shareQrUrl);
       setShareQrDataUrl(qrDataUrl);
       setQrEvent(event);
     } catch (error) {
@@ -313,12 +307,7 @@ export default function EventsPage() {
 
   const downloadQRCode = () => {
     if (!shareQrDataUrl || !qrEvent) return;
-    const link = document.createElement("a");
-    link.href = shareQrDataUrl;
-    link.download = `buy-${qrEvent._id}-ticket.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadHighQualityQR(shareQrDataUrl, `buy-${qrEvent._id}-ticket.png`);
   };
 
   const copyBuyLink = () => {

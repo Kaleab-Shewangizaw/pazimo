@@ -63,3 +63,41 @@ export const buildCinemaPassFields = (ticket: CinemaPassSource): TicketPassField
     { label: "ORDER ID", value: ticket.ticketId.slice(-6).toUpperCase() },
   ];
 };
+
+/**
+ * One order's pass fields — every seat bought in one checkout, collapsed
+ * onto a single card instead of one card per seat. `tickets` all belong to
+ * the same order (one showtime), so DATE & TIME / CINEMA / HALL are read off
+ * the first row and only SEATS / TICKET TYPE fold in the rest.
+ */
+export const buildCinemaOrderPassFields = (
+  tickets: CinemaPassSource[],
+  transactionId: string
+): TicketPassField[] => {
+  const first = tickets[0];
+  const seated = tickets.filter((t) => t.seat?.seatKey);
+  const cinemaLine = [first.cinema?.name, first.cinema?.city].filter(Boolean).join(", ");
+  const admits = tickets.reduce((sum, t) => sum + (t.quantity || 1), 0);
+
+  const seatsValue = seated.length
+    ? seated.map((t) => `${t.seat!.row}${t.seat!.number}`).join(", ")
+    : `GENERAL ADMISSION × ${admits}`;
+
+  const typeCounts = new Map<string, number>();
+  for (const t of tickets) {
+    typeCounts.set(t.ticketType, (typeCounts.get(t.ticketType) || 0) + (t.quantity || 1));
+  }
+  const typeValue =
+    typeCounts.size === 1
+      ? [...typeCounts.keys()][0]
+      : [...typeCounts.entries()].map(([type, count]) => `${type} ×${count}`).join(", ");
+
+  return [
+    { label: "DATE & TIME", value: cinemaPassWhen(first.showtimeStartsAt).toUpperCase() },
+    { label: "CINEMA", value: (cinemaLine || "—").toUpperCase() },
+    { label: "HALL", value: (first.hallName || "—").toUpperCase() },
+    { label: "SEATS", value: seatsValue.toUpperCase() },
+    { label: "TICKET TYPE", value: typeValue.toUpperCase() },
+    { label: "ORDER ID", value: transactionId.slice(-6).toUpperCase() },
+  ];
+};

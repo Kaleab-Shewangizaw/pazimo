@@ -12,8 +12,12 @@ import {
   verifyPaymentStatus,
 } from "@/lib/cinema-api";
 import TicketPassCard from "@/components/tickets/ticket-pass-card";
-import { buildCinemaPassFields, cinemaPassTitle, cinemaPassWatermark } from "@/lib/cinemaTicketPass";
-import { cinemaTicketQrUrl, downloadCinemaTicketQr } from "@/lib/cinemaTicketQr";
+import {
+  buildCinemaOrderPassFields,
+  cinemaPassTitle,
+  cinemaPassWatermark,
+} from "@/lib/cinemaTicketPass";
+import { cinemaOrderQrUrl, downloadCinemaOrderQr } from "@/lib/cinemaTicketQr";
 import { toast } from "sonner";
 
 /**
@@ -196,29 +200,39 @@ export default function CinemaOrderPage() {
       )}
 
       {order.tickets.length > 0 && (
-        <div className="mb-6 flex flex-wrap justify-center gap-6">
-          {order.tickets.map((ticket) => (
-            <div key={ticket._id} className="flex flex-col items-center gap-3">
-              <TicketPassCard
-                title={cinemaPassTitle(ticket)}
-                watermark={cinemaPassWatermark(ticket)}
-                fields={buildCinemaPassFields(ticket)}
-                qrSrc={cinemaTicketQrUrl(ticket.ticketId)}
-                qrAlt={`QR code for ticket ${ticket.ticketId}`}
-                onDownload={() =>
-                  downloadCinemaTicketQr(ticket.ticketId, `ticket-${ticket.ticketId}.png`).catch(
-                    () => toast.error("Could not download the QR code")
-                  )
-                }
-              />
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="tabular-nums">{money(ticket.totalAmount, ticket.currency)}</span>
-                <Link href={`/ticket/${ticket.ticketId}`} className="underline underline-offset-2">
-                  View ticket page
+        <div className="mb-6 flex flex-col items-center gap-4">
+          <TicketPassCard
+            title={cinemaPassTitle(order.tickets[0])}
+            watermark={cinemaPassWatermark(order.tickets[0])}
+            fields={buildCinemaOrderPassFields(order.tickets, order.transactionId)}
+            qrSrc={cinemaOrderQrUrl(order.transactionId)}
+            qrAlt={`QR code for order ${order.transactionId}`}
+            onDownload={() =>
+              downloadCinemaOrderQr(
+                order.transactionId,
+                `order-${order.transactionId}.png`
+              ).catch(() => toast.error("Could not download the QR code"))
+            }
+          />
+
+          {/* Each seat's own code, for anyone in the group arriving separately —
+              the order QR above admits every seat at once, so a seat handed to
+              someone else keeps its own single-seat code instead. */}
+          {order.tickets.length > 1 && (
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              {order.tickets.map((ticket) => (
+                <Link
+                  key={ticket._id}
+                  href={`/ticket/${ticket.ticketId}`}
+                  className="underline underline-offset-2"
+                >
+                  {ticket.seat?.row
+                    ? `Seat ${ticket.seat.row}${ticket.seat.number}`
+                    : `Ticket ${ticket.ticketId.slice(-6).toUpperCase()}`}
                 </Link>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 

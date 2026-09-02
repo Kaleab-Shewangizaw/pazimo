@@ -410,10 +410,61 @@ const checkInTicket = async ({ ticketId, cinemaId, checkedInBy }) => {
   return ticket;
 };
 
+/**
+ * Admit every eligible seat on one order at once — the "mark as used"
+ * confirmation for a multi-seat purchase, which shares one QR across every
+ * seat in `paymentReference`.
+ *
+ * The eligibility filter lives inside the updateMany itself rather than a
+ * fetch-then-loop-save, the same reasoning claimSeats above gives for doing
+ * its check and its write in one operation: two staff scanning the same
+ * order at the same instant must not double-admit or race each other. The
+ * second call's filter simply matches whatever the first call did not
+ * already flip.
+ */
+const checkInOrder = async ({ reference, cinemaId, checkedInBy }) => {
+  if (!reference) throw new BadRequestError("An order reference is required");
+
+  const all = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId });
+  if (!all.length) throw new NotFoundError("Order not found for this cinema");
+
+  const result = await CinemaTicket.updateMany(
+    {
+      paymentReference: reference,
+      cinema: cinemaId,
+      checkedIn: false,
+      paymentStatus: "completed",
+      status: { $nin: ["cancelled", "refunded"] },
+    },
+    {
+      $set: {
+        checkedIn: true,
+        checkedAt: new Date(),
+        status: "used",
+        ...(checkedInBy && { checkedInBy }),
+      },
+    }
+  );
+
+  if (result.modifiedCount === 0) {
+    const usable = all.some(
+      (t) => t.paymentStatus === "completed" && !["cancelled", "refunded"].includes(t.status)
+    );
+    if (!usable) {
+      throw new BadRequestError("Every seat on this order was refunded or cancelled");
+    }
+    throw new BadRequestError("This order has already been admitted");
+  }
+
+  const tickets = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId });
+  return { tickets, admittedCount: result.modifiedCount };
+};
+
 module.exports = {
   claimSeats,
   releaseSeats,
   issueTicket,
   refundTicket,
   checkInTicket,
+  checkInOrder,
 };

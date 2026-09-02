@@ -35,3 +35,38 @@ export const downloadCinemaTicketQr = async (
 
   URL.revokeObjectURL(objectUrl);
 };
+
+/**
+ * URL of a whole ORDER's QR image — every seat bought in one checkout shares
+ * this one code, instead of each seat carrying its own.
+ */
+export const cinemaOrderQrUrl = (
+  reference: string,
+  ext: "svg" | "png" = "svg",
+  width?: number
+) => {
+  const query = ext === "png" && width ? `?w=${width}` : "";
+  return `${API}/api/cinemas/public/orders/${encodeURIComponent(reference)}/qr.${ext}${query}`;
+};
+
+/** Download an order's QR as a PNG. */
+export const downloadCinemaOrderQr = async (
+  reference: string,
+  filename = `order-${reference}.png`,
+  width = 1024
+) => {
+  const response = await fetch(cinemaOrderQrUrl(reference, "png", width));
+  if (!response.ok) throw new Error("Could not download the QR code");
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(objectUrl);
+};

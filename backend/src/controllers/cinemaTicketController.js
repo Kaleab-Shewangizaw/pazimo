@@ -38,6 +38,20 @@ const buildCinemaQrPayload = (ticket) =>
     tid: ticket.ticketId,
   });
 
+/**
+ * What a whole ORDER's QR encodes — every seat bought in one checkout shares
+ * this single code, rather than each seat carrying its own. A distinct `ctx`
+ * tag from the per-ticket payload, for the same reason that payload's own tag
+ * exists: the scanner has to tell the two kinds of code apart before it looks
+ * anything up, so a legacy single-seat code (still reachable from that seat's
+ * own /ticket/{id} page) never gets treated as if it admits the whole order.
+ */
+const buildCinemaOrderQrPayload = (reference) =>
+  JSON.stringify({
+    ctx: "CINEMA_ORDER",
+    ref: reference,
+  });
+
 // ---------------------------------------------------------------------------
 // Selling
 // ---------------------------------------------------------------------------
@@ -266,6 +280,123 @@ const checkIn = async (req, res) => {
   }
 };
 
+/**
+ * Admit every eligible seat on one order in a single action — the "mark as
+ * used" confirmation a staff member fires after reviewing the order in
+ * getStaffOrder, not off a bare camera scan.
+ */
+const checkInOrder = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+
+    const { tickets, admittedCount } = await cinemaTicketService.checkInOrder({
+      reference: req.params.reference,
+      cinemaId: cinema._id,
+      checkedInBy: req.user.userId,
+    });
+
+    let outstandingConcessions = [];
+    try {
+      outstandingConcessions =
+        await cinemaBeverageSalesService.listOutstandingForOrder({
+          paymentReference: req.params.reference,
+          cinemaId: cinema._id,
+        });
+    } catch (error) {
+      console.error(
+        `[CINEMA] could not read pre-bought items for ${req.params.reference}: ${error.message}`
+      );
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: { tickets, admittedCount },
+      outstandingConcessions,
+    });
+  } catch (error) {
+    console.error("Error checking in cinema order:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * A ticket, for the scanner to show BEFORE admitting it.
+ *
+ * Read-only and cinema-scoped, unlike getPublicTicket: this is what backs the
+ * "review, then tap Mark as used" flow, so it never throws for an
+ * already-used or refunded ticket — it returns the real status and lets the
+ * frontend render that instead of an error.
+ */
+const getStaffTicket = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+
+    const ticket = await CinemaTicket.findOne({
+      ticketId: req.params.ticketId,
+      cinema: cinema._id,
+    })
+      .populate("movie", "title poster")
+      .populate("hall", "name")
+      .lean();
+    if (!ticket) throw new NotFoundError("Ticket not found for this cinema");
+
+    let outstandingConcessions = [];
+    try {
+      outstandingConcessions =
+        await cinemaBeverageSalesService.listOutstandingForOrder({
+          paymentReference: ticket.paymentReference,
+          cinemaId: cinema._id,
+        });
+    } catch (error) {
+      console.error(
+        `[CINEMA] could not read pre-bought items for ${ticket.paymentReference}: ${error.message}`
+      );
+    }
+
+    res.status(StatusCodes.OK).json({ success: true, data: ticket, outstandingConcessions });
+  } catch (error) {
+    console.error("Error reading cinema ticket for staff:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/** Every seat on one order, for the scanner to show BEFORE admitting it. */
+const getStaffOrder = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+
+    const tickets = await CinemaTicket.find({
+      paymentReference: req.params.reference,
+      cinema: cinema._id,
+    })
+      .populate("movie", "title poster")
+      .populate("hall", "name")
+      .lean();
+    if (!tickets.length) throw new NotFoundError("Order not found for this cinema");
+
+    let outstandingConcessions = [];
+    try {
+      outstandingConcessions =
+        await cinemaBeverageSalesService.listOutstandingForOrder({
+          paymentReference: req.params.reference,
+          cinemaId: cinema._id,
+        });
+    } catch (error) {
+      console.error(
+        `[CINEMA] could not read pre-bought items for ${req.params.reference}: ${error.message}`
+      );
+    }
+
+    res.status(StatusCodes.OK).json({ success: true, data: tickets, outstandingConcessions });
+  } catch (error) {
+    console.error("Error reading cinema order for staff:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 /** Admin-only: reverse a ticket and return its seats. */
 const refund = async (req, res) => {
   try {
@@ -355,6 +486,46 @@ const getTicketQr = async (req, res) => {
   }
 };
 
+/**
+ * The QR image for a whole ORDER — every seat sharing `reference` scans as
+ * one code. Mirrors getTicketQr exactly; the only difference is the payload
+ * and the lookup, which just needs proof the reference is real.
+ */
+const getOrderQr = async (req, res) => {
+  try {
+    const exists = await CinemaTicket.findOne({
+      paymentReference: req.params.reference,
+    })
+      .select("_id")
+      .lean();
+    if (!exists) throw new NotFoundError("Order not found");
+
+    const payload = buildCinemaOrderQrPayload(req.params.reference);
+    const wantsPng = req.params.ext === "png" || req.query.format === "png";
+
+    if (wantsPng) {
+      const requested = parseInt(req.query.w, 10);
+      const width = Number.isFinite(requested)
+        ? Math.min(2048, Math.max(200, requested))
+        : 400;
+
+      const png = await renderQrPng(payload, width);
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return res.send(png);
+    }
+
+    const svg = await renderQrSvg(payload);
+    res.setHeader("Content-Type", "image/svg+xml");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.send(svg);
+  } catch (error) {
+    console.error("Error rendering cinema order QR:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 /** A signed-in customer's own cinema tickets. */
 const listMyTickets = async (req, res) => {
   try {
@@ -376,12 +547,17 @@ const listMyTickets = async (req, res) => {
 
 module.exports = {
   buildCinemaQrPayload,
+  buildCinemaOrderQrPayload,
   sellAtBoxOffice,
   listTickets,
   getTicketSummary,
   checkIn,
+  checkInOrder,
+  getStaffTicket,
+  getStaffOrder,
   refund,
   getPublicTicket,
   getTicketQr,
+  getOrderQr,
   listMyTickets,
 };

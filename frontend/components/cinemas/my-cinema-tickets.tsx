@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/authStore";
 import { fetchMyCinemaTickets, type CinemaTicket } from "@/lib/cinema-api";
+import { keyOf } from "@/lib/cinemaTicketGrouping";
 import { Clapperboard, Armchair, Clock, ChevronRight } from "lucide-react";
 
 /**
@@ -18,7 +19,30 @@ import { Clapperboard, Armchair, Clock, ChevronRight } from "lucide-react";
  *
  * Renders nothing at all when there are none, so an account that has never been
  * to the cinema sees no empty scaffolding.
+ *
+ * Grouped by order (paymentReference) rather than one row per seat — a party
+ * that bought several seats in one checkout shares one QR/pass now (see
+ * /cinema/order/[transactionId]), so the account list should read the same
+ * way: one card per order, not one per chair. `keyOf` is the same grouping
+ * boundary the admin ticket dashboard uses (lib/cinemaTicketGrouping.ts), kept
+ * so the two screens can never disagree about what counts as "one order".
  */
+
+interface TicketOrder {
+  key: string;
+  tickets: CinemaTicket[];
+}
+
+const groupByOrder = (tickets: CinemaTicket[]): TicketOrder[] => {
+  const groups = new Map<string, CinemaTicket[]>();
+  tickets.forEach((t, i) => {
+    const key = keyOf(t.paymentReference, t._id, i);
+    const list = groups.get(key);
+    if (list) list.push(t);
+    else groups.set(key, [t]);
+  });
+  return Array.from(groups, ([key, tickets]) => ({ key, tickets }));
+};
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString(undefined, {
@@ -57,6 +81,8 @@ export default function MyCinemaTickets() {
 
   if (loading || tickets.length === 0) return null;
 
+  const orders = groupByOrder(tickets);
+
   return (
     <section className="mb-8">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
@@ -65,36 +91,58 @@ export default function MyCinemaTickets() {
       </h2>
 
       <div className="space-y-3">
-        {tickets.map((ticket) => {
-          const dead = ["refunded", "cancelled"].includes(ticket.status);
+        {orders.map(({ key, tickets: group }) => {
+          const first = group[0];
+          const admitted = group.filter((t) => t.checkedIn).length;
+          const allDead = group.every((t) => ["refunded", "cancelled"].includes(t.status));
+          const seated = group.filter((t) => t.seat?.row);
+          const admits = group.reduce((sum, t) => sum + (t.quantity || 1), 0);
+
+          const seatLine = seated.length
+            ? seated.length === 1
+              ? `Row ${seated[0].seat!.row} · Seat ${seated[0].seat!.number}`
+              : `Seats ${seated.map((t) => `${t.seat!.row}${t.seat!.number}`).join(", ")}`
+            : `${first.ticketType} × ${admits}`;
+
+          // A grouped order — several seats bought in one checkout — links to
+          // the shared order pass. A single, ungrouped row (no
+          // paymentReference, e.g. a box-office sale) links straight to its
+          // own ticket page, same as before.
+          const href = first.paymentReference
+            ? `/cinema/order/${first.paymentReference}`
+            : `/ticket/${first.ticketId}`;
+
           return (
-            <Link key={ticket._id} href={`/ticket/${ticket.ticketId}`} className="block">
+            <Link key={key} href={href} className="block">
               <Card className="transition-shadow hover:shadow-md">
                 <CardContent className="flex items-center gap-4 p-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate font-semibold">
-                        {ticket.movie?.title || ticket.movieTitle}
+                        {first.movie?.title || first.movieTitle}
                       </h3>
-                      {dead && (
+                      {allDead && (
                         <Badge variant="destructive" className="capitalize">
-                          {ticket.status}
+                          {first.status}
                         </Badge>
                       )}
-                      {!dead && ticket.checkedIn && (
+                      {!allDead && admitted > 0 && admitted >= group.length && (
                         <Badge className="bg-emerald-600 text-white">Admitted</Badge>
+                      )}
+                      {!allDead && admitted > 0 && admitted < group.length && (
+                        <Badge className="bg-amber-500 text-white">
+                          {admitted} of {group.length} admitted
+                        </Badge>
                       )}
                     </div>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
                       <Clock className="h-3.5 w-3.5" />
-                      {when(ticket.showtimeStartsAt)}
-                      {ticket.cinema?.name ? ` · ${ticket.cinema.name}` : ""}
+                      {when(first.showtimeStartsAt)}
+                      {first.cinema?.name ? ` · ${first.cinema.name}` : ""}
                     </p>
                     <p className="mt-0.5 flex items-center gap-1.5 text-sm">
                       <Armchair className="h-3.5 w-3.5 text-muted-foreground" />
-                      {ticket.seat?.row
-                        ? `Row ${ticket.seat.row} · Seat ${ticket.seat.number}`
-                        : `${ticket.ticketType} × ${ticket.quantity}`}
+                      {seatLine}
                     </p>
                   </div>
                   <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
