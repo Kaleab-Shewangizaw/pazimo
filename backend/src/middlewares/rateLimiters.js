@@ -121,6 +121,28 @@ const cinemaCheckoutLimiter = rateLimit({
   ),
 });
 
+// Recipient search sits behind auth but still lets a caller page through the
+// user directory by phone/name/email, so it gets its own (generous) budget
+// rather than sharing one with the write endpoints below.
+const ticketShareSearchLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 120, // searches per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many searches. Please slow down and try again shortly."),
+});
+
+// Guards ticket-share create/accept/decline/cancel — authenticated, but a
+// stolen token or a scripted mistake should still only be able to spam a
+// bounded number of transfers per window.
+const ticketShareWriteLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 30, // share actions per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many share requests. Please wait a few minutes and try again."),
+});
+
 module.exports = {
   cinemaCheckoutLimiter,
   adminWriteLimiter,
@@ -132,4 +154,6 @@ module.exports = {
   registerLimiter,
   otpLimiter,
   unifiedAuthLimiter,
+  ticketShareSearchLimiter,
+  ticketShareWriteLimiter,
 };
