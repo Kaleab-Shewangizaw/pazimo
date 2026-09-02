@@ -1653,17 +1653,27 @@ const checkInTicket = async (req, res) => {
     // ⚡ OPTIMIZED: Use select() to only fetch needed fields
     let ticket = await Ticket.findOne({ ticketId })
       // Include invitation/door flags so validation rules stay accurate when saving
-      .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor");
-      
+      .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor pendingShare");
+
     if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
       ticket = await Ticket.findById(ticketId)
-        .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor");
+        .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor pendingShare");
     }
 
     if (!ticket) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: "Ticket not found",
+      });
+    }
+
+    // Ownership is mid-transfer until the recipient accepts or the share
+    // lapses — checking it in now would admit whoever scans it while it's
+    // ambiguous who actually holds it.
+    if (ticket.pendingShare) {
+      return res.status(StatusCodes.CONFLICT).json({
+        success: false,
+        message: "This ticket has a pending share and can't be checked in until it's resolved",
       });
     }
 
@@ -1775,6 +1785,12 @@ const cancelTicket = async (req, res) => {
 
     if (ticket.status !== "active") {
       throw new BadRequestError("Ticket cannot be cancelled");
+    }
+
+    if (ticket.pendingShare) {
+      throw new BadRequestError(
+        "This ticket has a pending share — cancel or wait for that to resolve first"
+      );
     }
 
     ticket.status = "cancelled";

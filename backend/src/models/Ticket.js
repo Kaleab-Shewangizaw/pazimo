@@ -179,6 +179,23 @@ const TicketSchema = new mongoose.Schema(
     qrCode: {
       type: String,
     },
+
+    // Set while a TicketShare on this ticket is outstanding ("pending"), and
+    // cleared back to null the moment that share is accepted, declined,
+    // cancelled or expires. Existing tickets simply don't have this field,
+    // which Mongo treats as equivalent to null for querying purposes — so
+    // every legacy ticket is correctly "not locked" with no backfill needed.
+    //
+    // Acts as a lock: a ticket can only be in one outstanding share at a
+    // time, and check-in/cancel must refuse to act on a locked ticket since
+    // its ownership is mid-transfer (see ticketShareService and the guards in
+    // checkInTicket/cancelTicket below).
+    pendingShare: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TicketShare",
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
