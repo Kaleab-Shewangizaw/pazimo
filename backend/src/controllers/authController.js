@@ -4,6 +4,7 @@ const Admin = require("../models/Admin");
 const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
 const { isPhoneBanned } = require("../utils/fraudGuard");
+const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
@@ -206,7 +207,14 @@ const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    console.log("Forgot password request for:", email);
+    // See rejectQueryOperators.js — reject a query-operator object before it
+    // reaches findOne(), same as login/unifiedAuth.
+    if (isQueryOperatorInjection(email)) {
+      return res.status(200).json({
+        status: "success",
+        message: "If that email is registered, a reset link has been sent.",
+      });
+    }
 
     const user = await User.findOne({ email });
     // Always return 200 — never reveal whether the email exists
@@ -381,6 +389,13 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
+
+    // See rejectQueryOperators.js: email/password must be plain strings
+    // before either reaches a query or bcrypt, or a query-operator object
+    // (e.g. `{"$ne": null}`) turns the lookup into "match any account".
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(password)) {
+      throw new UnauthorizedError("Invalid credentials");
+    }
 
     // Find user
     const user = await User.findOne({ email }).select("+password");
@@ -665,6 +680,15 @@ const adminLogin = async (req, res) => {
       });
     }
 
+    // See rejectQueryOperators.js — this is the query that guards the single
+    // admin account, so it gets the same string-only check as the others.
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(password)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Please provide email and password",
+      });
+    }
+
     // Admins live exclusively in the Admin collection - there is no API that
     // creates one, so this is the only account type that can ever match here.
     const admin = await Admin.findOne({ email }).select("+password");
@@ -772,8 +796,22 @@ const unifiedAuth = async (req, res) => {
   try {
     const { fullName, email, phoneNumber } = req.body;
 
-    console.log("=== UNIFIED AUTH DEBUG ===");
-    console.log("Request body:", { fullName, email, phoneNumber });
+    // phoneNumber/email feed straight into User.find()/findOne() filters
+    // below. Mongoose does not reject a query-operator object (e.g.
+    // `{"$ne": null}`, `{"$regex": "^09"}`) on a String path, so without this
+    // check a crafted JSON body turns "find this phone number" into "find any
+    // phone number" — a full, passwordless login-as-arbitrary-user. Confirmed
+    // exploited against a real account on 2026-09-03; see rejectQueryOperators.js.
+    if (
+      isQueryOperatorInjection(phoneNumber) ||
+      isQueryOperatorInjection(email) ||
+      isQueryOperatorInjection(fullName)
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid request",
+      });
+    }
 
     // Validate required fields
     if (!fullName || !phoneNumber) {
