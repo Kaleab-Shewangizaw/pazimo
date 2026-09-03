@@ -13,6 +13,7 @@ import Link from "next/link";
 import Image from "next/image";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL + "/api";
+const RESEND_COOLDOWN_SECONDS = 60;
 
 function SignInContent() {
   const router = useRouter();
@@ -32,10 +33,22 @@ function SignInContent() {
   const [code, setCode] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  // Shared by "Resend code" and "Send by email instead" — both hit the same
+  // rate-limited send-otp endpoint, so one cooldown gates both rather than
+  // tracking them separately.
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
 
   // Shared by the plain-password path (non-organizers) and the post-OTP
   // path — same redirect decision either way, just reached differently.
@@ -83,6 +96,7 @@ function SignInContent() {
       if (pending) {
         setCode("");
         setOtpStep(true);
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
         toast.success(`We sent a verification code to ${pending.maskedDestination ?? "your device"}`);
         return;
       }
@@ -164,6 +178,7 @@ function SignInContent() {
         },
       });
       setCode("");
+      setResendCooldown(RESEND_COOLDOWN_SECONDS);
       toast.success(data.message || "Code resent");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to resend code");
@@ -324,10 +339,14 @@ function SignInContent() {
                 <button
                   type="button"
                   onClick={() => handleResendOtp()}
-                  disabled={isResending}
-                  className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline"
+                  disabled={isResending || resendCooldown > 0}
+                  className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline disabled:no-underline disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isResending ? "Resending..." : "Resend code"}
+                  {isResending
+                    ? "Resending..."
+                    : resendCooldown > 0
+                      ? `Resend code in ${resendCooldown}s`
+                      : "Resend code"}
                 </button>
                 {pendingOtp?.channel !== "email" && (
                   <>
@@ -335,8 +354,8 @@ function SignInContent() {
                     <button
                       type="button"
                       onClick={() => handleResendOtp("email")}
-                      disabled={isResending}
-                      className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline"
+                      disabled={isResending || resendCooldown > 0}
+                      className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline disabled:no-underline disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Send by email instead
                     </button>
@@ -348,6 +367,7 @@ function SignInContent() {
                     onClick={() => {
                       setOtpStep(false);
                       setCode("");
+                      setResendCooldown(0);
                     }}
                     className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium"
                   >
