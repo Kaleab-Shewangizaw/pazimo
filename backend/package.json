@@ -10,7 +10,8 @@
     "manual-ticket-sales": "node add-manual-ticket-sales.js",
     "indexes:create": "node src/scripts/createIndexes.js",
     "indexes:sync": "node src/scripts/createIndexes.js --sync",
-    "indexes:rsvp": "node src/scripts/createRsvpIndexes.js"
+    "indexes:rsvp": "node src/scripts/createRsvpIndexes.js",
+    "check:write-surface": "node src/scripts/checkPublicWriteSurface.js"
   },
   "keywords": [],
   "author": "",

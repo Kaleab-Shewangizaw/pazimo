@@ -35,19 +35,36 @@ const sendSMS = async (phone, message, retries = 1) => {
           }
         );
 
-        // Validate response
-        if (response.data && response.data.status === 'success') {
+        // GeezSMS's actual response shape is `{ error: boolean, msg: string, ... }`
+        // — there is no `status` field. The old check here (`status === 'success'`)
+        // never matched anything real, so every send fell through to "assumed
+        // success" regardless of what the gateway actually said, and a real
+        // failure's message was read from `response.data.error` (a boolean) instead
+        // of `response.data.msg` — so failures were caught but logged as
+        // "Error: true" instead of the real reason. Found 2026-09-04 while
+        // debugging a report of OTP SMS not arriving: confirmed against a live
+        // call that `error: false` + a `msg`/`sms_units`/`cost_etb` payload is what
+        // a real accepted send looks like.
+        if (response.data && response.data.error === false) {
           const duration = Date.now() - startTime;
-          console.log(`[SMS] ✅ Sent successfully in ${duration}ms (attempt ${attempt})`);
+          console.log(
+            `[SMS] ✅ Accepted by gateway in ${duration}ms (attempt ${attempt}):`,
+            response.data.msg || response.data
+          );
           return { success: true, duration, attempts: attempt };
         } else if (response.data && response.data.error) {
-          throw new Error(response.data.error);
+          throw new Error(response.data.msg || "GeezSMS reported a failure with no message");
         }
-        
-        // If response doesn't indicate success clearly, assume success
+
+        // Unrecognized shape — don't assume success over something we don't
+        // actually understand. Log the raw body so the next failure is
+        // diagnosable instead of silently reported as sent.
         const duration = Date.now() - startTime;
-        console.log(`[SMS] ✅ Sent (assumed success) in ${duration}ms (attempt ${attempt})`);
-        return { success: true, duration, attempts: attempt };
+        console.warn(
+          `[SMS] ⚠️ Unrecognized gateway response after ${duration}ms (attempt ${attempt}):`,
+          response.data
+        );
+        throw new Error("Unrecognized SMS gateway response");
         
       } catch (error) {
         lastError = error;

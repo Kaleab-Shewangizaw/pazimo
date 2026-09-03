@@ -12,12 +12,26 @@ interface User {
   role: "customer" | "organizer" | "admin";
 }
 
+interface PendingOtp {
+  email: string;
+  channel: "sms" | "email";
+  maskedDestination: string | null;
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;
   error: string | null;
   isBanned: boolean;
   banReason: string | null;
+  // Set by login() when the account requires a second factor (organizers,
+  // added 2026-09-04) instead of getting a token immediately. The caller
+  // should check this after awaiting login() — if set, show a code-entry
+  // step and complete sign-in via POST /api/auth/organizer/verify-otp using
+  // pendingOtp.email (never the raw form input, which may not match the
+  // account's real email exactly) and the code the user enters, then call
+  // setAuth() with the result.
+  pendingOtp: PendingOtp | null;
   setBanned: (reason: string | null) => void;
   checkAccountStatus: () => Promise<void>;
   signup: (userData: {
@@ -50,6 +64,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isBanned: false,
       banReason: null,
+      pendingOtp: null,
       setBanned: (reason) => set({ isBanned: true, banReason: reason }),
       checkAccountStatus: async () => {
         const { token } = useAuthStore.getState();
@@ -135,6 +150,23 @@ export const useAuthStore = create<AuthState>()(
             throw new Error(data.message || "Login failed");
           }
 
+          // Password verified, but this account (organizers, as of
+          // 2026-09-04) needs a code before a token is issued. Not an
+          // error — the caller should check pendingOtp after awaiting
+          // login() and show a code-entry step instead of treating this as
+          // signed in.
+          if (data.requiresOtp) {
+            set({
+              pendingOtp: {
+                email: data.data?.email,
+                channel: data.data?.channel || "sms",
+                maskedDestination: data.data?.maskedDestination ?? null,
+              },
+              error: null,
+            });
+            return;
+          }
+
           // Check if we have the user data in the expected format
           const userData = data.data?.user;
           const token = data.data?.token;
@@ -150,6 +182,7 @@ export const useAuthStore = create<AuthState>()(
             token: token,
             isAuthenticated: true,
             error: null,
+            pendingOtp: null,
           });
 
           // Store in localStorage for persistence
@@ -183,6 +216,7 @@ export const useAuthStore = create<AuthState>()(
           error: null,
           isBanned: false,
           banReason: null,
+          pendingOtp: null,
         });
         // Clear localStorage
         localStorage.removeItem("auth-storage");
@@ -198,6 +232,7 @@ export const useAuthStore = create<AuthState>()(
           token: authData.token,
           isAuthenticated: true,
           error: null,
+          pendingOtp: null,
         });
         // Store in localStorage for persistence
         localStorage.setItem(

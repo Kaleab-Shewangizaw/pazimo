@@ -91,13 +91,16 @@ const optionalAuth = async (req, res, next) => {
   next();
 };
 
-// TEMPORARY compat shim (2026-07-10): the organizer app can't be updated
-// right now and appears not to send a standard `Authorization: Bearer`
-// header on this route, so also accept the token from a couple of other
-// common places an HTTP client might put it. Still requires a valid,
-// signature-verified JWT either way - this does not weaken auth, it just
-// widens where we're willing to look for the credential.
-// Remove once the app is confirmed to send a proper Authorization header.
+// Accepts the credential from a standard `Authorization: Bearer` header or from
+// a couple of other places an HTTP client might put it, because the organizer
+// mobile app was found (2026-07-10) not to send the standard header on every
+// route.
+//
+// This is tolerance about WHERE the credential is, never about WHETHER there is
+// one: every branch below returns a token that still has to survive
+// `jwt.verify` against JWT_SECRET, so none of them weakens authentication. The
+// part that did weaken it — a no-token fallback that trusted the id in the URL —
+// was removed on 2026-08-20; see the note on protect() below.
 const extractToken = (req) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -115,6 +118,18 @@ const extractToken = (req) => {
   return null;
 };
 
+// Removed 2026-08-20: `protectStrictOrTrustParamId`, the TEMP-BYPASS-2026-07-10
+// shim on GET /api/users/:id. When a request carried no token at all it fell
+// back to trusting `req.params.id` and returned that account's email, phone and
+// ban status to an anonymous caller, as long as the account was an admin or
+// organizer — a real IDOR against exactly the highest-value accounts. It was
+// meant to last two days and lasted six weeks.
+//
+// The route now uses `protect` + `restrictTo('admin', 'organizer')`, which is
+// what it used before the shim. The mobile app is unaffected as long as it
+// sends its token anywhere extractToken looks (Authorization, x-access-token,
+// x-auth-token, ?token=); if it truly sends none, the rejection is logged below
+// with the URL, which is the signal to fix the app rather than reopen the hole.
 const protect = async (req, res, next) => {
   let account;
   try {
@@ -161,88 +176,6 @@ const protect = async (req, res, next) => {
   req.user = account;
   next();
 };
-
-// ============================================================================
-// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, REVERT BY 2026-09-20
-// ----------------------------------------------------------------------------
-// DEADLINE EXTENDED 2026-08-16. Originally due 2026-07-12; it ran five weeks
-// past that date still live in production. Extended by five more weeks by
-// decision on 2026-08-16 because the organizer mobile app release that removes
-// the need for it has not shipped. This is the SECOND deadline. Treat the new
-// date as firm: the longer this sits, the more it reads as permanent.
-//
-// The organizer mobile app has a bug (auth header commented out client-side)
-// that can't be fixed until that release. Until then, GET /api/users/:id
-// falls back to trusting the :id in the URL with NO token at all, IF that
-// account's role is admin/organizer. This is a real IDOR: anyone who has (or
-// guesses) an organizer/admin's Mongo id can read their email/phone/ban
-// status with zero credentials. Customer accounts are NOT exposed by this -
-// only admin/organizer, and only on this one route (PUT/DELETE/list are
-// untouched). Every use of the fallback path is logged below so usage can be
-// audited.
-//
-// BEFORE EXTENDING AGAIN: check the logged fallback hits below. If nothing has
-// hit the no-token path in a while, the app is already sending a credential and
-// this block can simply be deleted rather than extended a third time.
-//
-// A middle option, if the app still cannot send a standard header: delete ONLY
-// the no-token branch at the bottom of this function and keep extractToken(),
-// which already accepts the token from x-access-token, x-auth-token or ?token=.
-// That closes the IDOR while still tolerating a non-standard client.
-//
-// TO REVERT: delete this whole block and the `protectStrictOrTrustParamId`
-// export, then in userRoutes.js change the GET /:id route back to:
-//   router.get('/:id', protect, restrictTo('admin', 'organizer'), userController.getUser);
-// ============================================================================
-const protectStrictOrTrustParamId = async (req, res, next) => {
-  const token = extractToken(req);
-
-  // Token present: behave exactly like the normal, secure `protect` +
-  // restrictTo('admin', 'organizer') pair this route used before the bypass.
-  if (token) {
-    return protect(req, res, (err) => {
-      if (err) return next(err);
-      if (!["admin", "organizer"].includes(req.user.role)) {
-        return res.status(403).json({
-          status: "error",
-          message: "You do not have permission to perform this action",
-        });
-      }
-      next();
-    });
-  }
-
-  // No token at all - TEMPORARY fallback. Trust req.params.id directly.
-  try {
-    let account = await User.findById(req.params.id);
-    if (!account) {
-      account = await Admin.findById(req.params.id);
-    }
-
-    if (!account || !["admin", "organizer"].includes(account.role)) {
-      return next(new UnauthorizedError("Not authorized to access this route"));
-    }
-
-    if (account.isActive === false) {
-      if (account.isBanned) {
-        return next(bannedAccountError(account));
-      }
-      return next(new UnauthorizedError("Account is not active"));
-    }
-
-    console.warn(
-      `TEMP-BYPASS-2026-07-10: unauthenticated ${req.method} ${req.originalUrl} allowed through with no token (role=${account.role}). Remove this bypass by 2026-09-20 (deadline extended 2026-08-16).`
-    );
-
-    req.user = account;
-    next();
-  } catch (error) {
-    return next(new UnauthorizedError("Not authorized to access this route"));
-  }
-};
-// ============================================================================
-// END TEMP-BYPASS-2026-07-10
-// ============================================================================
 
 const restrictTo = (...roles) => {
   return (req, res, next) => {
@@ -305,5 +238,4 @@ module.exports = {
   restrictTo,
   isAdmin,
   requireCapitalEligible,
-  protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };
