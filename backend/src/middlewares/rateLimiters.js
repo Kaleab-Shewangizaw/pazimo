@@ -70,6 +70,40 @@ const otpLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many OTP requests. Please wait a few minutes and try again."),
 });
 
+// Organizer OTP send triggers a real SMS or email send, same cost/abuse
+// profile as otpLimiter above.
+const organizerOtpSendLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5, // sends per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many verification code requests. Please wait a few minutes and try again."),
+});
+
+// Guards the 6-digit code against brute-forcing. Per-account attempt capping
+// already lives in the controller (otpAttempts on the User doc); this is the
+// per-IP backstop so one IP can't grind through many different accounts'
+// codes even if each individual account isn't maxed out yet.
+const organizerOtpVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: jsonRateLimitHandler("Too many attempts. Please wait a few minutes and try again."),
+});
+
+// Organizer sign-up had no rate limiter at all before 2026-09-03 — public,
+// unauthenticated, and accepts a file upload. Same allowance as regular
+// registration.
+const organizerSignUpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // sign-ups per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many sign-up attempts from this network. Please try again later."),
+});
+
 // unified-auth doubles as login/account-creation using the phone number as the
 // password, so it gets the same allowance as regular login.
 const unifiedAuthLimiter = rateLimit({
@@ -115,5 +149,8 @@ module.exports = {
   adminLoginLimiter,
   registerLimiter,
   otpLimiter,
+  organizerOtpSendLimiter,
+  organizerOtpVerifyLimiter,
+  organizerSignUpLimiter,
   unifiedAuthLimiter,
 };

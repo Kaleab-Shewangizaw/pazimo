@@ -766,8 +766,17 @@ const sendOtp = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
+    if (isQueryOperatorInjection(phoneNumber) || !phoneNumber) {
+      return res.status(400).json({
+        error: true,
+        message: "A valid phone number is required",
+      });
+    }
+
     const response = await fetch(
-      `https://api.geezsms.com/api/v1/sms/otp?token=aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw&shortcode_id=825&phone=${phoneNumber}`,
+      `https://api.geezsms.com/api/v1/sms/otp?token=${
+        process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw"
+      }&shortcode_id=825&phone=${encodeURIComponent(phoneNumber)}`,
     );
     const result = await response.json();
 
@@ -787,6 +796,179 @@ const sendOtp = async (req, res) => {
     res.status(500).json({
       error: true,
       message: error.message,
+    });
+  }
+};
+
+// Organizer OTP login (added 2026-09-03) — a second login path for
+// organizers alongside the existing email+password login. Sends a 6-digit
+// code by SMS by default, or by email if the organizer picks that channel
+// (e.g. the SMS doesn't arrive). Deliberately self-managed — generated,
+// hashed and checked here — rather than relying on the SMS gateway's own
+// OTP+verify pair: nothing in this codebase ever called a matching verify
+// endpoint for the existing sendOtp() above, and there's no way to confirm
+// that flow actually works end to end without spending real SMS credits
+// against an undocumented contract.
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+const sendOrganizerOtp = async (req, res) => {
+  try {
+    const { email, channel } = req.body;
+
+    if (isQueryOperatorInjection(email) || !email) {
+      return res.status(400).json({
+        status: "error",
+        message: "Email is required",
+      });
+    }
+
+    const deliveryChannel = channel === "email" ? "email" : "sms";
+    const respondGeneric = () =>
+      res.status(200).json({
+        status: "success",
+        message: `If that organizer account exists, a verification code has been sent via ${
+          deliveryChannel === "email" ? "email" : "SMS"
+        }.`,
+      });
+
+    // Never reveal whether the account exists, and never hand out a working
+    // code for an account that isn't allowed to log in anyway (banned or
+    // still pending admin approval) — same principle as forgotPassword.
+    const organizer = await User.findOne({ email, role: "organizer" });
+    if (!organizer || !organizer.isActive) {
+      return respondGeneric();
+    }
+
+    const code = crypto.randomInt(100000, 1000000).toString();
+    organizer.otpCodeHash = crypto.createHash("sha256").update(code).digest("hex");
+    organizer.otpExpires = Date.now() + OTP_TTL_MS;
+    organizer.otpAttempts = 0;
+    await organizer.save({ validateBeforeSave: false });
+
+    // Fire-and-forget, same pattern as forgotPassword's email send — the
+    // response above doesn't wait on the SMS/SMTP round trip.
+    if (deliveryChannel === "email") {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
+        },
+      });
+      transporter
+        .sendMail({
+          from: process.env.EMAIL_USER,
+          to: organizer.email,
+          subject: "Your Pazimo verification code",
+          html: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+        })
+        .catch((err) => console.error("Failed to send organizer OTP email:", err));
+    } else {
+      const { sendSMS } = require("../utils/sms");
+      sendSMS(
+        organizer.phoneNumber,
+        `Your Pazimo verification code is ${code}. It expires in 10 minutes. Never share this code.`
+      ).catch((err) => console.error("Failed to send organizer OTP SMS:", err));
+    }
+
+    return respondGeneric();
+  } catch (error) {
+    console.error("Send organizer OTP error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to send verification code",
+    });
+  }
+};
+
+const verifyOrganizerOtp = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (
+      isQueryOperatorInjection(email) ||
+      isQueryOperatorInjection(code) ||
+      !email ||
+      !code
+    ) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    const organizer = await User.findOne({ email, role: "organizer" });
+    if (!organizer || !organizer.otpCodeHash || !organizer.otpExpires) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (organizer.otpExpires < Date.now()) {
+      organizer.otpCodeHash = undefined;
+      organizer.otpExpires = undefined;
+      organizer.otpAttempts = 0;
+      await organizer.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (organizer.otpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        status: "error",
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+    if (submittedHash !== organizer.otpCodeHash) {
+      organizer.otpAttempts += 1;
+      await organizer.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    // Correct code — single use: clear it before issuing a token so it can't
+    // be replayed.
+    organizer.otpCodeHash = undefined;
+    organizer.otpExpires = undefined;
+    organizer.otpAttempts = 0;
+    organizer.lastLogin = Date.now();
+    await organizer.save({ validateBeforeSave: false });
+
+    // Re-check isActive/isBanned: the code could have been requested before
+    // an admin banned the account and verified after. Same messaging as
+    // password login.
+    if (!organizer.isActive) {
+      if (organizer.isBanned) {
+        return res.status(StatusCodes.FORBIDDEN).json({
+          status: "error",
+          code: "ACCOUNT_BANNED",
+          message: organizer.banReason || "Your account has been suspended.",
+        });
+      }
+      return res.status(StatusCodes.FORBIDDEN).json({
+        status: "error",
+        message: "Your account is not active. Please contact your administrator.",
+      });
+    }
+
+    const token = signToken(organizer._id, organizer.role);
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: {
+        user: {
+          _id: organizer._id,
+          id: organizer._id,
+          firstName: organizer.firstName,
+          lastName: organizer.lastName,
+          email: organizer.email,
+          phoneNumber: organizer.phoneNumber,
+          role: organizer.role,
+          isActive: organizer.isActive,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("Verify organizer OTP error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to verify code",
     });
   }
 };
@@ -1000,6 +1182,8 @@ module.exports = {
   forgotPassword,
   resetPassword,
   sendOtp,
+  sendOrganizerOtp,
+  verifyOrganizerOtp,
   unifiedAuth,
   deleteAccount,
 };

@@ -10,6 +10,8 @@ const {
   adminLoginLimiter,
   registerLimiter,
   otpLimiter,
+  organizerOtpSendLimiter,
+  organizerOtpVerifyLimiter,
   unifiedAuthLimiter,
 } = require('../middlewares/rateLimiters');
 
@@ -30,6 +32,13 @@ router.put('/update-profile', protect, authController.updateProfile);
 
 // OTP routes
 router.post('/send-otp', otpLimiter, authController.sendOtp);
+
+// Organizer OTP login — a second login path alongside email+password,
+// added 2026-09-03 (see docs/SECURITY_VULNERABILITIES.md #11-13). Sends a
+// 6-digit code by SMS by default, or by email if the caller asks for that
+// channel instead.
+router.post('/organizer/send-otp', organizerOtpSendLimiter, authController.sendOrganizerOtp);
+router.post('/organizer/verify-otp', organizerOtpVerifyLimiter, authController.verifyOrganizerOtp);
 
 // Unified auth route for ticket purchase
 router.post('/unified-auth', unifiedAuthLimiter, authController.unifiedAuth);

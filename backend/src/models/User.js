@@ -90,6 +90,19 @@ const userSchema = new mongoose.Schema(
     ],
     passwordResetToken: String,
     passwordResetExpires: Date,
+    // OTP-based login (organizers only, added 2026-09-03). Same
+    // hash-before-store approach as passwordResetToken — the code itself
+    // never sits in the database in plain form. otpAttempts caps guesses
+    // against the 6-digit code independent of the per-IP rate limiter, since
+    // a shared NAT/proxy IP shouldn't cost a real organizer their remaining
+    // attempts and an attacker with many IPs shouldn't get unlimited guesses
+    // against one account either.
+    otpCodeHash: String,
+    otpExpires: Date,
+    otpAttempts: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
