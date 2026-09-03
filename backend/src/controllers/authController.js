@@ -434,6 +434,29 @@ const login = async (req, res) => {
       });
     }
 
+    // Organizers get a mandatory second factor after the password check —
+    // added 2026-09-04, alongside the standalone "sign in with a code"
+    // path (sendOrganizerOtp/verifyOrganizerOtp). Password proves the
+    // credential; the code proves this request also has the organizer's
+    // phone/email in hand. No token is issued yet — the client completes
+    // the sign-in with POST /api/auth/organizer/verify-otp using the email
+    // below and the code just sent, which is the same endpoint the
+    // standalone flow already uses. The destination always comes from
+    // `user.phoneNumber`/`user.email` on the account just authenticated by
+    // password, never from anything in the request body.
+    if (user.role === "organizer") {
+      const maskedDestination = await generateAndSendOtp(user, "sms");
+      return res.status(StatusCodes.OK).json({
+        status: "success",
+        requiresOtp: true,
+        data: {
+          email: user.email,
+          channel: "sms",
+          maskedDestination,
+        },
+      });
+    }
+
     // Generate token
     const token = signToken(user._id, user.role);
 
@@ -847,6 +870,54 @@ const maskEmailForDisplay = (email) => {
   return `${visible}${"*".repeat(Math.max(name.length - visible.length, 3))}@${domain}`;
 };
 
+// Shared by sendOrganizerOtp (the standalone "sign in with a code" path) and
+// login (the password path's mandatory second factor for organizers, added
+// 2026-09-04). Generates the code, hashes+stores it on the exact user
+// document passed in — never re-looked-up from client input at send time —
+// so the destination is always the one actually on that account, never
+// something a caller could redirect by supplying a different email/phone in
+// the request body.
+const generateAndSendOtp = async (user, channel) => {
+  const code = crypto.randomInt(100000, 1000000).toString();
+  user.otpCodeHash = crypto.createHash("sha256").update(code).digest("hex");
+  user.otpExpires = Date.now() + OTP_TTL_MS;
+  user.otpAttempts = 0;
+  await user.save({ validateBeforeSave: false });
+
+  const maskedDestination =
+    channel === "email"
+      ? maskEmailForDisplay(user.email)
+      : maskPhoneForDisplay(user.phoneNumber);
+
+  // Fire-and-forget, same pattern as forgotPassword's email send — the
+  // caller's response doesn't wait on the SMS/SMTP round trip.
+  if (channel === "email") {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+    transporter
+      .sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Your Pazimo verification code",
+        html: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+      })
+      .catch((err) => console.error("Failed to send OTP email:", err));
+  } else {
+    const { sendSMS } = require("../utils/sms");
+    sendSMS(
+      user.phoneNumber,
+      `Your Pazimo verification code is ${code}. It expires in 10 minutes. Never share this code.`
+    ).catch((err) => console.error("Failed to send OTP SMS:", err));
+  }
+
+  return maskedDestination;
+};
+
 const sendOrganizerOtp = async (req, res) => {
   try {
     const { email, channel } = req.body;
@@ -872,42 +943,7 @@ const sendOrganizerOtp = async (req, res) => {
       });
     }
 
-    const code = crypto.randomInt(100000, 1000000).toString();
-    organizer.otpCodeHash = crypto.createHash("sha256").update(code).digest("hex");
-    organizer.otpExpires = Date.now() + OTP_TTL_MS;
-    organizer.otpAttempts = 0;
-    await organizer.save({ validateBeforeSave: false });
-
-    const maskedDestination =
-      deliveryChannel === "email"
-        ? maskEmailForDisplay(organizer.email)
-        : maskPhoneForDisplay(organizer.phoneNumber);
-
-    // Fire-and-forget, same pattern as forgotPassword's email send — the
-    // response below doesn't wait on the SMS/SMTP round trip.
-    if (deliveryChannel === "email") {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-      transporter
-        .sendMail({
-          from: process.env.EMAIL_USER,
-          to: organizer.email,
-          subject: "Your Pazimo verification code",
-          html: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
-        })
-        .catch((err) => console.error("Failed to send organizer OTP email:", err));
-    } else {
-      const { sendSMS } = require("../utils/sms");
-      sendSMS(
-        organizer.phoneNumber,
-        `Your Pazimo verification code is ${code}. It expires in 10 minutes. Never share this code.`
-      ).catch((err) => console.error("Failed to send organizer OTP SMS:", err));
-    }
+    const maskedDestination = await generateAndSendOtp(organizer, deliveryChannel);
 
     return res.status(200).json({
       status: "success",
