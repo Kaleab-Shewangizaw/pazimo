@@ -820,6 +820,33 @@ const sendOtp = async (req, res) => {
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 
+// Masks a destination for display in the "we sent a code to ___" UI copy.
+// Trade-off, made deliberately: returning this only when the account exists
+// means the send-otp response is no longer perfectly silent about account
+// existence (a caller can tell a real organizer email from a fake one by
+// whether maskedDestination comes back) — narrower than the old fully-generic
+// response, but this exact masked-number UI was asked for directly. Every
+// other property (rate limiting, no code delivered anywhere but the real
+// channel, hashed storage) is unchanged.
+const maskPhoneForDisplay = (phone) => {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D/g, "");
+  const local = digits.startsWith("251")
+    ? "0" + digits.slice(3)
+    : digits.startsWith("0")
+      ? digits
+      : `0${digits}`;
+  if (local.length <= 3) return "*".repeat(local.length);
+  return local.slice(0, 2) + "*".repeat(local.length - 2);
+};
+
+const maskEmailForDisplay = (email) => {
+  if (!email || typeof email !== "string" || !email.includes("@")) return null;
+  const [name, domain] = email.split("@");
+  const visible = name.slice(0, Math.min(2, name.length));
+  return `${visible}${"*".repeat(Math.max(name.length - visible.length, 3))}@${domain}`;
+};
+
 const sendOrganizerOtp = async (req, res) => {
   try {
     const { email, channel } = req.body;
@@ -832,20 +859,17 @@ const sendOrganizerOtp = async (req, res) => {
     }
 
     const deliveryChannel = channel === "email" ? "email" : "sms";
-    const respondGeneric = () =>
-      res.status(200).json({
-        status: "success",
-        message: `If that organizer account exists, a verification code has been sent via ${
-          deliveryChannel === "email" ? "email" : "SMS"
-        }.`,
-      });
 
-    // Never reveal whether the account exists, and never hand out a working
-    // code for an account that isn't allowed to log in anyway (banned or
-    // still pending admin approval) — same principle as forgotPassword.
+    // Never hand out a working code for an account that isn't allowed to log
+    // in anyway (banned or still pending admin approval) — same principle as
+    // forgotPassword. Unlike forgotPassword, "account not found" here isn't
+    // fully hidden — see maskPhoneForDisplay's comment above.
     const organizer = await User.findOne({ email, role: "organizer" });
     if (!organizer || !organizer.isActive) {
-      return respondGeneric();
+      return res.status(404).json({
+        status: "error",
+        message: "No organizer account found with that email.",
+      });
     }
 
     const code = crypto.randomInt(100000, 1000000).toString();
@@ -854,8 +878,13 @@ const sendOrganizerOtp = async (req, res) => {
     organizer.otpAttempts = 0;
     await organizer.save({ validateBeforeSave: false });
 
+    const maskedDestination =
+      deliveryChannel === "email"
+        ? maskEmailForDisplay(organizer.email)
+        : maskPhoneForDisplay(organizer.phoneNumber);
+
     // Fire-and-forget, same pattern as forgotPassword's email send — the
-    // response above doesn't wait on the SMS/SMTP round trip.
+    // response below doesn't wait on the SMS/SMTP round trip.
     if (deliveryChannel === "email") {
       const transporter = nodemailer.createTransport({
         service: "gmail",
@@ -880,7 +909,12 @@ const sendOrganizerOtp = async (req, res) => {
       ).catch((err) => console.error("Failed to send organizer OTP SMS:", err));
     }
 
-    return respondGeneric();
+    return res.status(200).json({
+      status: "success",
+      channel: deliveryChannel,
+      maskedDestination,
+      message: `We sent a verification code to ${maskedDestination}.`,
+    });
   } catch (error) {
     console.error("Send organizer OTP error:", error);
     res.status(500).json({
