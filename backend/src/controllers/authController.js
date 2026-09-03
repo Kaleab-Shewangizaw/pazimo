@@ -4,6 +4,9 @@ const Admin = require("../models/Admin");
 const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
 const { isPhoneBanned } = require("../utils/fraudGuard");
+const { normalizePhone } = require("../utils/phone");
+const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
+const { stripAngleBrackets } = require("../utils/stripHtml");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
@@ -14,324 +17,6 @@ const signToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
-};
-
-// Configure nodemailer
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-};
-
-// Forgot Password
-// const forgotPassword = async (req, res) => {
-//   try {
-//     const { email } = req.body;
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(StatusCodes.NOT_FOUND).json({
-//         status: 'error',
-//         message: 'No user found with that email address'
-//       });
-//     }
-
-//     // Generate reset token
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-//     const passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-
-//     user.passwordResetToken = passwordResetToken;
-//     user.passwordResetExpires = passwordResetExpires;
-//     await user.save({ validateBeforeSave: false });
-
-//     // Send email
-//     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-//     const transporter = createTransporter();
-//     const mailOptions = {
-//       from: process.env.EMAIL_USER,
-//       to: user.email,
-//       subject: 'Password Reset Request',
-//       html: `
-//         <h2>Password Reset Request</h2>
-//         <p>You requested a password reset. Click the link below to reset your password:</p>
-//         <a href="${resetURL}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
-//         <p>This link will expire in 10 minutes.</p>
-//         <p>If you didn't request this, please ignore this email.</p>
-//       `
-//     };
-
-//     await transporter.sendMail(mailOptions);
-
-//     res.status(StatusCodes.OK).json({
-//       status: 'success',
-//       message: 'Password reset email sent successfully'
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// Forgot Password - NO EMAIL VERSION
-// const forgotPassword = async (req, res) => {
-//   try {
-//     const { email } = req.body;
-
-//     console.log('Forgot password request for:', email);
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(404).json({
-//         status: 'error',
-//         message: 'No user found with that email address'
-//       });
-//     }
-
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-//     const passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-//     user.passwordResetToken = passwordResetToken;
-//     user.passwordResetExpires = passwordResetExpires;
-//     await user.save({ validateBeforeSave: false });
-
-//     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-//     // Just log the URL - NO EMAIL SENDING
-//     console.log('=================================');
-//     console.log('PASSWORD RESET URL:', resetURL);
-//     console.log('=================================');
-
-//     res.status(200).json({
-//       status: 'success',
-//       message: 'Password reset link generated (check console)',
-//       resetURL: resetURL // For testing only
-//     });
-//   } catch (error) {
-//     console.error('Forgot password error:', error);
-//     res.status(500).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// Forgot Password - WITH EMAIL SENDING
-// const forgotPassword = async (req, res) => {
-//   try {
-//     const { email } = req.body;
-
-//     console.log('Forgot password request for:', email);
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(404).json({
-//         status: 'error',
-//         message: 'No user found with that email address'
-//       });
-//     }
-
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-//     const passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-//     user.passwordResetToken = passwordResetToken;
-//     user.passwordResetExpires = passwordResetExpires;
-//     await user.save({ validateBeforeSave: false });
-
-//     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-//     // Send email using Ethereal
-//     const testAccount = await nodemailer.createTestAccount();
-//     const transporter = nodemailer.createTransport({
-//       host: 'smtp.ethereal.email',
-//       port: 587,
-//       secure: false,
-//       auth: {
-//         user: testAccount.user,
-//         pass: testAccount.pass,
-//       },
-//     });
-
-//     const mailOptions = {
-//       from: 'noreply@yourapp.com',
-//       to: user.email,
-//       subject: 'Password Reset Request',
-//       html: `
-//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-//           <h2 style="color: #333;">Password Reset Request</h2>
-//           <p>Hello ${user.firstName},</p>
-//           <p>You requested a password reset. Click the button below to reset your password:</p>
-//           <div style="text-align: center; margin: 30px 0;">
-//             <a href="${resetURL}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-//           </div>
-//           <p>Or copy and paste this link in your browser:</p>
-//           <p style="word-break: break-all; color: #007bff;">${resetURL}</p>
-//           <p><strong>This link will expire in 10 minutes.</strong></p>
-//           <p>If you didn't request this, please ignore this email.</p>
-//         </div>
-//       `
-//     };
-
-//     const info = await transporter.sendMail(mailOptions);
-
-//     // Log preview URL for testing
-//     console.log('=================================');
-//     console.log('EMAIL PREVIEW URL:', nodemailer.getTestMessageUrl(info));
-//     console.log('=================================');
-
-//     res.status(200).json({
-//       status: 'success',
-//       message: 'Password reset email sent successfully',
-//       previewURL: nodemailer.getTestMessageUrl(info) // For testing only
-//     });
-//   } catch (error) {
-//     console.error('Forgot password error:', error);
-//     res.status(500).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-// Forgot Password - WITH REAL GMAIL
-const forgotPassword = async (req, res) => {
-  try {
-    const { email } = req.body;
-
-    console.log("Forgot password request for:", email);
-
-    const user = await User.findOne({ email });
-    // Always return 200 — never reveal whether the email exists
-    if (!user) {
-      return res.status(200).json({
-        status: "success",
-        message: "If that email is registered, a reset link has been sent.",
-      });
-    }
-
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const passwordResetToken = crypto
-      .createHash("sha256")
-      .update(resetToken)
-      .digest("hex");
-    const passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-    user.passwordResetToken = passwordResetToken;
-    user.passwordResetExpires = passwordResetExpires;
-    await user.save({ validateBeforeSave: false });
-
-    const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-    // Use Gmail
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Password Reset Request - PAZ",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #333; text-align: center;">Password Reset Request</h2>
-          <p>Hello ${user.firstName},</p>
-          <p>You requested a password reset for your PAZ account. Click the button below to reset your password:</p>
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${resetURL}" style="background-color: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
-          </div>
-          <p>Or copy and paste this link in your browser:</p>
-          <p style="word-break: break-all; color: #007bff; background: #f5f5f5; padding: 10px; border-radius: 5px;">${resetURL}</p>
-          <p><strong>This link will expire in 10 minutes.</strong></p>
-          <p>If you didn't request this password reset, please ignore this email.</p>
-          <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-          <p style="color: #666; font-size: 12px;">This email was sent from PAZ Event Management System.</p>
-        </div>
-      `,
-    };
-
-    // Send response immediately
-    res.status(200).json({
-      status: "success",
-      message: "Password reset email sent successfully",
-    });
-
-    // Send email in background
-    setImmediate(async () => {
-      try {
-        await transporter.sendMail(mailOptions);
-      } catch (emailError) {
-        console.error("Failed to send email:", emailError);
-      }
-    });
-  } catch (error) {
-    console.error("Forgot password error:", error);
-    res.status(500).json({
-      status: "error",
-      message: error.message,
-    });
-  }
-};
-
-// Reset Password
-const resetPassword = async (req, res) => {
-  try {
-    const { token, password } = req.body;
-
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
-    const user = await User.findOne({
-      passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() },
-    });
-
-    if (!user) {
-      return res.status(StatusCodes.BAD_REQUEST).json({
-        status: "error",
-        message: "Token is invalid or has expired",
-      });
-    }
-
-    user.password = password;
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
-    await user.save();
-
-    const authToken = signToken(user._id, user.role);
-
-    res.status(StatusCodes.OK).json({
-      status: "success",
-      message: "Password reset successfully",
-      data: {
-        user: {
-          _id: user._id,
-          id: user._id,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
-          role: user.role,
-        },
-        token: authToken,
-      },
-    });
-  } catch (error) {
-    res.status(StatusCodes.BAD_REQUEST).json({
-      status: "error",
-      message: error.message,
-    });
-  }
 };
 
 // Register user
@@ -351,7 +36,14 @@ const register = async (req, res) => {
       });
     }
 
-    const user = await User.create({ email, password, firstName, lastName, phoneNumber, role: 'customer' });
+    const user = await User.create({
+      email,
+      password,
+      firstName: stripAngleBrackets(firstName),
+      lastName: stripAngleBrackets(lastName),
+      phoneNumber,
+      role: 'customer',
+    });
     const token = signToken(user._id, user.role);
 
     res.status(StatusCodes.CREATED).json({
@@ -382,6 +74,13 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // See rejectQueryOperators.js: email/password must be plain strings
+    // before either reaches a query or bcrypt, or a query-operator object
+    // (e.g. `{"$ne": null}`) turns the lookup into "match any account".
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(password)) {
+      throw new UnauthorizedError("Invalid credentials");
+    }
+
     // Find user
     const user = await User.findOne({ email }).select("+password");
     if (!user) {
@@ -408,6 +107,29 @@ const login = async (req, res) => {
       return res.status(StatusCodes.FORBIDDEN).json({
         status: "error",
         message: "Your account is not active. Please contact your administrator.",
+      });
+    }
+
+    // Organizers get a mandatory second factor after the password check —
+    // added 2026-09-04, alongside the standalone "sign in with a code"
+    // path (sendOrganizerOtp/verifyOrganizerOtp). Password proves the
+    // credential; the code proves this request also has the organizer's
+    // phone/email in hand. No token is issued yet — the client completes
+    // the sign-in with POST /api/auth/organizer/verify-otp using the email
+    // below and the code just sent, which is the same endpoint the
+    // standalone flow already uses. The destination always comes from
+    // `user.phoneNumber`/`user.email` on the account just authenticated by
+    // password, never from anything in the request body.
+    if (user.role === "organizer") {
+      const maskedDestination = await generateAndSendOtp(user, "sms");
+      return res.status(StatusCodes.OK).json({
+        status: "success",
+        requiresOtp: true,
+        data: {
+          email: user.email,
+          channel: "sms",
+          maskedDestination,
+        },
       });
     }
 
@@ -557,6 +279,65 @@ const updateProfile = async (req, res) => {
   }
 };
 
+// Claims/changes the caller's Telegram-style @username, used for exact-match
+// recipient search when sharing a ticket (see ticketShareService). Format is
+// enforced again here even though the schema already validates it, so a bad
+// value is rejected with a clear message instead of the generic Mongoose
+// ValidationError text.
+const updateUsername = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const username = String(req.body.username || "").trim().toLowerCase();
+
+    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Username must be 3-20 characters and contain only lowercase letters, numbers and underscores",
+      });
+    }
+
+    const taken = await User.findOne({
+      username,
+      _id: { $ne: req.user._id },
+    }).select("_id");
+    if (taken) {
+      return res.status(409).json({
+        status: "error",
+        message: "That username is already taken",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { username },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    res.status(200).json({
+      status: "success",
+      data: user,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        status: "error",
+        message: "That username is already taken",
+      });
+    }
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
 // Add new method to update phone number
 const updatePhoneNumber = async (req, res) => {
   try {
@@ -665,6 +446,15 @@ const adminLogin = async (req, res) => {
       });
     }
 
+    // See rejectQueryOperators.js — this is the query that guards the single
+    // admin account, so it gets the same string-only check as the others.
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(password)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Please provide email and password",
+      });
+    }
+
     // Admins live exclusively in the Admin collection - there is no API that
     // creates one, so this is the only account type that can ever match here.
     const admin = await Admin.findOne({ email }).select("+password");
@@ -742,8 +532,17 @@ const sendOtp = async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
+    if (isQueryOperatorInjection(phoneNumber) || !phoneNumber) {
+      return res.status(400).json({
+        error: true,
+        message: "A valid phone number is required",
+      });
+    }
+
     const response = await fetch(
-      `https://api.geezsms.com/api/v1/sms/otp?token=aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw&shortcode_id=825&phone=${phoneNumber}`,
+      `https://api.geezsms.com/api/v1/sms/otp?token=${
+        process.env.GEEZSMS_API_KEY || "aL1wTWYrFKag3XVOP4iuQ6KNRIK283nw"
+      }&shortcode_id=825&phone=${encodeURIComponent(phoneNumber)}`,
     );
     const result = await response.json();
 
@@ -767,13 +566,555 @@ const sendOtp = async (req, res) => {
   }
 };
 
+// Organizer OTP login (added 2026-09-03) — a second login path for
+// organizers alongside the existing email+password login. Sends a 6-digit
+// code by SMS by default, or by email if the organizer picks that channel
+// (e.g. the SMS doesn't arrive). Deliberately self-managed — generated,
+// hashed and checked here — rather than relying on the SMS gateway's own
+// OTP+verify pair: nothing in this codebase ever called a matching verify
+// endpoint for sendOtp() above, and there's no way to confirm that flow
+// actually works end to end without spending real SMS credits against an
+// undocumented contract.
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+// Masks a destination for display in the "we sent a code to ___" UI copy.
+// Trade-off, made deliberately: returning this only when the account exists
+// means the send-otp response is no longer perfectly silent about account
+// existence (a caller can tell a real organizer email from a fake one by
+// whether maskedDestination comes back) — narrower than the old fully-generic
+// response, but this exact masked-number UI was asked for directly. Every
+// other property (rate limiting, no code delivered anywhere but the real
+// channel, hashed storage) is unchanged.
+// International format with both ends visible — "+2519******44" — per
+// direct request 2026-09-04 (was local format, first 2 digits only).
+const maskPhoneForDisplay = (phone) => {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D/g, "");
+  const subscriber = digits.startsWith("251")
+    ? digits.slice(3)
+    : digits.startsWith("0")
+      ? digits.slice(1)
+      : digits;
+  if (!subscriber) return null;
+  if (subscriber.length <= 4) return "+251" + "*".repeat(subscriber.length);
+  const first = subscriber.slice(0, 1);
+  const last = subscriber.slice(-2);
+  const middle = "*".repeat(subscriber.length - 3);
+  return `+251${first}${middle}${last}`;
+};
+
+const maskEmailForDisplay = (email) => {
+  if (!email || typeof email !== "string" || !email.includes("@")) return null;
+  const [name, domain] = email.split("@");
+  const visible = name.slice(0, Math.min(2, name.length));
+  return `${visible}${"*".repeat(Math.max(name.length - visible.length, 3))}@${domain}`;
+};
+
+// Which User fields a code is written to, keyed by what the code is proving.
+// "login" (organizer sign-in, both the standalone code path and the
+// password path's mandatory second factor) and "reset" (forgot-password,
+// added 2026-09-03) are kept in entirely separate fields so a code issued
+// for one purpose can never be replayed against the other's verify
+// endpoint — a leaked/guessed reset code can't be used to sign in, and a
+// sign-in code can't be used to change the password.
+const OTP_FIELDS_BY_PURPOSE = {
+  login: { hash: "otpCodeHash", expires: "otpExpires", attempts: "otpAttempts" },
+  reset: { hash: "resetOtpCodeHash", expires: "resetOtpExpires", attempts: "resetOtpAttempts" },
+};
+
+// Shared by sendOrganizerOtp (the standalone "sign in with a code" path),
+// login (the password path's mandatory second factor for organizers, added
+// 2026-09-04), and the forgot-password flow below. Generates the code,
+// hashes+stores it on the exact user document passed in — never re-looked-up
+// from client input at send time — so the destination is always the one
+// actually on that account, never something a caller could redirect by
+// supplying a different email/phone in the request body.
+const generateAndSendOtp = async (user, channel, purpose = "login") => {
+  const fields = OTP_FIELDS_BY_PURPOSE[purpose];
+  const code = crypto.randomInt(100000, 1000000).toString();
+  user[fields.hash] = crypto.createHash("sha256").update(code).digest("hex");
+  user[fields.expires] = Date.now() + OTP_TTL_MS;
+  user[fields.attempts] = 0;
+  await user.save({ validateBeforeSave: false });
+
+  const maskedDestination =
+    channel === "email"
+      ? maskEmailForDisplay(user.email)
+      : maskPhoneForDisplay(user.phoneNumber);
+
+  // SMS wording below is explicit "PAZIMO OTP:" / "Do not share it with
+  // anyone" per direct request 2026-09-04 — NOTE this is close to the exact
+  // phrasing confirmed EARLIER THE SAME DAY to be accepted by GeezSMS
+  // (dashboard shows "Sent") but never delivered to the handset, while the
+  // ticket-confirmation-style wording this replaced was confirmed to
+  // deliver. Re-test actual phone delivery after this ships — don't trust
+  // "Sent" status alone. If it silently stops arriving again, reverting to
+  // the ticket-style phrasing (git history) is the known-working fallback.
+  const copy =
+    purpose === "reset"
+      ? {
+          emailSubject: "Your Pazimo password reset code",
+          emailHtml: `<p>Your Pazimo password reset code is <strong>${code}</strong>. It expires in 10 minutes. If you didn't request this, you can ignore this message — your password won't change unless this code is used.</p>`,
+          sms: `PAZIMO OTP: ${code}\nUse this code to reset your organizer account password. Do not share it with anyone.`,
+        }
+      : {
+          emailSubject: "Your Pazimo verification code",
+          emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+          sms: `PAZIMO OTP: ${code}\nUse this code to sign in to your organizer account. Do not share it with anyone.`,
+        };
+
+  // Fire-and-forget — the caller's response doesn't wait on the SMTP round
+  // trip. Zoho (smtp.zoho.com), same transporter shape as
+  // ticketConfirmationEmail.js/invitationEmailController.js/contactController.js,
+  // not the old ad-hoc Gmail account: a verification code should come from
+  // admin@pazimo.com, not a personal-looking Gmail address.
+  if (channel === "email") {
+    if (!process.env.EMAIL_USER_ZOHO || !process.env.EMAIL_PASS_ZOHO) {
+      console.error(`Failed to send ${purpose} OTP email: EMAIL_USER_ZOHO/EMAIL_PASS_ZOHO env vars are required`);
+    } else {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.zoho.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.EMAIL_USER_ZOHO,
+          pass: process.env.EMAIL_PASS_ZOHO,
+        },
+      });
+      transporter
+        .sendMail({
+          from: `Pazimo <${process.env.EMAIL_USER_ZOHO}>`,
+          to: user.email,
+          subject: copy.emailSubject,
+          html: copy.emailHtml,
+        })
+        .catch((err) => console.error(`Failed to send ${purpose} OTP email:`, err));
+    }
+  } else {
+    // Worded like the ticket-confirmation SMS (name, emoji, "Pazimo" sign-off)
+    // rather than explicit "verification code"/OTP language — messages in
+    // that literal OTP phrasing were confirmed accepted by the gateway
+    // (dashboard shows "Sent") but never reached the handset, while
+    // ticket-style messages to the same number reliably do. Found
+    // 2026-09-04; presumed carrier-side OTP-content filtering distinct from
+    // GeezSMS's own anti-spam check (which requires the code to be
+    // explained, not that it avoid the word "verification" — this still
+    // satisfies that).
+    const { sendSMS } = require("../utils/sms");
+    sendSMS(user.phoneNumber, copy.sms).catch((err) =>
+      console.error(`Failed to send ${purpose} OTP SMS:`, err)
+    );
+  }
+
+  return maskedDestination;
+};
+
+const sendOrganizerOtp = async (req, res) => {
+  try {
+    const { email, channel } = req.body;
+
+    if (isQueryOperatorInjection(email) || !email) {
+      return res.status(400).json({
+        status: "error",
+        message: "Email is required",
+      });
+    }
+
+    const deliveryChannel = channel === "email" ? "email" : "sms";
+
+    // Never hand out a working code for an account that isn't allowed to log
+    // in anyway (banned or still pending admin approval) — same principle as
+    // forgotPassword. Unlike forgotPassword, "account not found" here isn't
+    // fully hidden — see maskPhoneForDisplay's comment above.
+    const organizer = await User.findOne({ email, role: "organizer" });
+    if (!organizer || !organizer.isActive) {
+      return res.status(404).json({
+        status: "error",
+        message: "No organizer account found with that email.",
+      });
+    }
+
+    const maskedDestination = await generateAndSendOtp(organizer, deliveryChannel);
+
+    return res.status(200).json({
+      status: "success",
+      channel: deliveryChannel,
+      maskedDestination,
+      message: `We sent a verification code to ${maskedDestination}.`,
+    });
+  } catch (error) {
+    console.error("Send organizer OTP error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to send verification code",
+    });
+  }
+};
+
+const verifyOrganizerOtp = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (
+      isQueryOperatorInjection(email) ||
+      isQueryOperatorInjection(code) ||
+      !email ||
+      !code
+    ) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    const organizer = await User.findOne({ email, role: "organizer" });
+    if (!organizer || !organizer.otpCodeHash || !organizer.otpExpires) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (organizer.otpExpires < Date.now()) {
+      organizer.otpCodeHash = undefined;
+      organizer.otpExpires = undefined;
+      organizer.otpAttempts = 0;
+      await organizer.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (organizer.otpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        status: "error",
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+    if (submittedHash !== organizer.otpCodeHash) {
+      organizer.otpAttempts += 1;
+      await organizer.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    // Correct code — single use: clear it before issuing a token so it can't
+    // be replayed.
+    organizer.otpCodeHash = undefined;
+    organizer.otpExpires = undefined;
+    organizer.otpAttempts = 0;
+    organizer.lastLogin = Date.now();
+    await organizer.save({ validateBeforeSave: false });
+
+    // Re-check isActive/isBanned: the code could have been requested before
+    // an admin banned the account and verified after. Same messaging as
+    // password login.
+    if (!organizer.isActive) {
+      if (organizer.isBanned) {
+        return res.status(StatusCodes.FORBIDDEN).json({
+          status: "error",
+          code: "ACCOUNT_BANNED",
+          message: organizer.banReason || "Your account has been suspended.",
+        });
+      }
+      return res.status(StatusCodes.FORBIDDEN).json({
+        status: "error",
+        message: "Your account is not active. Please contact your administrator.",
+      });
+    }
+
+    const token = signToken(organizer._id, organizer.role);
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: {
+        user: {
+          _id: organizer._id,
+          id: organizer._id,
+          firstName: organizer.firstName,
+          lastName: organizer.lastName,
+          email: organizer.email,
+          phoneNumber: organizer.phoneNumber,
+          role: organizer.role,
+          isActive: organizer.isActive,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("Verify organizer OTP error:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to verify code",
+    });
+  }
+};
+
+// Looks a user up by email or phone number — whichever the caller typed
+// into the single "email or phone" field on the forgot-password form. "@"
+// present means email; otherwise it's normalized as a phone number the same
+// way ticketShareService.searchRecipients does exact-match phone search, so
+// "0912345678"/"+251912345678"/"251912345678" all resolve to the same
+// account. roleFilter narrows to one role (organizer) when given; without
+// it, a phone shared by more than one role (see the phoneNumber+role
+// compound index on User) resolves to whichever Mongo returns first — an
+// acceptable ambiguity here since the caller still has to prove ownership of
+// that phone/email via the code before anything happens to the account.
+const findUserByIdentifier = async (identifier, roleFilter) => {
+  const value = String(identifier || "").trim();
+  if (!value) return null;
+
+  const query = roleFilter ? { role: roleFilter } : {};
+  if (value.includes("@")) {
+    query.email = value.toLowerCase();
+  } else {
+    const normalized = normalizePhone(value);
+    if (!normalized) return null;
+    query.normalizedPhone = normalized;
+  }
+  return User.findOne(query);
+};
+
+// Forgot password (added 2026-09-03) — same code+channel OTP mechanism as
+// the organizer sign-in OTP above, spent on a password change instead of a
+// login. Shared by forgotPassword (any role on the User model) and
+// organizerForgotPassword (role: "organizer" only); roleFilter is the only
+// difference between the two. Like sendOrganizerOtp, "account not found"
+// isn't fully hidden here — see that function's comment for why the
+// masked-destination UX makes that trade-off worthwhile.
+const sendPasswordResetCode = async (req, res, roleFilter) => {
+  const { identifier, channel } = req.body;
+  const deliveryChannel = channel === "email" ? "email" : "sms";
+
+  if (isQueryOperatorInjection(identifier) || !identifier) {
+    return res.status(400).json({ status: "error", message: "Email or phone number is required" });
+  }
+
+  const user = await findUserByIdentifier(identifier, roleFilter);
+  if (!user || !user.isActive) {
+    return res.status(404).json({
+      status: "error",
+      message:
+        roleFilter === "organizer"
+          ? "No organizer account found with that email or phone number."
+          : "No account found with that email or phone number.",
+    });
+  }
+
+  const maskedDestination = await generateAndSendOtp(user, deliveryChannel, "reset");
+
+  return res.status(200).json({
+    status: "success",
+    channel: deliveryChannel,
+    maskedDestination,
+    message: `We sent a password reset code to ${maskedDestination}.`,
+  });
+};
+
+const forgotPassword = async (req, res) => {
+  try {
+    await sendPasswordResetCode(req, res, null);
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({ status: "error", message: "Failed to send reset code" });
+  }
+};
+
+const organizerForgotPassword = async (req, res) => {
+  try {
+    await sendPasswordResetCode(req, res, "organizer");
+  } catch (error) {
+    console.error("Organizer forgot password error:", error);
+    res.status(500).json({ status: "error", message: "Failed to send reset code" });
+  }
+};
+
+// Checks a submitted reset code against the account found by identifier —
+// shared by verifyResetCode (the standalone "is this code right?" checkpoint
+// the frontend calls before showing the change-password screen) and
+// resetPasswordWithCode (the final submit). Mirrors verifyOrganizerOtp's
+// expiry/attempt-capping checks. On success the code is deliberately left
+// in place (not cleared) — see verifyResetCode below for why — so the
+// caller decides what happens next; only resetPasswordWithCode ever clears
+// it. Writes the error response itself and returns { ok: false } on any
+// failure, so callers just do `if (!result.ok) return;`.
+const checkResetCode = async (req, res, roleFilter) => {
+  const { identifier, code } = req.body;
+
+  if (
+    isQueryOperatorInjection(identifier) ||
+    isQueryOperatorInjection(code) ||
+    !identifier ||
+    !code
+  ) {
+    res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    return { ok: false };
+  }
+
+  const user = await findUserByIdentifier(identifier, roleFilter);
+  if (!user || !user.resetOtpCodeHash || !user.resetOtpExpires) {
+    res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    return { ok: false };
+  }
+
+  // Re-check isActive/isBanned before spending an attempt: the account could
+  // have been banned after the code was sent. Same messaging as login.
+  if (!user.isActive) {
+    if (user.isBanned) {
+      res.status(StatusCodes.FORBIDDEN).json({
+        status: "error",
+        code: "ACCOUNT_BANNED",
+        message: user.banReason || "Your account has been suspended.",
+      });
+    } else {
+      res.status(StatusCodes.FORBIDDEN).json({
+        status: "error",
+        message: "Your account is not active. Please contact your administrator.",
+      });
+    }
+    return { ok: false };
+  }
+
+  if (user.resetOtpExpires < Date.now()) {
+    user.resetOtpCodeHash = undefined;
+    user.resetOtpExpires = undefined;
+    user.resetOtpAttempts = 0;
+    await user.save({ validateBeforeSave: false });
+    res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    return { ok: false };
+  }
+
+  if (user.resetOtpAttempts >= OTP_MAX_ATTEMPTS) {
+    res.status(429).json({
+      status: "error",
+      message: "Too many incorrect attempts. Request a new code.",
+    });
+    return { ok: false };
+  }
+
+  const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+  if (submittedHash !== user.resetOtpCodeHash) {
+    user.resetOtpAttempts += 1;
+    await user.save({ validateBeforeSave: false });
+    res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    return { ok: false };
+  }
+
+  return { ok: true, user };
+};
+
+// Standalone verify step (added 2026-09-05): the frontend calls this right
+// after the user types the code, so it only advances to the change-password
+// screen once the code is actually confirmed correct — "once they got it
+// right" — instead of finding out at the final submit. Deliberately does
+// NOT clear resetOtpCodeHash on success: the code stays valid so the change-
+// password screen's later call to resetPasswordWithCode can check it again
+// without asking the user to retype it. It does reset the attempt counter,
+// so a mistyped code corrected here doesn't carry a stale count forward.
+const verifyResetCode = async (req, res, roleFilter) => {
+  const result = await checkResetCode(req, res, roleFilter);
+  if (!result.ok) return;
+
+  result.user.resetOtpAttempts = 0;
+  await result.user.save({ validateBeforeSave: false });
+  res.status(200).json({ status: "success", message: "Code verified" });
+};
+
+// Sets the new password once verifyResetCode has already confirmed the code
+// server-side. Mirrors verifyOrganizerOtp/resetPassword's "single use" rule:
+// the code is cleared here, together with setting the password, so it can
+// never be replayed after this point (from either this endpoint or a second
+// call to verifyResetCode). Same "sign in immediately" behavior as the old
+// email-link reset used to have.
+const resetPasswordWithCode = async (req, res, roleFilter) => {
+  const { newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({
+      status: "error",
+      message: "Password must be at least 6 characters long",
+    });
+  }
+
+  const result = await checkResetCode(req, res, roleFilter);
+  if (!result.ok) return;
+  const user = result.user;
+
+  user.resetOtpCodeHash = undefined;
+  user.resetOtpExpires = undefined;
+  user.resetOtpAttempts = 0;
+  user.password = newPassword;
+  await user.save();
+
+  const token = signToken(user._id, user.role);
+  return res.status(200).json({
+    status: "success",
+    message: "Password reset successfully",
+    data: {
+      user: {
+        _id: user._id,
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+      },
+      token,
+    },
+  });
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    await resetPasswordWithCode(req, res, null);
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+const organizerResetPassword = async (req, res) => {
+  try {
+    await resetPasswordWithCode(req, res, "organizer");
+  } catch (error) {
+    console.error("Organizer reset password error:", error);
+    res.status(500).json({ status: "error", message: error.message });
+  }
+};
+
+const verifyPasswordResetCode = async (req, res) => {
+  try {
+    await verifyResetCode(req, res, null);
+  } catch (error) {
+    console.error("Verify reset code error:", error);
+    res.status(500).json({ status: "error", message: "Failed to verify code" });
+  }
+};
+
+const organizerVerifyResetCode = async (req, res) => {
+  try {
+    await verifyResetCode(req, res, "organizer");
+  } catch (error) {
+    console.error("Organizer verify reset code error:", error);
+    res.status(500).json({ status: "error", message: "Failed to verify code" });
+  }
+};
+
 // Unified auth for ticket purchase
 const unifiedAuth = async (req, res) => {
   try {
     const { fullName, email, phoneNumber } = req.body;
 
-    console.log("=== UNIFIED AUTH DEBUG ===");
-    console.log("Request body:", { fullName, email, phoneNumber });
+    // phoneNumber/email feed straight into User.find()/findOne() filters
+    // below. Mongoose does not reject a query-operator object (e.g.
+    // `{"$ne": null}`, `{"$regex": "^09"}`) on a String path, so without this
+    // check a crafted JSON body turns "find this phone number" into "find any
+    // phone number" — a full, passwordless login-as-arbitrary-user. Confirmed
+    // exploited against a real account on 2026-09-03; see rejectQueryOperators.js.
+    if (
+      isQueryOperatorInjection(phoneNumber) ||
+      isQueryOperatorInjection(email) ||
+      isQueryOperatorInjection(fullName)
+    ) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid request",
+      });
+    }
 
     // Validate required fields
     if (!fullName || !phoneNumber) {
@@ -797,8 +1138,8 @@ const unifiedAuth = async (req, res) => {
       });
     }
 
-    const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(" ") || ""; // Optional last name
+    const firstName = stripAngleBrackets(nameParts[0]);
+    const lastName = stripAngleBrackets(nameParts.slice(1).join(" ")) || ""; // Optional last name
 
     // 1. Find ALL users with this phone number
     const usersByPhone = await User.find({ phoneNumber });
@@ -956,12 +1297,19 @@ module.exports = {
   getMe,
   updatePassword,
   updateProfile,
+  updateUsername,
   updatePhoneNumber,
   verifyPhoneNumber,
   adminLogin,
   forgotPassword,
   resetPassword,
+  verifyPasswordResetCode,
+  organizerForgotPassword,
+  organizerResetPassword,
+  organizerVerifyResetCode,
   sendOtp,
+  sendOrganizerOtp,
+  verifyOrganizerOtp,
   unifiedAuth,
   deleteAccount,
 };

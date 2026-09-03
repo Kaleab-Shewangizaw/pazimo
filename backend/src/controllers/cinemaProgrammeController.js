@@ -10,6 +10,7 @@ const { BadRequestError, NotFoundError } = require("../errors");
 const { resolveCinema } = require("../utils/cinemaAccess");
 const { extractShortIdFromEventSlug } = require("../utils/eventUrl");
 const { eatDateKey, eatDayBounds } = require("../services/platformFeeService");
+const { fetchImdbMetadata } = require("../services/imdbService");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -89,10 +90,10 @@ const parseDate = (value, label) => {
   return date;
 };
 
-// Genres arrive as a JSON array from the dashboard and as a comma-separated
-// string from a multipart form. Both are accepted rather than forcing one shape
-// on the client.
-const parseGenres = (value) => {
+// Genres and cast both arrive as a JSON array from the dashboard and as a
+// comma-separated string from a multipart form. Both are accepted rather than
+// forcing one shape on the client.
+const parseStringList = (value) => {
   if (value === undefined) return undefined;
   if (Array.isArray(value)) return value.map((g) => String(g).trim()).filter(Boolean);
   if (typeof value === "string") {
@@ -156,6 +157,24 @@ const listMovies = async (req, res) => {
   }
 };
 
+// A lookup, not a write: it hands back what IMDb (via OMDb) has on the film
+// so the dashboard form can prefill itself, and the organizer still submits
+// through the normal create/update endpoint — reviewing and editing whatever
+// came back — rather than this endpoint ever touching CinemaMovie itself.
+const importFromImdb = async (req, res) => {
+  try {
+    const link = normalizeText(req.body.imdbUrl || req.body.url || req.body.imdbId);
+    if (!link) throw new BadRequestError("Paste an IMDb link or id first");
+
+    const data = await fetchImdbMetadata(link);
+    res.status(StatusCodes.OK).json({ success: true, data });
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error importing from IMDb:", error);
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 const createMovie = async (req, res) => {
   try {
     const cinema = await resolveCinema(req, req.params.cinemaId);
@@ -183,7 +202,8 @@ const createMovie = async (req, res) => {
       poster: uploadedPath(req, "poster") ?? null,
       coverImage: uploadedPath(req, "coverImage") ?? null,
       durationMinutes,
-      genre: parseGenres(req.body.genre) || [],
+      genre: parseStringList(req.body.genre) || [],
+      cast: parseStringList(req.body.cast) || [],
       language: normalizeText(req.body.language),
       subtitles: normalizeText(req.body.subtitles),
       ageRating: normalizeText(req.body.ageRating),
@@ -244,8 +264,11 @@ const updateMovie = async (req, res) => {
     const status = parseStatus(req.body.status);
     if (status !== undefined) movie.status = status;
 
-    const genres = parseGenres(req.body.genre);
+    const genres = parseStringList(req.body.genre);
     if (genres !== undefined) movie.genre = genres;
+
+    const cast = parseStringList(req.body.cast);
+    if (cast !== undefined) movie.cast = cast;
 
     if (durationChanged) {
       const durationMinutes = Number(req.body.durationMinutes);
@@ -901,6 +924,7 @@ const getPublicMovie = async (req, res) => {
           coverImage: movie.coverImage,
           durationMinutes: movie.durationMinutes,
           genre: movie.genre,
+          cast: movie.cast,
           language: movie.language,
           subtitles: movie.subtitles,
           ageRating: movie.ageRating,
@@ -1591,6 +1615,7 @@ const listPublicMovies = async (req, res) => {
 
 module.exports = {
   listMovies,
+  importFromImdb,
   createMovie,
   updateMovie,
   deleteMovie,

@@ -81,13 +81,18 @@ export default function ClientLayout({
   const hasHydrated = authHydrated && adminHydrated;
 
   useEffect(() => {
-    if (!isOrganizerRoute || !hasHydrated) return;
+    // isSignInOrSignUp must be exempted here too, not just in the render
+    // branch below — without it, this effect redirected every unauthenticated
+    // visitor away from /organizer/sign-in (and /sign-up) before they could
+    // ever see it, straight to the generic /sign-in page instead. Found
+    // 2026-09-03 while wiring up organizer OTP login on this exact page.
+    if (!isOrganizerRoute || !hasHydrated || isSignInOrSignUp) return;
     if (!canAccessOrganizerArea) {
       toast.error("Please login to access organizer features");
       router.replace("/sign-in");
       return;
     }
-  }, [canAccessOrganizerArea, router, isOrganizerRoute, hasHydrated]);
+  }, [canAccessOrganizerArea, router, isOrganizerRoute, hasHydrated, isSignInOrSignUp]);
 
   // If it's not an organizer route or it's sign-in/sign-up, render children directly without layout
   if (!isOrganizerRoute || isSignInOrSignUp) {

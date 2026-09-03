@@ -196,6 +196,39 @@ const TicketSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+
+    // Lineage for a ticket created by splitting admissions off another one
+    // (see ticketShareService.respondToShare — a PARTIAL share transfers some
+    // but not all of a ticket's remaining ticketCount, so the recipient gets a
+    // brand-new Ticket document rather than the sender's). Absent/null on
+    // every ticket bought directly and on any ticket transferred whole, which
+    // Mongo treats as "no parent" without needing a backfill.
+    parentTicketId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ticket",
+      default: null,
+      index: true,
+    },
+    // The very first ticket in this one's split lineage — itself for a
+    // once-split ticket, and carried forward unchanged through further splits
+    // of its children, so an admin can find every fragment of one original
+    // purchase with a single `rootTicketId` query regardless of how many
+    // times it's been split.
+    rootTicketId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ticket",
+      default: null,
+      index: true,
+    },
+    // Who this ticket's admissions belonged to before the first transfer in
+    // its lineage — set once, on creation, and never overwritten by later
+    // transfers (see respondToShare). Absent on a ticket that has never been
+    // transferred; its current `user` is the original owner in that case.
+    originalOwnerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

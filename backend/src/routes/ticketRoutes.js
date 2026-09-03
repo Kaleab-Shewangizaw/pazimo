@@ -6,6 +6,7 @@ const { authenticateUser, protect, restrictTo } = require("../middlewares/auth")
 const {
   createTicket,
   getUserTickets,
+  getTransferableTickets,
   getEventTickets,
   checkInTicket,
   cancelTicket,
@@ -860,6 +861,7 @@ router.post("/invite", createInvitationTicket);
 router.post("/guest-ticket", createGuestTicket);
 router.post("/guest-ticket/send", sendGuestInvitation);
 router.get("/my-tickets", getUserTickets);
+router.get("/transferable", getTransferableTickets);
 router.get("/organizer/all", getOrganizerTickets);
 router.get("/details/:id", getTicketDetails);
 router.get("/:ticketId", getTicket);

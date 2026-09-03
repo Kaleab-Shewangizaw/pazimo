@@ -142,6 +142,10 @@ router.delete("/me/halls/:hallId", ...cinemaSelf, cinemaController.deleteHall);
 
 // Movies
 router.get("/me/movies", ...cinemaSelf, programmeController.listMovies);
+// Literal segment, declared before the /me/movies/:movieId-shaped patterns
+// below for the same reason "public/movies" precedes "public/:cinemaId"
+// further up — Express would otherwise read "import-imdb" as a movie id.
+router.post("/me/movies/import-imdb", ...cinemaSelf, programmeController.importFromImdb);
 router.post("/me/movies", ...cinemaSelf, movieUploads, programmeController.createMovie);
 router.patch("/me/movies/:movieId", ...cinemaSelf, movieUploads, programmeController.updateMovie);
 router.delete("/me/movies/:movieId", ...cinemaSelf, programmeController.deleteMovie);
@@ -214,6 +218,7 @@ router.get("/admin/finance", ...adminOnly, financeController.getAdminCinemaFinan
 // Cross-cinema movie curation. Literal second segments, so declared before the
 // /admin/:cinemaId patterns.
 router.get("/admin/movies", ...adminOnly, programmeController.listAllMoviesForAdmin);
+router.post("/admin/movies/import-imdb", ...adminOnly, programmeController.importFromImdb);
 router.patch("/admin/movies/:movieId/display", ...adminOnly, programmeController.setMovieDisplay);
 // The publication gate: a cinema creates a film, an admin decides whether it
 // reaches customers. Same movie-id-only shape as /display, and for the same

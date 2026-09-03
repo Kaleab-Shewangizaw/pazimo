@@ -1194,6 +1194,50 @@ const createInvitationTicket = async (req, res) => {
 };
 
 // Get user's tickets
+// Tickets (or remaining admissions on a ticket) the authenticated user is
+// actually allowed to hand to someone else via ticketShareService.createShare
+// — feeds the mobile app's attachment/paperclip picker. `transferableCapacity`
+// is the ticket's remaining, not-yet-checked-in capacity (ticketCount), which
+// is exactly what createShare's per-item quantity is validated against.
+const getTransferableTickets = async (req, res) => {
+  if (!req.user || !req.user.userId) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "User not authenticated",
+    });
+  }
+
+  const tickets = await Ticket.find({
+    user: req.user.userId,
+    status: "active",
+    paymentStatus: "completed",
+    isInvitation: false,
+    isOnDoor: false,
+    pendingShare: null,
+    ticketCount: { $gt: 0 },
+  })
+    .select("ticketId ticketType price currency ticketCount event")
+    .populate({ path: "event", select: "title startDate location" })
+    .sort("-createdAt")
+    .lean();
+
+  const data = tickets.map((t) => ({
+    ticketId: t._id,
+    publicTicketId: t.ticketId,
+    eventId: t.event?._id,
+    eventName: t.event?.title,
+    eventDate: t.event?.startDate,
+    eventLocation: t.event?.location,
+    ticketType: t.ticketType,
+    currency: t.currency,
+    price: t.price,
+    capacity: t.ticketCount,
+    transferableCapacity: t.ticketCount,
+  }));
+
+  res.status(StatusCodes.OK).json({ success: true, data });
+};
+
 const getUserTickets = async (req, res) => {
   try {
     if (!req.user || !req.user.userId) {
@@ -2524,6 +2568,7 @@ module.exports = {
   getTicketQr,
   createInvitationTicket,
   getUserTickets,
+  getTransferableTickets,
   getEventTickets,
   getOrganizerTickets,
   checkInTicket,

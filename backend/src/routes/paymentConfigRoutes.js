@@ -8,10 +8,13 @@ const {
   updateCinemaGiftCardMode,
   updateCinemaGiftCardRouting,
 } = require("../controllers/paymentConfigController");
-const { authenticateUser, restrictTo } = require("../middlewares/auth");
+const { authenticateUser, restrictTo, optionalAuth } = require("../middlewares/auth");
 
-// Public route to get active provider + gift card routing config
-router.get("/active", getActiveProvider);
+// Public route to get the active provider + gift card mode flags. optionalAuth
+// so an admin's own token (sent by the admin gift-card-routing screens) still
+// gets the full config including the actual routing card numbers — see
+// serializePublicConfig in the controller for why anonymous callers don't.
+router.get("/active", optionalAuth, getActiveProvider);
 
 // Admin only route to update provider
 router.patch(

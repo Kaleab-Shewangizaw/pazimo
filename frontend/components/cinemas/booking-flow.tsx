@@ -420,43 +420,6 @@ export default function BookingFlow({
               priceByCategory={priceByCategory}
               currency={currency}
             />
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-              {(seatMap.categories || []).map((category) => (
-                <span key={category.key} className="inline-flex items-center gap-1.5">
-                  <span
-                    className="h-2.5 w-2.5 rounded-[3px]"
-                    style={{ backgroundColor: category.color || "#6366f1" }}
-                  />
-                  {category.label}
-                  <span className="font-medium text-foreground">
-                    {money(category.price ?? 0, currency)}
-                  </span>
-                </span>
-              ))}
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-[3px] bg-muted-foreground/30" />
-                Taken
-              </span>
-            </div>
-
-            {/* What you have picked, with a way to drop one without hunting
-                for it back in the grid. */}
-            {seatCount > 0 && (
-              <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-                {selected.map((seatKey) => (
-                  <button
-                    key={seatKey}
-                    type="button"
-                    onClick={() => toggleSeat(seatKey, "available")}
-                    className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 py-1 pl-3 pr-2 text-xs font-medium transition-colors hover:border-destructive/50 hover:text-destructive"
-                  >
-                    {seatKey}
-                    <X className="h-3 w-3 opacity-50 transition-opacity group-hover:opacity-100" />
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         )}
 
@@ -791,14 +754,6 @@ function SeatPlan({
           {rows.map((row, rowIndex) => {
             const count = row.seats.length;
             const center = (count - 1) / 2;
-            // A gap is never selectable and must never count as picked, even
-            // though its seatKey can coincide with the real seat right after
-            // it once a hall is edited — a gap keeps the stale number it had
-            // before that seat was renumbered into its old spot.
-            const pickedSeats = row.seats.filter((s) => s.exists && selectedSet.has(s.seatKey));
-            const pickedCategory = pickedSeats.length
-              ? priceByCategory.get(pickedSeats[0].categoryKey)
-              : undefined;
 
             return (
               // Keyed by position, not row.label: a row with no seats (a blank
@@ -816,20 +771,7 @@ function SeatPlan({
                   {row.label}
                 </span>
 
-                <div className="relative flex items-center" style={{ gap: GAP }}>
-                  {pickedSeats.length > 0 && (
-                    <div className="pointer-events-none absolute left-1/2 top-0 z-20 flex -translate-x-1/2 -translate-y-[calc(100%+8px)] items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-popover/95 px-3 py-1 text-[11px] font-medium text-popover-foreground shadow-md backdrop-blur">
-                      {pickedCategory?.color && (
-                        <span
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: pickedCategory.color }}
-                        />
-                      )}
-                      Row {row.label} · {pickedSeats.length} {pickedSeats.length === 1 ? "Seat" : "Seats"}
-                      {pickedCategory?.label ? ` (${pickedCategory.label})` : ""}
-                    </div>
-                  )}
-
+                <div className="flex items-center" style={{ gap: GAP }}>
                   {row.seats.map((s, i) => {
                     if (s.status === "gap") {
                       // Not s.seatKey: a gap keeps whatever number it had
@@ -892,6 +834,50 @@ function SeatPlan({
           Swipe sideways to see the whole row
         </p>
       )}
+
+      {/* What you have picked so far, with a way to drop one without hunting
+          for it back in the grid. One list under the whole map rather than a
+          chip per row — a customer picking across several rows reads their
+          whole selection in one place instead of chasing it up and down the
+          plan. */}
+      {selected.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2 border-t border-border/60 pt-4">
+          {selected.map((seatKey) => (
+            <button
+              key={seatKey}
+              type="button"
+              onClick={() => onToggle(seatKey, "available")}
+              className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 py-1 pl-3 pr-2 text-xs font-medium transition-colors hover:border-destructive/50 hover:text-destructive"
+            >
+              {seatKey}
+              <X className="h-3 w-3 opacity-50 transition-opacity group-hover:opacity-100" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* What each seat's colour means — the same glyph the grid itself
+          draws, not an abstract swatch, so a category dot or a selected
+          armchair here looks exactly like the one a customer just tapped. */}
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5 border-t border-border/60 pt-4">
+        {(seatMap.categories || []).map((category) => (
+          <span key={category.key} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <SeatGlyph size={16} selected={false} disabled={false} categoryColor={category.color || "#6366f1"} />
+            {category.label}
+            <span className="font-semibold text-foreground">
+              {money(category.price ?? 0, currency)}
+            </span>
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+          <SeatGlyph size={16} selected disabled={false} />
+          Selected
+        </span>
+        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+          <SeatGlyph size={16} selected={false} disabled />
+          Taken
+        </span>
+      </div>
     </div>
   );
 }

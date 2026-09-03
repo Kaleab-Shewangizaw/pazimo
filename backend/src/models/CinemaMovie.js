@@ -99,6 +99,14 @@ const CinemaMovieSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    // Billed as plain names ("Christian Bale", "Heath Ledger") rather than
+    // {name, role} pairs — a cinema copying this off IMDb or typing it by hand
+    // has a cast list, not a role breakdown, and the listing only ever shows
+    // it as a flat "Starring" line.
+    cast: {
+      type: [String],
+      default: [],
+    },
     language: {
       type: String,
       trim: true,
@@ -300,6 +308,7 @@ const CUSTOMER_FACING_FIELDS = [
   "coverImage",
   "trailerUrl",
   "genre",
+  "cast",
   "language",
   "subtitles",
   "ageRating",

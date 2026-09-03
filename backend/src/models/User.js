@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const { normalizePhone } = require("../utils/phone");
 
 const userSchema = new mongoose.Schema(
   {
@@ -25,6 +26,35 @@ const userSchema = new mongoose.Schema(
         },
         message: (props) => `${props.value} is not a valid phone number!`,
       },
+    },
+    // Canonical "+<countrycode><number>" form of phoneNumber, kept in sync by
+    // the pre-save hook below. phoneNumber itself stays free-form (existing
+    // logins/reports depend on its stored shape), so exact-match phone search
+    // (see ticketShareService.searchRecipients) has one normalized field to
+    // compare against instead of every historical format a number was typed
+    // in. Not unique: the same phone can legitimately back more than one
+    // role (see the phoneNumber+role compound index below).
+    normalizedPhone: {
+      type: String,
+      index: true,
+    },
+    // Telegram-style handle for exact-match user search/sharing (see
+    // ticketShareService.searchRecipients). Optional and unset for every
+    // account created before this field existed — sparse so those millions
+    // of `null`s don't collide on the unique index. A user claims one via
+    // PUT /api/auth/update-username.
+    username: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+      lowercase: true,
+      minlength: [3, "Username must be at least 3 characters"],
+      maxlength: [20, "Username must be at most 20 characters"],
+      match: [
+        /^[a-z0-9_]+$/,
+        "Username can only contain lowercase letters, numbers and underscores",
+      ],
     },
     password: {
       type: String,
@@ -101,8 +131,29 @@ const userSchema = new mongoose.Schema(
         ref: "Event",
       },
     ],
-    passwordResetToken: String,
-    passwordResetExpires: Date,
+    // OTP-based login (organizers only, added 2026-09-03). The code itself
+    // never sits in the database in plain form — only its hash does.
+    // otpAttempts caps guesses against the 6-digit code independent of the
+    // per-IP rate limiter, since a shared NAT/proxy IP shouldn't cost a real
+    // organizer their remaining attempts and an attacker with many IPs
+    // shouldn't get unlimited guesses against one account either.
+    otpCodeHash: String,
+    otpExpires: Date,
+    otpAttempts: {
+      type: Number,
+      default: 0,
+    },
+    // Forgot-password OTP (added 2026-09-03), same shape and hash-before-
+    // store approach as the login OTP above but kept in separate fields so a
+    // code sent to prove "let me reset my password" can never be replayed
+    // against verify-otp to sign in without changing anything, and a
+    // sign-in code can never be used to reset a password.
+    resetOtpCodeHash: String,
+    resetOtpExpires: Date,
+    resetOtpAttempts: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -127,6 +178,16 @@ userSchema.index(
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// Keeps normalizedPhone in lockstep with phoneNumber. Existing accounts get
+// theirs from the one-off backfill script (see
+// scripts/backfillUserNormalizedPhone.js) rather than this hook, since it
+// only runs on save.
+userSchema.pre("save", function (next) {
+  if (!this.isModified("phoneNumber")) return next();
+  this.normalizedPhone = normalizePhone(this.phoneNumber) || undefined;
   next();
 });
 

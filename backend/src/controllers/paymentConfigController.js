@@ -24,12 +24,26 @@ const serializeConfig = (config) => ({
   },
 });
 
+// GET /active is fully public (no auth) — every checkout/booking page calls
+// it just to know which provider is live. It has no legitimate reason to
+// also hand back the actual gift-card numbers money gets routed to; only the
+// admin gift-card-routing screens need those, and they already call this
+// same endpoint with an admin bearer token. Anonymous/non-admin callers get
+// the trimmed shape; admins keep the full one. Found 2026-09-03 — the actual
+// card numbers were visible to any visitor via the network tab.
+const serializePublicConfig = (config) => ({
+  activeProvider: config.activeProvider,
+  giftCardMode: config.giftCardMode,
+  cinemaGiftCardMode: config.cinemaGiftCardMode,
+});
+
 const getActiveProvider = async (req, res) => {
   try {
     const config = await getOrCreateConfig();
+    const isAdmin = req.user && req.user.role === "admin";
     res.status(StatusCodes.OK).json({
       success: true,
-      data: serializeConfig(config),
+      data: isAdmin ? serializeConfig(config) : serializePublicConfig(config),
     });
   } catch (error) {
     console.error("Error fetching payment config:", error);

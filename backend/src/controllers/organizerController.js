@@ -3,12 +3,15 @@ const OrganizerRegistration = require("../models/OrganizerRegistration");
 const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Event = require("../models/Event");
+const Withdrawal = require("../models/Withdrawal");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const {
   getOrganizerEventIds,
   revenueFieldsOverArray,
 } = require("../utils/ticketRevenueQuery");
+const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
+const { stripAngleBrackets } = require("../utils/stripHtml");
 
 // Sign up organizer
 exports.signUp = async (req, res) => {
@@ -57,6 +60,17 @@ exports.signUp = async (req, res) => {
       });
     }
 
+    // See rejectQueryOperators.js — email/phone feed the $or filter right
+    // below; without this a query-operator object here could match an
+    // arbitrary existing account and report it as "already exists", or
+    // (depending on shape) match nothing when it should.
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid request",
+      });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({
       $or: [{ email }, { phoneNumber: phone }],
@@ -71,9 +85,10 @@ exports.signUp = async (req, res) => {
 
     // Split name into firstName and lastName
     const nameParts = name.trim().split(/\s+/);
-    const firstName = nameParts[0];
-    const lastName =
-      nameParts.length > 1 ? nameParts.slice(1).join(" ") : firstName;
+    const firstName = stripAngleBrackets(nameParts[0]);
+    const lastName = stripAngleBrackets(
+      nameParts.length > 1 ? nameParts.slice(1).join(" ") : firstName
+    );
 
     // Create new user with organizer role
     const user = await User.create({

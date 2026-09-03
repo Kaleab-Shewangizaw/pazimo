@@ -95,6 +95,7 @@ export interface PublicMovieDetail {
     coverImage?: string | null;
     durationMinutes?: number;
     genre?: string[];
+    cast?: string[];
     language?: string;
     subtitles?: string;
     ageRating?: string;

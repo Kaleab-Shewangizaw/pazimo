@@ -67,12 +67,30 @@ const sanitizePublicTicketTypes = (ticketTypes = []) =>
   }));
 
 // Strips internal/admin-only fields (organizer email, ticket-wave scheduling
-// config, Mongoose version key) before an event is sent to an unauthenticated
-// caller.
+// config, Mongoose version key, Pazimo's commission/VAT arrangement with the
+// organizer) before an event is sent to an unauthenticated caller.
+//
+// This is a blocklist (`...rest` keeps everything not named here), which is
+// exactly how commissionRate/beverageCommissionRate/coversOrganizerVat ended
+// up leaking to every visitor on the public event page — they were added to
+// the Event schema after this function was written and nobody had to touch
+// this list for them to start flowing straight through. Found 2026-09-03.
+// Any new commercial/internal field added to Event needs adding here too;
+// there's no compiler check that catches the omission the way an allowlist
+// would, so treat this list as needing a second look whenever the Event
+// schema grows.
 const sanitizePublicEvent = (eventDoc) => {
   const event =
     typeof eventDoc.toObject === "function" ? eventDoc.toObject() : eventDoc;
-  const { __v, organizer, ticketTypes, ...rest } = event;
+  const {
+    __v,
+    organizer,
+    ticketTypes,
+    commissionRate,
+    beverageCommissionRate,
+    coversOrganizerVat,
+    ...rest
+  } = event;
   return {
     ...rest,
     organizer: sanitizePublicOrganizer(organizer),
@@ -296,9 +314,14 @@ const createEvent = async (req, res) => {
     ageRestriction,
   } = req.body;
 
-  // Use authenticated user ID if organizer is not provided
-  if (!organizer && req.user && req.user.userId) {
-    organizer = req.user.userId;
+  // The organizer an event is attached to must come from the verified JWT,
+  // not the request body — a client-supplied `organizer` field let any
+  // authenticated customer attach a fraudulent event to an arbitrary real
+  // organizer (confirmed 2026-09-03 against a real organizer account).
+  // Admins are the one legitimate exception: they manage events on behalf of
+  // organizers and need to set this explicitly.
+  if (!(req.user && req.user.role === "admin" && organizer)) {
+    organizer = req.user && req.user.userId;
   }
 
   if (!organizer) {
@@ -813,6 +836,18 @@ const getAllEvents = async (req, res) => {
 const publishEvent = async (req, res) => {
   const event = await Event.findById(req.params.id);
   if (!event) throw new NotFoundError("Event not found");
+
+  // Had no ownership check at all — any authenticated user could change the
+  // status of any event on the platform, not just publish their own draft.
+  // Same rule as updateEvent/cancelEvent. Confirmed missing 2026-09-03.
+  if (
+    event.organizer.toString() !== req.user.userId &&
+    req.user.role !== "admin"
+  ) {
+    return res
+      .status(StatusCodes.UNAUTHORIZED)
+      .json({ message: "Not authorized" });
+  }
 
   event.status = req.body.status;
   await event.save();

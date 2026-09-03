@@ -211,6 +211,7 @@ export interface CinemaMovie {
   coverImage?: string | null;
   durationMinutes?: number;
   genre: string[];
+  cast: string[];
   language?: string;
   subtitles?: string;
   ageRating?: string;
@@ -463,6 +464,29 @@ export const fetchHalls = (token: string) =>
 
 export const fetchMovies = (token: string) =>
   unwrap(cinemaRequest<{ data: CinemaMovie[] }>("/api/cinemas/me/movies", token));
+
+/** What IMDb (via OMDb) has on a film, by its id or link — read-only, fills a form. */
+export interface ImdbMovieData {
+  imdbId: string;
+  title?: string;
+  description?: string;
+  cast: string[];
+  genre: string[];
+  durationMinutes?: number;
+  ageRating?: string;
+  language?: string;
+  releaseDate?: string;
+  poster?: string;
+  imdbRating?: string;
+}
+
+export const importMovieFromImdb = (token: string, imdbUrl: string) =>
+  unwrap(
+    cinemaRequest<{ data: ImdbMovieData }>("/api/cinemas/me/movies/import-imdb", token, {
+      method: "POST",
+      body: JSON.stringify({ imdbUrl }),
+    })
+  );
 
 export const fetchShowtimes = (token: string, query = "") =>
   unwrap(

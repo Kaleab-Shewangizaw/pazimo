@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
 const TicketShare = require("../models/TicketShare");
+const { normalizePhone } = require("../utils/phone");
+const { round2 } = require("../config/rates");
 const {
   BadRequestError,
   ForbiddenError,
@@ -10,8 +12,7 @@ const {
 } = require("../errors");
 
 const SHARE_EXPIRY_DAYS = 3;
-const MAX_TICKETS_PER_SHARE = 20;
-const SEARCH_RESULT_LIMIT = 20;
+const MAX_ITEMS_PER_SHARE = 20;
 const CONTACTS_LIMIT = 30;
 
 // Same "transaction where the deployment supports it, best-effort sequential
@@ -51,13 +52,19 @@ const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
 const sharePopulateOptions = [
   {
-    path: "tickets",
-    select: "ticketId ticketType price currency status checkedIn event",
+    path: "items.ticket",
+    select: "ticketId ticketType price currency status checkedIn ticketCount event",
     populate: { path: "event", select: "title startDate location" },
   },
-  { path: "fromUser", select: "firstName lastName phoneNumber" },
-  { path: "toUser", select: "firstName lastName phoneNumber" },
+  {
+    path: "items.resultingTicket",
+    select: "ticketId ticketType price currency status checkedIn ticketCount event parentTicketId rootTicketId",
+  },
+  { path: "fromUser", select: "firstName lastName username" },
+  { path: "toUser", select: "firstName lastName username" },
 ];
+
+const ticketIdsOf = (share) => share.items.map((i) => i.ticket);
 
 // Transitions any pending share matched by `extraFilter` past its expiresAt
 // to "expired" and frees the tickets it was holding. Called lazily from read
@@ -69,12 +76,12 @@ const expireDueShares = async (extraFilter = {}) => {
     status: "pending",
     expiresAt: { $lt: now },
     ...extraFilter,
-  }).select("_id tickets");
+  }).select("_id items.ticket");
 
   if (!stale.length) return;
 
   const shareIds = stale.map((s) => s._id);
-  const ticketIds = stale.flatMap((s) => s.tickets);
+  const ticketIds = stale.flatMap((s) => ticketIdsOf(s));
 
   await TicketShare.updateMany(
     { _id: { $in: shareIds } },
@@ -90,26 +97,39 @@ const expireDueShares = async (extraFilter = {}) => {
 // Recipient search / recents
 // ---------------------------------------------------------------------------
 
+// Telegram-style exact match only: a caller must type the whole username or
+// the whole phone number (any format — see normalizePhone) to resolve
+// exactly one account. No prefix/substring matching, so typing part of a
+// username or number can never enumerate who else uses Pazimo.
 const searchRecipients = async ({ currentUserId, query }) => {
   const q = String(query || "").trim();
-  if (q.length < 2) return [];
+  if (!q) return [];
 
-  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const regex = new RegExp(escaped, "i");
+  const or = [];
+
+  // A string that's mostly digits/phone punctuation is treated as a phone
+  // number attempt; normalizePhone itself rejects anything that doesn't end
+  // up looking like a real number, so a short numeric username never leaks
+  // through this branch.
+  if (/^[+\d][\d\s\-()]{6,}$/.test(q)) {
+    const normalized = normalizePhone(q);
+    if (normalized) or.push({ normalizedPhone: normalized });
+  }
+
+  if (/^[A-Za-z0-9_]{3,20}$/.test(q)) {
+    or.push({ username: q.toLowerCase() });
+  }
+
+  if (!or.length) return [];
 
   return User.find({
     _id: { $ne: currentUserId },
     isActive: true,
     isBanned: false,
-    $or: [
-      { firstName: regex },
-      { lastName: regex },
-      { phoneNumber: regex },
-      { email: regex },
-    ],
+    $or: or,
   })
-    .select("firstName lastName phoneNumber")
-    .limit(SEARCH_RESULT_LIMIT)
+    .select("firstName lastName username")
+    .limit(2) // exact match resolves to at most one account per clause
     .lean();
 };
 
@@ -154,7 +174,7 @@ const listContacts = async ({ currentUserId }) => {
         userId: "$_id",
         firstName: "$user.firstName",
         lastName: "$user.lastName",
-        phoneNumber: "$user.phoneNumber",
+        username: "$user.username",
         lastSharedAt: 1,
         shareCount: 1,
       },
@@ -166,7 +186,13 @@ const listContacts = async ({ currentUserId }) => {
 // Creating a share
 // ---------------------------------------------------------------------------
 
-const createShare = async ({ fromUserId, toUserId, ticketIds, message }) => {
+const createShare = async ({
+  fromUserId,
+  toUserId,
+  items,
+  message,
+  idempotencyKey,
+}) => {
   if (!toUserId || !isValidId(toUserId)) {
     throw new BadRequestError("A valid recipient is required");
   }
@@ -174,18 +200,49 @@ const createShare = async ({ fromUserId, toUserId, ticketIds, message }) => {
     throw new BadRequestError("You can't share a ticket with yourself");
   }
 
-  const uniqueTicketIds = [...new Set((ticketIds || []).map(String))];
-  if (!uniqueTicketIds.length) {
+  // A retried POST (double tap, network retry, a WebSocket-reconnect resend)
+  // carrying a key already on file for this sender returns the original
+  // share instead of creating — and locking tickets for — a second one.
+  const trimmedKey = idempotencyKey ? String(idempotencyKey).trim().slice(0, 200) : undefined;
+  if (trimmedKey) {
+    const existing = await TicketShare.findOne({
+      fromUser: fromUserId,
+      idempotencyKey: trimmedKey,
+    });
+    if (existing) {
+      return TicketShare.findById(existing._id).populate(sharePopulateOptions);
+    }
+  }
+
+  const rawItems = Array.isArray(items) ? items : [];
+  if (!rawItems.length) {
     throw new BadRequestError("Select at least one ticket to share");
   }
-  if (uniqueTicketIds.length > MAX_TICKETS_PER_SHARE) {
+  if (rawItems.length > MAX_ITEMS_PER_SHARE) {
     throw new BadRequestError(
-      `You can share at most ${MAX_TICKETS_PER_SHARE} tickets at once`
+      `You can share at most ${MAX_ITEMS_PER_SHARE} tickets at once`
     );
   }
-  if (uniqueTicketIds.some((id) => !isValidId(id))) {
-    throw new BadRequestError("One or more ticket ids are invalid");
-  }
+
+  const seen = new Set();
+  const parsedItems = rawItems.map((raw) => {
+    const ticketId = String(raw?.ticketId || raw?.ticket || "");
+    if (!isValidId(ticketId)) {
+      throw new BadRequestError("One or more ticket ids are invalid");
+    }
+    if (seen.has(ticketId)) {
+      throw new BadRequestError("Each ticket can only appear once per share");
+    }
+    seen.add(ticketId);
+
+    const quantity = Number(raw?.quantity ?? 1);
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new BadRequestError(
+        `Invalid quantity for ticket ${ticketId} — must be a whole number of at least 1`
+      );
+    }
+    return { ticketId, quantity };
+  });
 
   const trimmedMessage = message ? String(message).trim() : undefined;
   if (trimmedMessage && trimmedMessage.length > 500) {
@@ -203,52 +260,68 @@ const createShare = async ({ fromUserId, toUserId, ticketIds, message }) => {
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SHARE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  // Pre-generated so each ticket can be locked with its final share id before
+  // the TicketShare document itself exists — `items` (and its per-item
+  // transferType) is only known once every ticket in the request has been
+  // locked and its current ticketCount read, so the document can't be
+  // created first and filled in after.
+  const shareId = new mongoose.Types.ObjectId();
 
   return withOptionalTransaction(async (session) => {
     const opts = session ? { session } : {};
 
-    const created = await TicketShare.create(
-      [
-        {
-          tickets: uniqueTicketIds,
-          fromUser: fromUserId,
-          toUser: toUserId,
-          message: trimmedMessage,
-          status: "pending",
-          expiresAt,
-        },
-      ],
-      opts
-    );
-    const share = created[0];
-
-    for (const ticketId of uniqueTicketIds) {
+    const lockedItems = [];
+    for (const { ticketId, quantity } of parsedItems) {
       // Conditional on every field that makes a ticket shareable, so this
       // single atomic update both locks the ticket and re-validates it —
       // closing the race window against a concurrent share, check-in, or
-      // cancellation of the same ticket.
+      // cancellation of the same ticket. ticketCount is the ticket's
+      // *remaining* (not-yet-checked-in) capacity — the only part of it
+      // that can legitimately change hands.
       const locked = await Ticket.findOneAndUpdate(
         {
           _id: ticketId,
           user: fromUserId,
           status: "active",
           paymentStatus: "completed",
-          checkedIn: false,
           isInvitation: false,
           isOnDoor: false,
           pendingShare: null,
+          ticketCount: { $gte: quantity },
         },
-        { $set: { pendingShare: share._id } },
+        { $set: { pendingShare: shareId } },
         { new: true, ...opts }
-      );
+      ).select("ticketCount");
       if (!locked) {
         throw new ConflictError(
-          `Ticket ${ticketId} isn't available to share right now (already used, cancelled, or already part of another pending share)`
+          `Ticket ${ticketId} isn't available to share right now (already used, cancelled, doesn't have ${quantity} admission(s) left, or already part of another pending share)`
         );
       }
+
+      lockedItems.push({
+        ticket: ticketId,
+        quantity,
+        transferType: quantity === locked.ticketCount ? "FULL" : "PARTIAL",
+      });
     }
 
-    return TicketShare.findById(share._id, null, opts).populate(
+    const created = await TicketShare.create(
+      [
+        {
+          _id: shareId,
+          items: lockedItems,
+          fromUser: fromUserId,
+          toUser: toUserId,
+          message: trimmedMessage,
+          status: "pending",
+          expiresAt,
+          idempotencyKey: trimmedKey,
+        },
+      ],
+      opts
+    );
+
+    return TicketShare.findById(created[0]._id, null, opts).populate(
       sharePopulateOptions
     );
   });
@@ -320,32 +393,120 @@ const respondToShare = async ({ shareId, userId, accept }) => {
     }
 
     if (accept) {
-      for (const ticketId of share.tickets) {
-        const updated = await Ticket.findOneAndUpdate(
-          { _id: ticketId, pendingShare: share._id },
-          { $set: { user: share.toUser, pendingShare: null } },
-          { new: true, ...opts }
+      for (const item of share.items) {
+        const ticket = await Ticket.findOne(
+          { _id: item.ticket, pendingShare: share._id },
+          null,
+          opts
         );
-        if (!updated) {
+        if (!ticket) {
           throw new ConflictError(
             "A ticket in this share is no longer available"
           );
         }
+
+        if (item.transferType === "FULL") {
+          // Scenario A — the whole ticket (all of its remaining capacity)
+          // changes hands. Same document, same ticketId/QR identity; only
+          // ownership moves. The sender loses every trace of it as an
+          // active ticket the moment this commits.
+          ticket.user = share.toUser;
+          ticket.pendingShare = null;
+          if (!ticket.originalOwnerId) ticket.originalOwnerId = share.fromUser;
+          await ticket.save(opts);
+
+          await User.updateOne(
+            { _id: share.fromUser },
+            { $pull: { tickets: ticket._id } },
+            opts
+          );
+          await User.updateOne(
+            { _id: share.toUser },
+            { $addToSet: { tickets: ticket._id } },
+            opts
+          );
+
+          item.resultingTicket = ticket._id;
+        } else {
+          // Scenario B — split off exactly `item.quantity` admissions into a
+          // brand-new ticket for the recipient. The sender keeps the
+          // original ticketId/QR and whatever capacity remains; the
+          // recipient's admissions are never reachable through the
+          // sender's ticket again.
+          if (ticket.ticketCount < item.quantity) {
+            // Guarded already by the lock at share-creation time (see
+            // createShare — ticketCount cannot move while pendingShare is
+            // set), so this is a belt-and-suspenders check, not an expected
+            // path.
+            throw new ConflictError(
+              "A ticket in this share no longer has enough remaining capacity"
+            );
+          }
+
+          // childPrice is rounded first (it's the real amount that will show
+          // up on the recipient's ticket/receipt); the sender's remainder is
+          // then whatever's left of the original price, NOT independently
+          // rounded — so the two always sum to exactly the original price,
+          // with no shared cent lost or invented by rounding both sides.
+          const childPrice = round2(
+            (ticket.price * item.quantity) / ticket.ticketCount
+          );
+          const remainingPrice = ticket.price - childPrice;
+          const remainingCount = ticket.ticketCount - item.quantity;
+          const remainingPurchaseQty =
+            typeof ticket.purchaseQuantity === "number"
+              ? Math.max(0, ticket.purchaseQuantity - item.quantity)
+              : undefined;
+
+          ticket.price = remainingPrice;
+          ticket.ticketCount = remainingCount;
+          if (remainingPurchaseQty !== undefined) {
+            ticket.purchaseQuantity = remainingPurchaseQty;
+          }
+          ticket.pendingShare = null;
+          await ticket.save(opts);
+
+          const createdChild = await Ticket.create(
+            [
+              {
+                event: ticket.event,
+                user: share.toUser,
+                ticketType: ticket.ticketType,
+                price: childPrice,
+                commissionRate: ticket.commissionRate,
+                organizerVatRate: ticket.organizerVatRate,
+                currency: ticket.currency,
+                status: "active",
+                paymentStatus: "completed",
+                ticketCount: item.quantity,
+                purchaseQuantity: item.quantity,
+                paymentReference: ticket.paymentReference,
+                isInvitation: false,
+                isOnDoor: false,
+                checkedIn: false,
+                parentTicketId: ticket._id,
+                rootTicketId: ticket.rootTicketId || ticket._id,
+                originalOwnerId: ticket.originalOwnerId || share.fromUser,
+              },
+            ],
+            opts
+          );
+          const child = createdChild[0];
+
+          await User.updateOne(
+            { _id: share.toUser },
+            { $addToSet: { tickets: child._id } },
+            opts
+          );
+
+          item.resultingTicket = child._id;
+        }
       }
-      await User.updateOne(
-        { _id: share.fromUser },
-        { $pull: { tickets: { $in: share.tickets } } },
-        opts
-      );
-      await User.updateOne(
-        { _id: share.toUser },
-        { $addToSet: { tickets: { $each: share.tickets } } },
-        opts
-      );
+
       share.status = "accepted";
     } else {
       await Ticket.updateMany(
-        { _id: { $in: share.tickets }, pendingShare: share._id },
+        { _id: { $in: ticketIdsOf(share) }, pendingShare: share._id },
         { $set: { pendingShare: null } },
         opts
       );
@@ -379,7 +540,7 @@ const cancelShare = async ({ shareId, userId }) => {
     }
 
     await Ticket.updateMany(
-      { _id: { $in: share.tickets }, pendingShare: share._id },
+      { _id: { $in: ticketIdsOf(share) }, pendingShare: share._id },
       { $set: { pendingShare: null } },
       opts
     );

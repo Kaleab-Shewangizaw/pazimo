@@ -4,6 +4,7 @@ const { startTicketScheduler } = require("./utils/ticketScheduler");
 const { startPlatformFeeScheduler } = require("./utils/platformFeeScheduler");
 const http = require("http");
 const socketio = require("socket.io");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 const server = http.createServer(app);
@@ -25,6 +26,21 @@ io.on("connection", (socket) => {
     const roomName = `organizer_${organizerId}`;
     socket.join(roomName);
     // console.log(`Socket ${socket.id} joined room ${roomName}`);
+  });
+
+  // Joins a per-user room so events like a ticket transfer (see
+  // ticketShareController) can be pushed to exactly the account they concern
+  // — never broadcast, and never joinable by a client just guessing another
+  // user's id, since the room name is derived from a verified JWT rather
+  // than anything the client supplies directly.
+  socket.on("authenticate", (token) => {
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      socket.join(`user_${payload.id}`);
+      socket.emit("authenticated", { ok: true });
+    } catch (err) {
+      socket.emit("authenticated", { ok: false, message: "Invalid or expired token" });
+    }
   });
 
   socket.on("disconnect", () => {

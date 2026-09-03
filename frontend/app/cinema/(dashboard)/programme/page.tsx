@@ -6,6 +6,7 @@ import {
   cinemaRequest,
   fetchHalls,
   fetchMovies,
+  importMovieFromImdb,
   type CinemaHall,
   type CinemaMovie,
   type CinemaProfile,
@@ -20,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Trash2, Film, DoorOpen, LayoutGrid, Pencil } from "lucide-react";
+import { Trash2, Film, DoorOpen, LayoutGrid, Pencil, Link2, Loader2 } from "lucide-react";
 import SeatMapEditor from "@/components/cinema/seat-map-editor";
 import {
   Dialog,
@@ -199,6 +200,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     language: "",
     subtitles: "",
     genre: "",
+    cast: "",
     trailerUrl: "",
     releaseDate: "",
     status: "now_showing",
@@ -212,6 +214,40 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   // identical.
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
 
+  // The organizer's alternative to typing the synopsis and cast by hand: paste
+  // the film's IMDb link, fetch, and review/edit whatever came back before
+  // saving. This never submits on its own — it only fills the fields above.
+  const [imdbUrl, setImdbUrl] = useState("");
+  const [importingImdb, setImportingImdb] = useState(false);
+
+  const importFromImdb = async () => {
+    if (!imdbUrl.trim()) return;
+    setImportingImdb(true);
+    try {
+      const data = await importMovieFromImdb(token, imdbUrl.trim());
+      setMovieForm({
+        ...movieForm,
+        title: data.title || movieForm.title,
+        description: data.description || movieForm.description,
+        cast: data.cast.length ? data.cast.join(", ") : movieForm.cast,
+        genre: data.genre.length ? data.genre.join(", ") : movieForm.genre,
+        durationMinutes: data.durationMinutes
+          ? String(data.durationMinutes)
+          : movieForm.durationMinutes,
+        ageRating: data.ageRating || movieForm.ageRating,
+        language: data.language || movieForm.language,
+        releaseDate: data.releaseDate
+          ? String(data.releaseDate).slice(0, 10)
+          : movieForm.releaseDate,
+      });
+      toast.success("Pulled in from IMDb — check it over before saving");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setImportingImdb(false);
+    }
+  };
+
   const beginEditMovie = (movie: CinemaMovie) => {
     setEditingMovieId(movie._id);
     setMovieForm({
@@ -221,6 +257,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
       language: movie.language || "",
       subtitles: movie.subtitles || "",
       genre: (movie.genre || []).join(", "),
+      cast: (movie.cast || []).join(", "),
       trailerUrl: movie.trailerUrl || "",
       // The date input wants YYYY-MM-DD; the API returns an ISO timestamp.
       releaseDate: movie.releaseDate ? String(movie.releaseDate).slice(0, 10) : "",
@@ -231,6 +268,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     // existing poster rather than clearing it.
     setPoster(null);
     setCover(null);
+    setImdbUrl("");
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -239,6 +277,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     setMovieForm(EMPTY_MOVIE_FORM);
     setPoster(null);
     setCover(null);
+    setImdbUrl("");
   };
 
   const addMovie = async () => {
@@ -272,6 +311,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
       setMovieForm(EMPTY_MOVIE_FORM);
       setPoster(null);
       setCover(null);
+      setImdbUrl("");
       await reload();
     } catch (e) {
       toast.error((e as Error).message);
@@ -328,6 +368,46 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                     form; the heading is what tells them why it is pre-filled. */}
                 {editingMovieId ? "Edit film" : "Add a film"}
               </h2>
+
+              {/* The shortcut: paste the film's IMDb link and pull in its
+                  synopsis, cast, genre, runtime and rating instead of typing
+                  them out. Nothing here is saved until "Add film"/"Save
+                  changes" below is pressed — this only fills the form. */}
+              {/* <div className="flex flex-col gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40 sm:flex-row sm:items-center">
+                <Link2 className="hidden h-4 w-4 shrink-0 text-gray-400 sm:block" />
+                <Input
+                  placeholder="Paste an IMDb link (e.g. imdb.com/title/tt1234567) to fill this in"
+                  value={imdbUrl}
+                  onChange={(e) => setImdbUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      importFromImdb();
+                    }
+                  }}
+                  className="flex-1 bg-white dark:bg-gray-950"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={importFromImdb}
+                  disabled={importingImdb || !imdbUrl.trim()}
+                  className="shrink-0"
+                >
+                  {importingImdb ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Fetching…
+                    </>
+                  ) : (
+                    "Fetch from IMDb"
+                  )}
+                </Button>
+              </div>
+              <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
+                Or just fill in the fields below yourself — the link is optional.
+              </p> */}
+
               <div className="grid gap-3 sm:grid-cols-4">
                 <Input
                   placeholder="Title"
@@ -370,6 +450,13 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                   value={movieForm.genre}
                   onChange={(e) =>
                     setMovieForm({ ...movieForm, genre: e.target.value })
+                  }
+                />
+                <Input
+                  placeholder="Cast (comma separated)"
+                  value={movieForm.cast}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, cast: e.target.value })
                   }
                 />
                 <div>

@@ -4,12 +4,22 @@ const Notification = require("../models/Notification");
 exports.getUserNotifications = async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log("Fetching notifications for userId:", userId);
+
+    // Had no ownership check — any authenticated user could read any other
+    // user's notification feed by guessing/observing their userId. Confirmed
+    // 2026-09-04 during final pre-PR review.
+    if (
+      !req.user ||
+      (String(req.user._id) !== String(userId) && req.user.role !== "admin")
+    ) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Not authorized" });
+    }
 
     const notifications = await Notification.find({ userId }).sort({
       createdAt: -1,
     });
-    console.log("Found notifications:", notifications.length);
 
     res.json({ success: true, data: notifications });
   } catch (err) {
@@ -24,8 +34,11 @@ exports.getUserNotifications = async (req, res) => {
 exports.markNotificationsRead = async (req, res) => {
   try {
     const { notificationIds } = req.body;
+    // Scoped to the caller's own notifications — previously any authenticated
+    // user could mark arbitrary notification IDs (belonging to anyone) as
+    // read. Confirmed 2026-09-04 during final pre-PR review.
     await Notification.updateMany(
-      { _id: { $in: notificationIds } },
+      { _id: { $in: notificationIds }, userId: req.user._id },
       { $set: { read: true } }
     );
     res.json({ success: true });

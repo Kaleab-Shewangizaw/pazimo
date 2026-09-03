@@ -4,6 +4,7 @@ const { authenticateUser } = require("../middlewares/auth");
 const organizerController = require("../controllers/organizerController");
 const { protect, restrictTo } = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
+const { organizerSignUpLimiter } = require("../middlewares/rateLimiters");
 
 // Debug middleware
 router.use((req, res, next) => {
@@ -12,8 +13,11 @@ router.use((req, res, next) => {
 });
 
 // Public routes
+// Had no rate limiter at all before 2026-09-03 — public, unauthenticated,
+// accepted a file upload. See docs/SECURITY_VULNERABILITIES.md #13.
 router.post(
   "/sign-up",
+  organizerSignUpLimiter,
   upload.single("businessLicense"),
   organizerController.signUp,
 );

@@ -82,6 +82,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
     { label: "Language", value: movie.language },
     { label: "Subtitles", value: movie.subtitles },
     { label: "Genre", value: movie.genre?.join(", ") },
+    { label: "Cast", value: movie.cast?.join(", ") },
     {
       label: "Screenings",
       value: hasScreenings
