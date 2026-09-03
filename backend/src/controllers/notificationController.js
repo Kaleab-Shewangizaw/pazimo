@@ -4,12 +4,22 @@ const Notification = require("../models/Notification");
 exports.getUserNotifications = async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log("Fetching notifications for userId:", userId);
+
+    // `protect` only proves the caller is *someone*, not that they own this
+    // notification feed — without this check any logged-in account (even a
+    // freshly self-registered one) could read any other user's notifications
+    // by id. Found 2026-09-03 during the incident review; not part of the
+    // 2026-08-20 write-surface fix, which didn't cover this route.
+    if (req.user.role !== "admin" && req.user._id.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to view these notifications",
+      });
+    }
 
     const notifications = await Notification.find({ userId }).sort({
       createdAt: -1,
     });
-    console.log("Found notifications:", notifications.length);
 
     res.json({ success: true, data: notifications });
   } catch (err) {
