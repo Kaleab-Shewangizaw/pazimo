@@ -136,18 +136,34 @@ function SignInContent() {
     }
   };
 
-  const handleResendOtp = async () => {
+  // channelOverride lets the "Send by email instead" button switch delivery
+  // mid-flow without re-entering the password — same account, same pending
+  // login, just a different channel for this one code.
+  const handleResendOtp = async (channelOverride?: "sms" | "email") => {
     const pending = useAuthStore.getState().pendingOtp;
     if (!pending) return;
+    const channel = channelOverride ?? pending.channel;
     setIsResending(true);
     try {
       const res = await fetch(`${API_URL}/auth/organizer/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: pending.email, channel: pending.channel }),
+        body: JSON.stringify({ email: pending.email, channel }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to resend code");
+      // The mask differs by channel (phone vs email), and a later plain
+      // "Resend code" click should keep using whichever channel was last
+      // picked here, so the store's pendingOtp needs updating too, not just
+      // the toast.
+      useAuthStore.setState({
+        pendingOtp: {
+          email: pending.email,
+          channel,
+          maskedDestination: data.maskedDestination ?? pending.maskedDestination,
+        },
+      });
+      setCode("");
       toast.success(data.message || "Code resent");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to resend code");
@@ -307,12 +323,25 @@ function SignInContent() {
               <div className="text-center space-y-2">
                 <button
                   type="button"
-                  onClick={handleResendOtp}
+                  onClick={() => handleResendOtp()}
                   disabled={isResending}
                   className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline"
                 >
                   {isResending ? "Resending..." : "Resend code"}
                 </button>
+                {pendingOtp?.channel !== "email" && (
+                  <>
+                    <span className="text-sm text-muted-foreground mx-2">·</span>
+                    <button
+                      type="button"
+                      onClick={() => handleResendOtp("email")}
+                      disabled={isResending}
+                      className="text-sm text-[#2563eb] dark:text-blue-400 hover:underline"
+                    >
+                      Send by email instead
+                    </button>
+                  </>
+                )}
                 <p className="text-sm text-muted-foreground">
                   <button
                     type="button"
