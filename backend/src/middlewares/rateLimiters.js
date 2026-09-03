@@ -93,6 +93,29 @@ const organizerOtpVerifyLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many attempts. Please wait a few minutes and try again."),
 });
 
+// Forgot-password send triggers a real SMS or email send, same cost/abuse
+// profile as organizerOtpSendLimiter. Shared by the generic and
+// organizer-scoped forgot-password routes — same feature, same abuse shape.
+const passwordResetSendLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 5, // sends per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many password reset requests. Please wait a few minutes and try again."),
+});
+
+// Guards the reset code against brute-forcing, same shape as
+// organizerOtpVerifyLimiter. Per-account attempt capping lives in the
+// controller (resetOtpAttempts on the User doc); this is the per-IP backstop.
+const passwordResetVerifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: jsonRateLimitHandler("Too many attempts. Please wait a few minutes and try again."),
+});
+
 // Organizer sign-up had no rate limiter at all before 2026-09-03 — public,
 // unauthenticated, and accepts a file upload. Same allowance as regular
 // registration.
@@ -151,6 +174,8 @@ module.exports = {
   otpLimiter,
   organizerOtpSendLimiter,
   organizerOtpVerifyLimiter,
+  passwordResetSendLimiter,
+  passwordResetVerifyLimiter,
   organizerSignUpLimiter,
   unifiedAuthLimiter,
 };

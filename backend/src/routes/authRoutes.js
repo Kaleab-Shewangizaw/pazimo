@@ -12,6 +12,8 @@ const {
   otpLimiter,
   organizerOtpSendLimiter,
   organizerOtpVerifyLimiter,
+  passwordResetSendLimiter,
+  passwordResetVerifyLimiter,
   unifiedAuthLimiter,
 } = require('../middlewares/rateLimiters');
 
@@ -24,9 +26,14 @@ router.post('/login', loginLimiter, authController.login);
 // Get current user
 router.get('/me', protect, authController.getMe);
 
-// Password reset routes - not a functioning feature yet, left unlimited for now
-router.post('/forgot-password', authController.forgotPassword);
-router.post('/reset-password', authController.resetPassword);
+// Password reset — OTP-based, same code+channel mechanism as the organizer
+// sign-in OTP below. Covers every role on the User model; the single Admin
+// account has no self-service reset. Three steps: send a code to the
+// email/phone the user types, verify it (the frontend only advances to its
+// change-password screen once this succeeds), then submit the new password.
+router.post('/forgot-password', passwordResetSendLimiter, authController.forgotPassword);
+router.post('/verify-reset-code', passwordResetVerifyLimiter, authController.verifyPasswordResetCode);
+router.post('/reset-password', passwordResetVerifyLimiter, authController.resetPassword);
 router.put('/update-profile', protect, authController.updateProfile);
 
 
@@ -39,6 +46,14 @@ router.post('/send-otp', otpLimiter, authController.sendOtp);
 // channel instead.
 router.post('/organizer/send-otp', organizerOtpSendLimiter, authController.sendOrganizerOtp);
 router.post('/organizer/verify-otp', organizerOtpVerifyLimiter, authController.verifyOrganizerOtp);
+
+// Organizer-scoped password reset — same OTP mechanism as /forgot-password
+// above, but confirms the identifier belongs to an organizer account first
+// (see sendOrganizerOtp's comment on why "account not found" isn't fully
+// hidden there — same trade-off applies here for the masked-destination UX).
+router.post('/organizer/forgot-password', passwordResetSendLimiter, authController.organizerForgotPassword);
+router.post('/organizer/verify-reset-code', passwordResetVerifyLimiter, authController.organizerVerifyResetCode);
+router.post('/organizer/reset-password', passwordResetVerifyLimiter, authController.organizerResetPassword);
 
 // Unified auth route for ticket purchase
 router.post('/unified-auth', unifiedAuthLimiter, authController.unifiedAuth);
