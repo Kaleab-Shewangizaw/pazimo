@@ -889,24 +889,33 @@ const generateAndSendOtp = async (user, channel) => {
       ? maskEmailForDisplay(user.email)
       : maskPhoneForDisplay(user.phoneNumber);
 
-  // Fire-and-forget, same pattern as forgotPassword's email send — the
-  // caller's response doesn't wait on the SMS/SMTP round trip.
+  // Fire-and-forget — the caller's response doesn't wait on the SMTP round
+  // trip. Zoho (smtp.zoho.com), same transporter shape as
+  // ticketConfirmationEmail.js/invitationEmailController.js/contactController.js,
+  // not the old ad-hoc Gmail account: a verification code should come from
+  // admin@pazimo.com, not a personal-looking Gmail address.
   if (channel === "email") {
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-    transporter
-      .sendMail({
-        from: process.env.EMAIL_USER,
-        to: user.email,
-        subject: "Your Pazimo verification code",
-        html: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
-      })
-      .catch((err) => console.error("Failed to send OTP email:", err));
+    if (!process.env.EMAIL_USER_ZOHO || !process.env.EMAIL_PASS_ZOHO) {
+      console.error("Failed to send OTP email: EMAIL_USER_ZOHO/EMAIL_PASS_ZOHO env vars are required");
+    } else {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.zoho.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.EMAIL_USER_ZOHO,
+          pass: process.env.EMAIL_PASS_ZOHO,
+        },
+      });
+      transporter
+        .sendMail({
+          from: `Pazimo <${process.env.EMAIL_USER_ZOHO}>`,
+          to: user.email,
+          subject: "Your Pazimo verification code",
+          html: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+        })
+        .catch((err) => console.error("Failed to send OTP email:", err));
+    }
   } else {
     const { sendSMS } = require("../utils/sms");
     sendSMS(
