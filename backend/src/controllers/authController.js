@@ -5,6 +5,7 @@ const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
 const { isPhoneBanned } = require("../utils/fraudGuard");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
+const { stripAngleBrackets } = require("../utils/stripHtml");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
@@ -359,7 +360,14 @@ const register = async (req, res) => {
       });
     }
 
-    const user = await User.create({ email, password, firstName, lastName, phoneNumber, role: 'customer' });
+    const user = await User.create({
+      email,
+      password,
+      firstName: stripAngleBrackets(firstName),
+      lastName: stripAngleBrackets(lastName),
+      phoneNumber,
+      role: 'customer',
+    });
     const token = signToken(user._id, user.role);
 
     res.status(StatusCodes.CREATED).json({
@@ -1017,8 +1025,8 @@ const unifiedAuth = async (req, res) => {
       });
     }
 
-    const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(" ") || ""; // Optional last name
+    const firstName = stripAngleBrackets(nameParts[0]);
+    const lastName = stripAngleBrackets(nameParts.slice(1).join(" ")) || ""; // Optional last name
 
     // 1. Find ALL users with this phone number
     const usersByPhone = await User.find({ phoneNumber });
