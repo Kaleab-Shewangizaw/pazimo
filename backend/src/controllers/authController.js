@@ -851,16 +851,22 @@ const OTP_MAX_ATTEMPTS = 5;
 // response, but this exact masked-number UI was asked for directly. Every
 // other property (rate limiting, no code delivered anywhere but the real
 // channel, hashed storage) is unchanged.
+// International format with both ends visible — "+2519******44" — per
+// direct request 2026-09-04 (was local format, first 2 digits only).
 const maskPhoneForDisplay = (phone) => {
   if (!phone) return null;
   const digits = String(phone).replace(/\D/g, "");
-  const local = digits.startsWith("251")
-    ? "0" + digits.slice(3)
+  const subscriber = digits.startsWith("251")
+    ? digits.slice(3)
     : digits.startsWith("0")
-      ? digits
-      : `0${digits}`;
-  if (local.length <= 3) return "*".repeat(local.length);
-  return local.slice(0, 2) + "*".repeat(local.length - 2);
+      ? digits.slice(1)
+      : digits;
+  if (!subscriber) return null;
+  if (subscriber.length <= 4) return "+251" + "*".repeat(subscriber.length);
+  const first = subscriber.slice(0, 1);
+  const last = subscriber.slice(-2);
+  const middle = "*".repeat(subscriber.length - 3);
+  return `+251${first}${middle}${last}`;
 };
 
 const maskEmailForDisplay = (email) => {
@@ -917,19 +923,19 @@ const generateAndSendOtp = async (user, channel) => {
         .catch((err) => console.error("Failed to send OTP email:", err));
     }
   } else {
-    // Worded like the ticket-confirmation SMS (name, emoji, "Pazimo" sign-off)
-    // rather than explicit "verification code"/OTP language — messages in
-    // that literal OTP phrasing were confirmed accepted by the gateway
-    // (dashboard shows "Sent") but never reached the handset, while
-    // ticket-style messages to the same number reliably do. Found
-    // 2026-09-04; presumed carrier-side OTP-content filtering distinct from
-    // GeezSMS's own anti-spam check (which requires the code to be
-    // explained, not that it avoid the word "verification" — this still
-    // satisfies that).
+    // SMS wording below is explicit "PAZIMO OTP:" / "Do not share it with
+    // anyone" per direct request 2026-09-04 — NOTE this is close to the
+    // exact phrasing confirmed EARLIER THE SAME DAY to be accepted by
+    // GeezSMS (dashboard shows "Sent") but never delivered to the handset,
+    // while the ticket-confirmation-style wording this replaced was
+    // confirmed to deliver. Re-test actual phone delivery after this ships
+    // — don't trust "Sent" status alone. If it silently stops arriving
+    // again, reverting to the ticket-style phrasing (git history) is the
+    // known-working fallback.
     const { sendSMS } = require("../utils/sms");
     sendSMS(
       user.phoneNumber,
-      `Hi ${user.firstName} 👋\nUse code ${code} to finish signing in to your Pazimo account.\n\nPazimo`
+      `PAZIMO OTP: ${code}\nUse this code to sign in to your organizer account. Do not share it with anyone.`
     ).catch((err) => console.error("Failed to send OTP SMS:", err));
   }
 
