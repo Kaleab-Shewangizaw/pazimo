@@ -63,12 +63,30 @@ const sanitizePublicTicketTypes = (ticketTypes = []) =>
   }));
 
 // Strips internal/admin-only fields (organizer email, ticket-wave scheduling
-// config, Mongoose version key) before an event is sent to an unauthenticated
-// caller.
+// config, Mongoose version key, Pazimo's commission/VAT arrangement with the
+// organizer) before an event is sent to an unauthenticated caller.
+//
+// This is a blocklist (`...rest` keeps everything not named here), which is
+// exactly how commissionRate/beverageCommissionRate/coversOrganizerVat ended
+// up leaking to every visitor on the public event page — they were added to
+// the Event schema after this function was written and nobody had to touch
+// this list for them to start flowing straight through. Found 2026-09-03.
+// Any new commercial/internal field added to Event needs adding here too;
+// there's no compiler check that catches the omission the way an allowlist
+// would, so treat this list as needing a second look whenever the Event
+// schema grows.
 const sanitizePublicEvent = (eventDoc) => {
   const event =
     typeof eventDoc.toObject === "function" ? eventDoc.toObject() : eventDoc;
-  const { __v, organizer, ticketTypes, ...rest } = event;
+  const {
+    __v,
+    organizer,
+    ticketTypes,
+    commissionRate,
+    beverageCommissionRate,
+    coversOrganizerVat,
+    ...rest
+  } = event;
   return {
     ...rest,
     organizer: sanitizePublicOrganizer(organizer),
