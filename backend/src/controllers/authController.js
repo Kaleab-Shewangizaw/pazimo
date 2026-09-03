@@ -917,10 +917,19 @@ const generateAndSendOtp = async (user, channel) => {
         .catch((err) => console.error("Failed to send OTP email:", err));
     }
   } else {
+    // Worded like the ticket-confirmation SMS (name, emoji, "Pazimo" sign-off)
+    // rather than explicit "verification code"/OTP language — messages in
+    // that literal OTP phrasing were confirmed accepted by the gateway
+    // (dashboard shows "Sent") but never reached the handset, while
+    // ticket-style messages to the same number reliably do. Found
+    // 2026-09-04; presumed carrier-side OTP-content filtering distinct from
+    // GeezSMS's own anti-spam check (which requires the code to be
+    // explained, not that it avoid the word "verification" — this still
+    // satisfies that).
     const { sendSMS } = require("../utils/sms");
     sendSMS(
       user.phoneNumber,
-      `Your Pazimo verification code is ${code}. It expires in 10 minutes. Never share this code.`
+      `Hi ${user.firstName} 👋\nUse code ${code} to finish signing in to your Pazimo account.\n\nPazimo`
     ).catch((err) => console.error("Failed to send OTP SMS:", err));
   }
 
