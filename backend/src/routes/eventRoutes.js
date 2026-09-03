@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const eventController = require("../controllers/eventController");
 const upload = require("../middlewares/upload");
-const { authenticateUser, optionalAuth } = require("../middlewares/auth");
+const { authenticateUser, optionalAuth, restrictTo } = require("../middlewares/auth");
 
 // Public routes
 router.get("/public-events", eventController.getPublicEvents);
@@ -17,7 +17,17 @@ router.get("/details/:id", optionalAuth, eventController.getEventDetails);
 
 // Protected routes
 router.use(authenticateUser);
-router.post("/", upload.array("coverImages", 5), eventController.createEvent);
+// Event creation was reachable by any authenticated customer, with no role
+// check at all — confirmed 2026-09-03 during incident review (any customer
+// token could create and publish live events). restrictTo closes that; the
+// controller also stops trusting a client-supplied `organizer` field for
+// non-admins (see createEvent).
+router.post(
+  "/",
+  restrictTo("organizer", "admin"),
+  upload.array("coverImages", 5),
+  eventController.createEvent,
+);
 router.get("/organizer/:id", eventController.getOrganizerEvents);
 // Wishlist routes (default to authenticated user, keep legacy param for compatibility)
 router.get("/wishlist", eventController.getWishlist);

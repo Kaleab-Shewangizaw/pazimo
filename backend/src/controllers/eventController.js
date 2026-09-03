@@ -412,9 +412,14 @@ const createEvent = async (req, res) => {
     ageRestriction,
   } = req.body;
 
-  // Use authenticated user ID if organizer is not provided
-  if (!organizer && req.user && req.user.userId) {
-    organizer = req.user.userId;
+  // The organizer an event is attached to must come from the verified JWT,
+  // not the request body — a client-supplied `organizer` field let any
+  // authenticated customer attach a fraudulent event to an arbitrary real
+  // organizer (confirmed 2026-09-03 against a real organizer account).
+  // Admins are the one legitimate exception: they manage events on behalf of
+  // organizers and need to set this explicitly.
+  if (!(req.user && req.user.role === "admin" && organizer)) {
+    organizer = req.user && req.user.userId;
   }
 
   if (!organizer) {
@@ -953,6 +958,18 @@ const getAllEvents = async (req, res) => {
 const publishEvent = async (req, res) => {
   const event = await Event.findById(req.params.id);
   if (!event) throw new NotFoundError("Event not found");
+
+  // Had no ownership check at all — any authenticated user could change the
+  // status of any event on the platform, not just publish their own draft.
+  // Same rule as updateEvent/cancelEvent. Confirmed missing 2026-09-03.
+  if (
+    event.organizer.toString() !== req.user.userId &&
+    req.user.role !== "admin"
+  ) {
+    return res
+      .status(StatusCodes.UNAUTHORIZED)
+      .json({ message: "Not authorized" });
+  }
 
   event.status = req.body.status;
   await event.save();
