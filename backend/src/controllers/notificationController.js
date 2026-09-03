@@ -34,8 +34,11 @@ exports.getUserNotifications = async (req, res) => {
 exports.markNotificationsRead = async (req, res) => {
   try {
     const { notificationIds } = req.body;
+    // Scoped to the caller's own notifications — previously any authenticated
+    // user could mark arbitrary notification IDs (belonging to anyone) as
+    // read. Confirmed 2026-09-04 during final pre-PR review.
     await Notification.updateMany(
-      { _id: { $in: notificationIds } },
+      { _id: { $in: notificationIds }, userId: req.user._id },
       { $set: { read: true } }
     );
     res.json({ success: true });
