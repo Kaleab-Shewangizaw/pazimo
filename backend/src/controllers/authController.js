@@ -120,7 +120,17 @@ const login = async (req, res) => {
     // standalone flow already uses. The destination always comes from
     // `user.phoneNumber`/`user.email` on the account just authenticated by
     // password, never from anything in the request body.
-    if (user.role === "organizer") {
+    //
+    // Gated off by default as of 2026-09-04: pazimo-organizer-mobile is
+    // already live and can't be updated for ~1 week (app-store review
+    // takes that long), and it doesn't know how to handle `requiresOtp`
+    // yet — turning this on unconditionally would lock every organizer out
+    // of the mobile app. Everything else from the 2026-09-04 hardening
+    // pass (injection guards, IDOR fixes, rate limiters, mass-assignment
+    // fix, data-exposure fixes) stays on; only this one flag is off.
+    // Set ORGANIZER_LOGIN_OTP_ENABLED=true (and restart) once the mobile
+    // app ships OTP support — no code change needed to re-enable.
+    if (user.role === "organizer" && process.env.ORGANIZER_LOGIN_OTP_ENABLED === "true") {
       const maskedDestination = await generateAndSendOtp(user, "sms");
       return res.status(StatusCodes.OK).json({
         status: "success",
