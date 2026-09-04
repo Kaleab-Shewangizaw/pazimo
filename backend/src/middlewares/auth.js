@@ -177,6 +177,85 @@ const protect = async (req, res, next) => {
   next();
 };
 
+// ============================================================================
+// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, RESTORED 2026-09-04
+// ----------------------------------------------------------------------------
+// First added 2026-07-10 for the same reason, removed 2026-08-20 once it
+// looked safe to. It wasn't: the organizer app already published to the
+// App Store / Play Store — a completely separate codebase this repo has no
+// access to, distinct from the in-development pazimo-organizer-mobile — has
+// never sent an auth token on this call, and that app can't be updated (a
+// store review cycle) until pazimo-organizer-mobile replaces it. Removing
+// the bypass on 2026-08-20 broke every organizer on the live app the moment
+// production actually picked up that change today; restoring it is what
+// "align it with what we have here" means in practice. Same shape as
+// ORGANIZER_LOGIN_OTP_ENABLED in authController.js — a compatibility shim
+// for the old app, not a rollback of anything else from 2026-09-04.
+//
+// GET /api/users/:id falls back to trusting the :id in the URL with NO
+// token at all, IF that account's role is admin/organizer. This is a real
+// IDOR: anyone who has (or guesses) an organizer/admin's Mongo id can read
+// their email/phone/ban status with zero credentials. Customer accounts are
+// NOT exposed by this — only admin/organizer, and only on this one route
+// (PUT/DELETE/list are untouched). Every use of the fallback path is logged
+// below so usage can be audited, and a request that does carry a token is
+// still held to the normal protect()+restrictTo() check.
+//
+// TO REMOVE (once pazimo-organizer-mobile has replaced the old app): delete
+// this whole block and the `protectStrictOrTrustParamId` export, then in
+// userRoutes.js change the GET /:id route back to:
+//   router.get('/:id', protect, restrictTo('admin', 'organizer'), userController.getUser);
+// ============================================================================
+const protectStrictOrTrustParamId = async (req, res, next) => {
+  const token = extractToken(req);
+
+  // Token present: behave exactly like the normal, secure `protect` +
+  // restrictTo('admin', 'organizer') pair this route used before the bypass.
+  if (token) {
+    return protect(req, res, (err) => {
+      if (err) return next(err);
+      if (!["admin", "organizer"].includes(req.user.role)) {
+        return res.status(403).json({
+          status: "error",
+          message: "You do not have permission to perform this action",
+        });
+      }
+      next();
+    });
+  }
+
+  // No token at all - fallback for the old app. Trust req.params.id directly.
+  try {
+    let account = await User.findById(req.params.id);
+    if (!account) {
+      account = await Admin.findById(req.params.id);
+    }
+
+    if (!account || !["admin", "organizer"].includes(account.role)) {
+      return next(new UnauthorizedError("Not authorized to access this route"));
+    }
+
+    if (account.isActive === false) {
+      if (account.isBanned) {
+        return next(bannedAccountError(account));
+      }
+      return next(new UnauthorizedError("Account is not active"));
+    }
+
+    console.warn(
+      `TEMP-BYPASS-2026-07-10: unauthenticated ${req.method} ${req.originalUrl} allowed through with no token (role=${account.role}).`
+    );
+
+    req.user = account;
+    next();
+  } catch (error) {
+    return next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+// ============================================================================
+// END TEMP-BYPASS-2026-07-10
+// ============================================================================
+
 const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -238,4 +317,5 @@ module.exports = {
   restrictTo,
   isAdmin,
   requireCapitalEligible,
+  protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };
