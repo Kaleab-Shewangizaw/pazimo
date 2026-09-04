@@ -656,7 +656,7 @@ const generateAndSendOtp = async (user, channel, purpose = "login") => {
       ? {
           emailSubject: "Your Pazimo password reset code",
           emailHtml: `<p>Your Pazimo password reset code is <strong>${code}</strong>. It expires in 10 minutes. If you didn't request this, you can ignore this message — your password won't change unless this code is used.</p>`,
-          sms: `PAZIMO OTP: ${code}\nUse this code to reset your organizer account password. Do not share it with anyone.`,
+          sms: `PAZIMO OTP: ${code}\nUse this code to reset your Pazimo account password. Do not share it with anyone.`,
         }
       : {
           emailSubject: "Your Pazimo verification code",
