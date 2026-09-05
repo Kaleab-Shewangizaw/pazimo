@@ -5,6 +5,7 @@ const { startPlatformFeeScheduler } = require("./utils/platformFeeScheduler");
 const { startStockHoldExpirySweep } = require("./utils/stockHoldExpiry");
 const http = require("http");
 const socketio = require("socket.io");
+const { registerDeveloperStatsNamespace } = require("./sockets/developerStats");
 require("dotenv").config();
 
 const server = http.createServer(app);
@@ -17,6 +18,8 @@ const io = socketio(server, {
 
 // Make io accessible in controllers
 app.set("io", io);
+
+registerDeveloperStatsNamespace(io);
 
 // Socket.IO connection handler
 io.on("connection", (socket) => {

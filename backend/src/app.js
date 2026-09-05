@@ -15,6 +15,7 @@ const organizerRoutes = require("./routes/organizerRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const withdrawalRoutes = require("./routes/withdrawalRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const developerRoutes = require("./routes/developerRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const webhookRoutes = require("./routes/webhookRoutes");
@@ -119,6 +120,7 @@ app.use(
   })
 );
 app.use(morgan("dev"));
+app.use(require("./utils/requestLog").requestLogger);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -140,6 +142,7 @@ app.use("/api/organizers", organizerRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/withdrawals", withdrawalRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/developer", developerRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/webhooks", webhookRoutes);
