@@ -20,6 +20,7 @@
     "backfill:platform-fees": "node src/scripts/backfillPlatformFees.js",
     "migrate:cinema-publication": "node src/scripts/migrateCinemaMoviePublication.js",
     "backfill:beverage-categories": "node src/scripts/backfillBeverageCategories.js",
+    "backfill:cinema-ticket-seats": "node src/scripts/backfillCinemaTicketSeats.js",
     "check:seats": "node src/scripts/checkSeatSelection.js",
     "reconcile:seats": "node src/scripts/reconcileCinemaSeats.js",
     "migrate:beverage-ownership": "node src/scripts/migrateBeverageOwnership.js",

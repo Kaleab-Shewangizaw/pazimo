@@ -52,28 +52,40 @@ const main = async () => {
 
   const soldHolds = await CinemaSeatHold.find({ status: "sold" }).lean();
   const seatedTickets = await CinemaTicket.find({
-    "seat.seatKey": { $exists: true, $ne: null },
+    $or: [
+      { "seats.seatKey": { $exists: true, $ne: null } },
+      { "seat.seatKey": { $exists: true, $ne: null } }, // pre-migration shape
+    ],
     status: LIVE_TICKET_STATUS,
   })
-    .select("ticketId showtime seat status paymentReference")
+    .select("ticketId showtime cinema seats seat status paymentReference")
     .lean();
 
+  // One ticket can now cover several seats. Flatten to one entry per
+  // (ticket, seat) pair, since the sold/held invariant is per seat, not per
+  // ticket — falls back to the pre-migration singular `seat` field.
+  const seatEntries = seatedTickets.flatMap((t) =>
+    (t.seats?.length ? t.seats : t.seat ? [t.seat] : [])
+      .filter((s) => s?.seatKey)
+      .map((seat) => ({ ticket: t, seat }))
+  );
+
   console.log(`\n  sold seat rows        : ${soldHolds.length}`);
-  console.log(`  live seated tickets   : ${seatedTickets.length}\n`);
+  console.log(`  live seated tickets   : ${seatedTickets.length} (${seatEntries.length} seats)\n`);
 
   // Keyed by showtime+seat, which is what makes a seat unique.
-  const ticketBySeat = new Map(
-    seatedTickets.map((t) => [`${t.showtime}::${t.seat.seatKey}`, t])
+  const entryBySeat = new Map(
+    seatEntries.map((e) => [`${e.ticket.showtime}::${e.seat.seatKey}`, e])
   );
   const holdBySeat = new Map(
     soldHolds.map((h) => [`${h.showtime}::${h.seatKey}`, h])
   );
 
   const orphanedSeats = soldHolds.filter(
-    (h) => !ticketBySeat.has(`${h.showtime}::${h.seatKey}`)
+    (h) => !entryBySeat.has(`${h.showtime}::${h.seatKey}`)
   );
-  const unprotectedTickets = seatedTickets.filter(
-    (t) => !holdBySeat.has(`${t.showtime}::${t.seat.seatKey}`)
+  const unprotectedEntries = seatEntries.filter(
+    (e) => !holdBySeat.has(`${e.ticket.showtime}::${e.seat.seatKey}`)
   );
 
   if (orphanedSeats.length) {
@@ -86,17 +98,17 @@ const main = async () => {
     console.log("    -> released, so they can be sold again\n");
   }
 
-  if (unprotectedTickets.length) {
-    console.log(`  UNPROTECTED TICKETS — a ticket whose seat is not locked (${unprotectedTickets.length}):`);
-    unprotectedTickets.forEach((t) =>
+  if (unprotectedEntries.length) {
+    console.log(`  UNPROTECTED SEATS — a ticket whose seat is not locked (${unprotectedEntries.length}):`);
+    unprotectedEntries.forEach(({ ticket: t, seat: s }) =>
       console.log(
-        `    ${t.seat.seatKey.padEnd(8)} showtime ${String(t.showtime).slice(-8)}  ticket ${t.ticketId}`
+        `    ${s.seatKey.padEnd(8)} showtime ${String(t.showtime).slice(-8)}  ticket ${t.ticketId}`
       )
     );
     console.log("    -> re-locked, so the chair cannot be sold twice\n");
   }
 
-  if (!orphanedSeats.length && !unprotectedTickets.length) {
+  if (!orphanedSeats.length && !unprotectedEntries.length) {
     console.log("  Every taken seat has a live ticket, and every seated ticket holds its seat.\n");
     await mongoose.disconnect();
     return;
@@ -117,16 +129,16 @@ const main = async () => {
   }
 
   let relockedCount = 0;
-  for (const ticket of unprotectedTickets) {
-    const [row, ...numberParts] = String(ticket.seat.seatKey).split("-");
+  for (const { ticket, seat } of unprotectedEntries) {
+    const [row, ...numberParts] = String(seat.seatKey).split("-");
     try {
       await CinemaSeatHold.create({
         showtime: ticket.showtime,
         cinema: ticket.cinema,
-        seatKey: ticket.seat.seatKey,
-        row: ticket.seat.row || row,
-        number: ticket.seat.number || numberParts.join("-"),
-        categoryKey: ticket.seat.categoryKey || "standard",
+        seatKey: seat.seatKey,
+        row: seat.row || row,
+        number: seat.number || numberParts.join("-"),
+        categoryKey: seat.categoryKey || "standard",
         status: "sold",
         // Null, so the TTL never reaps a seat someone has paid for.
         expiresAt: null,
@@ -138,7 +150,7 @@ const main = async () => {
       // A duplicate key means the seat is already locked by something else —
       // which is a genuine double-sale and needs a human, not a retry.
       console.error(
-        `    could not re-lock ${ticket.seat.seatKey} for ${ticket.ticketId}: ${error.message}`
+        `    could not re-lock ${seat.seatKey} for ${ticket.ticketId}: ${error.message}`
       );
     }
   }

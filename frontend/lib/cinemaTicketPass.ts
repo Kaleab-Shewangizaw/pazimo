@@ -7,17 +7,31 @@ import type { TicketPassField } from "@/components/tickets/ticket-pass-card";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
+export interface CinemaPassSeat {
+  row?: string;
+  number?: string;
+  seatKey?: string;
+  categoryKey?: string;
+  categoryLabel?: string;
+}
+
 export interface CinemaPassSource {
   ticketId: string;
   ticketType: string;
   quantity: number;
   hallName?: string;
   showtimeStartsAt: string;
-  seat?: { row?: string; number?: string; seatKey?: string } | null;
+  // Every seat bought in the same price category in one checkout shares one
+  // ticket now — a single-seat ticket still has seats.length === 1, general
+  // admission has an empty array.
+  seats?: CinemaPassSeat[] | null;
   cinema?: { name?: string; city?: string } | null;
   movie?: { title?: string; poster?: string | null } | null;
   movieTitle: string;
 }
+
+const seatsOf = (ticket: Pick<CinemaPassSource, "seats">): CinemaPassSeat[] =>
+  (ticket.seats || []).filter((s) => Boolean(s?.seatKey));
 
 export const cinemaPassPosterUrl = (poster?: string | null) => {
   if (!poster) return "";
@@ -40,28 +54,39 @@ export const cinemaPassTitle = (ticket: Pick<CinemaPassSource, "movie" | "movieT
 export const cinemaPassWatermark = (ticket: Pick<CinemaPassSource, "movie" | "movieTitle">) =>
   cinemaPassTitle(ticket).split(" ")[0]?.toUpperCase() || "";
 
-export const buildCinemaPassFields = (ticket: CinemaPassSource): TicketPassField[] => {
-  const hasSeat = Boolean(ticket.seat?.seatKey);
+/**
+ * A single ticket's pass fields, plus the seats it covers so the caller can
+ * offer a "view seats" modal when there is more than one. One seat renders
+ * inline ("ROW A · SEAT 5") exactly as before; several collapse to a count
+ * ("3 SEATS") rather than overflowing the card.
+ */
+export const buildCinemaPassFields = (
+  ticket: CinemaPassSource
+): { fields: TicketPassField[]; seats: CinemaPassSeat[] } => {
+  const seats = seatsOf(ticket);
   const cinemaLine = [ticket.cinema?.name, ticket.cinema?.city].filter(Boolean).join(", ");
 
-  return [
+  const seatValue = !seats.length
+    ? "GENERAL ADMISSION"
+    : seats.length === 1
+      ? `ROW ${seats[0].row} · SEAT ${seats[0].number}`
+      : `${seats.length} SEATS`;
+
+  const fields: TicketPassField[] = [
     { label: "DATE & TIME", value: cinemaPassWhen(ticket.showtimeStartsAt).toUpperCase() },
     { label: "CINEMA", value: (cinemaLine || "—").toUpperCase() },
     { label: "HALL", value: (ticket.hallName || "—").toUpperCase() },
-    {
-      label: "SEAT",
-      value: hasSeat
-        ? `ROW ${ticket.seat!.row} · SEAT ${ticket.seat!.number}`
-        : "GENERAL ADMISSION",
-    },
+    { label: seats.length > 1 ? "SEATS" : "SEAT", value: seatValue },
     {
       label: "TICKET TYPE",
-      value: hasSeat
+      value: seats.length
         ? ticket.ticketType.toUpperCase()
         : `${ticket.ticketType} × ${ticket.quantity}`.toUpperCase(),
     },
     { label: "ORDER ID", value: ticket.ticketId.slice(-6).toUpperCase() },
   ];
+
+  return { fields, seats };
 };
 
 /**
@@ -75,12 +100,12 @@ export const buildCinemaOrderPassFields = (
   transactionId: string
 ): TicketPassField[] => {
   const first = tickets[0];
-  const seated = tickets.filter((t) => t.seat?.seatKey);
+  const seated = tickets.flatMap((t) => seatsOf(t));
   const cinemaLine = [first.cinema?.name, first.cinema?.city].filter(Boolean).join(", ");
   const admits = tickets.reduce((sum, t) => sum + (t.quantity || 1), 0);
 
   const seatsValue = seated.length
-    ? seated.map((t) => `${t.seat!.row}${t.seat!.number}`).join(", ")
+    ? seated.map((s) => `${s.row}${s.number}`).join(", ")
     : `GENERAL ADMISSION × ${admits}`;
 
   const typeCounts = new Map<string, number>();

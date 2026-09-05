@@ -38,8 +38,13 @@ const round2 = (n) => Math.round(((Number(n) || 0) + Number.EPSILON) * 100) / 10
  *                      its tier and therefore its price
  *   unassigned       — the caller names a TIER and a quantity, as today
  *
- * Returning the resolved tier per seat matters downstream: settlement writes one
- * ticket per seat and needs to know which tier's counter to decrement.
+ * Either way, the result is ONE LINE PER TIER, not per seat: a basket of seats
+ * that all resolve to the same tier collapses into a single line carrying a
+ * `quantity` and (for assigned halls) a `seats` array — settlement writes one
+ * CinemaTicket per line, so a customer buying several seats of the same price
+ * gets one ticket, the way a multi-quantity event purchase already does. A
+ * basket spanning more than one tier (2 VIP + 1 Standard) still produces one
+ * line per tier, i.e. one ticket per tier, never one ticket per seat.
  */
 const priceTickets = async ({ showtime, hall, seatKeys, ticketTypeId, quantity }) => {
   const tiersByCategory = new Map();
@@ -62,7 +67,9 @@ const priceTickets = async ({ showtime, hall, seatKeys, ticketTypeId, quantity }
       (hall.seatCategories || []).map((c) => [c.key, c.label])
     );
 
-    const lines = seatKeys.map((key) => {
+    // Grouped by tier, not one entry per seat — see the docstring above.
+    const linesByTier = new Map();
+    seatKeys.forEach((key) => {
       const seat = byKey.get(String(key).trim());
       // One message for unknown, gap and blocked alike: a caller probing keys
       // should not be able to map the room from the errors it gets back.
@@ -85,20 +92,33 @@ const priceTickets = async ({ showtime, hall, seatKeys, ticketTypeId, quantity }
         throw new BadRequestError(`${tier.name} seats are not on sale`);
       }
 
-      return {
+      const tierId = String(tier._id);
+      if (!linesByTier.has(tierId)) {
+        linesByTier.set(tierId, {
+          ticketTypeId: tierId,
+          ticketType: tier.name,
+          // Read off the showtime, never off the request.
+          price: tier.price,
+          quantity: 0,
+          seats: [],
+        });
+      }
+      const line = linesByTier.get(tierId);
+      line.quantity += 1;
+      line.seats.push({
         seatKey: seat.seatKey,
         row: seat.row,
         number: seat.number,
         categoryKey: seat.categoryKey,
         categoryLabel: categoryLabels.get(seat.categoryKey) || seat.categoryKey,
-        ticketTypeId: String(tier._id),
-        ticketType: tier.name,
-        // Read off the showtime, never off the request.
-        price: tier.price,
-      };
+      });
     });
 
-    return { lines, total: round2(lines.reduce((sum, l) => sum + l.price, 0)) };
+    const lines = Array.from(linesByTier.values());
+    return {
+      lines,
+      total: round2(lines.reduce((sum, l) => sum + l.price * l.quantity, 0)),
+    };
   }
 
   // --- unassigned hall: tier + quantity ---------------------------------
@@ -125,13 +145,17 @@ const priceTickets = async ({ showtime, hall, seatKeys, ticketTypeId, quantity }
     );
   }
 
-  // One line per seat here too, so settlement has one shape to handle rather
-  // than two — the only difference is that these lines carry no seat.
-  const lines = Array.from({ length: requested }, () => ({
-    ticketTypeId: String(tier._id),
-    ticketType: tier.name,
-    price: tier.price,
-  }));
+  // One line, same shape a line has on an assigned hall (quantity + seats) —
+  // just with an empty seats array, since there is no chair to name here.
+  const lines = [
+    {
+      ticketTypeId: String(tier._id),
+      ticketType: tier.name,
+      price: tier.price,
+      quantity: requested,
+      seats: [],
+    },
+  ];
 
   return { lines, total: round2(tier.price * requested) };
 };
@@ -318,7 +342,7 @@ const startCheckout = async ({
   if (basket.assignedSeating) {
     hold = await seatService.holdSeats({
       showtimeId,
-      seatKeys: basket.tickets.map((t) => t.seatKey),
+      seatKeys: basket.tickets.flatMap((t) => (t.seats || []).map((s) => s.seatKey)),
       reference,
     });
   }

@@ -34,38 +34,15 @@ const getLogoBase64 = () => {
   return cachedLogo;
 };
 
-// What the scanner reads. Derived entirely from the ticket, so re-rendering an
-// old ticket produces the same code it was issued with — the check-in flow keeps
-// working for tickets sold before this change.
-const buildTicketQrPayload = (ticket, displayName = "") =>
-  JSON.stringify({
-    tid: ticket.ticketId,
-    nm: displayName,
-    tp: ticket.isInvitation ? "guest" : "user",
-    tip: ticket.ticketType,
-    qty: ticket.purchaseQuantity,
-  });
-
-// Resolve the name embedded in the payload. Invitations carry it inline; user
-// tickets may need one lookup, and only when the user isn't already populated.
-//
-// The trailing space when lastName is empty is deliberate — it reproduces what
-// the old pre-save hook wrote, so a re-render of an existing ticket produces the
-// same image it was issued with. Do not "tidy" this with .trim().
-const resolveDisplayName = async (ticket) => {
-  if (ticket.isInvitation) return ticket.guestName || "";
-  if (!ticket.user) return "";
-
-  if (ticket.user.firstName) {
-    return `${ticket.user.firstName} ${ticket.user.lastName ? ticket.user.lastName : ""}`;
-  }
-
-  // Required lazily: models/Ticket.js requires this file, so a top-level
-  // require("./User") here would close a cycle through the model registry.
-  const User = require("../models/User");
-  const user = await User.findById(ticket.user).select("firstName lastName").lean();
-  return user ? `${user.firstName} ${user.lastName ? user.lastName : ""}` : "";
-};
+// What the scanner reads. Just the ticket's own id — validateQRCode looks
+// everything else up server-side (name, ticket type, quantity, status), so
+// none of it needs to ride along in the code itself. Kept minimal on purpose:
+// the more that's embedded, the denser the printed pattern gets, and cinema's
+// own QR (utils in cinemaTicketController.js) has always been this small.
+// Re-rendering an old ticket still produces a scannable code — validateQRCode
+// only ever read `tid`/`ticketId`, so shedding the other fields breaks
+// nothing already issued.
+const buildTicketQrPayload = (ticket) => JSON.stringify({ tid: ticket.ticketId });
 
 // The branded SVG: round (dot) modules, blue rounded finder eyes, logo in the
 // middle.
@@ -132,10 +109,7 @@ const renderQrSvg = async (payload) => {
 };
 
 // Convenience for a ticket document: payload -> SVG in one call.
-const renderTicketQrSvg = async (ticket) => {
-  const name = await resolveDisplayName(ticket);
-  return renderQrSvg(buildTicketQrPayload(ticket, name));
-};
+const renderTicketQrSvg = async (ticket) => renderQrSvg(buildTicketQrPayload(ticket));
 
 // The legacy data-URI form. Kept only so anything still expecting the old shape
 // keeps working during the transition — do not persist the result.
@@ -200,16 +174,13 @@ const renderQrPng = async (payload, width = 400) => {
   return qrImage.getBuffer("image/png");
 };
 
-const renderTicketQrPng = async (ticket, width) => {
-  const name = await resolveDisplayName(ticket);
-  return renderQrPng(buildTicketQrPayload(ticket, name), width);
-};
+const renderTicketQrPng = async (ticket, width) =>
+  renderQrPng(buildTicketQrPayload(ticket), width);
 
 module.exports = {
   getLogoPath,
   getLogoBase64,
   buildTicketQrPayload,
-  resolveDisplayName,
   renderQrSvg,
   renderQrPng,
   renderTicketQrSvg,

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { CheckCircle, Loader2, ArrowRight, Ticket } from "lucide-react";
+import { CheckCircle, Loader2, ArrowRight, Ticket, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { processInvitation } from "@/lib/invitationUtils";
@@ -38,57 +38,30 @@ function PaymentSuccessContent() {
       if (status === "success") return;
 
       try {
-        console.log(`[Payment] Checking status (poll ${pollCount + 1})`);
-        const startTime = Date.now();
-        
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?txn=${txnId}`
         );
         const data = await response.json();
-        
-        console.log(`[Payment] Status check took ${Date.now() - startTime}ms:`, data);
 
         if (data.status === "COMPLETED" || data.status === "PAID") {
           setStatus("success");
           if (data.ticketId) {
             setTicketId(data.ticketId);
           }
-          
-          // ⚡ Auto-login if new user was created
+
           if (data.newUserCredentials) {
-            console.log("[Payment] New user created, auto-logging in...");
             setNewUserCreated(true);
-            
             try {
               await login({
                 email: data.newUserCredentials.email,
                 password: data.newUserCredentials.password,
               });
-              console.log("[Payment] ✅ Auto-login successful");
-              
-              // Verify login worked
-              const authStorage = localStorage.getItem("auth-storage");
-              if (authStorage) {
-                const parsed = JSON.parse(authStorage);
-                console.log("[Payment] ✅ User now logged in:", parsed.state?.user?._id);
-              }
-              
               toast.success("Welcome to Pazimo! Your account has been created.");
-            } catch (loginError) {
-              console.error("[Payment] Auto-login failed:", loginError);
+            } catch {
               toast.info(
                 `Your account has been created. Login with:\nEmail: ${data.newUserCredentials.email}\nPassword: ${data.newUserCredentials.password}`,
                 { duration: 10000 }
               );
-            }
-          } else {
-            // User already existed, verify they're logged in
-            const authStorage = localStorage.getItem("auth-storage");
-            if (authStorage) {
-              const parsed = JSON.parse(authStorage);
-              console.log("[Payment] ✅ User already logged in:", parsed.state?.user?._id);
-            } else {
-              console.log("[Payment] ⚠️ User not logged in after payment");
             }
           }
 
@@ -100,18 +73,14 @@ function PaymentSuccessContent() {
               const invitationData = JSON.parse(storedInvitation);
               await processInvitation(invitationData);
               localStorage.removeItem(`invitation_${txnId}`);
-              // toast.success("Invitation sent successfully!");
-            } catch (e) {
-              console.error("Failed to process invitation", e);
+            } catch {
               toast.error("Payment successful, but failed to send invitation.");
             }
           }
         } else if (data.status === "CANCELLED" || data.status === "CANCELED") {
-          console.log(`[Payment] Payment cancelled`);
           setStatus("failed");
           toast.error("Payment was cancelled.");
         } else if (data.status === "FAILED") {
-          console.log(`[Payment] Payment failed`);
           setStatus("failed");
           toast.error("Payment failed. Please try again.");
         } else {
@@ -122,26 +91,19 @@ function PaymentSuccessContent() {
           if (pollCount < 90) {
             const delays = [500, 500, 1000, 1000, 1500, 1500, 2000, 2000];
             const delay = delays[pollCount] ?? 2000;
-            console.log(`[Payment] Still pending (poll ${pollCount + 1}/90), retrying in ${delay}ms...`);
             setTimeout(() => setPollCount((prev) => prev + 1), delay);
           } else {
             // 3 minutes elapsed — cancel the payment server-side and show failure
-            console.log(`[Payment] 3-minute timeout reached, cancelling payment`);
-            try {
-              await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/cancel`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ transactionId: txnId }),
-              });
-            } catch (cancelErr) {
-              console.error("[Payment] Failed to cancel payment:", cancelErr);
-            }
+            await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/payments/cancel`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ transactionId: txnId }),
+            }).catch(() => {});
             setStatus("failed");
             toast.error("Payment timed out. Please try again.");
           }
         }
-      } catch (error) {
-        console.error("[Payment] Status check failed:", error);
+      } catch {
         // Retry on error up to the same 3-minute window
         if (pollCount < 90) {
           const delays = [500, 500, 1000, 1000, 2000, 2000, 3000, 3000];
@@ -170,69 +132,69 @@ function PaymentSuccessContent() {
   }, [status, ticketId, router]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 dark:bg-background">
+      <div className="w-full max-w-md rounded-2xl border border-transparent bg-white p-8 text-center shadow-xl dark:border-border dark:bg-card">
         <div className="mb-6 flex justify-center">
           {status === "loading" || status === "pending" ? (
-            <Loader2 className="w-16 h-16 text-blue-600 animate-spin" />
+            <Loader2 className="h-16 w-16 animate-spin text-blue-600 dark:text-blue-400" />
           ) : status === "success" ? (
-            <CheckCircle className="w-20 h-20 text-green-500" />
+            <CheckCircle className="h-20 w-20 text-green-500 dark:text-green-400" />
           ) : (
-            <div className="w-20 h-20 rounded-full bg-red-100 flex items-center justify-center">
-              <span className="text-4xl">⚠️</span>
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/10">
+              <AlertTriangle className="h-10 w-10 text-red-500 dark:text-red-400" />
             </div>
           )}
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+        <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-foreground">
           {status === "loading"
-            ? "Verifying Payment..."
+            ? "Verifying payment"
             : status === "pending"
-            ? "Payment Processing"
+            ? "Confirming payment"
             : status === "success"
-            ? "Payment Successful!"
-            : "Payment Failed"}
+            ? "Payment successful"
+            : "Payment failed"}
         </h1>
 
-        <p className="text-gray-600 mb-8">
+        <p className="mb-8 text-gray-600 dark:text-muted-foreground">
           {status === "loading" || status === "pending"
-            ? "Please wait while we confirm your transaction."
+            ? "This only takes a moment."
             : status === "success"
             ? isInvitation
-              ? "Thank you! Your invitation has been sent successfully."
+              ? "Your invitation is on its way."
               : newUserCreated
-              ? "Thank you for your purchase! Your account has been created and you're now logged in. Your tickets have been sent to your email and SMS."
-              : "Thank you for your purchase. Your tickets have been generated and sent to your email."
-            : "We couldn't verify your payment. Please contact support if you believe this is an error."}
+              ? "Your account is ready, and your ticket is on its way."
+              : "Your ticket is ready — sent to your email."
+            : "We couldn't verify this payment. Contact support if you were charged."}
         </p>
 
         <div className="space-y-3">
           {status === "success" && !isInvitation && (
             <Link href="/my-account" className="block w-full">
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg">
-                <Ticket className="mr-2 h-5 w-5" /> View My Tickets
+              <Button className="h-12 w-full bg-blue-600 text-lg text-white hover:bg-blue-700">
+                <Ticket className="mr-2 h-5 w-5" /> View my tickets
               </Button>
             </Link>
           )}
 
           {status === "success" && isInvitation && (
             <Link href="/organizer/invitations" className="block w-full">
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-lg">
-                Return to Invitations
+              <Button className="h-12 w-full bg-blue-600 text-lg text-white hover:bg-blue-700">
+                Return to invitations
               </Button>
             </Link>
           )}
 
           <Link
             href="/events"
-            className={`block w-full ${
+            className={`flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold transition-colors ${
               status === "success"
-                ? "bg-gray-100 hover:bg-gray-200 text-gray-700"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            } font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2`}
+                ? "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-secondary dark:text-secondary-foreground dark:hover:bg-secondary/80"
+                : "bg-blue-600 text-white hover:bg-blue-700"
+            }`}
           >
-            {status === "success" ? "Browse More Events" : "Return to Events"}{" "}
-            <ArrowRight className="w-4 h-4" />
+            {status === "success" ? "Browse more events" : "Return to events"}{" "}
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
@@ -242,7 +204,13 @@ function PaymentSuccessContent() {
 
 export default function PaymentSuccessPage() {
   return (
-    <Suspense fallback={<div className="p-10 text-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="p-10 text-center text-gray-600 dark:text-muted-foreground">
+          Loading…
+        </div>
+      }
+    >
       <PaymentSuccessContent />
     </Suspense>
   );

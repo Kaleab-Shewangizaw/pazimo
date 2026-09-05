@@ -286,16 +286,19 @@ export interface CinemaTicket {
   hall?: { _id: string; name: string };
   cinema?: { _id: string; name: string; city?: string; image?: string | null };
   /**
-   * The chair, on an assigned-seating hall. A SNAPSHOT taken at sale time, so
-   * it keeps saying "Row K, seat 7, VIP" after the room is re-tiered.
+   * The chairs this ticket admits, on an assigned-seating hall — every seat
+   * bought in the same price category in one checkout shares one ticket, so
+   * this can have more than one entry (`quantity` above is its length).
+   * Each is a SNAPSHOT taken at sale time, so it keeps saying "Row K, seat 7,
+   * VIP" after the room is re-tiered. Empty/absent on an unassigned hall.
    */
-  seat?: {
+  seats?: {
     row?: string;
     number?: string;
     seatKey?: string;
     categoryKey?: string;
     categoryLabel?: string;
-  } | null;
+  }[] | null;
 }
 
 export interface CinemaConcession {
@@ -763,7 +766,7 @@ export const fetchCinemaOrder = (transactionId: string) =>
       quantity: number;
       totalAmount: number;
       currency: string;
-      seat?: { row?: string; number?: string; seatKey?: string; categoryLabel?: string };
+      seats?: { row?: string; number?: string; seatKey?: string; categoryLabel?: string }[];
       movie?: { title?: string; poster?: string | null };
       cinema?: { name?: string; address?: string; city?: string };
     }[];

@@ -45,6 +45,12 @@ const formatWhen = (date) => {
   });
 };
 
+// One ticket can now cover several seats (every seat bought in the same price
+// category in one order). Falls back to the old singular `seat` field so a
+// ticket written before this changed still prints correctly.
+const seatsOf = (ticket) =>
+  ticket.seats?.length ? ticket.seats : ticket.seat ? [ticket.seat] : [];
+
 /**
  * The one line that matters: where to sit.
  *
@@ -54,17 +60,19 @@ const formatWhen = (date) => {
  */
 const describeSeats = (tickets) => {
   // Filtered on the fields actually printed below, not on seatKey. They are
-  // always written together by the checkout, but a ticket that somehow carried
+  // always written together by the checkout, but a seat that somehow carried
   // one and not the other would otherwise print "Seat undefinedundefined".
-  const seated = tickets.filter((t) => t.seat?.row && t.seat?.number);
+  const seated = tickets
+    .flatMap((t) => seatsOf(t))
+    .filter((s) => s?.row && s?.number);
   if (!seated.length) {
     const admits = tickets.reduce((sum, t) => sum + (t.quantity || 1), 0);
     return `Admits ${admits}`;
   }
   if (seated.length === 1) {
-    return `Seat ${seated[0].seat.row}${seated[0].seat.number}`;
+    return `Seat ${seated[0].row}${seated[0].number}`;
   }
-  return `Seats ${seated.map((t) => `${t.seat.row}${t.seat.number}`).join(", ")}`;
+  return `Seats ${seated.map((s) => `${s.row}${s.number}`).join(", ")}`;
 };
 
 /**
@@ -147,16 +155,23 @@ const sendCinemaTicketEmail = async ({ tickets, concessions, name, seats, when, 
   });
 
   const rows = tickets
-    .map(
-      (t) => `
+    .map((t) => {
+      const seatList = seatsOf(t);
+      const seatText = !seatList.length
+        ? t.ticketType
+        : seatList.length === 1
+          ? `Row ${seatList[0].row} · Seat ${seatList[0].number}`
+          : `Seats ${seatList.map((s) => `${s.row}${s.number}`).join(", ")}`;
+      const categoryLabel = seatList[0]?.categoryLabel || t.ticketType;
+      return `
       <tr>
         <td style="padding:12px 0;border-bottom:1px solid #eee">
-          <div style="font-weight:600">${t.seat?.seatKey ? `Row ${t.seat.row} · Seat ${t.seat.number}` : t.ticketType}</div>
-          <div style="color:#666;font-size:13px">${t.seat?.categoryLabel || t.ticketType}</div>
+          <div style="font-weight:600">${seatText}</div>
+          <div style="color:#666;font-size:13px">${categoryLabel}</div>
           <a href="${ticketLink(t.ticketId)}" style="color:#4f46e5;font-size:13px">Open ticket ${t.ticketId}</a>
         </td>
-      </tr>`
-    )
+      </tr>`;
+    })
     .join("");
 
   const snacks = concessions.length

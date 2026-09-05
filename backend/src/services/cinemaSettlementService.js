@@ -52,11 +52,12 @@ const settleCinemaOrder = async ({ order, reference, customer, customerName, cus
   const failedTickets = [];
 
   for (const line of order.tickets) {
+    const seats = Array.isArray(line.seats) ? line.seats : [];
     try {
       const ticket = await cinemaTicketService.issueTicket({
         showtimeId: order.showtimeId,
         ticketTypeId: line.ticketTypeId,
-        quantity: 1,
+        quantity: line.quantity ?? 1,
         customer,
         customerName,
         customerPhone,
@@ -65,20 +66,18 @@ const settleCinemaOrder = async ({ order, reference, customer, customerName, cus
         paymentReference: reference,
         paymentStatus: "completed",
         cinemaId: showtime.cinema,
-        // The seat, when there is one. issueTicket writes it onto the ticket as
-        // a snapshot and confirms the hold.
-        seat: line.seatKey
-          ? {
-              seatKey: line.seatKey,
-              row: line.row,
-              number: line.number,
-              categoryKey: line.categoryKey,
-              categoryLabel: line.categoryLabel,
-            }
-          : undefined,
-        // The seat was locked at basket time under this reference; issueTicket
-        // confirms that hold instead of taking a new one.
-        seatHoldReference: line.seatKey ? reference : undefined,
+        // The seats this line covers, when there are any — issueTicket writes
+        // them onto the ticket as a snapshot and confirms each one's hold.
+        seats: seats.map((seat) => ({
+          seatKey: seat.seatKey,
+          row: seat.row,
+          number: seat.number,
+          categoryKey: seat.categoryKey,
+          categoryLabel: seat.categoryLabel,
+        })),
+        // Every seat here was locked at basket time under this reference;
+        // issueTicket confirms those holds instead of taking new ones.
+        seatHoldReference: seats.length ? reference : undefined,
         // Already checked at basket time. Re-checking here would let an admin
         // un-publishing a film during a redirect strand a customer who has
         // already paid, with a charge and no ticket.
@@ -87,9 +86,12 @@ const settleCinemaOrder = async ({ order, reference, customer, customerName, cus
       tickets.push(ticket);
     } catch (error) {
       // Recorded, never swallowed. The customer has paid; someone has to know
-      // this seat did not materialise.
+      // this line did not materialise.
+      const seatDescr = seats.length
+        ? seats.map((s) => s.seatKey).join(",")
+        : line.ticketType;
       console.error(
-        `[CINEMA-SETTLE] ticket failed for ${reference} seat ${line.seatKey || line.ticketType}: ${error.message}`
+        `[CINEMA-SETTLE] ticket failed for ${reference} (${seatDescr}): ${error.message}`
       );
       failedTickets.push({ line, reason: error.message });
     }

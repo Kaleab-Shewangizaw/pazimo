@@ -8,8 +8,9 @@ require("dotenv").config({ path: path.join(__dirname, "../../.env") });
  *
  * Money and seats, end to end: server-side pricing that ignores anything the
  * client claims a thing costs, seats locked while payment runs, settlement that
- * issues one ticket per seat with its own scannable id, and a webhook that can
- * fire twice without selling anything twice.
+ * issues one ticket per price category (not one per seat) each with its own
+ * scannable id, and a webhook that can fire twice without selling anything
+ * twice.
  *
  * Runs against a SCRATCH DATABASE it creates and drops, never the app's own, so
  * it is safe to run anywhere and needs no fixtures. MONGODB_URI is used only for
@@ -64,7 +65,7 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
     hasAssignedSeating:true,
     seatCategories:[{key:'standard',label:'Standard'},{key:'vip',label:'VIP'}],
     seatMap:{rows:[
-      {label:'A',curve:20,seats:[{number:'1',categoryKey:'standard'},{number:'2',categoryKey:'standard'},{number:'3',categoryKey:'standard'}]},
+      {label:'A',curve:20,seats:[{number:'1',categoryKey:'standard'},{number:'2',categoryKey:'standard'},{number:'3',categoryKey:'standard'},{number:'4',categoryKey:'standard'},{number:'5',categoryKey:'standard'}]},
       {label:'K',curve:0,seats:[{number:'1',categoryKey:'vip'},{number:'2',categoryKey:'vip'}]}]}});
   const movie=await CinemaMovie.create({cinema:cinema._id,title:'Dune',durationMinutes:120,publicationStatus:'published'});
   const st=await CinemaShowtime.create({cinema:cinema._id,movie:movie._id,hall:hall._id,
@@ -83,7 +84,7 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   check('seat category sets the price (220 + 400)', basket.ticketTotal===620, basket.ticketTotal);
   check('snacks priced from the line-up (2x80 + 3x50)', basket.concessionTotal===310, basket.concessionTotal);
   check('total = 930', basket.total===930, basket.total);
-  check('VIP seat resolved to the VIP tier', basket.tickets.find(t=>t.seatKey==='K-1').ticketType==='VIP');
+  check('VIP seat resolved to the VIP tier', basket.tickets.find(t=>t.seats?.some(s=>s.seatKey==='K-1')).ticketType==='VIP');
 
   console.log('\n--- the client cannot set the price ---');
   const tampered=await checkout.priceBasket({showtimeId:st._id,seatKeys:['K-1'],
@@ -109,16 +110,26 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   console.log('\n--- settlement ---');
   const result=await settle.settleCinemaOrder({order,reference:'order-1',
     customerName:'Test Buyer',customerPhone:'+14155550100',customerEmail:''});
-  check('two tickets issued, one per seat', result.tickets.length===2, result.tickets.length);
+  check('two tickets issued, one per price category (A-1 standard, K-1 VIP)', result.tickets.length===2, result.tickets.length);
   check('no failures', result.failedTickets.length===0 && result.failedConcessions.length===0,
         JSON.stringify([result.failedTickets,result.failedConcessions]));
   check('one concession sale recorded', result.concessions.length===1);
-  const vipTicket=result.tickets.find(t=>t.seat?.seatKey==='K-1');
-  check('ticket carries the seat snapshot', vipTicket && vipTicket.seat.row==='K' && vipTicket.seat.categoryLabel==='VIP',
-        JSON.stringify(vipTicket&&vipTicket.seat));
+  const vipTicket=result.tickets.find(t=>t.seats?.some(s=>s.seatKey==='K-1'));
+  check('ticket carries the seat snapshot', vipTicket && vipTicket.seats[0].row==='K' && vipTicket.seats[0].categoryLabel==='VIP',
+        JSON.stringify(vipTicket&&vipTicket.seats));
   check('ticket charged the VIP price', vipTicket && vipTicket.totalAmount===400, vipTicket&&vipTicket.totalAmount);
   check('every ticket has a scannable id', result.tickets.every(t=>!!t.ticketId));
   check('holds became sold', await CinemaSeatHold.countDocuments({reference:'order-1',status:'sold'})===2);
+
+  console.log('\n--- two seats in the SAME category collapse into one ticket ---');
+  const sameCatOrder=await checkout.startCheckout({showtimeId:st._id,seatKeys:['A-4','A-5'],reference:'same-cat'});
+  const sameCatResult=await settle.settleCinemaOrder({order:sameCatOrder,reference:'same-cat',customerName:'Pair Buyer'});
+  check('one ticket for two same-category seats, not two', sameCatResult.tickets.length===1, sameCatResult.tickets.length);
+  const pairTicket=sameCatResult.tickets[0];
+  check('ticket carries both seats and the right quantity', pairTicket.seats?.length===2 && pairTicket.quantity===2,
+        JSON.stringify(pairTicket.seats));
+  check('ticket charged for both seats (2 x 220)', pairTicket.totalAmount===440, pairTicket.totalAmount);
+  check('both seat holds are sold', await CinemaSeatHold.countDocuments({reference:'same-cat',status:'sold'})===2);
 
   console.log('\n--- idempotence: the webhook fires twice ---');
   const again=await settle.settleCinemaOrder({order,reference:'order-1',customerName:'Test Buyer'});
@@ -144,14 +155,14 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   try{ walkin=await ticketSvc.issueTicket({showtimeId:st._id,ticketTypeId:String(st.ticketTypes[0]._id),
     quantity:1,customerName:'walkin',channel:'box_office',paymentStatus:'completed',
     cinemaId:cinema._id,requirePublished:false,
-    seat:{seatKey:'A-2',row:'A',number:'2',categoryKey:'standard',categoryLabel:'Standard'}}); }catch(e){err=e;}
+    seats:[{seatKey:'A-2',row:'A',number:'2',categoryKey:'standard',categoryLabel:'Standard'}]}); }catch(e){err=e;}
   check('counter sale of seat A-2 succeeds', !err && !!walkin, err&&err.message);
   check('A-2 now locked against the online picker', await CinemaSeatHold.countDocuments({seatKey:'A-2',status:'sold'})===1);
 
   const map=await seats.getSeatMapForShowtime(st._id);
   const flat=map.rows.flatMap(r=>r.seats);
   const st2=flat.reduce((a,s)=>{a[s.status]=(a[s.status]||0)+1;return a;},{});
-  check('picker shows 3 sold, 2 available: '+JSON.stringify(st2), st2.sold===3 && st2.available===2);
+  check('picker shows 5 sold, 2 available: '+JSON.stringify(st2), st2.sold===5 && st2.available===2);
 
 
   // ---------------------------------------------------------------------
@@ -214,7 +225,7 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
 
   console.log('\n--- refund releases BOTH locks ---');
   const ticketSvc2 = require("../services/cinemaTicketService");
-  const soldTicket = result.tickets.find((t) => t.seat?.seatKey === 'K-1');
+  const soldTicket = result.tickets.find((t) => t.seats?.some(s=>s.seatKey === 'K-1'));
   const beforeTier = (await CinemaShowtime.findById(st._id)).ticketTypes
     .find((t) => t.seatCategoryKey === 'vip').sold;
   await ticketSvc2.refundTicket(soldTicket._id, { reason: 'test refund' });
@@ -223,6 +234,17 @@ const check=(l,c,e='')=>{ if(c){pass++;console.log('  ok   '+l);} else {fail++;c
   check('refund returns the tier counter', afterTier === beforeTier - 1, `${beforeTier} -> ${afterTier}`);
   check('refund releases the seat lock too',
     (await CinemaSeatHold.countDocuments({ showtime: st._id, seatKey: 'K-1' })) === 0);
+
+  console.log('\n--- refunding a MULTI-SEAT ticket releases every one of its seats ---');
+  const beforeStdTier = (await CinemaShowtime.findById(st._id)).ticketTypes
+    .find((t) => t.seatCategoryKey === 'standard').sold;
+  await ticketSvc2.refundTicket(pairTicket._id, { reason: 'test refund pair' });
+  const afterStdTier = (await CinemaShowtime.findById(st._id)).ticketTypes
+    .find((t) => t.seatCategoryKey === 'standard').sold;
+  check('refund returns the tier counter by the ticket\'s full quantity',
+    afterStdTier === beforeStdTier - 2, `${beforeStdTier} -> ${afterStdTier}`);
+  check('refund releases BOTH seat locks, not just one',
+    (await CinemaSeatHold.countDocuments({ showtime: st._id, seatKey: { $in: ['A-4', 'A-5'] } })) === 0);
 
   // The point of the pair: the freed chair has to be genuinely re-sellable.
   // Returning only the tier counter leaves the picker refusing a seat the tier

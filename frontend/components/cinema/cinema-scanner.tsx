@@ -25,7 +25,7 @@ type StaffTicket = {
   hallName?: string;
   ticketType: string;
   quantity: number;
-  seat?: { row?: string; number?: string } | null;
+  seats?: { row?: string; number?: string }[] | null;
   checkedIn: boolean;
   checkedAt?: string | null;
   status: string;
@@ -111,7 +111,11 @@ const readScan = (
 };
 
 const seatLabel = (t: StaffTicket) =>
-  t.seat?.row ? `Row ${t.seat.row} · Seat ${t.seat.number}` : `${t.ticketType} × ${t.quantity}`;
+  t.seats?.length
+    ? t.seats.length === 1
+      ? `Row ${t.seats[0].row} · Seat ${t.seats[0].number}`
+      : `Seats ${t.seats.map((s) => `${s.row}${s.number}`).join(", ")}`
+    : `${t.ticketType} × ${t.quantity}`;
 
 export default function CinemaScanner() {
   const { token } = useAuthStore();

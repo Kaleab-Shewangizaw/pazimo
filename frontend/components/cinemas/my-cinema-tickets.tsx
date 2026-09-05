@@ -95,13 +95,13 @@ export default function MyCinemaTickets() {
           const first = group[0];
           const admitted = group.filter((t) => t.checkedIn).length;
           const allDead = group.every((t) => ["refunded", "cancelled"].includes(t.status));
-          const seated = group.filter((t) => t.seat?.row);
+          const seated = group.flatMap((t) => t.seats || []).filter((s) => s?.row);
           const admits = group.reduce((sum, t) => sum + (t.quantity || 1), 0);
 
           const seatLine = seated.length
             ? seated.length === 1
-              ? `Row ${seated[0].seat!.row} · Seat ${seated[0].seat!.number}`
-              : `Seats ${seated.map((t) => `${t.seat!.row}${t.seat!.number}`).join(", ")}`
+              ? `Row ${seated[0].row} · Seat ${seated[0].number}`
+              : `Seats ${seated.map((s) => `${s.row}${s.number}`).join(", ")}`
             : `${first.ticketType} × ${admits}`;
 
           // A grouped order — several seats bought in one checkout — links to

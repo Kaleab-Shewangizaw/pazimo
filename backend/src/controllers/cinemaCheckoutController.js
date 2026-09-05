@@ -578,7 +578,7 @@ const getOrder = async (req, res) => {
       .populate("movie", "title poster")
       .populate("cinema", "name address city")
       .select(
-        "ticketId movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency seat status paymentStatus purchaseDate movie cinema"
+        "ticketId movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency seats status paymentStatus purchaseDate movie cinema"
       )
       .lean();
 

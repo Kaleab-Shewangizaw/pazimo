@@ -16,6 +16,10 @@ export interface TicketPassCardProps {
   badgeClassName?: string;
   backdropImageUrl?: string;
   fields: TicketPassField[];
+  /** Rendered under the fields grid — e.g. a "View seats" button for a
+   * multi-seat ticket. Absent for the common single-seat/general-admission
+   * card, which looks exactly as it always has. */
+  extra?: ReactNode;
   qrSrc?: string;
   qrAlt?: string;
   caption?: string;
@@ -57,6 +61,7 @@ export default function TicketPassCard({
   badgeClassName = "border-white/50 text-white",
   backdropImageUrl,
   fields,
+  extra,
   qrSrc,
   qrAlt = "Ticket QR Code",
   caption = "— SCAN FOR ENTRY —",
@@ -94,6 +99,8 @@ export default function TicketPassCard({
             </div>
           ))}
         </div>
+
+        {extra && <div className="relative mt-4">{extra}</div>}
       </div>
 
       {/* Perforation with die-cut notches */}

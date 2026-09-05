@@ -2,6 +2,13 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import TicketPassCard, { buildPassBackdropStyle } from "@/components/tickets/ticket-pass-card";
 import {
   buildCinemaPassFields,
@@ -9,6 +16,7 @@ import {
   cinemaPassTitle,
   cinemaPassWatermark,
   cinemaPassWhen,
+  type CinemaPassSeat,
 } from "@/lib/cinemaTicketPass";
 import { cinemaTicketQrUrl, downloadCinemaTicketQr } from "@/lib/cinemaTicketQr";
 import { toast } from "sonner";
@@ -41,14 +49,47 @@ export interface CinemaTicketData {
   checkedIn?: boolean;
   checkedAt?: string | null;
   customerName?: string;
-  seat?: {
-    row?: string;
-    number?: string;
-    seatKey?: string;
-    categoryLabel?: string;
-  } | null;
+  // Every seat this ticket covers — all bought in the same price category in
+  // one checkout. A single-seat ticket still has one entry here.
+  seats?: CinemaPassSeat[] | null;
   cinema?: { name?: string; address?: string; city?: string } | null;
   movie?: { title?: string; poster?: string | null } | null;
+}
+
+/** Lists each seat a multi-seat ticket covers. Not shown at all for the
+ * common one-seat case — that already reads fine on the card itself. */
+function SeatsModal({ seats }: { seats: CinemaPassSeat[] }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-full border-white/30 bg-white/5 text-white hover:bg-white/10 hover:text-white"
+        >
+          View {seats.length} seats
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-xs">
+        <DialogHeader>
+          <DialogTitle>Seats on this ticket</DialogTitle>
+        </DialogHeader>
+        <ul className="divide-y divide-border">
+          {seats.map((seat) => (
+            <li key={seat.seatKey} className="flex items-center justify-between py-2 text-sm">
+              <span className="font-medium">
+                Row {seat.row} · Seat {seat.number}
+              </span>
+              {seat.categoryLabel && (
+                <span className="text-muted-foreground">{seat.categoryLabel}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 export default function CinemaTicketView({ ticket }: { ticket: CinemaTicketData }) {
@@ -65,6 +106,7 @@ export default function CinemaTicketView({ ticket }: { ticket: CinemaTicketData 
 
   const posterUrl = cinemaPassPosterUrl(ticket.movie?.poster);
   const backdropStyle = buildPassBackdropStyle(posterUrl);
+  const { fields, seats } = buildCinemaPassFields(ticket);
 
   let badgeText = "OFFICIAL PASS";
   let badgeClassName = "border-white/50 text-white";
@@ -88,7 +130,8 @@ export default function CinemaTicketView({ ticket }: { ticket: CinemaTicketData 
           badgeText={badgeText}
           badgeClassName={badgeClassName}
           backdropImageUrl={posterUrl}
-          fields={buildCinemaPassFields(ticket)}
+          fields={fields}
+          extra={seats.length > 1 ? <SeatsModal seats={seats} /> : undefined}
           qrSrc={dead ? undefined : cinemaTicketQrUrl(ticket.ticketId)}
           qrAlt={`QR code for ticket ${ticket.ticketId}`}
           deadMessage={

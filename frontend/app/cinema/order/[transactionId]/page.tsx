@@ -215,9 +215,11 @@ export default function CinemaOrderPage() {
             }
           />
 
-          {/* Each seat's own code, for anyone in the group arriving separately —
-              the order QR above admits every seat at once, so a seat handed to
-              someone else keeps its own single-seat code instead. */}
+          {/* Each ticket's own code, for anyone in the group arriving
+              separately — the order QR above admits everything at once, so a
+              subset of the group can peel off with just their own ticket's
+              code instead. One ticket covers every seat in its price
+              category, so its link lists all of them, not just one. */}
           {order.tickets.length > 1 && (
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               {order.tickets.map((ticket) => (
@@ -226,8 +228,8 @@ export default function CinemaOrderPage() {
                   href={`/ticket/${ticket.ticketId}`}
                   className="underline underline-offset-2"
                 >
-                  {ticket.seat?.row
-                    ? `Seat ${ticket.seat.row}${ticket.seat.number}`
+                  {ticket.seats?.length
+                    ? `Seat${ticket.seats.length > 1 ? "s" : ""} ${ticket.seats.map((s) => `${s.row}${s.number}`).join(", ")}`
                     : `Ticket ${ticket.ticketId.slice(-6).toUpperCase()}`}
                 </Link>
               ))}

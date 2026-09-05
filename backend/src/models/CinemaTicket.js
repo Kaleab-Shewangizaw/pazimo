@@ -111,24 +111,36 @@ const CinemaTicketSchema = new mongoose.Schema(
       required: true,
     },
 
-    // The seat this ticket admits, on a hall with assigned seating.
+    // The seats this ticket admits, on a hall with assigned seating. One
+    // ticket covers every seat bought in the same price category in one
+    // checkout (2 VIP seats in one order -> one ticket, seats.length === 2) —
+    // a mixed-category order (2 VIP + 1 Standard) still produces two tickets,
+    // one per category, matching how a mixed-ticket-type event order already
+    // works. `quantity` below is always seats.length on an assigned hall.
     //
-    // A SNAPSHOT, not a reference. The hall's map is a living document a cinema
-    // re-tiers and re-labels; a sold ticket must keep saying "Row K, seat 7,
-    // VIP" for ever, even after row K is renamed or the VIP box is moved. It is
-    // also what the door reads, and the door cannot depend on the map still
-    // describing the room the way it did when the ticket was bought.
+    // Each entry is a SNAPSHOT, not a reference. The hall's map is a living
+    // document a cinema re-tiers and re-labels; a sold ticket must keep saying
+    // "Row K, seat 7, VIP" for ever, even after row K is renamed or the VIP
+    // box is moved. It is also what the door reads, and the door cannot depend
+    // on the map still describing the room the way it did when the ticket was
+    // bought.
     //
-    // Absent on unassigned-seating halls and on box-office sales that predate a
+    // Empty on unassigned-seating halls and on box-office sales that predate a
     // hall's seat map, where a ticket admits to the room and not to a chair.
-    seat: {
-      row: { type: String, trim: true },
-      number: { type: String, trim: true },
-      // "A-12" — the identity the hold used, kept so a refund can find and
-      // release the exact row that was locked.
-      seatKey: { type: String, trim: true },
-      categoryKey: { type: String, trim: true },
-      categoryLabel: { type: String, trim: true },
+    seats: {
+      type: [
+        {
+          _id: false,
+          row: { type: String, trim: true },
+          number: { type: String, trim: true },
+          // "A-12" — the identity the hold used, kept so a refund can find and
+          // release the exact row that was locked.
+          seatKey: { type: String, trim: true },
+          categoryKey: { type: String, trim: true },
+          categoryLabel: { type: String, trim: true },
+        },
+      ],
+      default: [],
     },
 
     // The per-seat price of the tier at the moment of sale.
@@ -137,8 +149,8 @@ const CinemaTicketSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
-    // Seats on this row. One row can admit several people, the way an event
-    // ticket's purchaseQuantity does.
+    // How many seats/admissions this ticket covers — seats.length on an
+    // assigned hall, a plain counter on an unassigned one.
     quantity: {
       type: Number,
       default: 1,
@@ -268,9 +280,9 @@ CinemaTicketSchema.index({ cinema: 1, status: 1, paymentStatus: 1, purchaseDate:
 // The scanner looks a ticket up by its code and nothing else.
 CinemaTicketSchema.index({ showtime: 1, checkedIn: 1 });
 // "Which seat is this?" at the door, and the refund path's lookup by seat.
-// Sparse: only assigned-seating tickets carry one, and indexing the nulls of
+// Sparse: only assigned-seating tickets carry any, and indexing the nulls of
 // every box-office sale would be pure cost.
-CinemaTicketSchema.index({ showtime: 1, "seat.seatKey": 1 }, { sparse: true });
+CinemaTicketSchema.index({ showtime: 1, "seats.seatKey": 1 }, { sparse: true });
 
 // Snapshot the cinema's ticket commission rate and VAT coverage at sale time.
 //
