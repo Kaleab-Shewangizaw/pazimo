@@ -593,12 +593,18 @@ export default function BookingFlow({
             {basket && (
               <div className="space-y-1.5 rounded-xl border border-border p-4 text-sm">
                 {basket.tickets.map((t) => (
-                  <div key={t.seatKey} className="flex justify-between gap-3">
+                  <div key={t.ticketTypeId} className="flex justify-between gap-3">
                     <span>
-                      Seat {t.seatKey}{" "}
-                      <span className="text-muted-foreground">({t.categoryLabel})</span>
+                      {t.seats.length > 0
+                        ? `Seat${t.seats.length > 1 ? "s" : ""} ${t.seats.map((s) => s.seatKey).join(", ")}`
+                        : `${t.ticketType} × ${t.quantity}`}{" "}
+                      <span className="text-muted-foreground">
+                        ({t.seats[0]?.categoryLabel || t.ticketType})
+                      </span>
                     </span>
-                    <span className="tabular-nums">{money(t.price, currency)}</span>
+                    <span className="tabular-nums">
+                      {money(t.price * t.quantity, currency)}
+                    </span>
                   </div>
                 ))}
                 {basket.concessions.map((c) => (
@@ -635,7 +641,7 @@ export default function BookingFlow({
                   {money(basket.total, currency)}
                 </span>
                 <span className="text-muted-foreground">
-                  {basket.tickets.length} seat{basket.tickets.length === 1 ? "" : "s"}
+                  {seatCount} seat{seatCount === 1 ? "" : "s"}
                   {basket.concessions.length
                     ? ` · ${basket.concessions.length} item${basket.concessions.length === 1 ? "" : "s"}`
                     : ""}

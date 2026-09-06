@@ -165,15 +165,22 @@ export interface ShowtimeSeatMap {
   needsRepricing?: boolean;
 }
 
-export interface CinemaBasketTicket {
-  seatKey?: string;
+export interface CinemaBasketTicketSeat {
+  seatKey: string;
   row?: string;
   number?: string;
   categoryKey?: string;
   categoryLabel?: string;
+}
+
+export interface CinemaBasketTicket {
   ticketTypeId: string;
   ticketType: string;
+  /** Unit price for one seat/quantity of this tier — multiply by `quantity` for the line total. */
   price: number;
+  quantity: number;
+  /** One entry per seat on an assigned-seating hall; empty on an unassigned hall. */
+  seats: CinemaBasketTicketSeat[];
 }
 
 export interface CinemaBasketConcession {
