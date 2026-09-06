@@ -50,6 +50,11 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
   const [dayIndex, setDayIndex] = useState(0);
   const [showtimeId, setShowtimeId] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
+  // True once the "confirm" step's order has actually settled — the dialog
+  // drops its own header/border/background at that point so the ticket is
+  // the only thing left on screen, matching the event checkout's own
+  // bare, transparent post-purchase dialog.
+  const [ticketReady, setTicketReady] = useState(false);
 
   const day = days[dayIndex];
 
@@ -529,23 +534,41 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
         </Tabs>
       </div>
 
-      <Dialog open={booking} onOpenChange={setBooking}>
+      <Dialog
+        open={booking}
+        onOpenChange={(open) => {
+          setBooking(open);
+          if (!open) setTicketReady(false);
+        }}
+      >
         {/* A sheet that owns the whole screen on a phone, a framed panel on a
             desktop. Either way the header and the price bar stay put and only
-            the room scrolls, so the way forward is never scrolled off. */}
-        <DialogContent className="flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl sm:border">
-          <DialogHeader className="shrink-0 space-y-0.5 border-b border-border px-4 py-4 text-left sm:px-6">
-            <DialogTitle className="pr-8 text-base font-semibold sm:text-lg">
-              {movie.title}
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              {showtime
-                ? `${dayLabel(day.date)} · ${clockLabel(showtime.startsAt)}${
-                    showtime.hall?.name ? ` · ${showtime.hall.name}` : ""
-                  }`
-                : ""}
-            </DialogDescription>
-          </DialogHeader>
+            the room scrolls, so the way forward is never scrolled off —
+            EXCEPT once the ticket is ready: at that point this drops its own
+            header, border and background entirely, the same way the event
+            checkout's own post-purchase dialog goes fully transparent, so
+            the ticket card is the only thing left on screen. */}
+        <DialogContent
+          className={
+            ticketReady
+              ? "w-[calc(100vw-2rem)] max-w-sm max-h-[92vh] overflow-y-auto rounded-none border-0 bg-transparent p-1 shadow-none gap-0"
+              : "flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-2xl sm:border"
+          }
+        >
+          {!ticketReady && (
+            <DialogHeader className="shrink-0 space-y-0.5 border-b border-border px-4 py-4 text-left sm:px-6">
+              <DialogTitle className="pr-8 text-base font-semibold sm:text-lg">
+                {movie.title}
+              </DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                {showtime
+                  ? `${dayLabel(day.date)} · ${clockLabel(showtime.startsAt)}${
+                      showtime.hall?.name ? ` · ${showtime.hall.name}` : ""
+                    }`
+                  : ""}
+              </DialogDescription>
+            </DialogHeader>
+          )}
           {showtime && (
             <BookingFlow
               // Keyed by screening: opening a different one must start from ITS
@@ -554,6 +577,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
               showtimeId={showtime._id}
               cinemaId={cinema._id}
               onClose={() => setBooking(false)}
+              onBareTicket={setTicketReady}
             />
           )}
         </DialogContent>

@@ -138,6 +138,14 @@ const CinemaTicketSchema = new mongoose.Schema(
           seatKey: { type: String, trim: true },
           categoryKey: { type: String, trim: true },
           categoryLabel: { type: String, trim: true },
+          // Set when THIS seat is admitted at the door, independent of the
+          // others on the same ticket — a group of 4 sharing one ticket can
+          // walk in as they arrive rather than all at once. The ticket-level
+          // `checkedIn`/`status` below only flips once every seat here has
+          // one of these, so the ticket stays scannable for whoever is left.
+          // Absent entirely on an unassigned hall's ticket (seats is always
+          // [] there), where admission has no per-chair identity to track.
+          admittedAt: { type: Date, default: null },
         },
       ],
       default: [],

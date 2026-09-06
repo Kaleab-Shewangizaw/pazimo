@@ -1,8 +1,10 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export interface TicketPassField {
   label: string;
@@ -23,10 +25,45 @@ export interface TicketPassCardProps {
   qrSrc?: string;
   qrAlt?: string;
   caption?: string;
+  /** Rendered below the download/done row — e.g. cinema snacks pre-bought
+   * with the ticket ("Collect at the counter"). Keeps this card the ONLY
+   * thing shown once a cinema order settles, rather than a second box
+   * floating below it for what is really just more of the same receipt. */
+  belowQr?: ReactNode;
   note?: ReactNode;
   deadMessage?: string;
-  onDownload?: () => void;
+  /**
+   * Overlaid on the poster band, bottom-aligned — e.g. "You're going to the
+   * movies! / Your ticket is ready", the way the event post-purchase modal
+   * greets a fresh purchase. Omit on a persistent /ticket/{id} page, where
+   * "you're going" no longer fits days later — the plain poster is enough.
+   */
+  bannerHeading?: string;
+  bannerSubheading?: string;
+  /**
+   * Filename stem (no extension) for the downloaded PNG. Providing this is
+   * what turns on the download button — it captures the whole rendered card
+   * (backdrop, fields, QR) exactly the way an event ticket already downloads
+   * from the post-purchase modal, rather than saving just the bare QR.
+   */
+  downloadFileName?: string;
+  /** Passed to navigator.share as the share sheet's title. Defaults to `title`. */
+  shareTitle?: string;
+  /**
+   * Last resort, only called if the whole-card capture itself fails (e.g. a
+   * blocked cross-origin image tainting the canvas) — typically wired to
+   * fetch just the raw QR PNG so the customer still gets something scannable.
+   */
+  onCaptureFailed?: () => void | Promise<void>;
   downloadLabel?: string;
+  /**
+   * A second, non-capturing action next to Download — "Done" to close the
+   * sheet after seeing the ticket, the same pair the event post-purchase
+   * modal offers. Omitted wherever there is nothing to close (a persistent
+   * ticket page), which keeps just the one Download button as before.
+   */
+  onDone?: () => void;
+  doneLabel?: string;
 }
 
 /**
@@ -65,17 +102,107 @@ export default function TicketPassCard({
   qrSrc,
   qrAlt = "Ticket QR Code",
   caption = "— SCAN FOR ENTRY —",
+  belowQr,
   note,
   deadMessage,
-  onDownload,
-  downloadLabel = "Download QR",
+  bannerHeading,
+  bannerSubheading,
+  downloadFileName,
+  shareTitle,
+  onCaptureFailed,
+  downloadLabel = "Download",
+  onDone,
+  doneLabel = "Done",
 }: TicketPassCardProps) {
   const backdropStyle = buildPassBackdropStyle(backdropImageUrl);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    const node = cardRef.current;
+    if (!node || !downloadFileName || downloading) return;
+    setDownloading(true);
+    try {
+      const { toBlob } = await import("html-to-image");
+      const blob = await toBlob(node, {
+        pixelRatio: 2,
+        // The card has its own solid gradient background, so this is only a
+        // fallback for any edge pixel a browser fails to rasterize.
+        backgroundColor: "#06283D",
+        // The download button itself lives inside this same card (there's
+        // nowhere else to put it) — exclude it from the exported image.
+        filter: (el) =>
+          !(el instanceof HTMLElement && el.dataset.captureIgnore === "true"),
+      });
+      if (!blob) throw new Error("Ticket render failed");
+
+      const filename = `${downloadFileName}.png`;
+      const file = new File([blob], filename, { type: "image/png" });
+
+      // On phones, a plain <a download> often just opens the image in a tab
+      // instead of saving it. Where the native share sheet is available, it's
+      // the reliable way to let someone save straight to Photos.
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.canShare?.({ files: [file] })
+      ) {
+        await navigator.share({ files: [file], title: shareTitle || title });
+        toast.success("Ticket ready to save!");
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Ticket downloaded!");
+    } catch (err) {
+      // A user cancelling the share sheet also lands here — don't treat that as a failure.
+      if (err instanceof Error && err.name === "AbortError") return;
+      if (onCaptureFailed) {
+        await onCaptureFailed();
+        toast.success("Ticket QR downloaded!");
+      } else {
+        toast.error("Could not download the ticket");
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
-    <div className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl border-0 shadow-2xl ring-1 ring-white/10 overflow-hidden">
+    <div
+      ref={cardRef}
+      className="max-w-sm w-full pb-15 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] dark:bg-card rounded-3xl border-0 shadow-2xl ring-1 ring-white/10 overflow-hidden"
+    >
+      {/* Poster band — the same "image up top, fading into the card's own
+          color" treatment the event post-purchase ticket uses. Absent
+          entirely when there's no poster/cover to show. */}
+      {backdropImageUrl && (
+        <div className="relative h-36 w-full">
+          <Image src={backdropImageUrl} alt={title} fill unoptimized className="object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#06283D]/70 via-[#06283D]/25 to-[#06283D]" />
+          {(bannerHeading || bannerSubheading) && (
+            <div className="absolute inset-x-0 bottom-3 px-6 text-center">
+              {bannerHeading && (
+                <h2 className="text-2xl font-extrabold text-white drop-shadow-md">
+                  {bannerHeading}
+                </h2>
+              )}
+              {bannerSubheading && (
+                <p className="text-sm text-white/80">{bannerSubheading}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Blue header block */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-[#06283D] to-[#1A5D8C] px-7 py-10">
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#06283D] to-[#1A5D8C] px-7 pb-8 pt-6">
         {watermark && (
           <span className="pointer-events-none absolute -bottom-4 right-5 select-none text-6xl font-black tracking-tight text-white/10 whitespace-nowrap">
             {watermark}
@@ -133,17 +260,41 @@ export default function TicketPassCard({
               {caption}
             </p>
 
-            {onDownload && (
-              <div className="flex items-center gap-3 pt-1">
-                <button
-                  onClick={onDownload}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#06283D] rounded-full hover:bg-[#0a3a57] transition-colors"
-                >
-                  <Download className="w-4 h-4" />
-                  {downloadLabel}
-                </button>
+            {(downloadFileName || onDone) && (
+              <div
+                className="flex w-full items-center gap-3 px-2 pt-1"
+                data-capture-ignore="true"
+              >
+                {downloadFileName && (
+                  <button
+                    onClick={handleDownload}
+                    disabled={downloading}
+                    className={
+                      onDone
+                        ? "flex flex-1 items-center justify-center gap-2 rounded-full border border-white/25 bg-white/10 py-2 text-sm font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-60"
+                        : "flex items-center gap-2 rounded-full bg-[#06283D] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0a3a57] disabled:opacity-60"
+                    }
+                  >
+                    {downloading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    {downloadLabel}
+                  </button>
+                )}
+                {onDone && (
+                  <button
+                    onClick={onDone}
+                    className="flex-1 rounded-full bg-white py-2 text-sm font-semibold text-[#06283D] transition-colors hover:bg-white/90"
+                  >
+                    {doneLabel}
+                  </button>
+                )}
               </div>
             )}
+
+            {belowQr && <div className="w-full border-t border-white/10 pt-3">{belowQr}</div>}
           </>
         ) : (
           <p className="py-8 text-center text-sm text-gray-400 dark:text-gray-500">

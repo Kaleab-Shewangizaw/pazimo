@@ -237,11 +237,17 @@ const checkIn = async (req, res) => {
   try {
     const cinema = await resolveCinema(req, req.params.cinemaId);
 
-    const ticket = await cinemaTicketService.checkInTicket({
-      ticketId: req.params.ticketId || req.body.ticketId,
-      cinemaId: cinema._id,
-      checkedInBy: req.user.userId,
-    });
+    // Which seats to admit right now, for a ticket that names them — a group
+    // of 4 on one ticket does not have to walk in together. Omitted (or every
+    // request against an unassigned-hall ticket, which has none to name)
+    // admits everything still outstanding, same as before this existed.
+    const { ticket, admittedSeats, fullyAdmitted } =
+      await cinemaTicketService.checkInTicket({
+        ticketId: req.params.ticketId || req.body.ticketId,
+        cinemaId: cinema._id,
+        checkedInBy: req.user.userId,
+        seatKeys: req.body.seatKeys,
+      });
 
     // Anything pre-bought on the same order, returned with the admission.
     //
@@ -265,6 +271,8 @@ const checkIn = async (req, res) => {
     res.status(StatusCodes.OK).json({
       success: true,
       data: ticket,
+      admittedSeats,
+      fullyAdmitted,
       outstandingConcessions,
     });
   } catch (error) {
@@ -287,6 +295,7 @@ const checkInOrder = async (req, res) => {
       reference: req.params.reference,
       cinemaId: cinema._id,
       checkedInBy: req.user.userId,
+      seatKeys: req.body.seatKeys,
     });
 
     let outstandingConcessions = [];

@@ -98,7 +98,7 @@ export default function CinemaTicketView({ ticket }: { ticket: CinemaTicketData 
   const dead = ["refunded", "cancelled"].includes(ticket.status);
   const used = ticket.checkedIn;
 
-  const handleDownload = () => {
+  const handleCaptureFailed = () => {
     downloadCinemaTicketQr(ticket.ticketId, `ticket-${ticket.ticketId}.png`).catch(() =>
       toast.error("Could not download the QR code")
     );
@@ -144,7 +144,9 @@ export default function CinemaTicketView({ ticket }: { ticket: CinemaTicketData 
                 } — this code will not scan again.`
               : undefined
           }
-          onDownload={dead ? undefined : handleDownload}
+          downloadFileName={dead ? undefined : `ticket-${ticket.ticketId}`}
+          shareTitle={`${ticket.movieTitle} — Ticket`}
+          onCaptureFailed={dead ? undefined : handleCaptureFailed}
         />
 
         <Button asChild variant="outline" className="mb-6 w-full max-w-sm">

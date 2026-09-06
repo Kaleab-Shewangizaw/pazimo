@@ -15,7 +15,6 @@ import {
   Popcorn,
   ShoppingBasket,
   Ticket,
-  X,
 } from "lucide-react";
 import {
   fetchShowtimeSeats,
@@ -27,6 +26,7 @@ import {
   type CinemaConcession,
   type ShowtimeSeatMap,
 } from "@/lib/cinema-api";
+import CinemaOrderResult from "@/components/cinemas/cinema-order-result";
 
 /**
  * Buying a seat: pick where you sit, add snacks, pay.
@@ -44,7 +44,7 @@ import {
 const money = (n: number, currency = "ETB") =>
   `${n.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${currency}`;
 
-type Step = "seats" | "snacks" | "pay";
+type Step = "seats" | "snacks" | "pay" | "confirm";
 
 // The film page's own accent, so the sheet reads as part of the page it opened
 // from rather than as a generic dialog dropped on top of it.
@@ -55,10 +55,20 @@ export default function BookingFlow({
   showtimeId,
   cinemaId,
   onClose,
+  onBareTicket,
 }: {
   showtimeId: string;
   cinemaId: string;
   onClose?: () => void;
+  /**
+   * Fires once the "confirm" step's order actually settles — lets the
+   * dialog embedding this whole flow drop its own header/border/background
+   * at exactly that point, the way the event checkout swaps into a bare,
+   * transparent dialog once its tickets are ready rather than keeping its
+   * normal chrome framing them. Forwarded straight from CinemaOrderResult's
+   * own onSettledChange; BookingFlow has no reason to hold this itself.
+   */
+  onBareTicket?: (bare: boolean) => void;
 }) {
   const [step, setStep] = useState<Step>("seats");
   const [seatMap, setSeatMap] = useState<ShowtimeSeatMap | null>(null);
@@ -232,6 +242,10 @@ export default function BookingFlow({
   // of the pay step without this leaves them locked for the full ten minutes.
   // Cleared on success too, so a paid order is never cancelled.
   const [startedRef, setStartedRef] = useState<string | null>(null);
+  // Set once a direct (mobile money) charge is placed — the "confirm" step
+  // polls and shows the result for this transaction right in the sheet,
+  // instead of navigating to a separate page the way a hosted checkout must.
+  const [confirmingTx, setConfirmingTx] = useState<string | null>(null);
 
   const abandonIfStarted = async () => {
     if (!startedRef) return;
@@ -285,7 +299,8 @@ export default function BookingFlow({
       }
       setStartedRef(null);
       toast.success("Approve the payment on your phone");
-      window.location.href = `/cinema/order/${result.transactionId}`;
+      setConfirmingTx(result.transactionId);
+      setStep("confirm");
     } catch (error) {
       toast.error((error as Error).message);
       // The server released the seats on failure, so the picker must be
@@ -344,13 +359,15 @@ export default function BookingFlow({
       ? { label: "Cancel", run: onClose }
       : step === "snacks"
         ? { label: "Back", run: () => setStep("seats") }
-        : {
-            label: "Back",
-            run: async () => {
-              await abandonIfStarted();
-              setStep(concessions.length ? "snacks" : "seats");
-            },
-          };
+        : step === "pay"
+          ? {
+              label: "Back",
+              run: async () => {
+                await abandonIfStarted();
+                setStep(concessions.length ? "snacks" : "seats");
+              },
+            }
+          : { label: "Back", run: () => {} }; // "confirm" — footer is hidden, never rendered
 
   const goNext =
     step === "seats"
@@ -370,6 +387,7 @@ export default function BookingFlow({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* --- step rail ------------------------------------------------------ */}
+      {step !== "confirm" && (
       <div className="shrink-0 border-b border-border px-4 py-3 sm:px-6">
         <div className="flex items-center gap-1.5 sm:gap-2">
           {(
@@ -408,11 +426,19 @@ export default function BookingFlow({
             })}
         </div>
       </div>
+      )}
 
-      {/* --- the step itself ------------------------------------------------ */}
+      {/* --- the step itself ------------------------------------------------
+          SeatPlan fills the space itself and fits its seat size to whatever
+          height is actually left, so picking a seat isn't usually scrolling
+          past the legend to find the last row — but this wrapper still
+          allows a scroll (rather than `overflow-hidden`) for whenever the
+          screen graphic + legend + summary card's own fixed heights leave
+          less room than even a fully-shrunk grid needs: clipping that
+          silently would hide real content with no way back to it. */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         {step === "seats" && (
-          <div className="space-y-4">
+          <div className="flex h-full min-h-[420px] flex-col">
             <SeatPlan
               seatMap={seatMap}
               selected={selected}
@@ -629,9 +655,21 @@ export default function BookingFlow({
             </p>
           </div>
         )}
+
+        {step === "confirm" && confirmingTx && (
+          <CinemaOrderResult
+            transactionId={confirmingTx}
+            embedded
+            onExit={onClose}
+            onSettledChange={onBareTicket}
+          />
+        )}
       </div>
 
-      {/* --- what it costs, and the way on -------------------------------- */}
+      {/* --- what it costs, and the way on --------------------------------
+          Hidden during "confirm": CinemaOrderResult renders its own actions
+          (retry/cancel/Done), and there is no basket total left to quote. */}
+      {step !== "confirm" && (
       <div className="shrink-0 border-t border-border bg-background px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-baseline gap-2 text-sm">
@@ -691,6 +729,7 @@ export default function BookingFlow({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -703,6 +742,18 @@ export default function BookingFlow({
  * the seat size is derived from the space actually available, so the whole
  * plan is on screen at once. Only a genuinely enormous hall falls back to
  * sideways scrolling, and it is told to scroll.
+ */
+/**
+ * Matches the mobile app's seat picker (pazimo-mobile/src/components/cinema/
+ * seat-map.tsx) look exactly: a fixed dark "auditorium" card — Pazimo mobile
+ * is dark-only by design, and this is the one piece of the web checkout that
+ * borrows that identity wholesale rather than following the site's own
+ * light/dark toggle, the same way a video player keeps its own chrome dark
+ * regardless of the page around it. Screen up top, category legend right
+ * under it (established before anyone starts tapping), the seat grid, then a
+ * fixed-footprint "YOUR SEATS" summary at the bottom — same order, same
+ * palette (`#08080A` ground, `#4A4A52`/`#6E6E78` for an available seat,
+ * white for a selected one) as the reference.
  */
 function SeatPlan({
   seatMap,
@@ -718,7 +769,17 @@ function SeatPlan({
   currency: string;
 }) {
   const viewport = useRef<HTMLDivElement | null>(null);
+  const gridArea = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
+  const [gridHeight, setGridHeight] = useState(0);
+  // The reference app zooms by pinch gesture; a web pointer has no
+  // equivalent, so this is its stand-in — a manual override on top of the
+  // auto-fit size below, for a customer who finds the auto-fit seats too
+  // small to comfortably tap.
+  const [zoom, setZoom] = useState(1);
+  const ZOOM_MIN = 0.75;
+  const ZOOM_MAX = 1.75;
+  const ZOOM_STEP = 0.15;
 
   useEffect(() => {
     const node = viewport.current;
@@ -731,6 +792,24 @@ function SeatPlan({
     return () => observer.disconnect();
   }, []);
 
+  // Only ever used to decide whether the grid needs to scroll internally —
+  // never to shrink the seats themselves. Sizing seats off available height
+  // as well as width (an earlier version of this did) fought the floor below
+  // on any hall with more than a handful of rows, shrinking every seat down
+  // to the bare minimum just to avoid a scrollbar. A comfortable, width-fit
+  // seat that occasionally needs a short scroll to reach the back row beats a
+  // seat sized to fit no matter how many rows there are.
+  useEffect(() => {
+    const node = gridArea.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setGridHeight(entry.contentRect.height)
+    );
+    observer.observe(node);
+    setGridHeight(node.clientHeight);
+    return () => observer.disconnect();
+  }, []);
+
   const rows = seatMap.rows || [];
   const columns = rows.reduce((widest, row) => Math.max(widest, row.seats.length), 0);
 
@@ -739,23 +818,76 @@ function SeatPlan({
   // stops a four-seat screening-room drawing armchairs the size of a hand.
   const GAP = 5;
   const LABEL = 22;
-  const fitted = columns
+  const ROW_GAP = GAP + 3; // matches the rows column's own `gap` below
+  const widthFit = columns
     ? Math.floor((width - LABEL * 2 - GAP * columns) / columns)
     : 28;
-  const seat = Math.max(18, Math.min(34, fitted || 28));
+  const baseSeat = Math.max(24, Math.min(34, widthFit || 28));
+  const seat = Math.max(18, Math.min(56, Math.round(baseSeat * zoom)));
   const glyph = Math.round(seat * 0.8);
-  const scrolls = width > 0 && fitted < 18;
+  // Recomputed off the ACTUAL (possibly zoomed) seat size, rather than off
+  // widthFit alone — zooming in is exactly what asks this to go horizontal.
+  const neededWidth = LABEL * 2 + columns * seat + GAP * Math.max(0, columns - 1);
+  const scrollsX = width > 0 && neededWidth > width;
+  const contentHeight = rows.length * seat + Math.max(0, rows.length - 1) * ROW_GAP;
+  const scrollsY = gridHeight > 0 && contentHeight > gridHeight;
 
   const selectedSet = new Set(selected);
 
+  // What's been picked so far, grouped by category — "VIP A6, A7" rather
+  // than a bare seat list, so the price attached to each pick is legible at
+  // a glance. Same grouping the reference app's own SelectionSummary reads.
+  const pickedGroups = (() => {
+    const byCategory = new Map<string, { label: string; price: number; seats: string[] }>();
+    for (const row of rows) {
+      for (const s of row.seats) {
+        if (s.status === "gap" || !selectedSet.has(s.seatKey)) continue;
+        const category = priceByCategory.get(s.categoryKey);
+        if (!category) continue;
+        const group =
+          byCategory.get(s.categoryKey) ??
+          { label: category.label, price: category.price, seats: [] as string[] };
+        group.seats.push(`${row.label}${s.number}`);
+        byCategory.set(s.categoryKey, group);
+      }
+    }
+    return [...byCategory.values()];
+  })();
+  const totalCount = pickedGroups.reduce((sum, g) => sum + g.seats.length, 0);
+  const totalPrice = pickedGroups.reduce((sum, g) => sum + g.price * g.seats.length, 0);
+
   return (
-    <div className="rounded-2xl border border-border bg-gradient-to-b from-muted/50 to-transparent p-3 dark:from-[#12161d] dark:to-[#0d1015] sm:p-5">
+    <div className="flex h-full min-h-0 flex-col rounded-[20px] border border-white/10 bg-[#08080A] p-3 sm:p-5">
       <CinemaScreen />
 
-      <div ref={viewport} className={scrolls ? "overflow-x-auto pb-2" : undefined}>
+      {/* Established up front, before anyone starts tapping — the seat dots
+          alone don't explain themselves. */}
+      {(seatMap.categories || []).length > 0 && (
+        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+          {(seatMap.categories || []).map((category) => (
+            <span key={category.key} className="inline-flex items-center gap-1.5 text-xs text-white/65">
+              <span
+                className="h-[9px] w-[9px] shrink-0 rounded-full"
+                style={{ backgroundColor: category.color || "#6366f1" }}
+              />
+              {category.label} · {money(category.price ?? 0, currency)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* relative z-10: guarantees this paints above CinemaScreen no matter
+          what, since the front row's seats curve up toward it (capped below,
+          but still real movement) — belt-and-suspenders alongside that cap
+          and CinemaScreen's own pointer-events-none.
+          pt-4: headroom for that same curve so overflow-y-auto never clips
+          the part of a seat that moved above this container's own top edge,
+          taking its click target with it. */}
+      <div ref={gridArea} className="relative z-10 min-h-0 flex-1 overflow-y-auto pt-4">
+      <div ref={viewport} className={scrollsX ? "overflow-x-auto pb-2" : undefined}>
         <div
           className="mx-auto flex flex-col items-center"
-          style={{ gap: GAP + 3, width: scrolls ? "max-content" : undefined }}
+          style={{ gap: GAP + 3, width: scrollsX ? "max-content" : undefined }}
         >
           {rows.map((row, rowIndex) => {
             const count = row.seats.length;
@@ -771,7 +903,7 @@ function SeatPlan({
                 style={{ gap: GAP, marginLeft: row.offset * 0.5 }}
               >
                 <span
-                  className="shrink-0 text-center text-[10px] font-semibold uppercase text-muted-foreground"
+                  className="shrink-0 text-center text-[10px] font-semibold uppercase text-white/40"
                   style={{ width: LABEL }}
                 >
                   {row.label}
@@ -788,8 +920,15 @@ function SeatPlan({
                     // Bow the row into a gentle arc, seat by seat, instead of
                     // shifting it as one rigid block — this is what makes the
                     // curve read as a real auditorium and not a tilted strip.
+                    //
+                    // Capped regardless of what a room configures: the front
+                    // row has no row above it to absorb this move, only the
+                    // fixed headroom this component itself reserves next to
+                    // the screen graphic — an uncapped curve could push a
+                    // seat's clickable area past that headroom and behind it.
+                    const effectiveCurve = Math.min(row.curve, 8);
                     const t = center === 0 ? 0 : (i - center) / center;
-                    const translateY = -row.curve * 0.45 * (1 - t * t);
+                    const translateY = -effectiveCurve * 0.45 * (1 - t * t);
                     const isSelected = selectedSet.has(s.seatKey);
                     const category = priceByCategory.get(s.categoryKey);
                     const unavailable =
@@ -809,7 +948,7 @@ function SeatPlan({
                             : `${s.seatKey} · ${category?.label ?? ""} · ${money(category?.price ?? 0, currency)}`
                         }
                         style={{ width: seat, height: seat, transform: `translateY(${translateY}px)` }}
-                        className="flex shrink-0 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:cursor-not-allowed"
+                        className="flex shrink-0 items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-1 focus-visible:ring-offset-[#08080A] disabled:cursor-not-allowed"
                       >
                         <span className="flex h-full w-full items-center justify-center transition-transform motion-safe:hover:scale-110 motion-safe:active:scale-90">
                           <SeatGlyph
@@ -835,54 +974,66 @@ function SeatPlan({
         </div>
       </div>
 
-      {scrolls && (
-        <p className="mt-1 text-center text-[10px] text-muted-foreground">
+      {scrollsX && (
+        <p className="mt-1 text-center text-[10px] text-white/40">
           Swipe sideways to see the whole row
         </p>
       )}
 
-      {/* What you have picked so far, with a way to drop one without hunting
-          for it back in the grid. One list under the whole map rather than a
-          chip per row — a customer picking across several rows reads their
-          whole selection in one place instead of chasing it up and down the
-          plan. */}
-      {selected.length > 0 && (
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-2 border-t border-border/60 pt-4">
-          {selected.map((seatKey) => (
-            <button
-              key={seatKey}
-              type="button"
-              onClick={() => onToggle(seatKey, "available")}
-              className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 py-1 pl-3 pr-2 text-xs font-medium transition-colors hover:border-destructive/50 hover:text-destructive"
-            >
-              {seatKey}
-              <X className="h-3 w-3 opacity-50 transition-opacity group-hover:opacity-100" />
-            </button>
-          ))}
+      {/* Floating over the grid, like the reference app's own reset-zoom
+          control — a customer who finds the auto-fit seats too small just
+          makes them bigger, at the cost of the horizontal scroll above once
+          a row no longer fits the width unzoomed. */}
+      <div className="pointer-events-none sticky bottom-2 z-20 flex justify-end pr-1">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.14] p-1 shadow-[0_6px_16px_rgba(0,0,0,0.38)] backdrop-blur-md">
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.max(ZOOM_MIN, +(z - ZOOM_STEP).toFixed(2)))}
+            disabled={zoom <= ZOOM_MIN}
+            aria-label="Smaller seats"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom((z) => Math.min(ZOOM_MAX, +(z + ZOOM_STEP).toFixed(2)))}
+            disabled={zoom >= ZOOM_MAX}
+            aria-label="Bigger seats"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
         </div>
+      </div>
+      </div>
+
+      {scrollsY && (
+        <p className="mt-1 text-center text-[10px] text-white/40">
+          Scroll to see the rest of the room
+        </p>
       )}
 
-      {/* What each seat's colour means — the same glyph the grid itself
-          draws, not an abstract swatch, so a category dot or a selected
-          armchair here looks exactly like the one a customer just tapped. */}
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2.5 border-t border-border/60 pt-4">
-        {(seatMap.categories || []).map((category) => (
-          <span key={category.key} className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <SeatGlyph size={16} selected={false} disabled={false} categoryColor={category.color || "#6366f1"} />
-            {category.label}
-            <span className="font-semibold text-foreground">
-              {money(category.price ?? 0, currency)}
-            </span>
+      {/* Always rendered, fixed footprint — its height must never change
+          with the selection. Mounting this only once something is picked
+          would shrink the grid's own available space at the exact moment a
+          customer just tapped a seat, which can clip the row it's in. */}
+      <div className="mt-4 shrink-0 rounded-2xl border border-white/10 bg-white/[0.06] p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-white/50">
+            Your seats
           </span>
-        ))}
-        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-          <SeatGlyph size={16} selected disabled={false} />
-          Selected
-        </span>
-        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-          <SeatGlyph size={16} selected={false} disabled />
-          Taken
-        </span>
+          <span className="shrink-0 text-sm font-bold text-white">
+            {totalCount > 0
+              ? `${totalCount} ${totalCount === 1 ? "seat" : "seats"} · ${money(totalPrice, currency)}`
+              : "None yet"}
+          </span>
+        </div>
+        <p className="mt-1 truncate text-xs text-white/75">
+          {totalCount > 0
+            ? pickedGroups.map((g) => `${g.label} ${g.seats.join(", ")}`).join("   ·   ")
+            : "Tap a seat above to select it"}
+        </p>
       </div>
     </div>
   );
@@ -891,23 +1042,37 @@ function SeatPlan({
 /**
  * The curved cinema screen and the reflection it casts, drawn as two nested
  * SVG paths that share one edge — so the glow reads as a single continuous
- * surface rather than a bar sitting above a separate gradient block. Warm
- * amber in dark mode (projector light), the page's own foreground in light
- * mode (a screen is dark against a bright room).
+ * surface rather than a bar sitting above a separate gradient block. A pure
+ * white glow rather than the site's own accent, matching the reference app
+ * exactly (Pazimo mobile is dark-only, white-on-black, by design — see the
+ * note on SeatPlan above). A soft halo bleeds past its edges and its hottest
+ * point breathes slowly, the way light off a running projector never sits
+ * quite still — the one deliberately alive element on an otherwise static
+ * picker.
+ *
+ * `pointer-events-none`: purely decorative (`aria-hidden` already says so),
+ * and the front row's seats curve up toward it — without this, this element
+ * sits on top of that curve and swallows the taps meant for those seats.
  */
 function CinemaScreen() {
   return (
     <div
       aria-hidden
-      className="relative mx-auto mb-6 w-[78%] min-w-[180px] max-w-sm select-none text-foreground/70 dark:text-amber-200/80"
+      className="relative mx-auto mb-7 w-[78%] min-w-[180px] max-w-sm select-none pointer-events-none text-white"
     >
-      <svg viewBox="0 0 100 48" preserveAspectRatio="none" className="block h-16 w-full sm:h-20">
+      {/* Halo: the beam bleeding past the screen's own edges into the room */}
+      <div
+        className="absolute inset-x-6 -top-3 h-14 rounded-[100%] bg-white opacity-[0.10] blur-xl sm:h-16"
+        aria-hidden
+      />
+
+      <svg viewBox="0 0 100 48" preserveAspectRatio="none" className="relative block h-16 w-full sm:h-20">
         <defs>
-          <linearGradient id="cinema-screen-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.35" />
-            <stop offset="40%" stopColor="currentColor" stopOpacity="0.16" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0.04" />
-          </linearGradient>
+          <radialGradient id="cinema-screen-fill" cx="50%" cy="0%" r="85%">
+            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.5" className="cinema-screen-pulse" />
+            <stop offset="45%" stopColor="#FFFFFF" stopOpacity="0.17" />
+            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.05" />
+          </radialGradient>
         </defs>
         <path d="M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z" fill="url(#cinema-screen-fill)" />
       </svg>
@@ -916,19 +1081,19 @@ function CinemaScreen() {
         <svg viewBox="0 44 100 22" preserveAspectRatio="none" className="block h-full w-full opacity-40">
           <defs>
             <linearGradient id="cinema-screen-reflection" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
-              <stop offset="25%" stopColor="currentColor" stopOpacity="0.12" />
-              <stop offset="55%" stopColor="currentColor" stopOpacity="0.05" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+              <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.22" />
+              <stop offset="25%" stopColor="#FFFFFF" stopOpacity="0.13" />
+              <stop offset="55%" stopColor="#FFFFFF" stopOpacity="0.06" />
+              <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
             </linearGradient>
           </defs>
           <path d="M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z" fill="url(#cinema-screen-reflection)" />
         </svg>
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#08080A]" />
       </div>
 
-      <p className="relative mt-2 text-center text-[10px] font-medium uppercase tracking-[0.35em] text-muted-foreground">
-        Screen
+      <p className="relative mt-2.5 text-center text-[10px] font-medium uppercase tracking-[0.35em] text-white/40">
+        — Screen —
       </p>
     </div>
   );
@@ -938,7 +1103,8 @@ function CinemaScreen() {
  * The seat itself — an armchair, not a coloured square. A neutral shell reads
  * as furniture at any size; the category shows up as a small dot instead of
  * painting the whole seat, which is what let the grid turn into a wall of
- * saturated colour once a hall had more than two tiers.
+ * saturated colour once a hall had more than two tiers. Palette lifted
+ * straight from the reference app's own SeatGlyph.
  */
 function SeatGlyph({
   size,
@@ -951,29 +1117,30 @@ function SeatGlyph({
   disabled: boolean;
   categoryColor?: string;
 }) {
-  const shell = disabled
-    ? "fill-foreground/6 stroke-foreground/10"
-    : selected
-      ? "fill-[#0D47A1] stroke-[#0D47A1] dark:fill-yellow-400 dark:stroke-yellow-400"
-      : "fill-foreground/12 stroke-foreground/25";
+  const fill = selected ? "#FFFFFF" : disabled ? "rgba(255,255,255,0.08)" : "#4A4A52";
+  const stroke = selected ? "#FFFFFF" : disabled ? "rgba(255,255,255,0.12)" : "#6E6E78";
+  // The cushion's notch cutout has to match whatever's actually behind the
+  // seat for the "cutout" illusion to hold — the reference app uses a
+  // slightly different near-black per state for exactly that reason.
+  const notch = selected ? "#121215" : disabled ? "#08080A" : "#141418";
 
   return (
     <span className="relative inline-flex shrink-0 items-center justify-center" style={{ width: size, height: size }}>
-      <svg viewBox="0 0 24 24" width={size} height={size} strokeWidth={1} className={shell}>
+      <svg viewBox="0 0 24 24" width={size} height={size}>
         {/* Backrest top bar */}
-        <rect x="4.5" y="2" width="15" height="4.5" rx="2" />
+        <rect x="4.5" y="2" width="15" height="4.5" rx="2" fill={fill} stroke={stroke} strokeWidth={1} />
         {/* Left armrest */}
-        <rect x="2" y="5.5" width="4" height="14.5" rx="2" />
+        <rect x="2" y="5.5" width="4" height="14.5" rx="2" fill={fill} stroke={stroke} strokeWidth={1} />
         {/* Right armrest */}
-        <rect x="18" y="5.5" width="4" height="14.5" rx="2" />
+        <rect x="18" y="5.5" width="4" height="14.5" rx="2" fill={fill} stroke={stroke} strokeWidth={1} />
         {/* Seat cushion */}
-        <rect x="4.5" y="9.5" width="15" height="10.5" rx="2.5" />
+        <rect x="4.5" y="9.5" width="15" height="10.5" rx="2.5" fill={fill} stroke={stroke} strokeWidth={1} />
         {/* Cushion notch cutout */}
-        <rect x="6.5" y="7" width="11" height="5" rx="1.5" className="fill-background stroke-none" />
+        <rect x="6.5" y="7" width="11" height="5" rx="1.5" fill={notch} />
       </svg>
       {!disabled && !selected && categoryColor && (
         <span
-          className="absolute bottom-0 right-0 h-[6px] w-[6px] rounded-full border border-background"
+          className="absolute bottom-0 right-0 h-[5px] w-[5px] rounded-full opacity-85"
           style={{ backgroundColor: categoryColor }}
         />
       )}

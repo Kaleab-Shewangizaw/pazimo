@@ -368,7 +368,13 @@ const refundTicket = async (ticketId, { adminId, reason } = {}) => {
   if (ticket.status === "refunded") {
     throw new BadRequestError("That ticket is already refunded");
   }
-  if (ticket.checkedIn) {
+  // `checkedIn` alone is not enough any more: a multi-seat ticket can be
+  // PARTIALLY admitted (some of the group already inside) while still reading
+  // checkedIn: false, since that flag only flips once every seat is in. A
+  // refund releases every seat on the ticket, so it has to refuse the moment
+  // even one seat has been admitted — otherwise it would refund and re-sell a
+  // chair someone is currently sitting in.
+  if (ticket.checkedIn || (ticket.seats || []).some((s) => s.admittedAt)) {
     throw new BadRequestError("That ticket has already been used");
   }
 
@@ -410,13 +416,22 @@ const refundTicket = async (ticketId, { adminId, reason } = {}) => {
 };
 
 /**
- * Admit the holder of a ticket.
+ * Admit the holder of a ticket — all of it, or just some of its seats.
  *
  * `cinemaId` is required by every caller: a cinema may only validate tickets for
  * its own screenings, so the check is part of the lookup rather than something a
  * route is trusted to have done. Passing a foreign ticket reads as not found.
+ *
+ * A named-seat ticket (assigned-seating hall) can be admitted seat by seat —
+ * a group of 4 sharing one ticket because they bought the same tier does not
+ * have to arrive together. Pass `seatKeys` to admit just those; omit it to
+ * admit every seat still outstanding, which is also the entire behavior on an
+ * unassigned-hall ticket (`seats` is always `[]` there — no chair to name, so
+ * the whole ticket flips at once, exactly as before this could admit by seat).
+ * The ticket's own `checkedIn`/`status`/`checkedAt` only flip to "used" once
+ * every seat has been admitted, so it stays scannable for whoever is left.
  */
-const checkInTicket = async ({ ticketId, cinemaId, checkedInBy }) => {
+const checkInTicket = async ({ ticketId, cinemaId, checkedInBy, seatKeys }) => {
   const ticket = await CinemaTicket.findOne({ ticketId, cinema: cinemaId });
   if (!ticket) throw new NotFoundError("Ticket not found for this cinema");
 
@@ -432,63 +447,174 @@ const checkInTicket = async ({ ticketId, cinemaId, checkedInBy }) => {
     );
   }
 
-  ticket.checkedIn = true;
-  ticket.checkedAt = new Date();
-  ticket.status = "used";
-  if (checkedInBy) ticket.checkedInBy = checkedInBy;
+  if (ticket.seats.length === 0) {
+    // No seat identity to admit by — the original one-shot behavior.
+    ticket.checkedIn = true;
+    ticket.checkedAt = new Date();
+    ticket.status = "used";
+    if (checkedInBy) ticket.checkedInBy = checkedInBy;
+    await ticket.save();
+    return { ticket, admittedSeats: [], fullyAdmitted: true };
+  }
+
+  const requested =
+    Array.isArray(seatKeys) && seatKeys.length > 0
+      ? new Set(seatKeys.map(String))
+      : null; // omitted -> every seat not yet admitted, same as before
+
+  if (requested) {
+    const unknown = [...requested].filter(
+      (key) => !ticket.seats.some((s) => s.seatKey === key)
+    );
+    if (unknown.length > 0) {
+      throw new BadRequestError(`Not a seat on this ticket: ${unknown.join(", ")}`);
+    }
+  }
+
+  const now = new Date();
+  const targets = ticket.seats.filter(
+    (s) => !s.admittedAt && (!requested || requested.has(s.seatKey))
+  );
+  if (targets.length === 0) {
+    throw new BadRequestError("Those seats are already admitted");
+  }
+  targets.forEach((s) => {
+    s.admittedAt = now;
+  });
+
+  const fullyAdmitted = ticket.seats.every((s) => s.admittedAt);
+  if (fullyAdmitted) {
+    ticket.checkedIn = true;
+    ticket.checkedAt = now;
+    ticket.status = "used";
+    if (checkedInBy) ticket.checkedInBy = checkedInBy;
+  }
   await ticket.save();
 
-  return ticket;
+  return {
+    ticket,
+    admittedSeats: targets.map((s) => s.seatKey),
+    fullyAdmitted,
+  };
 };
 
 /**
- * Admit every eligible seat on one order at once — the "mark as used"
- * confirmation for a multi-seat purchase, which shares one QR across every
- * seat in `paymentReference`.
+ * Admit an order — every eligible seat at once, or just some of them, across
+ * however many ticket lines (ticket types) the order split into.
  *
+ * One order can be more than one CinemaTicket document — 2 VIP seats + 1
+ * Standard seat bought together still produces two documents, one per tier
+ * (see the doc on priceTickets in cinemaCheckoutService). The primary order
+ * QR covers all of them, so admitting BY SEAT here has to reach across every
+ * document sharing `paymentReference`, not just one.
+ *
+ * `seatKeys` omitted admits everything outstanding in one atomic updateMany —
+ * the original behavior, kept exactly as it was and still the fast path a
+ * fully-unassigned-hall order has to use (it has no seats to name at all).
  * The eligibility filter lives inside the updateMany itself rather than a
  * fetch-then-loop-save, the same reasoning claimSeats above gives for doing
  * its check and its write in one operation: two staff scanning the same
- * order at the same instant must not double-admit or race each other. The
- * second call's filter simply matches whatever the first call did not
- * already flip.
+ * order at the same instant must not double-admit or race each other.
+ *
+ * `seatKeys` given picks specific seats, possibly spanning several of the
+ * order's ticket documents — that needs a per-document read since each one
+ * only flips to "used" once every ONE OF ITS OWN seats is admitted, not once
+ * any seat anywhere in the order is. Same fetch-then-save shape checkInTicket
+ * above already uses for one document, just repeated per document here.
  */
-const checkInOrder = async ({ reference, cinemaId, checkedInBy }) => {
+const checkInOrder = async ({ reference, cinemaId, checkedInBy, seatKeys }) => {
   if (!reference) throw new BadRequestError("An order reference is required");
 
   const all = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId });
   if (!all.length) throw new NotFoundError("Order not found for this cinema");
 
-  const result = await CinemaTicket.updateMany(
-    {
-      paymentReference: reference,
-      cinema: cinemaId,
-      checkedIn: false,
-      paymentStatus: "completed",
-      status: { $nin: ["cancelled", "refunded"] },
-    },
-    {
-      $set: {
-        checkedIn: true,
-        checkedAt: new Date(),
-        status: "used",
-        ...(checkedInBy && { checkedInBy }),
-      },
-    }
-  );
+  const now = new Date();
 
-  if (result.modifiedCount === 0) {
-    const usable = all.some(
-      (t) => t.paymentStatus === "completed" && !["cancelled", "refunded"].includes(t.status)
+  if (!Array.isArray(seatKeys) || seatKeys.length === 0) {
+    const result = await CinemaTicket.updateMany(
+      {
+        paymentReference: reference,
+        cinema: cinemaId,
+        checkedIn: false,
+        paymentStatus: "completed",
+        status: { $nin: ["cancelled", "refunded"] },
+      },
+      {
+        $set: {
+          checkedIn: true,
+          checkedAt: now,
+          status: "used",
+          ...(checkedInBy && { checkedInBy }),
+          // A ticket admitted here may already have some seats stamped from an
+          // earlier partial, single-ticket admission — this only fills in
+          // whichever seats have not been stamped yet, so the per-seat record
+          // stays accurate no matter which endpoint finished the ticket off.
+          "seats.$[elem].admittedAt": now,
+        },
+      },
+      { arrayFilters: [{ "elem.admittedAt": null }] }
     );
-    if (!usable) {
-      throw new BadRequestError("Every seat on this order was refunded or cancelled");
+
+    if (result.modifiedCount === 0) {
+      const usable = all.some(
+        (t) => t.paymentStatus === "completed" && !["cancelled", "refunded"].includes(t.status)
+      );
+      if (!usable) {
+        throw new BadRequestError("Every seat on this order was refunded or cancelled");
+      }
+      throw new BadRequestError("This order has already been admitted");
     }
-    throw new BadRequestError("This order has already been admitted");
+
+    const tickets = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId });
+    return { tickets, admittedCount: result.modifiedCount };
   }
 
+  const usable = all.filter(
+    (t) => t.paymentStatus === "completed" && !["cancelled", "refunded"].includes(t.status)
+  );
+  if (usable.length === 0) {
+    throw new BadRequestError("Every seat on this order was refunded or cancelled");
+  }
+
+  const requested = new Set(seatKeys.map(String));
+  const known = new Set(usable.flatMap((t) => t.seats.map((s) => s.seatKey)));
+  const unknown = [...requested].filter((key) => !known.has(key));
+  if (unknown.length > 0) {
+    throw new BadRequestError(`Not a seat on this order: ${unknown.join(", ")}`);
+  }
+
+  let admittedSeatCount = 0;
+  const touched = [];
+  for (const ticket of usable) {
+    // A line with no named seats (unassigned-hall) has nothing here for a
+    // seatKey to match — one hall is either entirely assigned-seating or
+    // entirely not, so this only ever skips a line, never half-admits one.
+    if (ticket.checkedIn || ticket.seats.length === 0) continue;
+
+    const targets = ticket.seats.filter((s) => !s.admittedAt && requested.has(s.seatKey));
+    if (targets.length === 0) continue;
+
+    targets.forEach((s) => {
+      s.admittedAt = now;
+    });
+    admittedSeatCount += targets.length;
+
+    if (ticket.seats.every((s) => s.admittedAt)) {
+      ticket.checkedIn = true;
+      ticket.checkedAt = now;
+      ticket.status = "used";
+      if (checkedInBy) ticket.checkedInBy = checkedInBy;
+    }
+    touched.push(ticket);
+  }
+
+  if (touched.length === 0) {
+    throw new BadRequestError("Those seats are already admitted");
+  }
+  await Promise.all(touched.map((t) => t.save()));
+
   const tickets = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId });
-  return { tickets, admittedCount: result.modifiedCount };
+  return { tickets, admittedCount: admittedSeatCount };
 };
 
 module.exports = {

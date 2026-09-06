@@ -25,7 +25,15 @@ type StaffTicket = {
   hallName?: string;
   ticketType: string;
   quantity: number;
-  seats?: { row?: string; number?: string }[] | null;
+  seats?:
+    | {
+        row?: string;
+        number?: string;
+        seatKey?: string;
+        categoryLabel?: string;
+        admittedAt?: string | null;
+      }[]
+    | null;
   checkedIn: boolean;
   checkedAt?: string | null;
   status: string;
@@ -117,11 +125,51 @@ const seatLabel = (t: StaffTicket) =>
       : `Seats ${t.seats.map((s) => `${s.row}${s.number}`).join(", ")}`
     : `${t.ticketType} × ${t.quantity}`;
 
+/** Seat keys on this ticket not yet admitted — what a fresh lookup pre-selects,
+ * and what "select all" means once someone starts unchecking a few. */
+const outstandingSeatKeys = (t: StaffTicket) =>
+  (t.seats || []).filter((s) => !s.admittedAt).map((s) => s.seatKey!);
+
+// Usable at all — not fully admitted, paid, not cancelled/refunded. Module
+// scope because both the lookup (to pre-select outstanding seats) and the
+// render (to split "pick a seat" tickets from plain status rows) need it.
+const eligibleFor = (t: StaffTicket) =>
+  !t.checkedIn && t.paymentStatus === "completed" && !["cancelled", "refunded"].includes(t.status);
+
+/** Every seat across a set of ticket documents, each tagged with which
+ * ticket (and tier) it came from — a group of 4 does not have to share one
+ * ticket type for the door to admit them seat by seat. */
+type FlatSeat = {
+  key: string;
+  row?: string;
+  number?: string;
+  categoryLabel?: string;
+  ticketType: string;
+  admittedAt?: string | null;
+};
+const flattenSeats = (tickets: StaffTicket[]): FlatSeat[] =>
+  tickets.flatMap((t) =>
+    (t.seats || []).map((s) => ({
+      key: s.seatKey!,
+      row: s.row,
+      number: s.number,
+      categoryLabel: s.categoryLabel,
+      ticketType: t.ticketType,
+      admittedAt: s.admittedAt,
+    }))
+  );
+
 export default function CinemaScanner() {
   const { token } = useAuthStore();
   const [pending, setPending] = useState<Pending>(null);
   const [outcome, setOutcome] = useState<Outcome>(null);
   const [confirming, setConfirming] = useState(false);
+  // Which seats of a single multi-seat ticket to admit right now — a group of
+  // 4 sharing one ticket does not have to walk in together. Pre-selected to
+  // every outstanding seat so one tap still admits everyone, same as before
+  // this existed; staff uncheck whoever has not arrived yet. Meaningless (and
+  // unused) for an order lookup or a single-seat ticket.
+  const [selectedSeats, setSelectedSeats] = useState<Set<string>>(new Set());
   const [manual, setManual] = useState("");
   const [collecting, setCollecting] = useState<string | null>(null);
   const [collectError, setCollectError] = useState<string | null>(null);
@@ -212,6 +260,12 @@ export default function CinemaScanner() {
 
       const tickets: StaffTicket[] = kind === "order" ? result.data.data : [result.data.data];
       setPending({ kind, code, tickets, owed: result.data.outstandingConcessions || [] });
+      // Pre-select every outstanding seat across whichever ticket documents
+      // are actually admittable — one tap still admits everyone by default,
+      // whether this is one ticket or a whole order spanning several types.
+      setSelectedSeats(
+        new Set(tickets.filter(eligibleFor).flatMap(outstandingSeatKeys))
+      );
     } catch {
       setOutcome({
         kind: "error",
@@ -224,6 +278,7 @@ export default function CinemaScanner() {
 
   const dismiss = () => {
     setPending(null);
+    setSelectedSeats(new Set());
     setCollectError(null);
     busyRef.current = false;
   };
@@ -231,15 +286,31 @@ export default function CinemaScanner() {
   /** The mutating step — fired only from an explicit "Mark as used" tap. */
   const confirmAdmit = async () => {
     if (!pending) return;
+    // Any named seat still outstanding on an admittable ticket picks which
+    // ones to admit right now — whether that is one multi-seat ticket or a
+    // whole order spanning several ticket types. Nothing named (an
+    // unassigned-hall sale) sends no body at all, so the backend admits
+    // everything outstanding, same as before per-seat picking existed.
+    const eligibleTickets = pending.tickets.filter(eligibleFor);
+    const hasNamedSeats = eligibleTickets.some((t) => (t.seats?.length ?? 0) > 0);
+    const seatPick = hasNamedSeats ? [...selectedSeats] : null;
     setConfirming(true);
     try {
       const { ok, data } =
         pending.kind === "order"
           ? await fetchJson(`/api/cinemas/me/orders/${encodeURIComponent(pending.code)}/check-in`, {
               method: "POST",
+              ...(seatPick && {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ seatKeys: seatPick }),
+              }),
             })
           : await fetchJson(`/api/cinemas/me/check-in/${encodeURIComponent(pending.code)}`, {
               method: "POST",
+              ...(seatPick && {
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ seatKeys: seatPick }),
+              }),
             });
 
       if (!ok) {
@@ -249,22 +320,36 @@ export default function CinemaScanner() {
           detail: data?.message || "That ticket could not be validated.",
         });
       } else if (pending.kind === "order") {
+        const updatedTickets: StaffTicket[] = data.data?.tickets || [];
         const admittedCount = data.data?.admittedCount ?? pending.tickets.length;
+        const stillOut = flattenSeats(updatedTickets).filter((s) => !s.admittedAt).length;
         const first = pending.tickets[0];
         setOutcome({
           kind: "ok",
           title: "Admitted",
-          detail: `${first.movieTitle} · ${admittedCount} seat${admittedCount === 1 ? "" : "s"}${
-            first.hallName ? ` · ${first.hallName}` : ""
-          }`,
+          detail:
+            hasNamedSeats && stillOut > 0
+              ? `${first.movieTitle} · admitted ${admittedCount} seat${admittedCount === 1 ? "" : "s"}${
+                  first.hallName ? ` · ${first.hallName}` : ""
+                } — ${stillOut} more can come in later on the same order.`
+              : `${first.movieTitle} · ${admittedCount} seat${admittedCount === 1 ? "" : "s"}${
+                  first.hallName ? ` · ${first.hallName}` : ""
+                }`,
           owed: data.outstandingConcessions || [],
         });
       } else {
-        const t = data.data;
+        const t: StaffTicket = data.data;
+        const admittedSeats: string[] = data.admittedSeats || [];
+        const fullyAdmitted = !!data.fullyAdmitted;
+        const stillOut = outstandingSeatKeys(t).length;
         setOutcome({
           kind: "ok",
           title: "Admitted",
-          detail: `${t.movieTitle} · ${seatLabel(t)}${t.hallName ? ` · ${t.hallName}` : ""}`,
+          detail: fullyAdmitted
+            ? `${t.movieTitle} · ${seatLabel(t)}${t.hallName ? ` · ${t.hallName}` : ""}`
+            : `${t.movieTitle} · admitted ${admittedSeats.length} seat${admittedSeats.length === 1 ? "" : "s"}${
+                t.hallName ? ` · ${t.hallName}` : ""
+              } — ${stillOut} more can come in later on the same ticket.`,
           owed: data.outstandingConcessions || [],
         });
       }
@@ -277,6 +362,7 @@ export default function CinemaScanner() {
     } finally {
       setConfirming(false);
       setPending(null);
+      setSelectedSeats(new Set());
       resetSoon();
     }
   };
@@ -309,9 +395,17 @@ export default function CinemaScanner() {
   // What the pending panel's action area should say — dynamic to whatever is
   // still eligible, so a re-scan of a partially-admitted order reads
   // correctly rather than repeating "Mark as used" for seats already in.
-  const eligibleFor = (t: StaffTicket) =>
-    !t.checkedIn && t.paymentStatus === "completed" && !["cancelled", "refunded"].includes(t.status);
   const remaining = pending?.tickets.filter(eligibleFor) ?? [];
+  const ineligible = pending?.tickets.filter((t) => !eligibleFor(t)) ?? [];
+
+  // Any admittable ticket document naming a seat gets a per-seat picker
+  // instead of the plain "mark as used" button — a group does not have to be
+  // admitted all at once, whether they share one ticket or split across
+  // several ticket types on the same order.
+  const eligibleSeats = flattenSeats(remaining);
+  const showSeatPicker = eligibleSeats.length > 0;
+  const outstandingEligibleSeats = eligibleSeats.filter((s) => !s.admittedAt);
+  const distinctTicketTypes = new Set(eligibleSeats.map((s) => s.ticketType));
 
   return (
     <div className="relative h-full min-h-[calc(100vh-4rem)] w-full overflow-hidden bg-black">
@@ -343,11 +437,55 @@ export default function CinemaScanner() {
             <p className="font-semibold">{pending.tickets[0].movieTitle}</p>
             <p className="mt-0.5 text-sm text-white/70">
               {pending.tickets[0].hallName || "—"}
-              {pending.kind === "order" && ` · ${pending.tickets.length} seat${pending.tickets.length === 1 ? "" : "s"}`}
+              {pending.kind === "order" &&
+                (() => {
+                  const total = pending.tickets.reduce(
+                    (sum, t) => sum + (t.seats?.length || t.quantity),
+                    0
+                  );
+                  return ` · ${total} seat${total === 1 ? "" : "s"}`;
+                })()}
             </p>
 
             <div className="mt-3 space-y-1.5">
-              {pending.tickets.map((t) => (
+              {showSeatPicker &&
+                eligibleSeats.map((s) => {
+                  const admitted = !!s.admittedAt;
+                  return (
+                    <label
+                      key={s.key}
+                      className={`flex items-center justify-between gap-2 text-sm ${
+                        admitted ? "opacity-50" : "cursor-pointer"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 text-white/90">
+                        <Armchair className="h-3.5 w-3.5 text-white/50" />
+                        Row {s.row} · Seat {s.number}
+                        {distinctTicketTypes.size > 1 && (
+                          <span className="text-white/50">· {s.categoryLabel || s.ticketType}</span>
+                        )}
+                      </span>
+                      {admitted ? (
+                        <span className="text-xs text-emerald-400">Already admitted</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          checked={selectedSeats.has(s.key)}
+                          onChange={(e) =>
+                            setSelectedSeats((prev) => {
+                              const next = new Set(prev);
+                              if (e.target.checked) next.add(s.key);
+                              else next.delete(s.key);
+                              return next;
+                            })
+                          }
+                          className="h-4 w-4 rounded border-white/30 bg-transparent accent-emerald-500"
+                        />
+                      )}
+                    </label>
+                  );
+                })}
+              {(showSeatPicker ? ineligible : pending.tickets).map((t) => (
                 <div key={t.ticketId} className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex items-center gap-1.5 text-white/90">
                     <Armchair className="h-3.5 w-3.5 text-white/50" />
@@ -400,7 +538,25 @@ export default function CinemaScanner() {
               >
                 Cancel
               </Button>
-              {remaining.length > 0 ? (
+              {showSeatPicker ? (
+                selectedSeats.size > 0 ? (
+                  <Button
+                    onClick={confirmAdmit}
+                    disabled={confirming}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-500"
+                  >
+                    {confirming
+                      ? "Admitting…"
+                      : selectedSeats.size === outstandingEligibleSeats.length
+                        ? "Mark as used"
+                        : `Admit ${selectedSeats.size} seat${selectedSeats.size === 1 ? "" : "s"}`}
+                  </Button>
+                ) : (
+                  <div className="flex flex-1 items-center justify-center text-sm text-white/60">
+                    Select at least one seat
+                  </div>
+                )
+              ) : remaining.length > 0 ? (
                 <Button
                   onClick={confirmAdmit}
                   disabled={confirming}

@@ -134,7 +134,7 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
     );
   }
 
-  const handleDownload = () => {
+  const handleCaptureFailed = () => {
     if (!ticket?.ticketId) return;
     downloadTicketQr(ticket.ticketId, `ticket-${ticket.ticketId}.png`).catch(() =>
       toast.error("Could not download the QR code")
@@ -191,7 +191,9 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
             { label: "ATTENDEE", value: attendee },
           ]}
           qrSrc={ticketQrUrl(ticket.ticketId)}
-          onDownload={handleDownload}
+          downloadFileName={`ticket-${ticket.ticketId}`}
+          shareTitle={`${ticket.event.title} — Ticket`}
+          onCaptureFailed={handleCaptureFailed}
         />
       </div>
     </div>
