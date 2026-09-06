@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const CinemaHall = require("../models/CinemaHall");
 const CinemaSeatHold = require("../models/CinemaSeatHold");
 const CinemaShowtime = require("../models/CinemaShowtime");
+const CinemaTicket = require("../models/CinemaTicket");
 const { BadRequestError, NotFoundError } = require("../errors");
 
 // Seat selection: who may sit where, and who got there first.
@@ -281,10 +282,111 @@ const releaseSoldSeat = async ({ showtimeId, seatKey }) => {
   });
 };
 
+/**
+ * The seat map a staff member (cinema or admin) needs for an audit view: the
+ * same available/held/sold/gap/blocked picker map, overlaid with WHO holds a
+ * sold seat and whether they have been admitted — plus an ownership check the
+ * public picker doesn't need, since this is staff reading one specific
+ * cinema's data rather than a customer browsing.
+ *
+ * On a general-admission hall there is no seat-by-seat identity to show, so
+ * this returns a per-tier occupancy breakdown instead: how many of each
+ * ticket type are sold and how many of those have been admitted.
+ */
+const getStaffSeatMap = async (showtimeId, cinemaId) => {
+  if (!mongoose.Types.ObjectId.isValid(showtimeId)) {
+    throw new NotFoundError("Showtime not found");
+  }
+
+  const showtime = await CinemaShowtime.findById(showtimeId)
+    .populate("hall")
+    .lean({ virtuals: false });
+  if (!showtime) throw new NotFoundError("Showtime not found");
+  // Not "forbidden": a cinema (or an admin browsing a different cinema by
+  // mistake) probing another cinema's showtime id should learn nothing more
+  // than that it doesn't exist.
+  if (String(showtime.cinema) !== String(cinemaId)) {
+    throw new NotFoundError("Showtime not found");
+  }
+
+  const activeTickets = await CinemaTicket.find({
+    showtime: showtimeId,
+    status: { $nin: ["cancelled", "refunded"] },
+  })
+    .select("ticketId ticketTypeId ticketType quantity checkedIn customerName seats")
+    .lean();
+
+  const hall = showtime.hall;
+  if (!hall?.hasAssignedSeating) {
+    const byTier = new Map();
+    for (const tier of showtime.ticketTypes || []) {
+      byTier.set(String(tier._id), {
+        ticketTypeId: String(tier._id),
+        name: tier.name,
+        allocation: tier.allocation,
+        sold: 0,
+        admitted: 0,
+      });
+    }
+    for (const ticket of activeTickets) {
+      const key = String(ticket.ticketTypeId);
+      const bucket = byTier.get(key) || {
+        ticketTypeId: key,
+        name: ticket.ticketType,
+        allocation: 0,
+        sold: 0,
+        admitted: 0,
+      };
+      bucket.sold += ticket.quantity || 1;
+      if (ticket.checkedIn) bucket.admitted += ticket.quantity || 1;
+      byTier.set(key, bucket);
+    }
+    return {
+      assignedSeating: false,
+      showtimeId: String(showtimeId),
+      tiers: [...byTier.values()],
+    };
+  }
+
+  // Who holds each sold seat, and whether they've been admitted — keyed by
+  // seatKey so it drops straight onto the base map below.
+  const seatInfo = new Map();
+  for (const ticket of activeTickets) {
+    for (const seat of ticket.seats || []) {
+      seatInfo.set(seat.seatKey, {
+        ticketId: ticket.ticketId,
+        customerName: ticket.customerName,
+        admittedAt: seat.admittedAt || null,
+      });
+    }
+  }
+
+  const base = await getSeatMapForShowtime(showtimeId);
+  const rows = (base.rows || []).map((row) => ({
+    ...row,
+    seats: row.seats.map((seat) => {
+      const info = seatInfo.get(seat.seatKey);
+      if (!info) return seat;
+      return {
+        ...seat,
+        ticketId: info.ticketId,
+        customerName: info.customerName,
+        admittedAt: info.admittedAt,
+        // Admission is only meaningful on a seat the base map already
+        // considers sold — a held (unpaid) seat has no ticket yet to admit.
+        status: info.admittedAt && seat.status === "sold" ? "admitted" : seat.status,
+      };
+    }),
+  }));
+
+  return { ...base, rows };
+};
+
 module.exports = {
   HOLD_MINUTES,
   seatKeyOf,
   getSeatMapForShowtime,
+  getStaffSeatMap,
   holdSeats,
   releaseHolds,
   confirmHold,

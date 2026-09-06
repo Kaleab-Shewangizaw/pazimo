@@ -21,6 +21,7 @@ export interface ScheduleShowtime {
   isPublished: boolean;
   seatsAllocated: number;
   seatsSold: number;
+  ticketTypes: { _id: string; name: string; price: number; allocation: number; sold: number }[];
 }
 
 export interface ScheduleHall {
@@ -163,6 +164,34 @@ export interface ShowtimeSeatMap {
    * picker says so instead of rendering a room that cannot be used.
    */
   needsRepricing?: boolean;
+}
+
+/** One seat as a STAFF audit view sees it: the public picker's state plus who
+ * holds it and whether they've been admitted. */
+export interface StaffPickerSeat extends Omit<PickerSeat, "status"> {
+  status: PickerSeat["status"] | "admitted";
+  ticketId?: string | null;
+  customerName?: string | null;
+  admittedAt?: string | null;
+}
+
+export interface StaffPickerRow extends Omit<PickerRow, "seats"> {
+  seats: StaffPickerSeat[];
+}
+
+/** A general-admission hall has no seat-by-seat identity, so staff see this
+ * per-tier breakdown instead of a seat grid. */
+export interface TierOccupancy {
+  ticketTypeId: string;
+  name: string;
+  allocation: number;
+  sold: number;
+  admitted: number;
+}
+
+export interface StaffSeatMap extends Omit<ShowtimeSeatMap, "rows"> {
+  rows?: StaffPickerRow[];
+  tiers?: TierOccupancy[];
 }
 
 export interface CinemaBasketTicketSeat {
@@ -798,6 +827,15 @@ export const fetchWeekSchedule = (token: string, from: string, to: string) =>
       token
     )
   );
+
+/**
+ * A generic staff GET, for components shared between the cinema's own
+ * dashboard and the admin's cinema panel — the two surfaces read the exact
+ * same shapes, scoped by `/api/cinemas/me` or `/api/cinemas/admin/:cinemaId`
+ * respectively. `path` starts with "/", e.g. "/schedule?from=...".
+ */
+export const staffGet = <T,>(endpointBase: string, path: string, token: string) =>
+  unwrap(cinemaRequest<{ data: T }>(`${endpointBase}${path}`, token));
 
 export const fetchCinemaBalance = (token: string) =>
   unwrap(cinemaRequest<{ data: CinemaBalance }>("/api/cinemas/me/finance", token));

@@ -14,7 +14,7 @@ import {
 const SECTIONS = [
   {
     icon: CalendarDays,
-    title: "Programme",
+    title: "Program",
     href: "/cinema/programme",
     body: "Add halls, then films, then screenings. Ticket prices belong to the screening, not the film — so a Tuesday matinee and a Saturday premiere of the same title can be priced differently. Setting a film's runtime lets us warn you when two screenings would overlap in the same hall.",
   },

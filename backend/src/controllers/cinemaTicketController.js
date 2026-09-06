@@ -2,6 +2,7 @@ const { StatusCodes } = require("http-status-codes");
 const CinemaTicket = require("../models/CinemaTicket");
 const CinemaShowtime = require("../models/CinemaShowtime");
 const cinemaTicketService = require("../services/cinemaTicketService");
+const cinemaSeatService = require("../services/cinemaSeatService");
 const cinemaBeverageSalesService = require("../services/cinemaBeverageSalesService");
 const { renderQrSvg, renderQrPng } = require("../utils/qrRenderer");
 const { BadRequestError, NotFoundError } = require("../errors");
@@ -216,6 +217,29 @@ const getTicketSummary = async (req, res) => {
     });
   } catch (error) {
     console.error("Error building cinema ticket summary:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * One screening's seat-by-seat status for staff: available/held/sold/admitted
+ * on an assigned-seating hall, or per-tier occupancy on a general-admission
+ * one. This is the audit view behind the Tickets page's Seats tab — unlike
+ * the public seat picker, it is scoped to the caller's own cinema (or, for an
+ * admin, the cinema named in the URL) and shows who bought and who has
+ * actually been admitted.
+ */
+const getShowtimeSeatsForStaff = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    const map = await cinemaSeatService.getStaffSeatMap(
+      req.params.showtimeId,
+      cinema._id
+    );
+    res.status(StatusCodes.OK).json({ success: true, data: map });
+  } catch (error) {
+    console.error("Error building staff seat map:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
   }
@@ -555,6 +579,7 @@ module.exports = {
   sellAtBoxOffice,
   listTickets,
   getTicketSummary,
+  getShowtimeSeatsForStaff,
   checkIn,
   checkInOrder,
   getStaffTicket,

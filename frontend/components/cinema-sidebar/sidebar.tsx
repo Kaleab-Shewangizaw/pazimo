@@ -143,7 +143,7 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
             <NavLink
               href="/cinema/programme"
               icon={CalendarDays}
-              label="Programme"
+              label="Program"
             />
             <NavLink
               href="/cinema/schedule"

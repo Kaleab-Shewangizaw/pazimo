@@ -19,25 +19,7 @@ import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, DoorOpen, Sparkles } from "lucide-react";
 import WeekScheduleGrid from "@/components/cinema/week-schedule-grid";
 import HallDayScheduleDialog from "@/components/cinema/hall-day-schedule-dialog";
-
-const toKey = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-
-const addDays = (dateKey: string, n: number) => {
-  const d = new Date(`${dateKey}T00:00:00`);
-  d.setDate(d.getDate() + n);
-  return toKey(d);
-};
-
-/** Monday of the week containing `dateKey` (Sunday rolls back 6 days, not 0). */
-const mondayOf = (dateKey: string) => {
-  const d = new Date(`${dateKey}T00:00:00`);
-  const dow = d.getDay(); // 0 = Sunday
-  const diff = dow === 0 ? -6 : 1 - dow;
-  return addDays(dateKey, diff);
-};
+import { toKey, addDays, mondayOf } from "@/lib/cinemaWeek";
 
 const clock = (iso?: string | null) =>
   iso
@@ -99,7 +81,7 @@ function ShowtimeRow({ show, onClick }: { show: ScheduleShowtime; onClick?: () =
 }
 
 function ScheduleContent({ cinema, token }: { cinema: CinemaProfile; token: string }) {
-  const [view, setView] = useState<"day" | "week">("day");
+  const [view, setView] = useState<"day" | "week">("week");
   const [day, setDay] = useState(() => toKey(new Date()));
   const [data, setData] = useState<CinemaSchedule | null>(null);
   const [loading, setLoading] = useState(true);
@@ -283,7 +265,7 @@ function ScheduleContent({ cinema, token }: { cinema: CinemaProfile; token: stri
             <CardContent className="py-16 text-center">
               <DoorOpen className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-700" />
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                No halls yet. Add one under Programme to start scheduling.
+                No halls yet. Add one under Program to start scheduling.
               </p>
             </CardContent>
           </Card>
@@ -327,7 +309,7 @@ function ScheduleContent({ cinema, token }: { cinema: CinemaProfile; token: stri
           <CardContent className="py-16 text-center">
             <DoorOpen className="mx-auto mb-3 h-8 w-8 text-gray-300 dark:text-gray-700" />
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              No halls yet. Add one under Programme to start scheduling.
+              No halls yet. Add one under Program to start scheduling.
             </p>
           </CardContent>
         </Card>

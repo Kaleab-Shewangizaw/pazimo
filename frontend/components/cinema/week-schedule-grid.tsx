@@ -28,9 +28,11 @@ const isToday = (dateKey: string) => {
 /** One screening, condensed to fit a week-grid cell. */
 function ShowtimeChip({
   show,
+  selected,
   onClick,
 }: {
   show: ScheduleShowtime;
+  selected?: boolean;
   onClick: () => void;
 }) {
   const cancelled = show.status === "cancelled";
@@ -40,9 +42,11 @@ function ShowtimeChip({
       onClick={onClick}
       title={`${show.movie?.title || "Untitled"} · ${clock(show.startsAt)}`}
       className={`block w-full rounded-md border px-1.5 py-1 text-left text-[11px] leading-tight transition-colors ${
-        cancelled
-          ? "border-gray-200 bg-gray-50 text-gray-400 line-through opacity-70 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-600"
-          : "border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50 dark:border-gray-800 dark:bg-gray-950/60 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/30"
+        selected
+          ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-500 dark:border-indigo-500 dark:bg-indigo-950/40"
+          : cancelled
+            ? "border-gray-200 bg-gray-50 text-gray-400 line-through opacity-70 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-600"
+            : "border-gray-200 bg-white hover:border-indigo-300 hover:bg-indigo-50 dark:border-gray-800 dark:bg-gray-950/60 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/30"
       }`}
     >
       <span className="font-mono font-semibold tabular-nums text-gray-900 dark:text-gray-100">
@@ -67,10 +71,18 @@ export default function WeekScheduleGrid({
   halls,
   days,
   onSlotClick,
+  readOnly,
+  selectedShowtimeId,
 }: {
   halls: ScheduleHallMeta[];
   days: ScheduleDay[];
   onSlotClick: (hallId: string, dateKey: string, showtimeId?: string) => void;
+  /** Hides the "add a screening" affordance — for a view that only picks an
+   * existing screening rather than building the schedule. */
+  readOnly?: boolean;
+  /** Highlights the chip for this screening, so the grid shows what's open
+   * below it. */
+  selectedShowtimeId?: string;
 }) {
   if (halls.length === 0) return null;
 
@@ -130,17 +142,20 @@ export default function WeekScheduleGrid({
                     <ShowtimeChip
                       key={s._id}
                       show={s}
+                      selected={s._id === selectedShowtimeId}
                       onClick={() => onSlotClick(hall._id, day.date, s._id)}
                     />
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => onSlotClick(hall._id, day.date)}
-                    aria-label={`Add a screening in ${hall.name} on ${day.date}`}
-                    className="flex w-full items-center justify-center rounded-md border border-dashed border-gray-200 py-1 text-gray-300 opacity-0 transition-opacity hover:border-indigo-300 hover:text-indigo-500 group-hover:opacity-100 dark:border-gray-800 dark:text-gray-700 dark:hover:border-indigo-700 dark:hover:text-indigo-400"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      onClick={() => onSlotClick(hall._id, day.date)}
+                      aria-label={`Add a screening in ${hall.name} on ${day.date}`}
+                      className="flex w-full items-center justify-center rounded-md border border-dashed border-gray-200 py-1 text-gray-300 opacity-0 transition-opacity hover:border-indigo-300 hover:text-indigo-500 group-hover:opacity-100 dark:border-gray-800 dark:text-gray-700 dark:hover:border-indigo-700 dark:hover:text-indigo-400"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               );
             })}

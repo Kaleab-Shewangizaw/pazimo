@@ -1303,6 +1303,16 @@ const toScheduleRow = (show) => ({
     0
   ),
   seatsSold: (show.ticketTypes || []).reduce((sum, t) => sum + (t.sold || 0), 0),
+  // Already on the document this row is built from — no extra query. Carried
+  // through so the Tickets page's per-tier sales chips can render straight off
+  // the week grid's own fetch, with no second round trip per screening picked.
+  ticketTypes: (show.ticketTypes || []).map((t) => ({
+    _id: t._id,
+    name: t.name,
+    price: t.price,
+    allocation: t.allocation,
+    sold: t.sold,
+  })),
 });
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;

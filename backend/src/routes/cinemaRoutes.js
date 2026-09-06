@@ -171,6 +171,12 @@ router.post("/me/ticket-sales", ...cinemaSelf, ticketController.sellAtBoxOffice)
 // decodes a frame.
 router.get("/me/tickets/:ticketId", ...cinemaSelf, ticketController.getStaffTicket);
 router.post("/me/check-in/:ticketId", ...cinemaSelf, ticketController.checkIn);
+// The Seats tab's audit view: one screening's seat-by-seat status.
+router.get(
+  "/me/showtimes/:showtimeId/seats",
+  ...cinemaSelf,
+  ticketController.getShowtimeSeatsForStaff
+);
 
 // Concessions
 router.get("/me/concessions/catalog", ...cinemaSelf, beverageController.listSellableCatalog);
@@ -286,6 +292,11 @@ router.delete("/admin/:cinemaId/movies/:movieId", ...adminOnly, programmeControl
 // Showtimes
 router.get("/admin/:cinemaId/showtimes", ...adminOnly, programmeController.listShowtimes);
 router.get("/admin/:cinemaId/schedule", ...adminOnly, programmeController.getSchedule);
+router.get(
+  "/admin/:cinemaId/showtimes/:showtimeId/seats",
+  ...adminOnly,
+  ticketController.getShowtimeSeatsForStaff
+);
 router.post("/admin/:cinemaId/showtimes", ...adminOnly, programmeController.createShowtime);
 router.patch("/admin/:cinemaId/showtimes/:showtimeId", ...adminOnly, programmeController.updateShowtime);
 router.delete("/admin/:cinemaId/showtimes/:showtimeId", ...adminOnly, programmeController.deleteShowtime);

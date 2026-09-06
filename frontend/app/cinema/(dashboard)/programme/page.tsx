@@ -21,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Trash2, Film, DoorOpen, LayoutGrid, Pencil, Link2, Loader2 } from "lucide-react";
+import { Trash2, Film, DoorOpen, LayoutGrid, Pencil, Link2, Loader2, Plus } from "lucide-react";
 import SeatMapEditor from "@/components/cinema/seat-map-editor";
 import {
   Dialog,
@@ -213,6 +213,9 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   // a separate edit form would drift from the add form, and the fields are
   // identical.
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
+  // Whether the add/edit form is open. Its own flag rather than deriving from
+  // editingMovieId, so "Add movie" (editingMovieId null) can open it too.
+  const [movieDialogOpen, setMovieDialogOpen] = useState(false);
 
   // The organizer's alternative to typing the synopsis and cast by hand: paste
   // the film's IMDb link, fetch, and review/edit whatever came back before
@@ -248,6 +251,15 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     }
   };
 
+  const beginAddMovie = () => {
+    setEditingMovieId(null);
+    setMovieForm(EMPTY_MOVIE_FORM);
+    setPoster(null);
+    setCover(null);
+    setImdbUrl("");
+    setMovieDialogOpen(true);
+  };
+
   const beginEditMovie = (movie: CinemaMovie) => {
     setEditingMovieId(movie._id);
     setMovieForm({
@@ -269,10 +281,11 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     setPoster(null);
     setCover(null);
     setImdbUrl("");
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    setMovieDialogOpen(true);
   };
 
   const cancelEditMovie = () => {
+    setMovieDialogOpen(false);
     setEditingMovieId(null);
     setMovieForm(EMPTY_MOVIE_FORM);
     setPoster(null);
@@ -307,6 +320,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           ? "Film updated. Listing changes go back to the admin for review."
           : "Film added"
       );
+      setMovieDialogOpen(false);
       setEditingMovieId(null);
       setMovieForm(EMPTY_MOVIE_FORM);
       setPoster(null);
@@ -349,7 +363,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Programme
+        Program
       </h1>
 
       <Tabs defaultValue="movies" className="space-y-6">
@@ -360,224 +374,63 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
 
         {/* Films ----------------------------------------------------------- */}
         <TabsContent value="movies" className="space-y-6">
-          <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
-            <CardContent className="space-y-4 p-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-                <Film className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                {/* An operator who clicked Edit is scrolled up to a pre-filled
-                    form; the heading is what tells them why it is pre-filled. */}
-                {editingMovieId ? "Edit film" : "Add a film"}
-              </h2>
-
-              {/* The shortcut: paste the film's IMDb link and pull in its
-                  synopsis, cast, genre, runtime and rating instead of typing
-                  them out. Nothing here is saved until "Add film"/"Save
-                  changes" below is pressed — this only fills the form. */}
-              {/* <div className="flex flex-col gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40 sm:flex-row sm:items-center">
-                <Link2 className="hidden h-4 w-4 shrink-0 text-gray-400 sm:block" />
-                <Input
-                  placeholder="Paste an IMDb link (e.g. imdb.com/title/tt1234567) to fill this in"
-                  value={imdbUrl}
-                  onChange={(e) => setImdbUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      importFromImdb();
-                    }
-                  }}
-                  className="flex-1 bg-white dark:bg-gray-950"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={importFromImdb}
-                  disabled={importingImdb || !imdbUrl.trim()}
-                  className="shrink-0"
-                >
-                  {importingImdb ? (
-                    <>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Fetching…
-                    </>
-                  ) : (
-                    "Fetch from IMDb"
-                  )}
-                </Button>
-              </div>
-              <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Or just fill in the fields below yourself — the link is optional.
-              </p> */}
-
-              <div className="grid gap-3 sm:grid-cols-4">
-                <Input
-                  placeholder="Title"
-                  value={movieForm.title}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, title: e.target.value })
-                  }
-                />
-                <Input
-                  type="number"
-                  placeholder="Runtime (min)"
-                  value={movieForm.durationMinutes}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, durationMinutes: e.target.value })
-                  }
-                />
-                <Input
-                  placeholder="Age rating"
-                  value={movieForm.ageRating}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, ageRating: e.target.value })
-                  }
-                />
-                <Input
-                  placeholder="Language"
-                  value={movieForm.language}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, language: e.target.value })
-                  }
-                />
-                <Input
-                  placeholder="Subtitles"
-                  value={movieForm.subtitles}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, subtitles: e.target.value })
-                  }
-                />
-                <Input
-                  placeholder="Genre (comma separated)"
-                  value={movieForm.genre}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, genre: e.target.value })
-                  }
-                />
-                <Input
-                  placeholder="Cast (comma separated)"
-                  value={movieForm.cast}
-                  onChange={(e) =>
-                    setMovieForm({ ...movieForm, cast: e.target.value })
-                  }
-                />
-                <div>
-                  <Label className="text-xs">Release date</Label>
-                  <Input
-                    type="date"
-                    value={movieForm.releaseDate}
-                    onChange={(e) =>
-                      setMovieForm({ ...movieForm, releaseDate: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Status</Label>
-                  <select
-                    className={selectClass}
-                    value={movieForm.status}
-                    onChange={(e) =>
-                      setMovieForm({ ...movieForm, status: e.target.value })
-                    }
-                  >
-                    <option value="now_showing">Now showing</option>
-                    <option value="coming_soon">Coming soon</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                </div>
-              </div>
-
-              <Input
-                placeholder="Trailer URL"
-                value={movieForm.trailerUrl}
-                onChange={(e) =>
-                  setMovieForm({ ...movieForm, trailerUrl: e.target.value })
-                }
-              />
-              <Textarea
-                rows={2}
-                placeholder="Description"
-                value={movieForm.description}
-                onChange={(e) =>
-                  setMovieForm({ ...movieForm, description: e.target.value })
-                }
-              />
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label className="text-xs">Poster (portrait, 2:3)</Label>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setPoster(e.target.files?.[0] || null)}
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Cover (landscape banner)</Label>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setCover(e.target.files?.[0] || null)}
-                  />
-                </div>
-              </div>
-
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Runtime is used to warn you when two screenings would overlap in
-                the same hall — set it, or conflicts cannot be checked.
-              </p>
-              <div className="flex items-center gap-2">
-                <Button onClick={addMovie} disabled={busy || !movieForm.title}>
-                  {editingMovieId ? "Save changes" : "Add film"}
-                </Button>
-                {editingMovieId && (
-                  <Button variant="ghost" onClick={cancelEditMovie} disabled={busy}>
-                    Cancel
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {movies.map((m) => (
-              <Card
-                key={m._id}
-                className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50"
-              >
-                <CardContent className="flex items-center justify-between gap-3 p-4">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-gray-900 dark:text-gray-100">
-                      {m.title}{" "}
-                      {!m.isActive && <Badge variant="secondary">retired</Badge>}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {[
-                        m.status === "coming_soon" ? "Coming soon" : null,
-                        m.durationMinutes ? `${m.durationMinutes} min` : null,
-                        m.ageRating,
-                        m.language,
-                        `${m.showtimeCount ?? 0} screenings`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title="Edit this film"
-                      onClick={() => beginEditMovie(m)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => removeMovie(m._id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+              <Film className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              Films ({movies.length})
+            </h2>
+            <Button size="sm" onClick={beginAddMovie}>
+              <Plus className="mr-1.5 h-4 w-4" /> Add Movie
+            </Button>
           </div>
+
+          {movies.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              No films yet. Add one to start scheduling screenings.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {movies.map((m) => (
+                <Card
+                  key={m._id}
+                  className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50"
+                >
+                  <CardContent className="flex items-center justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-gray-900 dark:text-gray-100">
+                        {m.title}{" "}
+                        {!m.isActive && <Badge variant="secondary">retired</Badge>}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {[
+                          m.status === "coming_soon" ? "Coming soon" : null,
+                          m.durationMinutes ? `${m.durationMinutes} min` : null,
+                          m.ageRating,
+                          m.language,
+                          `${m.showtimeCount ?? 0} screenings`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Edit this film"
+                        onClick={() => beginEditMovie(m)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => removeMovie(m._id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* Halls ----------------------------------------------------------- */}
@@ -696,6 +549,181 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={movieDialogOpen} onOpenChange={(open) => !open && cancelEditMovie()}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingMovieId ? "Edit film" : "Add a film"}</DialogTitle>
+            <DialogDescription>
+              {editingMovieId
+                ? "Changing a listing detail sends this film back to the admin for review."
+                : "Runtime is used to warn you when two screenings would overlap in the same hall — set it, or conflicts cannot be checked."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* The shortcut: paste the film's IMDb link and pull in its
+                synopsis, cast, genre, runtime and rating instead of typing
+                them out. Nothing here is saved until "Add film"/"Save
+                changes" below is pressed — this only fills the form. */}
+            {/* <div className="flex flex-col gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 p-3 dark:border-gray-700 dark:bg-gray-900/40 sm:flex-row sm:items-center">
+              <Link2 className="hidden h-4 w-4 shrink-0 text-gray-400 sm:block" />
+              <Input
+                placeholder="Paste an IMDb link (e.g. imdb.com/title/tt1234567) to fill this in"
+                value={imdbUrl}
+                onChange={(e) => setImdbUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    importFromImdb();
+                  }
+                }}
+                className="flex-1 bg-white dark:bg-gray-950"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={importFromImdb}
+                disabled={importingImdb || !imdbUrl.trim()}
+                className="shrink-0"
+              >
+                {importingImdb ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Fetching…
+                  </>
+                ) : (
+                  "Fetch from IMDb"
+                )}
+              </Button>
+            </div>
+            <p className="-mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Or just fill in the fields below yourself — the link is optional.
+            </p> */}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                placeholder="Title"
+                value={movieForm.title}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, title: e.target.value })
+                }
+              />
+              <Input
+                type="number"
+                placeholder="Runtime (min)"
+                value={movieForm.durationMinutes}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, durationMinutes: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Age rating"
+                value={movieForm.ageRating}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, ageRating: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Language"
+                value={movieForm.language}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, language: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Subtitles"
+                value={movieForm.subtitles}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, subtitles: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Genre (comma separated)"
+                value={movieForm.genre}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, genre: e.target.value })
+                }
+              />
+              <Input
+                placeholder="Cast (comma separated)"
+                value={movieForm.cast}
+                onChange={(e) =>
+                  setMovieForm({ ...movieForm, cast: e.target.value })
+                }
+              />
+              <div>
+                <Label className="text-xs">Release date</Label>
+                <Input
+                  type="date"
+                  value={movieForm.releaseDate}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, releaseDate: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Status</Label>
+                <select
+                  className={selectClass}
+                  value={movieForm.status}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, status: e.target.value })
+                  }
+                >
+                  <option value="now_showing">Now showing</option>
+                  <option value="coming_soon">Coming soon</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+            </div>
+
+            <Input
+              placeholder="Trailer URL"
+              value={movieForm.trailerUrl}
+              onChange={(e) =>
+                setMovieForm({ ...movieForm, trailerUrl: e.target.value })
+              }
+            />
+            <Textarea
+              rows={2}
+              placeholder="Description"
+              value={movieForm.description}
+              onChange={(e) =>
+                setMovieForm({ ...movieForm, description: e.target.value })
+              }
+            />
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label className="text-xs">Poster (portrait, 2:3)</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setPoster(e.target.files?.[0] || null)}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Cover (landscape banner)</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setCover(e.target.files?.[0] || null)}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button onClick={addMovie} disabled={busy || !movieForm.title}>
+                {editingMovieId ? "Save changes" : "Add film"}
+              </Button>
+              <Button variant="ghost" onClick={cancelEditMovie} disabled={busy}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editingHall} onOpenChange={(open) => !open && setEditingHall(null)}>
         <DialogContent className="max-w-md">
