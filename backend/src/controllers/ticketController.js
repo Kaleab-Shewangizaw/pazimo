@@ -1982,15 +1982,29 @@ const validateQRCode = async (req, res) => {
     console.log(`[QR-VALIDATE] ⚡ Validating QR code...`);
     const startTime = Date.now();
 
-    // Parse the QR code data
-    let ticketData;
+    // The QR is just the bare ticketId now (2026-09-07) — the JSON envelope
+    // {tid,...} it used to carry was pure overhead nothing here ever read
+    // beyond `tid` itself, and dropping it shrinks the printed pattern by a
+    // whole QR "version". A code that IS valid JSON is still accepted, so a
+    // ticket issued (and printed/emailed) before this change keeps scanning.
+    //
+    // The typeof guard matters: an 8-character ticketId that happens to be
+    // all digits (rare, but the alphabet allows it) is itself valid JSON — a
+    // NUMBER, not an object — so a bare successful JSON.parse is only trusted
+    // when it actually produced an object to pull tid/ticketId off of.
+    let ticketId = null;
     try {
-      ticketData = JSON.parse(qrData);
+      const ticketData = JSON.parse(qrData);
+      if (ticketData && typeof ticketData === "object") {
+        ticketId = ticketData.tid || ticketData.ticketId || null;
+      }
     } catch (error) {
-      throw new BadRequestError("Invalid QR code format");
+      // Not JSON at all — the expected shape for every ticket issued now.
+    }
+    if (!ticketId) {
+      ticketId = String(qrData).trim();
     }
 
-    const ticketId = ticketData.tid || ticketData.ticketId;
     if (!ticketId) {
       throw new BadRequestError("Invalid QR code: missing ticket ID");
     }

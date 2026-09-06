@@ -18,39 +18,33 @@ const {
 // they carry no eligibility check.
 
 /**
- * What a cinema ticket's QR encodes: just enough to look the ticket up and
- * tell it apart from an event ticket — nothing else. The scanner reads only
- * `tid` and re-fetches the ticket, so there is no reason to carry the seat,
- * type, or quantity in the code itself.
+ * What a cinema ticket's QR encodes: just the bare ticketId — nothing else.
+ * The scanner re-fetches everything (seat, type, quantity, status) from that
+ * id, so there is no reason to carry any of it in the code itself.
  *
- * The `ctx: "CINEMA"` tag is what lets a scanner tell the two kinds apart
- * before it looks anything up, so an event scanner pointed at a cinema
- * ticket rejects it as the wrong kind rather than searching the wrong
- * collection and reporting "not found".
+ * Changed 2026-09-07: this used to be JSON, `{ctx:"CINEMA", tid}`, so a
+ * scanner could tell a cinema code from an event code and from a whole-ORDER
+ * code before looking anything up. That `ctx` tag cost real, measured QR
+ * density (a whole version bigger) for a nicer error message on the rare
+ * wrong-scanner scan — cinema-scanner.tsx's extractCode() already falls back
+ * to trying a bare code as a ticket id first and an order reference second
+ * (see beginLookup/lookup there), so dropping the tag costs a slightly more
+ * generic "not found" instead of "wrong kind of ticket," never a broken scan.
  *
  * Derived entirely from fields already on the ticket, so it is deterministic and
  * can be re-rendered on demand — nothing is persisted, the same decision
  * qrRenderer documents for event tickets.
  */
-const buildCinemaQrPayload = (ticket) =>
-  JSON.stringify({
-    ctx: "CINEMA",
-    tid: ticket.ticketId,
-  });
+const buildCinemaQrPayload = (ticket) => String(ticket.ticketId);
 
 /**
  * What a whole ORDER's QR encodes — every seat bought in one checkout shares
- * this single code, rather than each seat carrying its own. A distinct `ctx`
- * tag from the per-ticket payload, for the same reason that payload's own tag
- * exists: the scanner has to tell the two kinds of code apart before it looks
- * anything up, so a legacy single-seat code (still reachable from that seat's
- * own /ticket/{id} page) never gets treated as if it admits the whole order.
+ * this single code, rather than each seat carrying its own. Bare, same as
+ * the per-ticket payload above and for the same reason: the scanner's
+ * ticket-then-order fallback already tells the two kinds apart at lookup
+ * time without a `ctx` tag riding along in the printed pattern.
  */
-const buildCinemaOrderQrPayload = (reference) =>
-  JSON.stringify({
-    ctx: "CINEMA_ORDER",
-    ref: reference,
-  });
+const buildCinemaOrderQrPayload = (reference) => String(reference);
 
 // ---------------------------------------------------------------------------
 // Selling

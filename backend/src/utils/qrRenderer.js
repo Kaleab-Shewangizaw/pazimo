@@ -34,15 +34,16 @@ const getLogoBase64 = () => {
   return cachedLogo;
 };
 
-// What the scanner reads. Just the ticket's own id — validateQRCode looks
-// everything else up server-side (name, ticket type, quantity, status), so
-// none of it needs to ride along in the code itself. Kept minimal on purpose:
-// the more that's embedded, the denser the printed pattern gets, and cinema's
-// own QR (utils in cinemaTicketController.js) has always been this small.
-// Re-rendering an old ticket still produces a scannable code — validateQRCode
-// only ever read `tid`/`ticketId`, so shedding the other fields breaks
-// nothing already issued.
-const buildTicketQrPayload = (ticket) => JSON.stringify({ tid: ticket.ticketId });
+// What the scanner reads: the bare ticketId string, no JSON envelope at all
+// (changed 2026-09-07 — a {"tid":"..."} wrapper was pushing this one QR
+// "version" bigger than it needed to be, for zero benefit; validateQRCode
+// looks everything else up server-side, so nothing needs to ride along in
+// the code itself). Cinema's own QR (cinemaTicketController.js) dropped the
+// same JSON wrapper for the same reason — measured, its ctx wrapper was
+// costing a full version-and-a-half of extra density on top of that. Re-
+// rendering an old ticket still produces a scannable code — validateQRCode
+// accepts either shape.
+const buildTicketQrPayload = (ticket) => String(ticket.ticketId);
 
 // The branded SVG: round (dot) modules, blue rounded finder eyes, logo in the
 // middle.
