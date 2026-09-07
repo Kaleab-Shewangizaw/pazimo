@@ -6,6 +6,13 @@ const mongoose = require("mongoose");
 // under an earlier code, and scanning authorization (ticketController's
 // checkInTicket/validateQRCode) checks this collection, never the code
 // itself, on every scan.
+//
+// An usher holds at most one live (revokedAt: null) grant at a time —
+// redeeming a different event's code revokes whatever was live before
+// creating the new one (see unlockEvent), so scanning is always scoped to
+// exactly one event, never several concurrently. Enforced there in
+// application code; the partial unique index below is the same rule as a
+// database-level backstop.
 const UsherEventAccessSchema = new mongoose.Schema(
   {
     usher: {
@@ -39,5 +46,12 @@ UsherEventAccessSchema.index({ usher: 1, event: 1 }, { unique: true });
 // Scanning authorization's actual lookup shape: "does this usher currently
 // have a live grant for this event".
 UsherEventAccessSchema.index({ event: 1, usher: 1, revokedAt: 1 });
+// Backstop for "at most one live grant per usher" — a partial index only
+// covers documents where revokedAt is null, so past (revoked) grants for
+// other events never collide with it.
+UsherEventAccessSchema.index(
+  { usher: 1 },
+  { unique: true, partialFilterExpression: { revokedAt: null } }
+);
 
 module.exports = mongoose.model("UsherEventAccess", UsherEventAccessSchema);
