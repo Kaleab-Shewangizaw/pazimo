@@ -2,6 +2,7 @@ const Ticket = require("../models/Ticket");
 const Event = require("../models/Event");
 const Invitation = require("../models/Invitation");
 const User = require("../models/User");
+const UsherEventAccess = require("../models/UsherEventAccess");
 const { StatusCodes } = require("http-status-codes");
 const {
   BadRequestError,
@@ -1708,6 +1709,24 @@ const checkInTicket = async (req, res) => {
       });
     }
 
+    // An usher has no ownership over any event — access is scoped entirely by
+    // UsherEventAccess grants (see usherController.unlockEvent), one per
+    // event they've redeemed a code for. Checked against the ticket's real
+    // event, never the client-supplied scopeEventId below.
+    if (req.user?.role === "usher") {
+      const hasAccess = await UsherEventAccess.exists({
+        usher: req.user._id,
+        event: ticket.event,
+        revokedAt: null,
+      });
+      if (!hasAccess) {
+        return res.status(StatusCodes.FORBIDDEN).json({
+          success: false,
+          message: "You don't have access to check in tickets for this event",
+        });
+      }
+    }
+
     if (scopeEventId && String(ticket.event || "") !== scopeEventId) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
@@ -1986,6 +2005,22 @@ const validateQRCode = async (req, res) => {
       throw new UnauthorizedError(
         "You are not allowed to scan tickets for this event",
       );
+    }
+
+    // Same UsherEventAccess check as checkInTicket above — an usher can only
+    // scan an event they've redeemed a code for, checked against the
+    // ticket's real event, never the client-supplied scopeEventId below.
+    if (req.user?.role === "usher") {
+      const hasAccess = await UsherEventAccess.exists({
+        usher: req.user._id,
+        event: ticket.event?._id,
+        revokedAt: null,
+      });
+      if (!hasAccess) {
+        throw new UnauthorizedError(
+          "You don't have access to scan tickets for this event",
+        );
+      }
     }
 
     if (scopeEventId && String(ticket.event?._id || "") !== scopeEventId) {

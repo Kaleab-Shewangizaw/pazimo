@@ -32,9 +32,15 @@ const userSchema = new mongoose.Schema(
       minlength: [6, "Password must be at least 6 characters long"],
       select: false,
     },
+    // "usher" is door staff: a scan-only account with no money or ownership
+    // attached to it at all. It never owns an event — it gets scoped, one
+    // event at a time, by redeeming that event's EventUsherCode, which creates
+    // a UsherEventAccess grant. Ticket check-in/validate-qr check that grant
+    // for this role; every other route stays exactly as closed to it as to a
+    // customer unless explicitly opened up.
     role: {
       type: String,
-      enum: ["customer", "organizer"],
+      enum: ["customer", "organizer", "usher"],
       required: true,
     },
     firstName: {

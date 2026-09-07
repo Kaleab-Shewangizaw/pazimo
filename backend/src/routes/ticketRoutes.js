@@ -894,13 +894,13 @@ router.post("/payment/cancel", cancelPaymentIntent);
 router.patch(
   "/:ticketId/check-in",
   protect,
-  restrictTo("admin", "organizer", "partner"),
+  restrictTo("admin", "organizer", "partner", "usher"),
   checkInTicket
 );
 router.post(
   "/validate-qr",
   protect,
-  restrictTo("admin", "organizer", "partner"),
+  restrictTo("admin", "organizer", "partner", "usher"),
   validateQRCode
 );
 
