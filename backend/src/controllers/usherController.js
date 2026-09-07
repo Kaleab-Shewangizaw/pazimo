@@ -171,6 +171,20 @@ const unlockEvent = async (req, res) => {
     throw new BadRequestError("This event has been cancelled");
   }
 
+  // An usher scans one event at a time, never several concurrently — so
+  // unlocking a new one revokes every other grant this account still holds
+  // before creating it. Excludes this event itself: redeeming the same
+  // event's code again (e.g. after a re-login) just refreshes that grant
+  // instead of pointlessly revoking-then-recreating it.
+  await UsherEventAccess.updateMany(
+    {
+      usher: req.user.userId,
+      event: { $ne: eventCode.event._id },
+      revokedAt: null,
+    },
+    { $set: { revokedAt: new Date() } }
+  );
+
   const access = await UsherEventAccess.findOneAndUpdate(
     { usher: req.user.userId, event: eventCode.event._id },
     { $set: { revokedAt: null, grantedAt: new Date() } },
@@ -186,8 +200,10 @@ const unlockEvent = async (req, res) => {
   });
 };
 
-// GET /api/ushers/my-events — usher only. Every event this account currently
-// holds a live grant for.
+// GET /api/ushers/my-events — usher only. At most one live grant per usher
+// (unlockEvent revokes any other on redeem), so this is a 0-or-1-element
+// list in practice; kept as a list rather than a single nullable object so
+// the shape doesn't have to change if that ever loosens.
 const getMyEvents = async (req, res) => {
   const grants = await UsherEventAccess.find({
     usher: req.user.userId,
