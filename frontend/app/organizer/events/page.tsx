@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEventStore } from "@/store/eventStore";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
+import { UsherAccessDialog } from "@/components/events/usher-access-dialog";
 import {
   Card,
   CardContent,
@@ -71,6 +73,7 @@ export default function EventsPage() {
     cancelEvent,
     toggleSoldOut,
   } = useEventStore();
+  const { token: organizerToken } = useAuthStore();
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState<string | null>(null);
@@ -556,6 +559,13 @@ export default function EventsPage() {
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        <UsherAccessDialog
+                          eventId={event._id}
+                          eventTitle={event.title}
+                          token={organizerToken || ""}
+                          triggerVariant="outline"
+                          triggerClassName="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 dark:border-gray-700"
+                        />
                         {beverageEligible && (
                           <Button
                             variant="outline"

@@ -166,6 +166,17 @@ export default function AdminSidebar({
                     >
                       All Users
                     </Link>
+                    <Link
+                      href="/admin/users/ushers"
+                      onClick={onClose}
+                      className={`block p-2.5 rounded-xl text-sm transition-colors ${
+                        pathname.startsWith("/admin/users/ushers")
+                          ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400"
+                          : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
+                      }`}
+                    >
+                      Ushers
+                    </Link>
                   </div>
                 )}
               </div>
