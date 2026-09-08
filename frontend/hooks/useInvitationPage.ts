@@ -840,8 +840,12 @@ export function useInvitationPage() {
         return;
       }
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}?limit=1000`,
+      // The invitations endpoint already returns each invitation pre-matched
+      // with its ticket (guestType, ticketType, quantities, check-in status),
+      // so a single request here is enough — no need for a second ticket
+      // fetch plus client-side O(n*m) matching between the two lists.
+      const invRes = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/event/${event.id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -850,183 +854,13 @@ export function useInvitationPage() {
         }
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        let tickets = (data.tickets || []).filter(
-          (t: any) => t.isInvitation === true
-        );
+      if (invRes.ok) {
+        const invData = await invRes.json();
+        const invitations: any[] = invData.data || [];
 
-        // If there are more pages, fetch all
-        if (data.hasMore) {
-          let page = 2;
-          let hasMore = true;
-          while (hasMore) {
-            const nextResponse = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${event.id}?page=${page}&limit=500`,
-              {
-                headers: {
-                  Authorization: `Bearer ${token}`,
-                  "Content-Type": "application/json",
-                },
-              }
-            );
-            if (nextResponse.ok) {
-              const nextData = await nextResponse.json();
-              const nextTickets = (nextData.tickets || []).filter(
-                (t: any) => t.isInvitation === true
-              );
-              tickets = [...tickets, ...nextTickets];
-              hasMore = nextData.hasMore || false;
-              page++;
-            } else {
-              hasMore = false;
-            }
-          }
-        }
-
-        // Fetch invitation records to match with tickets for correct usage data
-        let invitations: any[] = [];
-        try {
-          const invRes = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/invitations/event/${event.id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                "Content-Type": "application/json",
-              },
-            }
-          );
-          if (invRes.ok) {
-            const invData = await invRes.json();
-            invitations = invData.data || [];
-          }
-        } catch (err) {
-          console.error("Error fetching invitations for attendees:", err);
-        }
-
-        const formattedAttendees = tickets.map((ticket: any) => {
-          // Find matching invitation first (needed for name fallback)
-          const matchingInv = invitations.find((inv) => {
-            // Check for direct ticket ID match within the RSVP link
-            if (inv.rsvpLink && ticket.ticketId) {
-              const rsvpTicketId = inv.rsvpLink.split("inv=")[1];
-              if (rsvpTicketId === ticket.ticketId) {
-                return true;
-              }
-            }
-
-            // Fallback to strict email/phone matching if ticket ID link is missing
-            // Only use this fallback if we can't match by ID, to prevent partial matches
-            const invEmail = (inv.guestEmail || "").toLowerCase().trim();
-            const invPhone = (inv.guestPhone || "").trim();
-            const tEmail = (ticket.guestEmail || ticket.user?.email || "")
-              .toLowerCase()
-              .trim();
-            const tPhone = (
-              ticket.guestPhone ||
-              ticket.user?.phoneNumber ||
-              ""
-            ).trim();
-
-            // Only match if contact info is present
-            if (!invEmail && !invPhone) return false;
-
-            return (
-              (invEmail && tEmail && invEmail === tEmail) ||
-              (invPhone && tPhone && invPhone === tPhone)
-            );
-          });
-
-          const first = (ticket.user?.firstName || "").trim();
-          const last = (ticket.user?.lastName || "").trim();
-          const fallbackName =
-            ticket.guestName ||
-            matchingInv?.guestName ||
-            ticket.user?.email ||
-            ticket.guestEmail ||
-            ticket.guestPhone ||
-            "Guest";
-          const name = `${[first, last].filter(Boolean).join(" ") || fallbackName}`;
-
-          const contact =
-            ticket.user?.email ||
-            ticket.guestEmail ||
-            ticket.guestPhone ||
-            ticket.user?.phoneNumber ||
-            "No Contact";
-
-          const isOldTicket =
-            new Date(ticket.createdAt) < new Date("2026-01-02");
-
-          let originalAmount =
-            ticket.purchaseQuantity || ticket.ticketCount || 1;
-
-          if (isOldTicket && matchingInv && matchingInv.estimatedCost > 0) {
-            // Derive original quantity: cost / 1.03 (since each invitation unit is 1.03 ETB)
-            const derivedQty = Math.round(matchingInv.estimatedCost / 1.03);
-            originalAmount = Math.max(originalAmount, derivedQty);
-          }
-
-          let unifiedStatus = ticket.status || "pending";
-
-          if (matchingInv && matchingInv.rsvpStatus === "declined") {
-            unifiedStatus = "declined";
-          } else if (ticket.ticketCount === 0 && originalAmount > 0) {
-            unifiedStatus = "used";
-          } else if (unifiedStatus === "active") {
-            // Only convert "active" to "confirmed" if it is NOT pending an RSVP.
-            // A paid ticket (not an invitation by flag) is confirmed.
-            // A guest invitation should rely on rsvpStatus, which defaults to pending.
-            if (
-              ticket.isInvitation &&
-              (!matchingInv || matchingInv.rsvpStatus === "pending")
-            ) {
-              unifiedStatus = "pending";
-            } else {
-              unifiedStatus = "confirmed";
-            }
-          } else if (unifiedStatus === "cancelled") {
-            unifiedStatus = "declined";
-          }
-
-          return {
-            id: ticket._id,
-            customerName: name,
-            contact: contact,
-            guestType:
-              ticket.isInvitation || ticket.price === 0 ? "Guest" : "Paid",
-            confirmedAt:
-              ticket.status === "pending" || ticket.status === "cancelled"
-                ? "Pending"
-                : ticket.createdAt
-                ? new Date(ticket.createdAt).toLocaleDateString()
-                : "Unknown",
-            status: unifiedStatus,
-            purchaseQuantity: originalAmount,
-            ticketCount:
-              typeof ticket.ticketCount === "number"
-                ? ticket.ticketCount
-                : ticket.purchaseQuantity || 0,
-            hasTicket: true,
-            paymentStatus: "paid",
-          };
-        });
-
-        // Process invitations that don't have tickets yet
-        const invitationAttendees = invitations
+        const formattedAttendees = invitations
           .filter((inv: any) => {
-            // Check if this invitation already has a ticket in formattedAttendees
-            const hasTicket = formattedAttendees.some((att) => {
-              const invEmail = (inv.guestEmail || "").toLowerCase().trim();
-              const invPhone = (inv.guestPhone || "").trim();
-              const attEmail = (att.contact || "").toLowerCase().trim();
-              return (
-                (invEmail && attEmail && invEmail === attEmail) ||
-                (invPhone && att.contact && invPhone === att.contact)
-              );
-            });
-            if (hasTicket) return false;
-
+            if (inv.ticket) return true;
             const rsvp = (inv.rsvpStatus || "").toLowerCase();
             const st = (inv.status || "").toLowerCase();
             return (
@@ -1037,39 +871,96 @@ export function useInvitationPage() {
             );
           })
           .map((inv: any) => {
-            let status = "pending";
-            const rsvp = (inv.rsvpStatus || "").toLowerCase();
-            if (rsvp === "confirmed") status = "confirmed";
-            else if (rsvp === "declined") status = "declined";
-            else status = "pending";
+            const ticket = inv.ticket;
+            const hasTicket = !!ticket;
+            const ticketType = ticket?.ticketType || inv.ticketType || "Regular";
+            const contact = inv.guestEmail || inv.guestPhone || "No Contact";
+            const customerName =
+              inv.guestName || inv.guestEmail || inv.guestPhone || "Guest";
+
+            if (!hasTicket) {
+              const rsvp = (inv.rsvpStatus || "").toLowerCase();
+              const status =
+                rsvp === "confirmed"
+                  ? "confirmed"
+                  : rsvp === "declined"
+                  ? "declined"
+                  : "pending";
+
+              return {
+                id: inv._id || inv.invitationId,
+                customerName,
+                contact,
+                guestType: inv.guestType,
+                confirmedAt:
+                  inv.rsvpStatus === "pending"
+                    ? "Pending"
+                    : inv.rsvpConfirmedAt
+                    ? new Date(inv.rsvpConfirmedAt).toLocaleDateString()
+                    : inv.createdAt
+                    ? new Date(inv.createdAt).toLocaleDateString()
+                    : "Unknown",
+                status,
+                purchaseQuantity: inv.qrCodeCount || inv.amount || 1,
+                ticketCount: inv.qrCodeCount || inv.amount || 1,
+                ticketType,
+                paymentStatus: inv.paymentStatus,
+                hasTicket: false,
+              };
+            }
+
+            const isOldTicket =
+              new Date(ticket.createdAt) < new Date("2026-01-02");
+
+            let originalAmount =
+              ticket.purchaseQuantity || ticket.ticketCount || 1;
+
+            if (isOldTicket && inv.estimatedCost > 0) {
+              // Derive original quantity: cost / 1.03 (since each invitation unit is 1.03 ETB)
+              const derivedQty = Math.round(inv.estimatedCost / 1.03);
+              originalAmount = Math.max(originalAmount, derivedQty);
+            }
+
+            let unifiedStatus = ticket.status || "pending";
+
+            if (inv.rsvpStatus === "declined") {
+              unifiedStatus = "declined";
+            } else if (ticket.ticketCount === 0 && originalAmount > 0) {
+              unifiedStatus = "used";
+            } else if (unifiedStatus === "active") {
+              // A guest invitation relies on rsvpStatus, which defaults to pending.
+              unifiedStatus =
+                !inv.rsvpStatus || inv.rsvpStatus === "pending"
+                  ? "pending"
+                  : "confirmed";
+            } else if (unifiedStatus === "cancelled") {
+              unifiedStatus = "declined";
+            }
 
             return {
-              id: inv._id || inv.invitationId,
-              customerName:
-                inv.guestName ||
-                inv.customerName ||
-                inv.guestEmail ||
-                inv.guestPhone ||
-                "Guest",
-              contact: inv.guestEmail || inv.guestPhone || "No Contact",
-              guestType: inv.guestType,
+              id: ticket._id,
+              customerName,
+              contact,
+              guestType: inv.guestType === "paid" ? "Paid" : "Guest",
               confirmedAt:
-                inv.rsvpStatus === "pending"
+                ticket.status === "pending" || ticket.status === "cancelled"
                   ? "Pending"
-                  : inv.rsvpConfirmedAt
-                  ? new Date(inv.rsvpConfirmedAt).toLocaleDateString()
-                  : inv.createdAt
-                  ? new Date(inv.createdAt).toLocaleDateString()
+                  : ticket.createdAt
+                  ? new Date(ticket.createdAt).toLocaleDateString()
                   : "Unknown",
-              status: status,
-              purchaseQuantity: inv.qrCodeCount || inv.amount || 1,
-              ticketCount: inv.qrCodeCount || inv.amount || 1,
-              paymentStatus: inv.paymentStatus,
-              hasTicket: false,
+              status: unifiedStatus,
+              purchaseQuantity: originalAmount,
+              ticketCount:
+                typeof ticket.ticketCount === "number"
+                  ? ticket.ticketCount
+                  : ticket.purchaseQuantity || 0,
+              ticketType,
+              hasTicket: true,
+              paymentStatus: "paid",
             };
           });
 
-        setAttendees([...formattedAttendees, ...invitationAttendees]);
+        setAttendees(formattedAttendees);
       } else {
         setAttendees([]);
       }
