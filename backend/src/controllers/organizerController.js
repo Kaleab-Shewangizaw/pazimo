@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const OrganizerRegistration = require("../models/OrganizerRegistration");
 const Ticket = require("../models/Ticket");
+const Withdrawal = require("../models/Withdrawal");
 const mongoose = require("mongoose");
 const Event = require("../models/Event");
 const bcrypt = require("bcryptjs");
