@@ -899,24 +899,63 @@ exports.getOrganizerDashboard = async (req, res) => {
               },
             },
           },
-          // Calculate ticket stats
+          // Calculate ticket stats — sum purchaseQuantity/ticketCount per
+          // ticket document (falling back to 1), not just the document
+          // count: a single Ticket document can represent a multi-ticket
+          // purchase, so $size undercounts against what getEventTickets
+          // reports for the same event.
           ticketStats: {
-            total: { $size: "$tickets" },
-            active: {
-              $size: {
-                $filter: {
+            total: {
+              $sum: {
+                $map: {
                   input: "$tickets",
                   as: "ticket",
-                  cond: { $eq: ["$$ticket.status", "active"] },
+                  in: {
+                    $ifNull: [
+                      "$$ticket.purchaseQuantity",
+                      { $ifNull: ["$$ticket.ticketCount", 1] },
+                    ],
+                  },
+                },
+              },
+            },
+            active: {
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: "$tickets",
+                      as: "ticket",
+                      cond: { $eq: ["$$ticket.status", "active"] },
+                    },
+                  },
+                  as: "ticket",
+                  in: {
+                    $ifNull: [
+                      "$$ticket.purchaseQuantity",
+                      { $ifNull: ["$$ticket.ticketCount", 1] },
+                    ],
+                  },
                 },
               },
             },
             used: {
-              $size: {
-                $filter: {
-                  input: "$tickets",
+              $sum: {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: "$tickets",
+                      as: "ticket",
+                      cond: { $eq: ["$$ticket.status", "used"] },
+                    },
+                  },
                   as: "ticket",
-                  cond: { $eq: ["$$ticket.status", "used"] },
+                  in: {
+                    $ifNull: [
+                      "$$ticket.purchaseQuantity",
+                      { $ifNull: ["$$ticket.ticketCount", 1] },
+                    ],
+                  },
                 },
               },
             },

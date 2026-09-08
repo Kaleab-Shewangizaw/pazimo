@@ -2083,8 +2083,12 @@ const validateQRCode = async (req, res) => {
       );
     }
 
-    // Check if ticket is still valid
-    if (ticket.status !== "active") {
+    // Check if ticket is still valid. "confirmed" is an invitation ticket
+    // the guest has RSVP'd yes to (see confirmRSVP) — just as scannable at
+    // the door as a paid "active" ticket, not a rejection state. Guest-side
+    // confirmation is a different action from the usher's door check-in
+    // below, so it shouldn't block the scan.
+    if (!["active", "confirmed"].includes(ticket.status)) {
       throw new BadRequestError(`Ticket is ${ticket.status}`);
     }
 
@@ -2115,6 +2119,7 @@ const validateQRCode = async (req, res) => {
           checkedIn: ticket.checkedIn,
           checkedInAt: ticket.checkedInAt,
           ticketCount: ticket.ticketCount,
+          isInvitation: ticket.isInvitation,
         },
       });
     }
@@ -2135,6 +2140,7 @@ const validateQRCode = async (req, res) => {
         status: ticket.status,
         checkedIn: ticket.checkedIn,
         ticketCount: ticket.ticketCount,
+        isInvitation: ticket.isInvitation,
       },
     });
   } catch (error) {
