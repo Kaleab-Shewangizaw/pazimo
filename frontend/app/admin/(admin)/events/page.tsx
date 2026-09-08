@@ -35,6 +35,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
+import { UsherAccessDialog } from "@/components/events/usher-access-dialog";
 import {
   Table,
   TableBody,
@@ -699,6 +700,13 @@ export default function EventsPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          <UsherAccessDialog
+                            eventId={event._id}
+                            eventTitle={event.title}
+                            token={token || ""}
+                            triggerVariant="ghost"
+                            triggerClassName="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
+                          />
                           <Button
                             variant="ghost"
                             size="sm"

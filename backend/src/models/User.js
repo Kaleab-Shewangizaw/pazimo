@@ -75,9 +75,16 @@ const userSchema = new mongoose.Schema(
     // pools, and restrictTo() must be able to say "organizers only" on the
     // event-side money routes without a venue or a cinema slipping through.
     // Every route that admits "venue" or "cinema" does so explicitly.
+    //
+    // "usher" is door staff: a scan-only account with no money or ownership
+    // attached to it at all. It never owns an event — it gets scoped, one
+    // event at a time, by redeeming that event's EventUsherCode, which creates
+    // a UsherEventAccess grant. Ticket check-in/validate-qr check that grant
+    // for this role; every other route stays exactly as closed to it as to a
+    // customer unless explicitly opened up.
     role: {
       type: String,
-      enum: ["customer", "organizer", "venue", "cinema"],
+      enum: ["customer", "organizer", "venue", "cinema", "usher"],
       required: true,
     },
     firstName: {
