@@ -3,8 +3,7 @@ const User = require("../models/User");
 const Admin = require("../models/Admin");
 const { UnauthorizedError } = require("../errors");
 const { StatusCodes } = require("http-status-codes");
-const { isPhoneBanned } = require("../utils/fraudGuard");
-const { normalizePhone } = require("../utils/phone");
+const { isPhoneBanned, normalizePhone, phoneVariants } = require("../utils/fraudGuard");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
 const crypto = require("crypto");
@@ -702,15 +701,6 @@ const generateAndSendOtp = async (user, channel, purpose = "login") => {
         .catch((err) => console.error(`Failed to send ${purpose} OTP email:`, err));
     }
   } else {
-    // Worded like the ticket-confirmation SMS (name, emoji, "Pazimo" sign-off)
-    // rather than explicit "verification code"/OTP language — messages in
-    // that literal OTP phrasing were confirmed accepted by the gateway
-    // (dashboard shows "Sent") but never reached the handset, while
-    // ticket-style messages to the same number reliably do. Found
-    // 2026-09-04; presumed carrier-side OTP-content filtering distinct from
-    // GeezSMS's own anti-spam check (which requires the code to be
-    // explained, not that it avoid the word "verification" — this still
-    // satisfies that).
     const { sendSMS } = require("../utils/sms");
     sendSMS(user.phoneNumber, copy.sms).catch((err) =>
       console.error(`Failed to send ${purpose} OTP SMS:`, err)
@@ -853,16 +843,13 @@ const verifyOrganizerOtp = async (req, res) => {
   }
 };
 
-// Looks a user up by email or phone number — whichever the caller typed
-// into the single "email or phone" field on the forgot-password form. "@"
-// present means email; otherwise it's normalized as a phone number the same
-// way ticketShareService.searchRecipients does exact-match phone search, so
-// "0912345678"/"+251912345678"/"251912345678" all resolve to the same
-// account. roleFilter narrows to one role (organizer) when given; without
-// it, a phone shared by more than one role (see the phoneNumber+role
-// compound index on User) resolves to whichever Mongo returns first — an
-// acceptable ambiguity here since the caller still has to prove ownership of
-// that phone/email via the code before anything happens to the account.
+// Looks a user up by email or phone for the forgot-password flow below.
+// Phone matching goes through fraudGuard's normalizePhone/phoneVariants
+// (already relied on elsewhere for exactly this "match any stored format"
+// problem — see isPhoneBanned) rather than a dedicated normalized-phone
+// field, so this works against every existing account with no backfill
+// required. Query-operator injection on `identifier` must be rejected by
+// the caller before this runs — this function trusts its input.
 const findUserByIdentifier = async (identifier, roleFilter) => {
   const value = String(identifier || "").trim();
   if (!value) return null;
@@ -873,7 +860,7 @@ const findUserByIdentifier = async (identifier, roleFilter) => {
   } else {
     const normalized = normalizePhone(value);
     if (!normalized) return null;
-    query.normalizedPhone = normalized;
+    query.phoneNumber = { $in: phoneVariants(normalized) };
   }
   return User.findOne(query);
 };

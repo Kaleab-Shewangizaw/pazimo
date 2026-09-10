@@ -18,6 +18,12 @@ interface PendingOtp {
   maskedDestination: string | null;
 }
 
+interface PendingOtp {
+  email: string;
+  channel: "sms" | "email";
+  maskedDestination: string | null;
+}
+
 interface AuthState {
   user: User | null;
   token: string | null;

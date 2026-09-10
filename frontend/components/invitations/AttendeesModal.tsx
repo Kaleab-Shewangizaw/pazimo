@@ -116,9 +116,8 @@ export default function AttendeesModal({
                       paginatedAttendees.map((attendee) => {
                         const isGuestPending = !attendee.hasTicket;
 
-                        const displayTicketType = isGuestPending
-                          ? "Guest"
-                          : attendee.ticketType || "Regular";
+                        const displayTicketType =
+                          attendee.ticketType || "Regular";
 
                         const total = attendee.purchaseQuantity || 1;
                         const usedCount = Math.max(

@@ -167,6 +167,59 @@ const EventSchema = new mongoose.Schema(
           ],
           default: "date",
         },
+
+        // Nested wave chain for a ticket type that mutates itself in place
+        // (renames/reprices) instead of spawning a sibling ticketTypes entry
+        // per wave. When non-empty, this subdocument's own top-level
+        // name/price/priceETB/priceUSD/quantity/description/startDate/endDate/
+        // available become engine-owned: only applyTicketAvailabilityRules
+        // writes them, mirroring waves[currentWaveIndex]. waveGroup/waveOrder
+        // above are untouched and still drive the older per-sibling chain
+        // format, so already-published events keep working unmigrated.
+        waves: {
+          type: [
+            {
+              name: {
+                type: String,
+                required: true,
+              },
+              price: Number,
+              priceETB: Number,
+              priceUSD: Number,
+              // This wave's starting allocation. Live remaining stock during
+              // the wave's turn lives only on the parent's own `quantity`
+              // (atomically decremented by claimTicketStock); this field is
+              // never touched again after being copied over on transition.
+              quantity: {
+                type: Number,
+                required: true,
+              },
+              description: String,
+              // Ignored for waves[0] — wave 1 is always immediately live.
+              startDate: Date,
+              endDate: Date,
+              waveSwitchMode: {
+                type: String,
+                enum: [
+                  "date",
+                  "quantity",
+                  "date_or_quantity",
+                  "by_time",
+                  "by_sold_out",
+                  "by_time_or_sold_out",
+                ],
+                default: "date",
+              },
+            },
+          ],
+          default: undefined,
+        },
+        // Index into `waves` currently mirrored onto this subdocument's own
+        // top-level fields. null/undefined means "never activated yet".
+        currentWaveIndex: {
+          type: Number,
+          default: null,
+        },
       },
     ],
 

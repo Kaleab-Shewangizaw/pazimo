@@ -76,6 +76,17 @@ const TicketSchema = new mongoose.Schema(
       },
     },
 
+    // The specific Event.ticketTypes subdocument this ticket was bought from.
+    // `ticketType` above is a name snapshot, correct forever for display, but
+    // a wave ticket type's own name mutates as the chain advances — so a
+    // refund/cancel that needs to find the *current* subdocument to credit
+    // stock back to cannot rely on matching that name once the chain has
+    // moved on. Optional because historical tickets predate this field.
+    ticketTypeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: false,
+    },
+
     price: {
       type: Number,
       required: true,
@@ -255,6 +266,7 @@ TicketSchema.index({ guestPhone: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ guestEmail: 1 }, { sparse: true }); // Guest ticket lookup
 TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
 TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
+TicketSchema.index({ status: 1, createdAt: 1 }); // Stock-hold expiry sweep (no event filter)
 
 // Snapshot the rates this ticket is being sold under.
 //

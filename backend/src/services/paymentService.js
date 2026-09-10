@@ -8,6 +8,7 @@ const CustomError = require('../errors/customError');
 const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const { applyTicketAvailabilityRules } = require('../utils/ticketAvailability');
+const { claimTicketStock } = require('../utils/ticketStock');
 
 class PaymentService {
     constructor() {
@@ -253,11 +254,31 @@ class PaymentService {
             throw new CustomError(`Not enough tickets available. Only ${ticketTypeDoc.quantity} tickets remaining`, StatusCodes.BAD_REQUEST);
         }
 
+        // Claim stock atomically *before* minting any tickets. Decrementing
+        // after creation left a window where two concurrent completions could
+        // both pass the check above and oversell the wave, and a failure here
+        // would have stranded already-created ticket documents.
+        const claim = await claimTicketStock({
+            eventId,
+            ticketTypeId: ticketTypeDoc._id,
+            ticketTypeName: ticketTypeDoc.name,
+            count: quantity,
+            now,
+        });
+
+        if (!claim.claimed) {
+            throw new CustomError(
+                'This ticket type sold out before the purchase could be completed',
+                StatusCodes.BAD_REQUEST
+            );
+        }
+
         const tickets = [];
         for (let i = 0; i < quantity; i++) {
             const ticket = new Ticket({
                 event: eventId,
                 ticketType: ticketTypeDoc.name,
+                ticketTypeId: ticketTypeDoc._id,
                 user: userId,
                 price: ticketTypeDoc.price,
                 status: 'active',
@@ -267,10 +288,6 @@ class PaymentService {
             await ticket.save();
             tickets.push(ticket);
         }
-
-        ticketTypeDoc.quantity -= quantity;
-        applyTicketAvailabilityRules(event, now);
-        await event.save();
 
         return {
             success: true,

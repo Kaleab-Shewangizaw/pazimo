@@ -2,7 +2,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "./ui/button";
 import base64id from "base64id";
-import { PlusIcon, Loader2, CreditCard, MessageSquareText } from "lucide-react";
+import {
+  PlusIcon,
+  Loader2,
+  CreditCard,
+  MessageSquareText,
+  Send,
+  Trash2,
+} from "lucide-react";
 import { PaymentInit, Row } from "@/types/bulk-invite";
 import { toast } from "sonner";
 import { Event } from "@/types/invitation";
@@ -235,6 +242,8 @@ export default function EditableTable({
   };
 
   const totalCost = calculateCost();
+  const validCount = data.filter((row) => isRowValid(row)).length;
+  const invalidCount = data.length - validCount;
 
   const addEmptyRow = () => {
     const newRow: Row = {
@@ -521,19 +530,34 @@ export default function EditableTable({
     "Actions",
   ];
 
+  const columnWidths: Record<string, string> = {
+    No: "3rem",
+    Name: "12rem",
+    Email: "14rem",
+    Phone: "10rem",
+    Type: "6.5rem",
+    "Ticket Type": "7.5rem",
+    Amount: "5rem",
+    Message: "9rem",
+    Actions: "4.5rem",
+  };
+
+  const inputBaseClass =
+    "w-full rounded-lg border bg-white dark:bg-black px-2.5 py-1.5 text-sm text-gray-900 dark:text-gray-100 outline-none transition-colors focus:ring-2 focus:ring-blue-500/60 dark:focus:ring-blue-500/40";
+
   if (successResult) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
-        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-          <PlusIcon className="w-8 h-8 text-green-600" />
+        <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
+          <PlusIcon className="w-8 h-8 text-green-600 dark:text-green-400" />
         </div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-2">
+        <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
           Invitations Sent!
         </h3>
-        <p className="text-gray-600 mb-6">
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
           Successfully processed {successResult.success.length} invitations.
           {successResult.failed.length > 0 && (
-            <span className="text-red-500 block mt-1">
+            <span className="text-red-500 dark:text-red-400 block mt-1">
               {successResult.failed.length} failed to send.
             </span>
           )}
@@ -554,32 +578,32 @@ export default function EditableTable({
     <>
       {/* Payment Modal */}
       {showPayment && paymentConfig && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white border border-gray-200 rounded-xl max-w-md w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-black border border-gray-200 dark:border-gray-800 rounded-xl max-w-md w-full p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Payment Required
             </h3>
-            <p className="text-sm text-gray-600 mb-6">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
               Complete payment to send bulk invitations for:{" "}
-              <strong>{event.title}</strong>
+              <strong className="text-gray-900 dark:text-gray-100">{event.title}</strong>
             </p>
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100">
               <div className="flex justify-between text-sm mb-2">
                 <span>Total Amount:</span>
                 <span>{paymentConfig.amount} ETB</span>
               </div>
-              <div className="border-t border-gray-300 pt-2 flex justify-between font-semibold">
+              <div className="border-t border-gray-300 dark:border-gray-700 pt-2 flex justify-between font-semibold">
                 <span>Total:</span>
                 <span>{paymentConfig.amount} ETB</span>
               </div>
             </div>
             <div className="space-y-6 mb-6">
               <div>
-                <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+                <Label className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2 block">
                   Phone Number
                 </Label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium z-10">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-medium z-10">
                     +251
                   </span>
                   <Input
@@ -596,7 +620,7 @@ export default function EditableTable({
                 </div>
               </div>
               <div>
-                <Label className="text-xs font-semibold uppercase text-gray-500 mb-2 block">
+                <Label className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2 block">
                   Payment Method
                 </Label>
                 <PaymentMethodSelector
@@ -632,7 +656,7 @@ export default function EditableTable({
             <div className="mt-2">
               <button
                 onClick={() => setShowPayment(false)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-900 hover:bg-gray-50 transition-all duration-200 font-medium"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-all duration-200 font-medium"
               >
                 Cancel
               </button>
@@ -642,28 +666,42 @@ export default function EditableTable({
       )}
 
       {/* Table and rest of UI */}
-      <div className="w-full border border-gray-300 rounded-lg overflow-auto">
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800"></div>
-        <div className="max-h-[400px] overflow-y-auto overflow-x-auto">
-          <table className="w-full text-xs text-left table-fixed">
-            <thead className="bg-gray-100 sticky top-0">
+      <div className="w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-black">
+        <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-4 py-3 dark:border-gray-800">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              Guest List
+            </h4>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {validCount} of {data.length} row{data.length === 1 ? "" : "s"} ready to send
+              {invalidCount > 0 && (
+                <span className="text-red-600 dark:text-red-400">
+                  {" "}
+                  · {invalidCount} need{invalidCount === 1 ? "s" : ""} attention
+                </span>
+              )}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addEmptyRow}
+            className="shrink-0 gap-1.5"
+          >
+            <PlusIcon className="h-4 w-4" />
+            Add Row
+          </Button>
+        </div>
+
+        <div className="max-h-[420px] overflow-x-auto overflow-y-auto">
+          <table className="w-full table-fixed text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900/70">
               <tr>
                 {headers.map((h) => (
                   <th
                     key={h}
-                    className="px-2 py-2 font-semibold text-gray-700 border-b"
-                    style={{
-                      width:
-                        h === "No"
-                          ? "2.5rem"
-                          : h === "Type"
-                            ? "6rem"
-                            : h === "Ticket Type"
-                              ? "8rem"
-                              : h === "Amount"
-                                ? "5rem"
-                                : undefined,
-                    }}
+                    className="border-b border-gray-200 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:border-gray-800 dark:text-gray-400"
+                    style={{ width: columnWidths[h] }}
                   >
                     {h}
                   </th>
@@ -671,167 +709,213 @@ export default function EditableTable({
               </tr>
             </thead>
             <tbody>
-              {displayData.map((row: Row, i: number) => (
-                <tr
-                  key={row.id}
-                  className={`border-b hover:bg-gray-100 ${!isRowValid(row) ? "bg-red-50" : ""
+              {displayData.map((row: Row, i: number) => {
+                const rowValid = isRowValid(row);
+                return (
+                  <tr
+                    key={row.id}
+                    className={`border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50 dark:border-gray-900 dark:hover:bg-gray-900/40 ${
+                      !rowValid ? "border-l-2 border-l-red-400 dark:border-l-red-500" : ""
                     }`}
-                >
-                  {headers.map((key) => (
-                    <td key={key} className="px-3 py-2">
-                      {key === "No" && (
-                        <div className="text-center">{row.No}</div>
-                      )}
-                      {key === "Name" && (
-                        <input
-                          type="text"
-                          value={row.Name}
-                          onChange={(e) =>
-                            handleChange(i, "Name", e.target.value)
-                          }
-                          className={`border px-2 py-1 rounded w-full text-xs ${row.Name?.trim().length === 0
-                            ? "border-red-500 bg-red-100"
-                            : "border-gray-300"
+                  >
+                    {headers.map((key) => (
+                      <td key={key} className="px-3 py-2 align-top">
+                        {key === "No" && (
+                          <div
+                            className="flex items-center justify-center gap-1.5 pt-2"
+                            title={rowValid ? "Ready to send" : "Missing or invalid contact info"}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                rowValid ? "bg-green-500" : "bg-red-500"
+                              }`}
+                            />
+                            <span className="text-xs tabular-nums text-gray-500 dark:text-gray-400">
+                              {row.No}
+                            </span>
+                          </div>
+                        )}
+                        {key === "Name" && (
+                          <input
+                            type="text"
+                            value={row.Name}
+                            placeholder="Guest name"
+                            onChange={(e) =>
+                              handleChange(i, "Name", e.target.value)
+                            }
+                            className={`${inputBaseClass} ${
+                              row.Name?.trim().length === 0
+                                ? "border-red-400 dark:border-red-600"
+                                : "border-gray-300 dark:border-gray-700"
                             }`}
-                        />
-                      )}
-                      {key === "Email" && (
-                        <input
-                          type="email"
-                          value={row.Email}
-                          disabled={row.Type === "Phone"}
-                          onChange={(e) =>
-                            handleChange(i, "Email", e.target.value)
-                          }
-                          className={`border px-2 py-1 rounded w-full text-xs ${(row.Type === "Email" || row.Type === "Both") &&
-                            !isEmailValid(row.Email)
-                            ? "border-red-500 bg-red-100"
-                            : "border-gray-300"
-                            } ${row.Type === "Phone" ? "opacity-50 bg-gray-100" : ""
+                          />
+                        )}
+                        {key === "Email" && (
+                          <input
+                            type="email"
+                            value={row.Email}
+                            disabled={row.Type === "Phone"}
+                            placeholder="name@example.com"
+                            onChange={(e) =>
+                              handleChange(i, "Email", e.target.value)
+                            }
+                            className={`${inputBaseClass} ${
+                              (row.Type === "Email" || row.Type === "Both") &&
+                              !isEmailValid(row.Email)
+                                ? "border-red-400 dark:border-red-600"
+                                : "border-gray-300 dark:border-gray-700"
+                            } ${
+                              row.Type === "Phone"
+                                ? "opacity-50 bg-gray-50 dark:bg-gray-900/50"
+                                : ""
                             }`}
-                        />
-                      )}
-                      {key === "Phone" && (
-                        <input
-                          type="tel"
-                          value={row.Phone}
-                          disabled={row.Type === "Email"}
-                          onChange={(e) =>
-                            handleChange(i, "Phone", e.target.value)
-                          }
-                          className={`border px-2 py-1 rounded w-full text-xs ${(row.Type === "Phone" || row.Type === "Both") &&
-                            !isPhoneValid(row.Phone)
-                            ? "border-red-500 bg-red-100"
-                            : "border-gray-300"
-                            } ${row.Type === "Email" ? "opacity-50 bg-gray-100" : ""
+                          />
+                        )}
+                        {key === "Phone" && (
+                          <input
+                            type="tel"
+                            value={row.Phone}
+                            disabled={row.Type === "Email"}
+                            placeholder="09XXXXXXXX"
+                            onChange={(e) =>
+                              handleChange(i, "Phone", e.target.value)
+                            }
+                            className={`${inputBaseClass} ${
+                              (row.Type === "Phone" || row.Type === "Both") &&
+                              !isPhoneValid(row.Phone)
+                                ? "border-red-400 dark:border-red-600"
+                                : "border-gray-300 dark:border-gray-700"
+                            } ${
+                              row.Type === "Email"
+                                ? "opacity-50 bg-gray-50 dark:bg-gray-900/50"
+                                : ""
                             }`}
-                        />
-                      )}
-                      {key === "Type" && (
-                        <select
-                          value={row.Type}
-                          onChange={(e) =>
-                            handleContactTypeChange(
-                              i,
-                              e.target.value as "Email" | "Phone" | "Both"
-                            )
-                          }
-                          className="border px-2 py-1 rounded w-full text-xs"
-                        >
-                          <option value="Email">Email</option>
-                          <option value="Phone">SMS</option>
-                          <option value="Both">Both</option>
-                        </select>
-                      )}
-                      {key === "Ticket Type" && (
-                        <select
-                          value={row.TicketType || ticketType || "Regular"}
-                          onChange={(e) =>
-                            handleChange(i, "TicketType", e.target.value)
-                          }
-                          className="border px-2 py-1 rounded w-full text-xs"
-                        >
-                          <option value="Regular">Regular</option>
-                          <option value="VIP">VIP</option>
-                          <option value="VVIP">VVIP</option>
-                        </select>
-                      )}
-                      {key === "Amount" && (
-                        <input
-                          type="number"
-                          min={1}
-                          value={row.Amount}
-                          defaultValue={1}
-                          onChange={(e) =>
-                            handleChange(
-                              i,
-                              "Amount",
-                              Math.max(1, Number(e.target.value))
-                            )
-                          }
-                          className="border border-gray-300 px-2 py-1 rounded w-full"
-                        />
-                      )}
-                      {key === "Message" && (
-                        <div className="flex flex-col gap-1">
+                          />
+                        )}
+                        {key === "Type" && (
+                          <select
+                            value={row.Type}
+                            onChange={(e) =>
+                              handleContactTypeChange(
+                                i,
+                                e.target.value as "Email" | "Phone" | "Both"
+                              )
+                            }
+                            className={`${inputBaseClass} border-gray-300 dark:border-gray-700`}
+                          >
+                            <option value="Email">Email</option>
+                            <option value="Phone">SMS</option>
+                            <option value="Both">Both</option>
+                          </select>
+                        )}
+                        {key === "Ticket Type" && (
+                          <select
+                            value={row.TicketType || ticketType || "Regular"}
+                            onChange={(e) =>
+                              handleChange(i, "TicketType", e.target.value)
+                            }
+                            className={`${inputBaseClass} border-gray-300 dark:border-gray-700`}
+                          >
+                            <option value="Regular">Regular</option>
+                            <option value="VIP">VIP</option>
+                            <option value="VVIP">VVIP</option>
+                          </select>
+                        )}
+                        {key === "Amount" && (
+                          <input
+                            type="number"
+                            min={1}
+                            value={row.Amount}
+                            defaultValue={1}
+                            onChange={(e) =>
+                              handleChange(
+                                i,
+                                "Amount",
+                                Math.max(1, Number(e.target.value))
+                              )
+                            }
+                            className={`${inputBaseClass} border-gray-300 dark:border-gray-700`}
+                          />
+                        )}
+                        {key === "Message" && (
+                          <div className="flex flex-col gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-8 w-full justify-center px-2 text-xs"
+                              onClick={() => openMessageDialog(i)}
+                            >
+                              <MessageSquareText className="mr-1 h-3 w-3" />
+                              {row.Message?.trim() ? "Edit Message" : "Add Message"}
+                            </Button>
+                            {row.Message?.trim() && (
+                              <p
+                                className="truncate text-[10px] text-gray-500 dark:text-gray-400"
+                                title={row.Message}
+                              >
+                                {row.Message}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        {key === "Actions" && (
                           <Button
                             type="button"
-                            variant="outline"
-                            className="w-full justify-center text-xs px-2 py-1 h-8"
-                            onClick={() => openMessageDialog(i)}
+                            className="h-8 w-full gap-1 px-2 text-xs text-gray-500 hover:border hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:border-red-800 dark:hover:bg-red-900/20 dark:hover:text-red-400"
+                            variant={"ghost"}
+                            onClick={() => handleRemove(i)}
                           >
-                            <MessageSquareText className="w-3 h-3 mr-1" />
-                            {row.Message?.trim() ? "Edit Message" : "Add Message"}
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Remove
                           </Button>
-                          {row.Message?.trim() && (
-                            <p
-                              className="text-[10px] text-gray-500 truncate"
-                              title={row.Message}
-                            >
-                              {row.Message}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      {key === "Actions" && (
-                        <Button
-                          className="text-xs py-1 px-2 hover:border hover:border-red-500 hover:text-red-500"
-                          variant={"ghost"}
-                          onClick={() => handleRemove(i)}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {showDataTrimmed && (
-            <p className="text-center py-6 text-sm text-gray-600">
+            <p className="py-6 text-center text-sm text-gray-600 dark:text-gray-400">
               Displaying first 1000 rows only.
             </p>
           )}
         </div>
-        <div className="p-3 flex justify-between items-center">
-          <p className="text-sm">
-            <strong>Total Cost:</strong> {totalCost} birr
+
+        <div className="flex items-center justify-between gap-4 border-t border-gray-200 px-4 py-3 dark:border-gray-800">
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            Total Cost:{" "}
+            <span className="font-semibold text-gray-900 dark:text-gray-100">
+              {totalCost} ETB
+            </span>
           </p>
-          <Button onClick={addEmptyRow} variant={"outline"}>
-            <PlusIcon className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 
-      <div className="w-full mt-3">
+      <div className="mt-3 w-full">
         <button
           onClick={handleBulkSend}
           disabled={!canSend || isSubmitting}
-          className="flex-1 bg-blue-600 w-full hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isSubmitting ? "Processing..." : "Send Bulk Invitations"}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Processing…
+            </>
+          ) : (
+            <>
+              <Send className="h-4 w-4" />
+              Send Bulk Invitations
+            </>
+          )}
         </button>
+        {!canSend && !isSubmitting && data.length > 0 && (
+          <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
+            Fix {invalidCount} row{invalidCount === 1 ? "" : "s"} above before sending.
+          </p>
+        )}
       </div>
 
       <Dialog
@@ -894,12 +978,12 @@ export default function EditableTable({
           <div className="flex justify-center py-6">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#0D47A1]"></div>
           </div>
-          <p className="text-sm text-gray-500 mb-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
             We are waiting for confirmation from the payment provider...
           </p>
           <Button
             variant="outline"
-            className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 border-red-200"
+            className="w-full text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-800"
             onClick={handleCancelPayment}
           >
             Cancel Payment

@@ -30,6 +30,8 @@ const SantimPayService = require("../services/santimPayService");
 const { v4: uuidv4 } = require("uuid");
 const QRCode = require("qrcode");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
+const { markPaymentTerminal } = require("../utils/paymentHold");
 const { isPhoneBanned } = require("../utils/fraudGuard");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
@@ -130,6 +132,14 @@ const processSuccessfulPayment = async (payment) => {
     throw new NotFoundError("Event not found");
   }
 
+  // Bring wave availability up to date before resolving the ticket type, so a
+  // wave whose start time has passed (or whose predecessor just sold out) is
+  // sellable immediately rather than only after the next scheduler tick.
+  const now = new Date();
+  if (applyTicketAvailabilityRules(event, now).changed) {
+    await event.save();
+  }
+
   // Find the ticket type in the event
   const ticketTypeInfo = event.ticketTypes.find(
     (type) => type.name === ticketType || type._id.toString() === ticketType
@@ -138,52 +148,80 @@ const processSuccessfulPayment = async (payment) => {
     throw new BadRequestError("Invalid ticket type");
   }
 
-  // Check if ticket is available
-  if (
-    !ticketTypeInfo.available ||
-    ticketTypeInfo.quantity < (ticketCount || 1)
-  ) {
-    throw new BadRequestError("Ticket type is not available or sold out");
-  }
-
-  // ⚡ Atomically claim the stock. The check above reads a snapshot that can
-  // go stale if two purchases for the same wave land at the same moment —
-  // both could read "enough left" before either writes. The actual decrement
-  // must re-verify quantity/availability in the same DB operation; if a
-  // concurrent purchase already took the remaining tickets, this matches
-  // nothing and we abort instead of overselling.
-  const stockClaim = await Event.updateOne(
-    {
-      _id: eventId,
-      ticketTypes: {
-        $elemMatch: {
-          _id: ticketTypeInfo._id,
-          available: true,
-          quantity: { $gte: ticketCount || 1 },
-        },
-      },
-    },
-    { $inc: { "ticketTypes.$.quantity": -(ticketCount || 1) } }
-  );
-
-  if (stockClaim.matchedCount === 0) {
-    throw new BadRequestError("Ticket type is not available or sold out");
-  }
-
-  // Prepare ticket data
   const paymentCurrency = payment.currency === "USD" ? "USD" : "ETB";
-  const unitPrice =
-    paymentCurrency === "USD"
-      ? Number(ticketTypeInfo.priceUSD ?? ticketTypeInfo.price ?? 0)
-      : Number(ticketTypeInfo.priceETB ?? ticketTypeInfo.price ?? 0);
+
+  // Stock is normally already reserved — claimTicketStock now runs at
+  // checkout-initiation (ticketRoutes.js), not here at confirmation. Trust
+  // that hold instead of re-claiming (which would double-decrement).
+  //
+  // The in-memory `payment` this function was called with can be stale — a
+  // caller may have loaded it before the expiry sweep concurrently released
+  // an abandoned hold. Re-reading just the hold fields fresh from the DB
+  // right before branching is what makes this safe: a sweep-set
+  // `stockReleasedAt` is guaranteed visible here even though the poll/
+  // webhook caller's own `payment.status = "PAID"; payment.save()` a moment
+  // earlier only ever writes the paths that specific document considers
+  // modified (status/paidAt), never touching stockReleasedAt.
+  const holdState = await Payment.findById(payment._id).select(
+    "stockHeldAt stockReleasedAt"
+  );
+  const holdStillValid =
+    holdState?.stockHeldAt && !holdState?.stockReleasedAt;
+
+  let totalPrice;
+
+  if (holdStillValid) {
+    // Trust the reservation: no claim here, and price comes from what was
+    // actually verified and captured at initiate time — never re-read live,
+    // or a wave transition between initiate and confirm could mint a ticket
+    // at a different price than what the customer was charged.
+    totalPrice = Number(payment.price || 0);
+  } else {
+    // No live hold (legacy payment from before this existed, or the expiry
+    // sweep already released it) — fall back to claiming now, same as this
+    // function always did. No pre-check here: claimTicketStock's atomic
+    // claim is the authoritative check, and a failure is handled gracefully
+    // right below — a separate pre-check that throws would bypass that for
+    // the exact case it exists to handle (the customer already paid).
+    const stockClaim = await claimTicketStock({
+      eventId,
+      ticketTypeId: ticketTypeInfo._id,
+      ticketTypeName: ticketTypeInfo.name,
+      count: ticketCount || 1,
+      now,
+    });
+
+    if (!stockClaim.claimed) {
+      // The customer has already paid — do not throw into a caller with no
+      // catch for this. Flag for manual follow-up (no refund automation
+      // exists yet) instead of leaving the payment PAID with no ticket and
+      // no trace of why.
+      console.error(
+        `[TICKET-CREATE] ❌ Stock claim failed for already-PAID payment ${payment.transactionId} — flagging for manual review.`
+      );
+      await Payment.updateOne(
+        { _id: payment._id },
+        { $set: { needsManualReview: true } }
+      );
+      console.log(`[TICKET-CREATE] ============================================\n`);
+      return null;
+    }
+
+    const unitPrice =
+      paymentCurrency === "USD"
+        ? Number(ticketTypeInfo.priceUSD ?? ticketTypeInfo.price ?? 0)
+        : Number(ticketTypeInfo.priceETB ?? ticketTypeInfo.price ?? 0);
+    totalPrice = unitPrice * (ticketCount || 1);
+  }
 
   const ticketData = {
     ticketId,
     event: eventId,
     ticketType: ticketTypeInfo.name, // Ensure we store the name
+    ticketTypeId: ticketTypeInfo._id,
     ticketCount: ticketCount || 1,
     purchaseQuantity: ticketCount || 1,
-    price: unitPrice * (ticketCount || 1),
+    price: totalPrice,
     currency: paymentCurrency,
     seatNumber,
     paymentReference: payment.transactionId,
@@ -333,23 +371,8 @@ const processSuccessfulPayment = async (payment) => {
   }
   console.log(`[TICKET-CREATE] ✅ Updated event & user records`);
 
-  // ⚡ Re-evaluate wave/date availability right away so a wave that just sold
-  // out (or whose date trigger already passed) hands off to the next wave
-  // immediately, instead of waiting up to 60s for the background scheduler.
-  // Non-blocking: this must never delay ticket delivery to the buyer.
-  Event.findById(eventId)
-    .then(async (freshEvent) => {
-      if (!freshEvent) return;
-      if (applyTicketAvailabilityRules(freshEvent, new Date()).changed) {
-        await freshEvent.save();
-      }
-    })
-    .catch((availabilityError) => {
-      console.error(
-        "[TICKET-CREATE] ❌ Failed to refresh ticket availability:",
-        availabilityError,
-      );
-    });
+  // Wave hand-off already happened as part of the atomic stock claim above, so
+  // there is nothing to re-evaluate here.
 
   // ⚡ Send SMS Confirmation ASYNCHRONOUSLY (non-blocking)
   // This prevents SMS delays from blocking ticket delivery
@@ -618,18 +641,26 @@ const createGuestTicket = async (req, res) => {
       throw new NotFoundError("Event not found");
     }
 
-    applyTicketAvailabilityRules(event);
-
     // Check if ticketType exists and update quantity if so
+    let ticketTypeId;
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
       if (typeInfo) {
-        if (typeInfo.quantity < (ticketCount || 1)) {
+        ticketTypeId = typeInfo._id;
+        // Invitations draw down the same allocation as sales, so the decrement
+        // has to be atomic too — otherwise a burst of invitations can push a
+        // wave below zero and corrupt the sell-out signal the chain relies on.
+        const claim = await claimTicketStock({
+          eventId,
+          ticketTypeId: typeInfo._id,
+          ticketTypeName: typeInfo.name,
+          count: ticketCount || 1,
+          requireAvailable: false,
+        });
+
+        if (!claim.claimed) {
           throw new BadRequestError("Not enough tickets available");
         }
-        typeInfo.quantity -= ticketCount || 1;
-        applyTicketAvailabilityRules(event);
-        await event.save();
       }
     }
 
@@ -641,6 +672,7 @@ const createGuestTicket = async (req, res) => {
       guestEmail,
       guestPhone,
       ticketType: ticketType || "Regular",
+      ticketTypeId,
       ticketCount: ticketCount || 1,
       purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
@@ -1036,18 +1068,26 @@ const createInvitationTicket = async (req, res) => {
       throw new NotFoundError("Event not found");
     }
 
-    applyTicketAvailabilityRules(event);
-
     // Check if ticketType exists and update quantity if so
+    let ticketTypeId;
     if (ticketType) {
       const typeInfo = event.ticketTypes.find((t) => t.name === ticketType);
       if (typeInfo) {
-        if (typeInfo.quantity < (ticketCount || 1)) {
+        ticketTypeId = typeInfo._id;
+        // Invitations draw down the same allocation as sales, so the decrement
+        // has to be atomic too — otherwise a burst of invitations can push a
+        // wave below zero and corrupt the sell-out signal the chain relies on.
+        const claim = await claimTicketStock({
+          eventId,
+          ticketTypeId: typeInfo._id,
+          ticketTypeName: typeInfo.name,
+          count: ticketCount || 1,
+          requireAvailable: false,
+        });
+
+        if (!claim.claimed) {
           throw new BadRequestError("Not enough tickets available");
         }
-        typeInfo.quantity -= ticketCount || 1;
-        applyTicketAvailabilityRules(event);
-        await event.save();
       }
     }
 
@@ -1060,6 +1100,7 @@ const createInvitationTicket = async (req, res) => {
       guestEmail,
       guestPhone,
       ticketType: ticketType || "Regular", // Default or from body
+      ticketTypeId,
       ticketCount: ticketCount || 1,
       purchaseQuantity: ticketCount || 1,
       price: 0, // Free for guest
@@ -1859,15 +1900,14 @@ const cancelTicket = async (req, res) => {
     ticket.status = "cancelled";
     await ticket.save();
 
-    // Update event ticket quantity
-    const event = await Event.findById(ticket.event);
-    const ticketType = event.ticketTypes.find(
-      (type) => type.name === ticket.ticketType
-    );
-    if (ticketType) {
-      ticketType.quantity += 1;
-      await event.save();
-    }
+    // Return the seat to its wave atomically, then re-evaluate the chain — a
+    // cancellation can reopen a wave that had just sold out.
+    await releaseTicketStock({
+      eventId: ticket.event,
+      ticketTypeId: ticket.ticketTypeId,
+      ticketTypeName: ticket.ticketType,
+      count: 1,
+    });
 
     res.status(StatusCodes.OK).json({ ticket });
   } catch (error) {
@@ -1912,14 +1952,12 @@ const deleteTicket = async (req, res) => {
 
     // Restore inventory only when deleting an active ticket.
     if (event && ticket.status === "active") {
-      const ticketType = event.ticketTypes.find(
-        (type) => type.name === ticket.ticketType
-      );
-      if (ticketType) {
-        const restoreCount = ticket.purchaseQuantity || ticket.ticketCount || 1;
-        ticketType.quantity += restoreCount;
-        await event.save();
-      }
+      await releaseTicketStock({
+        eventId: event._id,
+        ticketTypeId: ticket.ticketTypeId,
+        ticketTypeName: ticket.ticketType,
+        count: ticket.purchaseQuantity || ticket.ticketCount || 1,
+      });
     }
 
     if (ticket.user) {
@@ -2430,8 +2468,10 @@ const cancelPaymentIntent = async (req, res) => {
       });
     }
 
-    payment.status = "FAILED"; // Or 'CANCELLED' if you add that to enum
-    await payment.save();
+    // Releases any held stock atomically as part of the same update — this
+    // is the explicit "buyer backed out" path, so it shouldn't have to wait
+    // for the 15-minute expiry sweep to give the unit back.
+    await markPaymentTerminal({ paymentId: payment._id, status: "FAILED" });
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -2490,10 +2530,23 @@ const createOnDoorTicket = async (req, res) => {
       });
     }
 
-    // Deduct quantity
-    ticketType.quantity -= quantity;
-    applyTicketAvailabilityRules(event);
-    await event.save();
+    // Deduct quantity atomically so simultaneous door sales cannot oversell the
+    // wave, and so selling out at the door advances the chain like any other
+    // successful sale.
+    const claim = await claimTicketStock({
+      eventId,
+      ticketTypeId: ticketType._id,
+      ticketTypeName: ticketType.name,
+      count: quantity,
+      requireAvailable: false,
+    });
+
+    if (!claim.claimed) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: `Not enough tickets available. Only ${ticketType.quantity} left.`,
+      });
+    }
 
     const totalPrice = ticketType.price * quantity;
     const transactionId = `ONDOOR-${uuidv4()}`;
@@ -2521,6 +2574,7 @@ const createOnDoorTicket = async (req, res) => {
       ticketId,
       event: eventId,
       ticketType: ticketType.name,
+      ticketTypeId: ticketType._id,
       ticketCount: quantity,
       purchaseQuantity: quantity,
       price: totalPrice,

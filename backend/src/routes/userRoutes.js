@@ -22,5 +22,3 @@ router.put('/:id', protect, restrictTo('admin'), userController.updateUser);
 router.delete('/:id', protect, restrictTo('admin'), userController.deleteUser);
 
 module.exports = router;
-
-

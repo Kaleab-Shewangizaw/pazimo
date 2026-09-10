@@ -1,3 +1,7 @@
+const { endOfEatDay } = require("./eatTime");
+
+// Legacy events (created before waveGroup/waveOrder existed) encoded the wave
+// sequence in the ticket name alone. Still honored so those events keep working.
 const WAVE_NAME_ORDER = {
   "first wave": 1,
   "second wave": 2,
@@ -19,28 +23,66 @@ const toSafeNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+/**
+ * A wave order is only meaningful as a positive integer.
+ *
+ * `Number(null)` and `Number("")` are both 0 — and 0 is finite — so the old
+ * `Number.isFinite(Number(ticket.waveOrder))` check silently promoted ordinary
+ * ticket types carrying a null/empty waveOrder into a phantom "wave 0" chain,
+ * where every sibling but one was then force-disabled.
+ */
+const toWaveOrder = (value) => {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
+/**
+ * The real UTC instant a wave is scheduled to take over, or null when the
+ * organizer configured no time trigger.
+ *
+ * Returning null for "no start date" is the crux of the old bug: the previous
+ * implementation treated a missing start date as "already started", so in a
+ * date-mode chain every undated wave fired immediately and the *last* wave went
+ * live the moment the event was created.
+ */
+const getWaveStartInstant = (ticket) => {
+  if (!ticket || !ticket.startDate) return null;
+  const instant = new Date(ticket.startDate);
+  return Number.isNaN(instant.getTime()) ? null : instant;
+};
+
+const hasWaveStartArrived = (ticket, now) => {
+  const instant = getWaveStartInstant(ticket);
+  return instant !== null && now >= instant;
+};
+
 const hasStarted = (ticket, now) => {
-  if (!ticket.startDate) return true;
-  const start = new Date(ticket.startDate);
-  if (Number.isNaN(start.getTime())) return true;
-  return now >= start;
+  const instant = getWaveStartInstant(ticket);
+  if (instant === null) return true;
+  return now >= instant;
 };
 
 const hasNotEnded = (ticket, now) => {
   if (!ticket.endDate) return true;
   const end = new Date(ticket.endDate);
   if (Number.isNaN(end.getTime())) return true;
-  end.setHours(23, 59, 59, 999);
-  return now <= end;
+
+  // A bare calendar date is stored as UTC midnight and means "through the end of
+  // that day in Addis". The old code called `end.setHours(23, 59, 59, 999)`,
+  // which resolves against the *server's* timezone — on a UTC host that closed
+  // sales at 3:00 AM EAT the following day.
+  const isDateOnly = end.getTime() % 86400000 === 0;
+  const closesAt = isDateOnly ? endOfEatDay(end) : end;
+  return now <= closesAt;
 };
 
 const isWithinDateWindow = (ticket, now) =>
   hasStarted(ticket, now) && hasNotEnded(ticket, now);
 
 const detectWaveOrder = (ticket) => {
-  if (Number.isFinite(Number(ticket.waveOrder))) {
-    return Number(ticket.waveOrder);
-  }
+  const explicit = toWaveOrder(ticket.waveOrder);
+  if (explicit !== null) return explicit;
 
   const name = (ticket.name || "").toLowerCase();
   for (const [pattern, order] of Object.entries(WAVE_NAME_ORDER)) {
@@ -50,38 +92,55 @@ const detectWaveOrder = (ticket) => {
   return null;
 };
 
-const isWaveTicket = (ticket) => {
-  if (ticket.waveGroup || Number.isFinite(Number(ticket.waveOrder))) return true;
-  return detectWaveOrder(ticket) !== null;
-};
+const isWaveTicket = (ticket) => detectWaveOrder(ticket) !== null;
 
 /**
- * Determine whether a wave should become active given the previous wave's state.
- * Supports triggering modes: "date", "quantity", and "date_or_quantity".
+ * A wave is finished once it can no longer be sold: the organizer disabled it,
+ * or its allocation is gone. Successful sales are what drive `quantity` down,
+ * so this is inherently sale-driven — a failed or abandoned checkout never
+ * decrements stock and therefore never advances the chain.
  */
-const shouldActivateWave = (wave, previousWave, now) => {
-  if (!wave || !previousWave) return false;
-  if (toSafeNumber(wave.quantity) <= 0) return false;
+const isWaveFinished = (wave) =>
+  wave.manualDisabled === true || toSafeNumber(wave.quantity) <= 0;
 
-  const mode = normalizeWaveMode(wave.waveSwitchMode);
+/**
+ * Walk the chain forward one wave at a time and return the index that should be
+ * live right now.
+ *
+ * Two things end a wave's turn:
+ *   - it is finished (sold out, or manually disabled), or
+ *   - the *next* wave's scheduled start instant has arrived.
+ *
+ * Advancing strictly one step per iteration is what keeps transitions
+ * sequential: wave 1 -> wave 2 -> wave 3, never 1 -> 3. A later wave whose
+ * start time has already passed is only reached after the chain has walked
+ * through the waves in front of it, and a disabled wave is stepped over rather
+ * than dead-ending the chain behind it.
+ */
+const resolveActiveWaveIndex = (waves, now) => {
+  let index = 0;
 
-  const soldOut = toSafeNumber(previousWave.quantity) <= 0;
-  const dateReached = hasStarted(wave, now);
+  while (index < waves.length - 1) {
+    const current = waves[index];
+    const next = waves[index + 1];
 
-  if (mode === "quantity") {
-    return soldOut;
+    // A wave configured to hand off purely on sell-out carries no start
+    // instant; only its predecessor running out moves the chain along.
+    const nextIsTimeTriggered =
+      normalizeWaveMode(next.waveSwitchMode) !== "quantity";
+    const nextTimeReached =
+      nextIsTimeTriggered && hasWaveStartArrived(next, now);
+
+    if (!isWaveFinished(current) && !nextTimeReached) break;
+
+    index += 1;
   }
 
-  if (mode === "date_or_quantity") {
-    return dateReached || soldOut;
-  }
-
-  // Default: "date"
-  return dateReached;
+  return index;
 };
 
 /**
- * Process a single wave group (array of tickets sorted by waveOrder).
+ * Process a single wave chain (array of tickets sorted by waveOrder).
  * Returns true if any availability changed.
  */
 const applyWaveGroup = (waveTickets, now) => {
@@ -89,34 +148,142 @@ const applyWaveGroup = (waveTickets, now) => {
 
   if (waveTickets.length === 0) return changed;
 
-  // Find the furthest wave whose trigger condition is met
-  let activeWaveIndex = 0;
+  const waves = waveTickets.map(({ ticket }) => ticket);
+  const activeWaveIndex = resolveActiveWaveIndex(waves, now);
 
-  for (let index = 1; index < waveTickets.length; index += 1) {
-    const previousWave = waveTickets[index - 1].ticket;
-    const currentWave = waveTickets[index].ticket;
-
-    if (currentWave.manualDisabled === true) {
-      continue;
-    }
-
-    if (shouldActivateWave(currentWave, previousWave, now)) {
-      activeWaveIndex = index;
-    }
-  }
-
-  waveTickets.forEach(({ ticket }, index) => {
-    const hasQuantity = toSafeNumber(ticket.quantity) > 0;
+  waves.forEach((ticket, index) => {
     const shouldBeAvailable =
-      ticket.manualDisabled === true
-        ? false
-        : index === activeWaveIndex && hasQuantity;
+      index === activeWaveIndex &&
+      ticket.manualDisabled !== true &&
+      toSafeNumber(ticket.quantity) > 0;
 
     if (ticket.available !== shouldBeAvailable) {
       ticket.available = shouldBeAvailable;
       changed = true;
     }
   });
+
+  return changed;
+};
+
+/**
+ * Order a chain by waveOrder, keeping the stored order stable for ties so a
+ * duplicated waveOrder can never reshuffle a chain between evaluations.
+ */
+const sortWaveChain = (items) =>
+  [...items].sort((a, b) => a.order - b.order || a.position - b.position);
+
+/**
+ * A ticket type that owns its own wave chain (one document, mutated in
+ * place) rather than being one sibling in the older per-entry chain.
+ */
+const hasNestedWaves = (ticket) =>
+  Array.isArray(ticket && ticket.waves) && ticket.waves.length > 0;
+
+/**
+ * Walk one ticket type's own `waves` array forward and mirror whichever wave
+ * should be live right now onto the ticket type's own top-level fields.
+ *
+ * Unlike the legacy sibling chain, only the *currently active* wave has any
+ * live state — earlier waves are, by definition, already finished, and later
+ * waves haven't started, so there is nothing to track for them beyond their
+ * static config. That live state is exactly two things: `quantity` (because
+ * it's the field claimTicketStock's atomic $inc decrements — never re-derive
+ * it from `waves[idx].quantity` after the wave has gone live, or a concurrent
+ * sale would be silently reverted on the next tick) and `currentWaveIndex`
+ * itself. Everything else about a wave — name, price, description, its sale
+ * window — is just configuration, not sale-tracked state, so it is kept in
+ * sync with `waves[idx]` on *every* evaluation: an organizer correcting a
+ * typo in the active wave's name mid-sale must take effect immediately, not
+ * only the next time the chain happens to advance.
+ */
+const applyNestedWaveChain = (ticket, now) => {
+  let changed = false;
+
+  const waves = ticket.waves;
+
+  // A brand-new chain has no live state on the parent yet (quantity is
+  // whatever the client submitted, not necessarily wave 0's), so it can't be
+  // judged "finished" — always activate wave 0 first and let a later tick
+  // walk forward from there once real sales state exists.
+  const isFirstActivation =
+    ticket.currentWaveIndex === null || ticket.currentWaveIndex === undefined;
+  const startIndex = isFirstActivation ? 0 : ticket.currentWaveIndex;
+  let idx = startIndex;
+
+  if (!isFirstActivation) {
+    while (idx < waves.length - 1) {
+      // Only the wave actually recorded as active has live, sale-tracked
+      // state on the parent's own `quantity`. A wave the walk is merely
+      // passing through within this same evaluation — one step past the
+      // real current position — has never gone live, so its own starting
+      // allocation (waves[idx].quantity, never decremented) is what decides
+      // whether it's "finished", not the stale top-level field left over
+      // from the wave actually being walked away from. Using the top-level
+      // field unconditionally here used to let a single sale skip an entire
+      // untouched wave.
+      const currentQuantity =
+        idx === startIndex ? toSafeNumber(ticket.quantity) : toSafeNumber(waves[idx].quantity);
+      const currentFinished = ticket.manualDisabled === true || currentQuantity <= 0;
+      const next = waves[idx + 1];
+      const nextIsTimeTriggered = normalizeWaveMode(next.waveSwitchMode) !== "quantity";
+      const nextTimeReached = nextIsTimeTriggered && hasWaveStartArrived(next, now);
+
+      if (!currentFinished && !nextTimeReached) break;
+      idx += 1;
+    }
+  }
+
+  const transitioned = isFirstActivation || idx !== ticket.currentWaveIndex;
+  const wave = waves[idx];
+  const nextStartDate = idx === 0 ? undefined : wave.startDate;
+
+  if (ticket.name !== wave.name) {
+    ticket.name = wave.name;
+    changed = true;
+  }
+  if (ticket.price !== wave.price) {
+    ticket.price = wave.price;
+    changed = true;
+  }
+  if (ticket.priceETB !== wave.priceETB) {
+    ticket.priceETB = wave.priceETB;
+    changed = true;
+  }
+  if (ticket.priceUSD !== wave.priceUSD) {
+    ticket.priceUSD = wave.priceUSD;
+    changed = true;
+  }
+  if (ticket.description !== wave.description) {
+    ticket.description = wave.description;
+    changed = true;
+  }
+  if (String(ticket.startDate || "") !== String(nextStartDate || "")) {
+    ticket.startDate = nextStartDate;
+    changed = true;
+  }
+  if (String(ticket.endDate || "") !== String(wave.endDate || "")) {
+    ticket.endDate = wave.endDate;
+    changed = true;
+  }
+
+  if (transitioned) {
+    // Seed exactly once, on the transition itself — never on a later tick,
+    // or a partially-sold wave's remaining stock would be reset to full.
+    ticket.quantity = wave.quantity;
+    ticket.currentWaveIndex = idx;
+    changed = true;
+  }
+
+  const shouldBeAvailable =
+    ticket.manualDisabled !== true &&
+    toSafeNumber(ticket.quantity) > 0 &&
+    hasNotEnded(ticket, now);
+
+  if (ticket.available !== shouldBeAvailable) {
+    ticket.available = shouldBeAvailable;
+    changed = true;
+  }
 
   return changed;
 };
@@ -128,9 +295,55 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     return { changed: false };
   }
 
-  // Baseline availability for non-wave tickets.
+  // Nested-wave ticket types own their chain entirely; keep them out of the
+  // legacy sibling scan below so a stale waveGroup string left over from
+  // before migration can never sweep one into someone else's chain.
+  const nestedWaveTickets = event.ticketTypes.filter(hasNestedWaves);
+  nestedWaveTickets.forEach((ticket) => {
+    if (applyNestedWaveChain(ticket, now)) changed = true;
+  });
+  const nestedManaged = new Set(nestedWaveTickets);
+
+  // Group wave tickets by waveGroup so each ticket type's chain is evaluated
+  // independently — "Regular" waves must never interact with "VIP" waves.
+  const namedGroups = new Map();
+  const legacyWaves = [];
+
+  event.ticketTypes.forEach((ticket, position) => {
+    if (nestedManaged.has(ticket)) return;
+
+    const order = detectWaveOrder(ticket);
+    if (order === null) return;
+
+    const group = String(ticket.waveGroup || "").trim();
+    const item = { ticket, order, position };
+
+    if (group) {
+      if (!namedGroups.has(group)) namedGroups.set(group, []);
+      namedGroups.get(group).push(item);
+    } else {
+      legacyWaves.push(item);
+    }
+  });
+
+  const chains = [...namedGroups.values()];
+
+  // Legacy name-detected waves only form a chain when there are at least two of
+  // them and the event uses no explicit waveGroups. A lone ticket that merely
+  // happens to mention "final wave" in its name is left alone rather than being
+  // conscripted into a chain alongside unrelated ticket types.
+  if (legacyWaves.length > 1 && namedGroups.size === 0) {
+    chains.push(legacyWaves);
+  }
+
+  // Anything not actually governed by a chain — including a wave-named ticket
+  // that turned out to stand alone — falls back to the ordinary date/quantity
+  // rules rather than dropping through both branches and keeping a stale flag.
+  const chainManaged = new Set();
+  chains.forEach((items) => items.forEach(({ ticket }) => chainManaged.add(ticket)));
+
   event.ticketTypes.forEach((ticket) => {
-    if (isWaveTicket(ticket)) return;
+    if (chainManaged.has(ticket) || nestedManaged.has(ticket)) return;
 
     if (ticket.manualDisabled === true) {
       if (ticket.available !== false) {
@@ -149,40 +362,43 @@ const applyTicketAvailabilityRules = (event, now = new Date()) => {
     }
   });
 
-  // Group wave tickets by waveGroup so each chain is evaluated independently.
-  // Tickets that have a waveGroup are grouped by it; tickets without a waveGroup
-  // but detected as wave tickets (by name pattern) form a single legacy group.
-  const namedGroups = {};    // keyed by waveGroup string
-  const legacyWaves = [];    // tickets with no waveGroup but detected as wave tickets
-
-  event.ticketTypes
-    .map((ticket) => ({ ticket, order: detectWaveOrder(ticket) }))
-    .filter((item) => item.order !== null)
-    .forEach((item) => {
-      const group = (item.ticket.waveGroup || "").trim();
-      if (group) {
-        if (!namedGroups[group]) namedGroups[group] = [];
-        namedGroups[group].push(item);
-      } else {
-        legacyWaves.push(item);
-      }
-    });
-
-  // Process each named group independently
-  for (const groupItems of Object.values(namedGroups)) {
-    const sorted = [...groupItems].sort((a, b) => a.order - b.order);
-    if (applyWaveGroup(sorted, now)) changed = true;
-  }
-
-  // Process legacy (unnamed) wave tickets as a single group
-  if (legacyWaves.length > 0) {
-    const sorted = [...legacyWaves].sort((a, b) => a.order - b.order);
-    if (applyWaveGroup(sorted, now)) changed = true;
-  }
+  chains.forEach((items) => {
+    if (applyWaveGroup(sortWaveChain(items), now)) changed = true;
+  });
 
   return { changed };
 };
 
+/**
+ * The wave a customer should currently see and pay for within a ticket type's
+ * chain. Single source of truth for "which wave is live" so pricing, display
+ * and checkout can never disagree with the availability flags.
+ */
+const getActiveWave = (event, waveGroup, now = new Date()) => {
+  if (!event || !Array.isArray(event.ticketTypes)) return null;
+
+  const group = String(waveGroup || "").trim();
+  if (!group) return null;
+
+  const items = [];
+  event.ticketTypes.forEach((ticket, position) => {
+    const order = detectWaveOrder(ticket);
+    if (order === null) return;
+    if (String(ticket.waveGroup || "").trim() !== group) return;
+    items.push({ ticket, order, position });
+  });
+
+  if (items.length === 0) return null;
+
+  const waves = sortWaveChain(items).map(({ ticket }) => ticket);
+  return waves[resolveActiveWaveIndex(waves, now)] || null;
+};
+
 module.exports = {
   applyTicketAvailabilityRules,
+  getActiveWave,
+  getWaveStartInstant,
+  detectWaveOrder,
+  isWaveTicket,
+  normalizeWaveMode,
 };

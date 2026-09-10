@@ -8,7 +8,8 @@ const {
   processPaidInvitations,
 } = require("./invitationController");
 const { processGuestInvitation } = require("./ticketController");
-const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
+const { markSantimTransactionTerminal } = require("../utils/paymentHold");
 const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 
@@ -25,22 +26,32 @@ const hasValidInternalSecret = (req) =>
 // Consolidated Fulfillment Logic
 const processTransactionFulfillment = async (transaction, paymentId) => {
   try {
-    // If already completed, do nothing (idempotency)
-    if (transaction.status === "COMPLETED") {
+    // Atomic idempotency gate — a plain read-then-write here let a webhook
+    // and a concurrent fulfillPayment/poll call both pass the `!== "COMPLETED"`
+    // check before either had saved, and both proceed into ticket creation.
+    // Only whichever `findOneAndUpdate` reaches Mongo first actually flips
+    // the status; the other gets null back and is done.
+    const claimed = await SantimTransaction.findOneAndUpdate(
+      { _id: transaction._id, status: { $ne: "COMPLETED" } },
+      {
+        $set: {
+          status: "COMPLETED",
+          ...(paymentId ? { santimPayReference: paymentId } : {}),
+        },
+      },
+      { new: true }
+    );
+
+    if (!claimed) {
       console.log(
         `Transaction ${transaction.transactionId} already completed.`
       );
       return;
     }
 
-    console.log(`Fulfilling transaction ${transaction.transactionId}...`);
-    transaction.status = "COMPLETED";
-    if (paymentId) {
-      transaction.santimPayReference = paymentId;
-    }
-    await transaction.save();
+    console.log(`Fulfilling transaction ${claimed.transactionId}...`);
 
-    const meta = transaction.metaData;
+    const meta = claimed.metaData;
 
     // 1. Ticket Purchase
     if (
@@ -48,7 +59,7 @@ const processTransactionFulfillment = async (transaction, paymentId) => {
       meta.ticketTypeId &&
       meta.type !== "professional_invitation"
     ) {
-      await generateTicketsForTransaction(transaction);
+      await generateTicketsForTransaction(claimed);
     }
     // 2. Professional Invitation
     else if (meta.type === "professional_invitation") {
@@ -182,37 +193,76 @@ const initiatePayment = async (req, res) => {
     const cancelRedirectUrl = `${baseUrl}/payment/cancel?txn=${txnId}`;
     const notifyUrl = `${backendUrl}/api/webhook/santimpay`;
 
-    const result = await SantimPayService.initiatePayment({
-      amount: verifiedAmount,
-      paymentReason,
-      successRedirectUrl,
-      failureRedirectUrl,
-      cancelRedirectUrl,
-      notifyUrl,
-      phoneNumber,
-      transactionId: txnId,
-      paymentMethod: selectedMethod,
+    // Reserve the stock now, before the customer is asked to pay — not at
+    // fulfillment time. See ticketRoutes.js's initiate handlers for the
+    // full rationale (prevents two buyers both paying for the last unit,
+    // and a wave transition mid-checkout minting a ticket at the wrong
+    // price). Rejecting here also saves the SantimPay API call entirely.
+    const stockClaim = await claimTicketStock({
+      eventId: pricing.event._id,
+      ticketTypeId: pricing.ticketType._id,
+      ticketTypeName: pricing.ticketType.name,
+      count: pricing.quantity,
     });
 
-    // Save Transaction to DB with Metadata
-    await SantimTransaction.create({
-      transactionId: result.transactionId,
-      merchantId: SantimPayService.merchantId,
-      amount: verifiedAmount,
-      paymentReason,
-      status: "PENDING",
-      paymentUrl: result.paymentUrl,
-      santimPayReference: result.paymentId,
-      metaData: {
-        fullName,
-        email,
+    if (!stockClaim.claimed) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "This ticket type just sold out.",
+      });
+    }
+
+    const stockHeldAt = new Date();
+
+    let result;
+    try {
+      result = await SantimPayService.initiatePayment({
+        amount: verifiedAmount,
+        paymentReason,
+        successRedirectUrl,
+        failureRedirectUrl,
+        cancelRedirectUrl,
+        notifyUrl,
         phoneNumber,
-        ticketTypeId,
-        eventId,
-        quantity: quantity.toString(),
-        userId: userId || "",
-      },
-    });
+        transactionId: txnId,
+        paymentMethod: selectedMethod,
+      });
+
+      // Save Transaction to DB with Metadata
+      await SantimTransaction.create({
+        transactionId: result.transactionId,
+        merchantId: SantimPayService.merchantId,
+        amount: verifiedAmount,
+        paymentReason,
+        status: "PENDING",
+        paymentUrl: result.paymentUrl,
+        santimPayReference: result.paymentId,
+        ticketTypeId: pricing.ticketType._id,
+        stockHeldAt,
+        metaData: {
+          fullName,
+          email,
+          phoneNumber,
+          ticketTypeId,
+          eventId,
+          quantity: quantity.toString(),
+          userId: userId || "",
+        },
+      });
+    } catch (error) {
+      await releaseTicketStock({
+        eventId: pricing.event._id,
+        ticketTypeId: pricing.ticketType._id,
+        ticketTypeName: pricing.ticketType.name,
+        count: pricing.quantity,
+      }).catch((releaseError) =>
+        console.error(
+          `[SANTIMPAY-INIT] Failed to release stock after initiate failure for txn ${txnId}:`,
+          releaseError
+        )
+      );
+      throw error;
+    }
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -246,14 +296,62 @@ const generateTicketsForTransaction = async (transaction) => {
         );
 
         if (selectedType) {
-          const typeIndex = event.ticketTypes.indexOf(selectedType);
-          if (typeIndex > -1) {
-            event.ticketTypes[typeIndex].quantity = Math.max(
-              0,
-              event.ticketTypes[typeIndex].quantity - qty
-            );
-            applyTicketAvailabilityRules(event);
-            await event.save();
+          // Stock is normally already reserved — claimTicketStock now runs
+          // at checkout-initiation (initiatePayment/savePendingTransaction
+          // above), not here at fulfillment. Trust that hold instead of
+          // re-claiming (which would double-decrement).
+          //
+          // Re-read the hold fields fresh from the DB rather than trusting
+          // whatever `transaction` this function was handed — the caller
+          // may have loaded it before the expiry sweep concurrently
+          // released an abandoned hold, and a stale in-memory copy would
+          // wrongly treat an already-released hold as still good.
+          const holdState = await SantimTransaction.findById(
+            transaction._id
+          ).select("stockHeldAt stockReleasedAt");
+          const holdStillValid =
+            holdState?.stockHeldAt && !holdState?.stockReleasedAt;
+
+          let totalPrice;
+
+          if (holdStillValid) {
+            // Trust the reservation: no claim here, and price comes from
+            // what was actually verified and captured at initiate time —
+            // never re-read live, or a wave transition between initiate and
+            // fulfillment could mint a ticket at a different price than
+            // what the customer was charged.
+            totalPrice = Number(transaction.amount || 0);
+          } else {
+            // No live hold (legacy transaction from before this existed, or
+            // the expiry sweep already released it) — fall back to claiming
+            // now, same as this function always did. `requireAvailable:
+            // false` because the customer has already paid — the seat must
+            // be honoured even if the wave flipped mid-checkout, as long as
+            // stock is physically left.
+            const stockClaim = await claimTicketStock({
+              eventId: event._id,
+              ticketTypeId: selectedType._id,
+              ticketTypeName: selectedType.name,
+              count: qty,
+              requireAvailable: false,
+            });
+
+            if (!stockClaim.claimed) {
+              // The customer has already paid — do not silently skip ticket
+              // creation as this used to (that minted no ticket *and* left
+              // no trace of why). Flag for manual follow-up instead — no
+              // refund automation exists yet.
+              console.error(
+                `[SANTIMPAY] ❌ Stock claim failed for already-completed transaction ${transaction.transactionId} — flagging for manual review.`
+              );
+              await SantimTransaction.updateOne(
+                { _id: transaction._id },
+                { $set: { needsManualReview: true } }
+              );
+              return;
+            }
+
+            totalPrice = selectedType.price * qty;
           }
 
           // Create a single ticket with the total quantity
@@ -261,7 +359,8 @@ const generateTicketsForTransaction = async (transaction) => {
             event: event._id,
             user: userId || null,
             ticketType: selectedType.name,
-            price: selectedType.price * qty, // Total price
+            ticketTypeId: selectedType._id,
+            price: totalPrice,
             paymentReference: transaction.transactionId,
             status: "active",
             paymentStatus: "completed",
@@ -351,7 +450,10 @@ const getPaymentStatus = async (req, res) => {
           await processTransactionFulfillment(transaction, paymentId);
         } else if (status === "FAILED" || status === "CANCELLED") {
           transaction.status = status;
-          await transaction.save();
+          await markSantimTransactionTerminal({
+            transactionId: transaction._id,
+            status,
+          });
         }
       } catch (err) {
         console.warn("Failed to verify status with SantimPay:", err.message);
@@ -399,8 +501,7 @@ const handleWebhook = async (req, res) => {
     if (transaction.status !== "COMPLETED" && status === "COMPLETED") {
       await processTransactionFulfillment(transaction, paymentId);
     } else if (status === "FAILED" || status === "CANCELLED") {
-      transaction.status = status;
-      await transaction.save();
+      await markSantimTransactionTerminal({ transactionId: transaction._id, status });
     }
 
     res.status(StatusCodes.OK).json({ success: true });
@@ -450,6 +551,8 @@ const savePendingTransaction = async (req, res) => {
     // For ticket purchases (as opposed to custom-priced invitations) the
     // amount is always recomputed from the event's own ticket type data.
     let verifiedAmount = amount;
+    let ticketPricing = null;
+    let stockHeldAt = null;
     if (ticketData?.eventId && ticketData?.ticketTypeId) {
       const pricing = await resolveTicketPrice({
         eventId: ticketData.eventId,
@@ -480,6 +583,28 @@ const savePendingTransaction = async (req, res) => {
         });
       }
       verifiedAmount = pricing.amount;
+      ticketPricing = pricing;
+
+      // Reserve the stock now — Next.js has already sent this payment
+      // request to SantimPay before this server-to-server call arrives, but
+      // nothing has decremented inventory on this side yet. Claiming here,
+      // atomically, is what stops two such payments both landing on the
+      // same last unit.
+      const stockClaim = await claimTicketStock({
+        eventId: pricing.event._id,
+        ticketTypeId: pricing.ticketType._id,
+        ticketTypeName: pricing.ticketType.name,
+        count: pricing.quantity,
+      });
+
+      if (!stockClaim.claimed) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          success: false,
+          message: "This ticket type just sold out.",
+        });
+      }
+
+      stockHeldAt = new Date();
     }
 
     const merchantId = SantimPayService.merchantId;
@@ -556,14 +681,34 @@ const savePendingTransaction = async (req, res) => {
       metaData,
     });
 
-    await SantimTransaction.create({
-      transactionId: orderId,
-      merchantId,
-      amount: verifiedAmount,
-      paymentReason: reason,
-      status: "PENDING",
-      metaData,
-    });
+    try {
+      await SantimTransaction.create({
+        transactionId: orderId,
+        merchantId,
+        amount: verifiedAmount,
+        paymentReason: reason,
+        status: "PENDING",
+        ...(ticketPricing
+          ? { ticketTypeId: ticketPricing.ticketType._id, stockHeldAt }
+          : {}),
+        metaData,
+      });
+    } catch (createError) {
+      if (ticketPricing) {
+        await releaseTicketStock({
+          eventId: ticketPricing.event._id,
+          ticketTypeId: ticketPricing.ticketType._id,
+          ticketTypeName: ticketPricing.ticketType.name,
+          count: ticketPricing.quantity,
+        }).catch((releaseError) =>
+          console.error(
+            `[SANTIMPAY-SAVE-PENDING] Failed to release stock after create failure for txn ${orderId}:`,
+            releaseError
+          )
+        );
+      }
+      throw createError;
+    }
 
     res.status(StatusCodes.OK).json({ success: true });
   } catch (error) {
@@ -629,8 +774,10 @@ const fulfillPayment = async (req, res) => {
     ) {
       await processTransactionFulfillment(transaction, paymentId);
     } else if (remoteStatusValue === "FAILED" || remoteStatusValue === "CANCELLED") {
-      transaction.status = remoteStatusValue;
-      await transaction.save();
+      await markSantimTransactionTerminal({
+        transactionId: transaction._id,
+        status: remoteStatusValue,
+      });
     }
 
     res.status(StatusCodes.OK).json({ success: true });
@@ -648,4 +795,7 @@ module.exports = {
   getPaymentStatus,
   savePendingTransaction,
   fulfillPayment,
+  // Exported for direct testing — no route calls these by name.
+  processTransactionFulfillment,
+  generateTicketsForTransaction,
 };

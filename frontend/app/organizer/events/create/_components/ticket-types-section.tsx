@@ -23,12 +23,10 @@ interface TicketTypesSectionProps {
   waveTickets: TicketType[];
   regularDateTickets: TicketType[];
   visibleTickets: VisibleTicketEntry[];
-  allTicketTypes: TicketType[];
   onAddTicketType: () => void;
   onRemoveTicketType: (index: number) => void;
   onTicketTypeChange: (index: number, field: keyof TicketType, value: string | boolean) => void;
   onOpenWaveDialog: (index: number) => void;
-  getWaveChildren: (ticket: TicketType, ticketTypes: TicketType[]) => TicketType[];
 }
 
 export function TicketTypesSection({
@@ -38,12 +36,10 @@ export function TicketTypesSection({
   waveTickets,
   regularDateTickets,
   visibleTickets,
-  allTicketTypes,
   onAddTicketType,
   onRemoveTicketType,
   onTicketTypeChange,
   onOpenWaveDialog,
-  getWaveChildren,
 }: TicketTypesSectionProps) {
   return (
     <div id="tickets" className="space-y-5">
@@ -72,22 +68,24 @@ export function TicketTypesSection({
             <div className="grid gap-3">
               {waveTickets.map((ticket, idx) => (
                 <div
-                  key={`${ticket.waveGroup || "wave"}-${ticket.waveOrder || idx}`}
+                  key={ticket._id || `wave-ticket-${idx}`}
                   className="rounded-2xl border border-sky-100 dark:border-sky-900/60 bg-sky-50/80 dark:bg-sky-950/30 p-3"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-sky-950 dark:text-sky-100">
-                      {ticket.name || `Wave ${idx + 1}`}
+                      {ticket.name || `Wave chain ${idx + 1}`}
                     </p>
                     <Badge className="rounded-full bg-white dark:bg-slate-900 text-sky-800 dark:text-sky-300 hover:bg-white dark:hover:bg-slate-800">
-                      {(ticket.waveSwitchMode || "date").toUpperCase()}
+                      {(ticket.waves?.[1]?.waveSwitchMode || "date").toUpperCase()}
                     </Badge>
                   </div>
                   <p className="mt-2 text-base font-semibold text-slate-900 dark:text-slate-100">
                     {formatTicketPrice(ticket)}
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {formatWaveActivationSummary(ticket)}
+                    {ticket.waves && ticket.waves.length > 0
+                      ? formatWaveActivationSummary(ticket.waves[0], 0)
+                      : null}
                   </p>
                 </div>
               ))}
@@ -137,8 +135,8 @@ export function TicketTypesSection({
       >
         <div className="space-y-4">
           {visibleTickets.map(({ ticket, index }, visibleIndex) => {
-            const childWaves = getWaveChildren(ticket, allTicketTypes);
-            const isWaveParent = Number(ticket.waveOrder || 0) === 1 && Boolean(ticket.waveGroup);
+            const isWaveParent = Boolean(ticket.waves && ticket.waves.length > 0);
+            const childWaves = isWaveParent ? ticket.waves!.slice(1) : [];
             const showStatus = isWaveParent || (ticket.name === "Regular" && ticket.hasDateRange);
 
             return (
@@ -151,7 +149,7 @@ export function TicketTypesSection({
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-base font-semibold text-slate-950 dark:text-white">
                         {isWaveParent
-                          ? `Wave 1: ${ticket.name}`
+                          ? `Wave chain: ${ticket.name}`
                           : `Ticket Type ${visibleIndex + 1}`}
                       </h3>
                       {showStatus ? (
@@ -182,7 +180,7 @@ export function TicketTypesSection({
                       onClick={() => onOpenWaveDialog(index)}
                     >
                       <Waves className="mr-2 h-4 w-4" />
-                      {childWaves.length > 0 || ticket.waveGroup ? "Manage waves" : "Create waves"}
+                      {isWaveParent ? "Manage waves" : "Create waves"}
                     </Button>
                     {index > 0 ? (
                       <Button
@@ -209,9 +207,13 @@ export function TicketTypesSection({
                         onChange={(e) =>
                           onTicketTypeChange(index, "name", e.target.value)
                         }
+                        readOnly={isWaveParent}
                         placeholder={isWaveParent ? "Wave name" : "e.g. Regular, VIP, VVIP, Gold…"}
-                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 read-only:bg-slate-50 dark:read-only:bg-slate-800/60 read-only:text-slate-500"
                       />
+                      {isWaveParent ? (
+                        <FieldHint>Current wave's name — edit it via "Manage waves".</FieldHint>
+                      ) : null}
                     </FieldGroup>
 
                     <FieldGroup>
@@ -224,10 +226,14 @@ export function TicketTypesSection({
                         onChange={(e) =>
                           onTicketTypeChange(index, "quantity", e.target.value)
                         }
+                        readOnly={isWaveParent}
                         placeholder="250"
                         required
-                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 read-only:bg-slate-50 dark:read-only:bg-slate-800/60 read-only:text-slate-500"
                       />
+                      {isWaveParent ? (
+                        <FieldHint>Current wave's remaining stock — set starting quantity via "Manage waves".</FieldHint>
+                      ) : null}
                     </FieldGroup>
                   </div>
 
@@ -241,19 +247,20 @@ export function TicketTypesSection({
                           </p>
                         </div>
                         <Badge className="rounded-full bg-white dark:bg-slate-900 text-sky-700 dark:text-sky-400 hover:bg-white dark:hover:bg-slate-800">
-                          {ticket.waveSwitchMode || "date"}
+                          {ticket.waves?.[1]?.waveSwitchMode || "date"}
                         </Badge>
                       </div>
                       <div className="mt-3 space-y-2">
                         <div className="rounded-2xl bg-white/80 dark:bg-slate-900/80 px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
-                          Wave 1: {ticket.name} • Default active wave
+                          Wave 1: {ticket.waves?.[0]?.name || ticket.name} • Default active wave
                         </div>
-                        {childWaves.map((wave) => (
+                        {childWaves.map((wave, childIndex) => (
                           <div
-                            key={`${wave.waveGroup}-${wave.waveOrder}`}
+                            key={wave.id}
                             className="rounded-2xl bg-white/80 dark:bg-slate-900/80 px-3 py-2 text-sm text-slate-700 dark:text-slate-300"
                           >
-                            {wave.name || `Wave ${wave.waveOrder}`} • {formatWaveActivationSummary(wave)}
+                            {wave.name || `Wave ${childIndex + 2}`} •{" "}
+                            {formatWaveActivationSummary(wave, childIndex + 1)}
                           </div>
                         ))}
                       </div>
@@ -272,10 +279,15 @@ export function TicketTypesSection({
                         onChange={(e) =>
                           onTicketTypeChange(index, "priceETB", e.target.value)
                         }
+                        readOnly={isWaveParent}
                         placeholder="750"
-                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 read-only:bg-slate-50 dark:read-only:bg-slate-800/60 read-only:text-slate-500"
                       />
-                      <FieldHint>Leave empty only if you are selling exclusively in USD.</FieldHint>
+                      <FieldHint>
+                        {isWaveParent
+                          ? "Current wave's price — edit it via \"Manage waves\"."
+                          : "Leave empty only if you are selling exclusively in USD."}
+                      </FieldHint>
                     </FieldGroup>
 
                     <FieldGroup>
@@ -289,10 +301,15 @@ export function TicketTypesSection({
                         onChange={(e) =>
                           onTicketTypeChange(index, "priceUSD", e.target.value)
                         }
+                        readOnly={isWaveParent}
                         placeholder="20"
-                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                        className="h-11 rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 read-only:bg-slate-50 dark:read-only:bg-slate-800/60 read-only:text-slate-500"
                       />
-                      <FieldHint>Optional alternate currency for checkout.</FieldHint>
+                      <FieldHint>
+                        {isWaveParent
+                          ? "Current wave's price — edit it via \"Manage waves\"."
+                          : "Optional alternate currency for checkout."}
+                      </FieldHint>
                     </FieldGroup>
                   </div>
 

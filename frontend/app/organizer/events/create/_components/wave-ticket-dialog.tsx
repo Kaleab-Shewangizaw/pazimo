@@ -223,16 +223,37 @@ export function WaveTicketDialog({
                   </FieldGroup>
 
                   {index > 0 && wave.waveSwitchMode !== "quantity" ? (
-                    <FieldGroup>
-                      <Label>Activation date</Label>
-                      <DatePickerInput
-                        value={wave.saleStartDate}
-                        onChange={(value) =>
-                          onUpdateWaveDraft(wave.id, "saleStartDate", value)
-                        }
-                        placeholder="Choose the replacement date"
-                      />
-                    </FieldGroup>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <FieldGroup>
+                        <Label>Activation date</Label>
+                        <DatePickerInput
+                          value={wave.saleStartDate}
+                          onChange={(value) =>
+                            onUpdateWaveDraft(wave.id, "saleStartDate", value)
+                          }
+                          placeholder="Choose the replacement date"
+                        />
+                      </FieldGroup>
+
+                      <FieldGroup>
+                        <Label>Activation time</Label>
+                        <Input
+                          type="time"
+                          value={wave.saleStartTime}
+                          onChange={(e) =>
+                            onUpdateWaveDraft(
+                              wave.id,
+                              "saleStartTime",
+                              e.target.value,
+                            )
+                          }
+                          className="h-11 rounded-xl border-slate-200 dark:border-slate-800"
+                        />
+                        <FieldHint>
+                          Local Ethiopian time. Defaults to midnight if left empty.
+                        </FieldHint>
+                      </FieldGroup>
+                    </div>
                   ) : null}
 
                   {index > 0 && wave.waveSwitchMode === "quantity" ? (

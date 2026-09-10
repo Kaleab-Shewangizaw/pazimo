@@ -37,6 +37,7 @@ const Payment = require("../models/Payment");
 const PaymentConfig = require("../models/PaymentConfig");
 const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
+const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
 
 const resolveWebhookBaseUrl = (req) => {
   const explicitPublicUrl =
@@ -255,41 +256,84 @@ router.post("/ticket/initiate", async (req, res) => {
       orderId ||
       `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Call SantimPay directPayment via Service
-    const response = await SantimPayService.directPayment(
-      transactionId,
-      verifiedAmount,
-      reason,
-      notifyUrl,
-      phoneNumber,
-      method
-    );
-
-    console.log("SantimPay payment initiated:", response);
-
-    // Save a “pending” payment record in your DB
-    // For logged-in users: use account phone for SMS, store payment phone separately
-    // For guest users: use payment phone for account creation and SMS
-    await Payment.create({
-      transactionId: transactionId,
-      status: "PENDING",
-      guestName: user ? user.firstName : ticketDetails.fullName, // Use firstName for logged-in users
-      contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber, // Use account phone for logged-in users
-      paymentPhone: phoneNumber, // Store payment phone separately
-      method: method,
-      price: verifiedAmount,
+    // Reserve the stock now, before the customer is asked to pay — not at
+    // confirmation time. Claiming only at confirmation let two buyers both
+    // pay for the last unit (only one claim would later succeed, leaving
+    // the other charged with no ticket and no refund path), and let a wave
+    // transition mid-checkout mint a ticket at a different price than what
+    // was actually charged. Claiming here means a sold-out ticket type is
+    // rejected before the customer ever reaches SantimPay.
+    const stockClaim = await claimTicketStock({
       eventId: selectedEventId,
-      userId: userId, // Use the found/created userId
-      ticketDetails: {
-        ...ticketDetails,
-        eventId: selectedEventId,
-        ticketType: ticketDetails.ticketTypeId,
-        ticketCount: ticketDetails.quantity,
-        userId: userId, // ⚡ CRITICAL: Also save in ticketDetails for redundancy
-        email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
-      },
+      ticketTypeId: pricing.ticketType._id,
+      ticketTypeName: pricing.ticketType.name,
+      count: pricing.quantity,
     });
-    
+
+    if (!stockClaim.claimed) {
+      return res
+        .status(400)
+        .json({ success: false, error: "This ticket type just sold out." });
+    }
+
+    const stockHeldAt = new Date();
+
+    let response;
+    try {
+      // Call SantimPay directPayment via Service
+      response = await SantimPayService.directPayment(
+        transactionId,
+        verifiedAmount,
+        reason,
+        notifyUrl,
+        phoneNumber,
+        method
+      );
+
+      console.log("SantimPay payment initiated:", response);
+
+      // Save a “pending” payment record in your DB
+      // For logged-in users: use account phone for SMS, store payment phone separately
+      // For guest users: use payment phone for account creation and SMS
+      await Payment.create({
+        transactionId: transactionId,
+        status: "PENDING",
+        guestName: user ? user.firstName : ticketDetails.fullName, // Use firstName for logged-in users
+        contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber, // Use account phone for logged-in users
+        paymentPhone: phoneNumber, // Store payment phone separately
+        method: method,
+        price: verifiedAmount,
+        eventId: selectedEventId,
+        ticketTypeId: pricing.ticketType._id,
+        stockHeldAt,
+        userId: userId, // Use the found/created userId
+        ticketDetails: {
+          ...ticketDetails,
+          eventId: selectedEventId,
+          ticketType: ticketDetails.ticketTypeId,
+          ticketCount: ticketDetails.quantity,
+          userId: userId, // ⚡ CRITICAL: Also save in ticketDetails for redundancy
+          email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
+        },
+      });
+    } catch (error) {
+      // The gateway call or the Payment write failed after stock was
+      // already claimed — give it back rather than stranding it for 15
+      // minutes until the expiry sweep gets to it.
+      await releaseTicketStock({
+        eventId: selectedEventId,
+        ticketTypeId: pricing.ticketType._id,
+        ticketTypeName: pricing.ticketType.name,
+        count: pricing.quantity,
+      }).catch((releaseError) =>
+        console.error(
+          `[PAYMENT-INIT] Failed to release stock after initiate failure for txn ${transactionId}:`,
+          releaseError
+        )
+      );
+      throw error;
+    }
+
     console.log(`[PAYMENT-INIT] ✅ Payment created with userId: ${userId}, transactionId: ${transactionId}`);
 
     // Return transactionId so frontend can poll
@@ -561,6 +605,40 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       }
     }
 
+    // Reserve the stock now, before the customer is asked to pay — not at
+    // confirmation time. Claiming only at confirmation let two buyers both
+    // pay for the last unit (only one claim would later succeed, leaving
+    // the other charged with no ticket and no refund path), and let a wave
+    // transition mid-checkout mint a ticket at a different price than what
+    // was actually charged. Claiming here means a sold-out ticket type is
+    // rejected before the customer ever reaches Chapa.
+    const stockClaim = await claimTicketStock({
+      eventId: selectedEventId,
+      ticketTypeId: pricing.ticketType._id,
+      ticketTypeName: pricing.ticketType.name,
+      count: pricing.quantity,
+    });
+
+    if (!stockClaim.claimed) {
+      return res
+        .status(400)
+        .json({ success: false, error: "This ticket type just sold out." });
+    }
+
+    const stockHeldAt = new Date();
+    const releaseStockHold = () =>
+      releaseTicketStock({
+        eventId: selectedEventId,
+        ticketTypeId: pricing.ticketType._id,
+        ticketTypeName: pricing.ticketType.name,
+        count: pricing.quantity,
+      }).catch((releaseError) =>
+        console.error(
+          `[CHAPA-INIT] Failed to release stock after initiate failure for txn ${transactionId}:`,
+          releaseError
+        )
+      );
+
     // Call Chapa - use web checkout for card payments or direct charge for mobile money
     let response;
     let giftCardLinkReference = null;
@@ -698,7 +776,9 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         errorDetails,
         errorCode: error.code,
       });
-      
+
+      await releaseStockHold();
+
       return res.status(400).json({
         success: false,
         error: errorMessage,
@@ -712,6 +792,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
         message: response.message,
         data: response.data,
       });
+      await releaseStockHold();
       return res.status(400).json({
         success: false,
         error: response.message || "Payment initiation failed",
@@ -743,29 +824,39 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
     // Save Payment Record
     // For logged-in users: use account phone for SMS, store payment phone separately
     // For guest users: use payment phone for account creation and SMS
-    await Payment.create({
-      transactionId: transactionId,
-      status: "PENDING",
-      guestName: user ? user.firstName : ticketDetails.fullName,
-      contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber,
-      paymentPhone: phoneNumber,
-      method: method,
-      provider: giftCardTarget ? "chapa_giftcard" : "chapa",
-      giftCardNumber: giftCardTarget || undefined,
-      giftCardLinkReference: giftCardLinkReference || undefined,
-      price: verifiedAmount,
-      currency: currency, // Store currency in payment record
-      eventId: selectedEventId,
-      userId: userId,
-      ticketDetails: {
-        ...ticketDetails,
+    try {
+      await Payment.create({
+        transactionId: transactionId,
+        status: "PENDING",
+        guestName: user ? user.firstName : ticketDetails.fullName,
+        contact: user && user.phoneNumber ? user.phoneNumber : phoneNumber,
+        paymentPhone: phoneNumber,
+        method: method,
+        provider: giftCardTarget ? "chapa_giftcard" : "chapa",
+        giftCardNumber: giftCardTarget || undefined,
+        giftCardLinkReference: giftCardLinkReference || undefined,
+        price: verifiedAmount,
+        currency: currency, // Store currency in payment record
         eventId: selectedEventId,
-        ticketType: ticketDetails.ticketTypeId,
-        ticketCount: ticketDetails.quantity,
+        ticketTypeId: pricing.ticketType._id,
+        stockHeldAt,
         userId: userId,
-        email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
-      },
-    });
+        ticketDetails: {
+          ...ticketDetails,
+          eventId: selectedEventId,
+          ticketType: ticketDetails.ticketTypeId,
+          ticketCount: ticketDetails.quantity,
+          userId: userId,
+          email: ticketDetails.email ? ticketDetails.email.toLowerCase() : undefined,
+        },
+      });
+    } catch (error) {
+      // Chapa already has our money moving/reserved at this point, but the
+      // Payment record itself failed to write — give the stock back rather
+      // than stranding it for 15 minutes until the expiry sweep gets to it.
+      await releaseStockHold();
+      throw error;
+    }
 
     // Return response matching SantimPay shape
     res.json({

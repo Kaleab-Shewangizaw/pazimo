@@ -1,7 +1,7 @@
 "use client";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
-import { Calendar, Clock, MapPin, QrCode, Download, Users } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { downloadHighQualityQR } from "@/lib/downloadQR";
 
@@ -9,9 +9,10 @@ interface EventData {
   title: string;
   startDate: string;
   startTime: string;
-  location: string | { address: string };
+  location: string | { address?: string; city?: string; country?: string };
   description: string;
   organizer?: { name: string };
+  coverImages?: string[];
 }
 
 interface InvitationData {
@@ -25,13 +26,38 @@ interface InvitationData {
   message?: string;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+const buildEventImageUrl = (coverImages?: string[]) => {
+  if (!coverImages || coverImages.length === 0) return "";
+  const img = coverImages[0];
+  if (!img) return "";
+  if (img.startsWith("http")) return img;
+  return `${API_URL}${img.startsWith("/") ? img : `/${img}`}`;
+};
+
+const formatDateLine = (isoDate: string, startTime?: string) => {
+  const date = new Date(isoDate);
+  const weekday = date
+    .toLocaleDateString("en-US", { weekday: "short" })
+    .toUpperCase();
+  const day = date.getDate().toString().padStart(2, "0");
+  const month = date
+    .toLocaleDateString("en-US", { month: "short" })
+    .toUpperCase();
+  const year = date.getFullYear();
+  return `${weekday}, ${day} ${month} ${year}${startTime ? `, ${startTime}` : ""}`;
+};
+
 function GuestInvitationContent() {
   const searchParams = useSearchParams();
   const [invitation, setInvitation] = useState<InvitationData | null>(null);
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [isDeclined, setIsDeclined] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     const invId = searchParams.get("id") || searchParams.get("inv");
@@ -44,9 +70,7 @@ function GuestInvitationContent() {
 
   const fetchInvitation = async (id: string) => {
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${id}`
-      );
+      const response = await fetch(`${API_URL}/api/tickets/invitation/${id}`);
       const result = await response.json();
       if (response.ok && result.success) {
         const data = result.data;
@@ -68,275 +92,292 @@ function GuestInvitationContent() {
 
   const handleStatusUpdate = async (status: "confirmed" | "declined") => {
     if (!invitation) return;
-    setIsLoading(true);
+    setIsUpdating(true);
+    setActionError("");
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/invitation/${invitation.ticketId}/status`,
+        `${API_URL}/api/tickets/invitation/${invitation.ticketId}/status`,
         {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status }),
         }
       );
       const result = await response.json();
       if (response.ok) {
-        if (status === "confirmed") setIsConfirmed(true);
-        else setIsDeclined(true);
+        setIsConfirmed(status === "confirmed");
+        setIsDeclined(status === "declined");
       } else {
-        setError(result.message || "Failed to update status");
+        setActionError(result.message || "Failed to update status");
       }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (error) {
-      setError("An error occurred while updating status");
+    } catch {
+      setActionError("Something went wrong. Please try again.");
     } finally {
-      setIsLoading(false);
+      setIsUpdating(false);
     }
   };
 
-  const formatLocation = (loc: string | { address: string }) =>
-    typeof loc === "string" ? loc : loc.address;
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString(undefined, {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-
   if (isLoading)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin h-8 w-8 border-b-2 border-blue-600 rounded-full" />
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-500" />
       </div>
     );
 
   if (error)
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-600">{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-background px-4">
+        <p className="text-center font-medium text-red-500 dark:text-red-400">
+          {error}
+        </p>
       </div>
     );
 
   if (!invitation) return null;
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
-      <div className="max-w-3xl mx-auto space-y-6 relative">
-        {/* HERO */}
-        <div className="relative bg-white rounded-xl shadow-xl p-8 text-center overflow-hidden">
-          {/* Decorations */}
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-yellow-200 rounded-full opacity-60 rotate-12" />
-          <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-pink-200 rounded-lg opacity-50 -rotate-6" />
-          <svg
-            className="absolute top-20 -left-20 w-72 h-20 opacity-30"
-            viewBox="0 0 300 80"
-          >
-            <path
-              d="M0,40 Q150,0 300,40"
-              stroke="#fbbf24"
-              strokeWidth="8"
-              fill="transparent"
-            />
-          </svg>
-          <svg
-            className="absolute bottom-24 -right-20 w-72 h-20 opacity-30"
-            viewBox="0 0 300 80"
-          >
-            <path
-              d="M0,40 Q150,80 300,40"
-              stroke="#a78bfa"
-              strokeWidth="6"
-              fill="transparent"
-            />
-          </svg>
-          {/* Confetti */}
-          <svg className="absolute top-40 right-0 w-full h-60 pointer-events-none">
-            <circle cx="20" cy="30" r="6" fill="#f59e0b" opacity="0.4" />
-            <rect
-              x="60"
-              y="40"
-              width="8"
-              height="8"
-              fill="#f472b6"
-              opacity="0.3"
-            />
-            <polygon
-              points="100,10 110,30 90,30"
-              fill="#60a5fa"
-              opacity="0.3"
-            />
-            <circle cx="140" cy="50" r="5" fill="#fbbf24" opacity="0.4" />
-            <rect
-              x="180"
-              y="30"
-              width="6"
-              height="6"
-              fill="#a78bfa"
-              opacity="0.3"
-            />
-            <polygon
-              points="220,20 230,40 210,40"
-              fill="#34d399"
-              opacity="0.3"
-            />
-            <circle cx="260" cy="60" r="4" fill="#f87171" opacity="0.3" />
-            <rect
-              x="300"
-              y="40"
-              width="7"
-              height="7"
-              fill="#fb923c"
-              opacity="0.4"
-            />
-          </svg>
+  const handleDownload = () => {
+    if (!invitation.qrCode) return;
+    downloadHighQualityQR(invitation.qrCode, `invitation-${invitation.ticketId}.png`);
+  };
 
-          {/* Guest Hero Content */}
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+  const dateLine = formatDateLine(
+    invitation.event.startDate,
+    invitation.event.startTime
+  );
+  const venue = (
+    typeof invitation.event.location === "string"
+      ? invitation.event.location
+      : invitation.event.location?.address ||
+        invitation.event.location?.city ||
+        "See map"
+  ).toUpperCase();
+  const attendee = (invitation.guestName || "Guest").toUpperCase();
+  const firstName = (invitation.guestName || "there").split(" ")[0];
+  const orderId = invitation.ticketId.slice(-6).toUpperCase();
+  const watermark = invitation.event.title.split(" ")[0]?.toUpperCase() || "";
+  const eventImageUrl = buildEventImageUrl(invitation.event.coverImages);
+
+  const backdropStyle: CSSProperties | undefined = eventImageUrl
+    ? {
+        backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.8)), linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)), url(${eventImageUrl})`,
+        backgroundSize: "cover, cover, cover",
+        backgroundPosition: "center, center, center",
+        backgroundAttachment: "fixed, fixed, fixed",
+        backgroundRepeat: "no-repeat, no-repeat, no-repeat",
+      }
+    : undefined;
+
+  const badgeLabel =
+    invitation.ticketType === "VVIP"
+      ? "VVIP"
+      : invitation.ticketType === "VIP"
+      ? "VIP"
+      : "GUEST PASS";
+  const badgeClass =
+    invitation.ticketType === "VVIP"
+      ? "border-purple-300/70 bg-purple-500/20 text-purple-100"
+      : invitation.ticketType === "VIP"
+      ? "border-amber-300/70 bg-amber-500/20 text-amber-100"
+      : "border-white/50 text-white";
+
+  return (
+    <div className="relative min-h-screen w-full overflow-hidden">
+      {/* Full-screen event backdrop */}
+      <div
+        className="fixed inset-0 -z-10 bg-gray-50 dark:bg-background"
+        style={backdropStyle}
+      />
+
+      <div className="relative flex min-h-screen w-full flex-col items-center px-4 py-10 sm:py-16">
+        {/* Headline */}
+        <div className="mb-6 w-full max-w-sm text-center">
+          <h1 className="text-2xl font-extrabold text-gray-900 dark:text-gray-100 sm:text-3xl">
             {isConfirmed
-              ? "You're Going! 🎊"
+              ? "You're Going! 🎉"
               : isDeclined
               ? "Maybe Next Time"
-              : "You're Invited!"}
+              : "You're Invited"}
           </h1>
-          <p className="py-3 text-gray-400">
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             {isConfirmed
-              ? "Your attendance has been confirmed. We’re excited to have you with us."
+              ? `${firstName}, your spot is locked in — see you there.`
               : isDeclined
-              ? "You’ve declined this invitation. We hope to see you at a future event."
-              : "Please confirm your attendance below."}
+              ? "You've let the organizer know you can't make it this time."
+              : `${firstName}, you've been personally invited. Let us know if you're coming.`}
           </p>
-          <h2 className="text-2xl font-extrabold text-gray-900">
-            {invitation.event.title}
-          </h2>
-
-          {/* Action Buttons */}
         </div>
 
-        {/* Invitation + Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Invitation Text */}
-          <div className="bg-white rounded-xl p-6 shadow relative overflow-hidden">
-            {/* Small confetti inside card */}
-            <svg className="absolute top-0 right-0 w-32 h-32 opacity-20 pointer-events-none">
-              <circle cx="20" cy="30" r="6" fill="#f59e0b" />
-              <rect x="60" y="20" width="8" height="8" fill="#f472b6" />
-            </svg>
+        {/* Ticket card */}
+        <div className="w-full max-w-sm overflow-hidden rounded-3xl border-0 bg-gradient-to-br from-[#06283D] to-[#1A5D8C] pb-8 shadow-2xl ring-1 ring-white/10 dark:bg-card">
+          {/* Header block */}
+          <div className="relative overflow-hidden bg-gradient-to-br from-[#06283D] to-[#1A5D8C] px-7 py-10">
+            <span className="pointer-events-none absolute -bottom-4 right-5 select-none whitespace-nowrap text-6xl font-black tracking-tight text-white/10">
+              {watermark}
+            </span>
 
-            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              Dear {invitation.guestName},
-              {invitation.ticketType &&
-                ["VIP", "VVIP"].includes(invitation.ticketType) && (
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-bold ${
-                      invitation.ticketType === "VVIP"
-                        ? "bg-purple-100 text-purple-700 border border-purple-200"
-                        : "bg-amber-100 text-amber-700 border border-amber-200"
-                    }`}
-                  >
-                    {invitation.ticketType}
-                  </span>
-                )}
-            </h3>
-            <div className="text-gray-700 text-sm leading-relaxed space-y-4">
-              <p>
-                You are warmly invited to{" "}
-                <strong>{invitation.event.title}</strong>.
-              </p>
+            <div className="relative flex items-start justify-between gap-3">
+              <h2 className="text-xl font-extrabold leading-tight text-white">
+                {invitation.event.title}
+              </h2>
+              <span
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[10px] font-bold tracking-wider ${badgeClass}`}
+              >
+                {badgeLabel}
+              </span>
+            </div>
 
-              {invitation.message && (
-                <p className="italic text-gray-800 border-l-4 border-blue-500 pl-3 py-1 bg-blue-50/50 rounded-r">
-                  &quot;{invitation.message}&quot;
+            <div className="relative mt-5 grid grid-cols-2 gap-x-3 gap-y-4">
+              <div>
+                <p className="text-[10px] tracking-wider text-white/65">
+                  DATE &amp; TIME
                 </p>
-              )}
-
-              <p>
-                This invitation admits <strong>{invitation.ticketCount}</strong>{" "}
-                {invitation.ticketCount > 1 ? "people" : "person"}.
-              </p>
+                <p className="text-sm font-bold text-white">{dateLine}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] tracking-wider text-white/65">
+                  VENUE
+                </p>
+                <p className="text-sm font-bold text-white">{venue}</p>
+              </div>
+              <div>
+                <p className="text-[10px] tracking-wider text-white/65">
+                  ADMITS
+                </p>
+                <p className="text-sm font-bold text-white">
+                  {invitation.ticketCount.toString().padStart(2, "0")}{" "}
+                  {invitation.ticketCount > 1 ? "GUESTS" : "GUEST"}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] tracking-wider text-white/65">
+                  INVITE ID
+                </p>
+                <p className="text-sm font-bold text-white">{orderId}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-[10px] tracking-wider text-white/65">
+                  GUEST
+                </p>
+                <p className="text-sm font-bold text-white">{attendee}</p>
+              </div>
             </div>
           </div>
 
-          {/* Event Details */}
-          <div className="bg-blue-50 rounded-xl p-6 shadow relative overflow-hidden">
-            {/* Confetti */}
-            <svg className="absolute top-0 left-0 w-32 h-32 opacity-20 pointer-events-none">
-              <circle cx="20" cy="30" r="6" fill="#f59e0b" />
-              <rect x="60" y="20" width="8" height="8" fill="#f472b6" />
-            </svg>
+          {/* Perforation with die-cut notches */}
+          <div className="relative">
+            <div
+              className="absolute -top-2.5 -left-2.5 h-5 w-5 rounded-full border-0 bg-gray-50 dark:bg-background"
+              style={backdropStyle}
+            />
+            <div
+              className="absolute -top-2.5 -right-2.5 h-5 w-5 rounded-full bg-gray-50 dark:bg-background"
+              style={backdropStyle}
+            />
+            <div className="mx-5 border-t-2 border-dashed border-gray-300 dark:border-border" />
+          </div>
 
-            <h3 className="font-semibold mb-4 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" /> Event Details
-            </h3>
-            <div className="space-y-2 text-sm text-gray-700">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-blue-400" />
-                {formatDate(invitation.event.startDate)}
+          {/* Stub / action area */}
+          <div className="px-7 pt-6">
+            {invitation.message && (
+              <p className="mb-5 rounded-r border-l-4 border-blue-500 bg-blue-50/70 py-1 pl-3 text-sm italic text-gray-700 dark:border-yellow-400 dark:bg-white/5 dark:text-gray-300">
+                &quot;{invitation.message}&quot;
+              </p>
+            )}
+
+            {isConfirmed ? (
+              <div className="flex flex-col items-center gap-3">
+                {invitation.qrCode ? (
+                  <>
+                    <Image
+                      width={256}
+                      height={256}
+                      priority
+                      src={invitation.qrCode}
+                      alt="Ticket QR Code"
+                      className="h-34 w-34"
+                    />
+                    <p className="text-[11px] font-bold tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                      &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
+                    </p>
+                    <button
+                      onClick={handleDownload}
+                      className="mt-1 flex items-center gap-2 rounded-full bg-[#06283D] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0a3a57] dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-300"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download Ticket
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Your ticket QR is being generated.
+                  </p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-400" />
-                {invitation.event.startTime}
+            ) : isDeclined ? (
+              <div className="flex flex-col items-center gap-2 py-2 text-center">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Changed your mind?
+                </p>
+                <button
+                  onClick={() => handleStatusUpdate("confirmed")}
+                  disabled={isUpdating}
+                  className="text-sm font-semibold text-blue-600 hover:underline disabled:opacity-50 dark:text-yellow-400"
+                >
+                  {isUpdating ? "Updating…" : "Confirm attendance instead"}
+                </button>
+                {actionError && (
+                  <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                    {actionError}
+                  </p>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="w-4 h-4 text-blue-400" />
-                {formatLocation(invitation.event.location)}
+            ) : (
+              <div className="flex flex-col items-center gap-4">
+                {invitation.qrCode && (
+                  <div className="relative">
+                    <Image
+                      width={256}
+                      height={256}
+                      src={invitation.qrCode}
+                      alt=""
+                      aria-hidden
+                      className="h-28 w-28 opacity-40 blur-sm grayscale"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="rounded bg-white/80 px-2 py-1 text-[10px] font-bold tracking-wider text-gray-500 dark:bg-black/60 dark:text-gray-400">
+                        LOCKED
+                      </span>
+                    </div>
+                  </div>
+                )}
+                <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                  Confirm to unlock your ticket QR code.
+                </p>
+                <div className="flex w-full gap-3">
+                  <button
+                    onClick={() => handleStatusUpdate("declined")}
+                    disabled={isUpdating}
+                    className="flex-1 rounded-xl border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-border dark:text-gray-300 dark:hover:bg-white/5"
+                  >
+                    Decline
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate("confirmed")}
+                    disabled={isUpdating}
+                    className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-blue-700 disabled:opacity-50 dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-300"
+                  >
+                    {isUpdating ? "Confirming…" : "Confirm Attendance"}
+                  </button>
+                </div>
+                {actionError && (
+                  <p className="text-xs text-red-500 dark:text-red-400">
+                    {actionError}
+                  </p>
+                )}
               </div>
-            </div>
+            )}
           </div>
         </div>
-        {!isConfirmed && !isDeclined && (
-          <div className="flex justify-center gap-4 mt-6 relative z-10">
-            <button
-              onClick={() => handleStatusUpdate("confirmed")}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold shadow-lg transition-all transform hover:scale-105"
-            >
-              Confirm Attendance
-            </button>
-            <button
-              onClick={() => handleStatusUpdate("declined")}
-              className="bg-red-100 hover:bg-red-200 text-red-700 px-8 py-3 rounded-lg font-semibold shadow transition-all"
-            >
-              Decline
-            </button>
-          </div>
-        )}
-
-        {/* QR */}
-        {isConfirmed && invitation.qrCode && (
-          <div className="bg-white relative rounded-xl p-6 shadow text-center">
-            <div className=" my-3 mx-auto w-fit  bg-blue-400 text-white px-4 py-1 rounded-md text-sm font-semibold flex items-center gap-2 z-10 shadow">
-              {" "}
-              <Users className="w-4 h-4" /> Admits {invitation.ticketCount}{" "}
-              {invitation.ticketCount > 1 ? "People" : "Person"}{" "}
-            </div>
-            <h3 className="font-semibold mb-4 flex items-center justify-center gap-2">
-              <QrCode className="w-5 h-5 text-blue-600" />
-              Digital Ticket (admits {invitation.ticketCount})
-            </h3>
-            <Image
-              src={invitation.qrCode}
-              alt="QR Code"
-              width={192}
-              height={192}
-              className="mx-auto border p-2 rounded-lg"
-            />
-            <button
-              onClick={() => {
-                if (invitation.qrCode) {
-                  downloadHighQualityQR(
-                    invitation.qrCode,
-                    `invitation-${invitation.ticketId}.png`
-                  );
-                }
-              }}
-              className="mt-4 bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 mx-auto hover:bg-blue-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Download Ticket
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

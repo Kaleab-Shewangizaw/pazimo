@@ -30,91 +30,19 @@ import {
   createInitialEventFormData,
   getComparableTicketPrice,
   getVisibleTicketEntries,
-  getWaveChildren,
-  getWaveGroupId,
   getWaveParentTickets,
-  groupWaveTickets,
   hasAtLeastOneTicketPrice,
-  isWaveTicket,
+  recalculateTicketAvailability,
+  serializeTicketTypeForSubmit,
   syncLegacyPriceField,
 } from "./_lib/event-form-utils";
 
-const isTicketActiveByDate = (startDate: string, endDate: string): boolean => {
-  if (!startDate || !endDate) {
-    return true;
-  }
-
-  const today = new Date();
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  end.setHours(23, 59, 59, 999);
-  return today >= start && today <= end;
-};
-
-const recalculateTicketAvailability = (ticketTypes: TicketType[]) => {
-  const nextTicketTypes = ticketTypes.map((ticket) => ({ ...ticket }));
-
-  nextTicketTypes.forEach((ticket) => {
-    if (!isWaveTicket(ticket)) {
-      if (ticket.name === "Regular" && ticket.hasDateRange) {
-        ticket.isActive =
-          ticket.saleStartDate && ticket.saleEndDate
-            ? isTicketActiveByDate(ticket.saleStartDate, ticket.saleEndDate)
-            : true;
-      } else {
-        ticket.isActive = true;
-      }
-    }
-  });
-
-  const waveGroups = groupWaveTickets(nextTicketTypes);
-
-  Object.values(waveGroups).forEach((group) => {
-    const orderedGroup = [...group].sort(
-      (a, b) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0),
-    );
-
-    orderedGroup.forEach((ticket) => {
-      ticket.isActive = false;
-    });
-
-    const firstWave = orderedGroup[0];
-    if (!firstWave) {
-      return;
-    }
-
-    let activeIndex = 0;
-
-    for (let index = 1; index < orderedGroup.length; index += 1) {
-      const wave = orderedGroup[index];
-      const previousWave = orderedGroup[index - 1];
-      const startsByDate =
-        (wave.waveSwitchMode === "date" || wave.waveSwitchMode === "date_or_quantity") &&
-        wave.saleStartDate &&
-        new Date(wave.saleStartDate) <= new Date();
-      const startsByQuantity =
-        (wave.waveSwitchMode === "quantity" || wave.waveSwitchMode === "date_or_quantity") &&
-        Number(previousWave?.quantity || 0) <= 0;
-
-      if (startsByDate || startsByQuantity) {
-        activeIndex = index;
-      }
-    }
-
-    orderedGroup[activeIndex].isActive =
-      Number(orderedGroup[activeIndex].quantity || 0) > 0;
-  });
-
-  return nextTicketTypes.map(syncLegacyPriceField);
-};
-
 const getTicketPriceValidationError = (ticketTypes: TicketType[]) => {
-  const waveGroups = groupWaveTickets(ticketTypes);
+  for (const ticket of ticketTypes) {
+    if (!ticket.waves || ticket.waves.length === 0) continue;
 
-  for (const group of Object.values(waveGroups)) {
-    const priceSignatures = group
-      .map((ticket) => [ticket.priceETB || "_", ticket.priceUSD || "_"].join(":"))
+    const priceSignatures = ticket.waves
+      .map((wave) => [wave.priceETB || "_", wave.priceUSD || "_"].join(":"))
       .filter((value) => value !== "_:_");
 
     if (new Set(priceSignatures).size !== priceSignatures.length) {
@@ -383,26 +311,12 @@ export default function CreateEventPage() {
   };
 
   const removeTicketType = (index: number) => {
-    setFormData((prev) => {
-      const targetTicket = prev.ticketTypes[index];
-      const waveGroup = getWaveGroupId(targetTicket);
-
-      if (!waveGroup) {
-        return {
-          ...prev,
-          ticketTypes: recalculateTicketAvailability(
-            prev.ticketTypes.filter((_, ticketIndex) => ticketIndex !== index),
-          ),
-        };
-      }
-
-      return {
-        ...prev,
-        ticketTypes: recalculateTicketAvailability(
-          prev.ticketTypes.filter((ticket) => getWaveGroupId(ticket) !== waveGroup),
-        ),
-      };
-    });
+    setFormData((prev) => ({
+      ...prev,
+      ticketTypes: recalculateTicketAvailability(
+        prev.ticketTypes.filter((_, ticketIndex) => ticketIndex !== index),
+      ),
+    }));
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -426,15 +340,12 @@ export default function CreateEventPage() {
   };
 
   const validateTicketDates = () => {
-    const waveGroups = groupWaveTickets(formData.ticketTypes);
+    for (const ticket of formData.ticketTypes) {
+      const waves = ticket.waves;
+      if (!waves || waves.length === 0) continue;
 
-    for (const group of Object.values(waveGroups)) {
-      const orderedGroup = [...group].sort(
-        (a, b) => Number(a.waveOrder || 0) - Number(b.waveOrder || 0),
-      );
-
-      for (let index = 0; index < orderedGroup.length; index += 1) {
-        const wave = orderedGroup[index];
+      for (let index = 0; index < waves.length; index += 1) {
+        const wave = waves[index];
 
         if (index === 0) {
           continue;
@@ -448,15 +359,13 @@ export default function CreateEventPage() {
         }
       }
 
-      for (let index = 0; index < orderedGroup.length - 1; index += 1) {
-        const currentWave = orderedGroup[index];
-        const nextWave = orderedGroup[index + 1];
+      for (let index = 1; index < waves.length - 1; index += 1) {
+        const currentWave = waves[index];
+        const nextWave = waves[index + 1];
 
         if (
           nextWave.saleStartDate &&
           currentWave.saleStartDate &&
-          currentWave.waveOrder &&
-          currentWave.waveOrder > 1 &&
           new Date(currentWave.saleStartDate) >= new Date(nextWave.saleStartDate)
         ) {
           toast.error(
@@ -517,17 +426,11 @@ export default function CreateEventPage() {
     setSelectedRegularTicketIndex(index);
 
     const ticket = formData.ticketTypes[index];
-    const existingWaveChildren = getWaveChildren(ticket, formData.ticketTypes);
-    const parentDraft = buildWaveDraftFromTicket(ticket, "Wave 1");
 
-    if (existingWaveChildren.length > 0 || ticket.waveGroup) {
-      setWaveDrafts([
-        parentDraft,
-        ...existingWaveChildren.map((wave, waveIndex) =>
-          buildWaveDraftFromTicket(wave, `Wave ${waveIndex + 2}`),
-        ),
-      ]);
+    if (ticket.waves && ticket.waves.length > 0) {
+      setWaveDrafts(ticket.waves);
     } else {
+      const parentDraft = buildWaveDraftFromTicket(ticket, "Wave 1");
       setWaveDrafts([
         parentDraft,
         createDefaultWaveDraft({
@@ -541,6 +444,9 @@ export default function CreateEventPage() {
     setWaveDialogOpen(true);
   };
 
+  // Assigns the edited wave chain onto the one ticket type being managed —
+  // waves live entirely on `ticket.waves`, never as separate ticketTypes
+  // entries, so this is a single in-place update, not a splice.
   const createWaveTickets = () => {
     if (selectedRegularTicketIndex === null) {
       toast.error("No ticket selected for wave creation");
@@ -552,68 +458,29 @@ export default function CreateEventPage() {
       return;
     }
 
-    const baseTicket = formData.ticketTypes[selectedRegularTicketIndex];
-    const waveGroup = getWaveGroupId(baseTicket) || `wave_group_${Date.now()}`;
+    setFormData((prev) => {
+      const nextTicketTypes = [...prev.ticketTypes];
+      const baseTicket = nextTicketTypes[selectedRegularTicketIndex];
+      const firstWave = waveDrafts[0];
 
-    const buildWaveTicket = (draft: WaveDraft, waveOrder: number): TicketType => {
-      const usesDates = waveOrder > 1 && draft.waveSwitchMode !== "quantity";
-
-      return syncLegacyPriceField({
-        name: draft.name,
-        price: "",
-        priceETB: draft.priceETB,
-        priceUSD: draft.priceUSD,
-        quantity: draft.quantity || baseTicket.quantity || "0",
-        description: draft.description || baseTicket.description || "",
-        saleStartDate: usesDates ? draft.saleStartDate : "",
-        saleEndDate: "",
-        isActive: false,
-        hasDateRange: usesDates,
-        waveOrder,
-        waveSwitchMode: draft.waveSwitchMode,
-        waveGroup,
-      });
-    };
-
-    // Collapsing back down to a single wave means this is no longer a wave
-    // chain — revert it to a plain ticket type with no wave metadata.
-    const buildPlainTicket = (draft: WaveDraft): TicketType =>
-      syncLegacyPriceField({
-        name: draft.name,
-        price: "",
-        priceETB: draft.priceETB,
-        priceUSD: draft.priceUSD,
-        quantity: draft.quantity || baseTicket.quantity || "0",
-        description: draft.description || baseTicket.description || "",
-        saleStartDate: "",
-        saleEndDate: "",
+      nextTicketTypes[selectedRegularTicketIndex] = syncLegacyPriceField({
+        ...baseTicket,
+        name: firstWave.name,
+        priceETB: firstWave.priceETB,
+        priceUSD: firstWave.priceUSD,
+        quantity: firstWave.quantity || baseTicket.quantity || "0",
+        description: firstWave.description || baseTicket.description || "",
         isActive: true,
-        hasDateRange: false,
+        // Collapsing back down to a single wave means this is no longer a
+        // wave chain — revert to a plain ticket type with no wave config.
+        waves: waveDrafts.length > 1 ? waveDrafts : undefined,
       });
 
-    const nextWaveTickets =
-      waveDrafts.length === 1
-        ? [buildPlainTicket(waveDrafts[0])]
-        : [
-            buildWaveTicket(waveDrafts[0], 1),
-            ...waveDrafts.slice(1).map((draft, index) => buildWaveTicket(draft, index + 2)),
-          ];
-
-    const nextTicketTypes = formData.ticketTypes.filter((ticket, index) => {
-      if (index === selectedRegularTicketIndex) {
-        return false;
-      }
-
-      return getWaveGroupId(ticket) !== waveGroup;
+      return {
+        ...prev,
+        ticketTypes: recalculateTicketAvailability(nextTicketTypes),
+      };
     });
-
-    const insertionIndex = Math.min(selectedRegularTicketIndex, nextTicketTypes.length);
-    nextTicketTypes.splice(insertionIndex, 0, ...nextWaveTickets);
-
-    setFormData((prev) => ({
-      ...prev,
-      ticketTypes: recalculateTicketAvailability(nextTicketTypes),
-    }));
 
     setWaveDrafts([]);
     setSelectedRegularTicketIndex(null);
@@ -821,70 +688,10 @@ export default function CreateEventPage() {
         }
       }
 
-      formData.ticketTypes.forEach((ticket, index) => {
-        payload.append(`ticketTypes[${index}][name]`, ticket.name);
-
-        if (ticket.priceETB) {
-          payload.append(`ticketTypes[${index}][priceETB]`, ticket.priceETB);
-        }
-
-        if (ticket.priceUSD) {
-          payload.append(`ticketTypes[${index}][priceUSD]`, ticket.priceUSD);
-        }
-
-        payload.append(
-          `ticketTypes[${index}][price]`,
-          ticket.priceETB || ticket.priceUSD || ticket.price || "0",
-        );
-
-        payload.append(`ticketTypes[${index}][quantity]`, ticket.quantity);
-        payload.append(
-          `ticketTypes[${index}][description]`,
-          ticket.description,
-        );
-        payload.append(
-          `ticketTypes[${index}][available]`,
-          String(ticket.isActive),
-        );
-
-        if (ticket.waveOrder) {
-          payload.append(
-            `ticketTypes[${index}][waveOrder]`,
-            String(ticket.waveOrder),
-          );
-          payload.append(
-            `ticketTypes[${index}][waveSwitchMode]`,
-            String(ticket.waveSwitchMode || "date"),
-          );
-          payload.append(
-            `ticketTypes[${index}][waveGroup]`,
-            String(ticket.waveGroup || "regular_wave"),
-          );
-        }
-
-        if (
-          (ticket.name === "Regular" && ticket.hasDateRange) &&
-          ticket.saleStartDate &&
-          ticket.saleEndDate
-        ) {
-          payload.append(
-            `ticketTypes[${index}][startDate]`,
-            ticket.saleStartDate,
-          );
-          payload.append(`ticketTypes[${index}][endDate]`, ticket.saleEndDate);
-          payload.append(
-            `ticketTypes[${index}][hasDateRange]`,
-            String(ticket.hasDateRange),
-          );
-        }
-
-        if (isWaveTicket(ticket) && ticket.saleStartDate) {
-          payload.append(
-            `ticketTypes[${index}][startDate]`,
-            ticket.saleStartDate,
-          );
-        }
-      });
+      payload.append(
+        "ticketTypes",
+        JSON.stringify(formData.ticketTypes.map(serializeTicketTypeForSubmit)),
+      );
 
       formData.coverImages.forEach((coverImage) => {
         payload.append("coverImages", coverImage);
@@ -1021,12 +828,10 @@ export default function CreateEventPage() {
               waveTickets={waveTickets}
               regularDateTickets={regularDateTickets}
               visibleTickets={visibleTickets}
-              allTicketTypes={formData.ticketTypes}
               onAddTicketType={addTicketType}
               onRemoveTicketType={removeTicketType}
               onTicketTypeChange={handleTicketTypeChange}
               onOpenWaveDialog={openWaveCreationDialog}
-              getWaveChildren={getWaveChildren}
             />
 
             {beverageEligible && (

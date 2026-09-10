@@ -8,6 +8,8 @@ const Ticket = require("../models/Ticket");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
+const { claimTicketStock } = require("../utils/ticketStock");
+const { resolveEatInstant } = require("../utils/eatTime");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 const {
   generateShortId,
@@ -28,12 +30,6 @@ const toNumberOrUndefined = (value) => {
   if (value === undefined || value === null || value === "") return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const toDateOrUndefined = (value) => {
-  if (!value) return undefined;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 };
 
 // Roles allowed to see full, unsanitized event data (draft events, organizer
@@ -167,6 +163,45 @@ const parseTicketTypesInput = (ticketTypes, reqBody) => {
   return [];
 };
 
+// Normalizes one entry of a ticket type's nested `waves` array. Mirrors the
+// same coercion `normalizeTicketTypes` applies to a top-level ticket, since a
+// wave is really the same shape (name/prices/quantity/dates/switch mode).
+const normalizeWaveEntry = (rawWave = {}, isFirstWave = false) => {
+  const priceETB = toNumberOrUndefined(rawWave.priceETB);
+  const priceUSD = toNumberOrUndefined(rawWave.priceUSD);
+  const price =
+    toNumberOrUndefined(rawWave.price) ??
+    (priceETB !== undefined ? priceETB : priceUSD !== undefined ? priceUSD : 0);
+
+  const quantity = toNumberOrUndefined(rawWave.quantity) ?? 0;
+
+  // Wave 1 is always immediately live — it never has a start trigger.
+  const startDate = isFirstWave
+    ? undefined
+    : resolveEatInstant(
+        rawWave.startDate || rawWave.saleStartDate,
+        rawWave.startTime || rawWave.saleStartTime
+      );
+  const endDate = resolveEatInstant(
+    rawWave.endDate || rawWave.saleEndDate,
+    rawWave.endTime || rawWave.saleEndTime
+  );
+
+  return {
+    name: rawWave.name,
+    price,
+    priceETB,
+    priceUSD,
+    quantity,
+    description: rawWave.description,
+    startDate,
+    endDate,
+    waveSwitchMode: normalizeWaveSwitchMode(
+      rawWave.waveSwitchMode || rawWave.waveActivationType
+    ),
+  };
+};
+
 const normalizeTicketTypes = (rawTickets = []) =>
   rawTickets.map((ticket) => {
     const priceETB = toNumberOrUndefined(ticket.priceETB);
@@ -176,8 +211,25 @@ const normalizeTicketTypes = (rawTickets = []) =>
       (priceETB !== undefined ? priceETB : priceUSD !== undefined ? priceUSD : 0);
 
     const quantity = toNumberOrUndefined(ticket.quantity) ?? 0;
-    const startDate = toDateOrUndefined(ticket.startDate || ticket.saleStartDate);
-    const endDate = toDateOrUndefined(ticket.endDate || ticket.saleEndDate);
+
+    const rawWaves = Array.isArray(ticket.waves) ? ticket.waves : [];
+    const waves =
+      rawWaves.length > 0
+        ? rawWaves.map((rawWave, index) => normalizeWaveEntry(rawWave, index === 0))
+        : undefined;
+
+    // Organizers pick a wall-clock Ethiopian date *and* time ("Aug 19, 8:00 PM").
+    // Anchor it to EAT explicitly: a bare "YYYY-MM-DD" run through `new Date()`
+    // parses as UTC midnight, which is 3:00 AM in Addis, so date-only wave
+    // transitions used to fire three hours after the organizer expected.
+    const startDate = resolveEatInstant(
+      ticket.startDate || ticket.saleStartDate,
+      ticket.startTime || ticket.saleStartTime
+    );
+    const endDate = resolveEatInstant(
+      ticket.endDate || ticket.saleEndDate,
+      ticket.endTime || ticket.saleEndTime
+    );
     const inferredWaveOrder = detectWaveOrderFromName(ticket.name);
     const waveOrder = toNumberOrUndefined(ticket.waveOrder) ?? inferredWaveOrder;
     const waveSwitchMode = normalizeWaveSwitchMode(
@@ -206,6 +258,11 @@ const normalizeTicketTypes = (rawTickets = []) =>
       ...(ticket.waveGroup ? { waveGroup: ticket.waveGroup } : {}),
       ...(waveOrder !== undefined ? { waveOrder } : {}),
       ...(hasWaveMetadata ? { waveSwitchMode } : {}),
+      ...(waves ? { waves } : {}),
+      // Carried through only so applyManualAvailabilityOverrides can match
+      // this submission against its existing subdocument by id; stripped
+      // out (replaced with the existing id) before it reaches the schema.
+      ...(ticket._id ? { _id: ticket._id } : {}),
     };
   });
 
@@ -258,11 +315,39 @@ const ensureEventUrlFields = async (event) => {
   return event;
 };
 
+const hasNestedWaves = (ticket) =>
+  Array.isArray(ticket && ticket.waves) && ticket.waves.length > 0;
+
+// A wave-enabled ticket type's `currentWaveIndex` points into its own
+// `waves` array by position. If the organizer edited that array (reordered,
+// inserted, deleted a wave), the old integer may now point at the wrong
+// entry. Re-resolve it by matching the currently-mirrored wave's name into
+// the new array; if that wave was itself removed, fall back to the old
+// index clamped into range — applyTicketAvailabilityRules re-validates it
+// immediately since it always runs right after save.
+const resolveCarriedWaveIndex = (existing, nextWaves) => {
+  if (!existing || !Array.isArray(nextWaves) || nextWaves.length === 0) {
+    return null;
+  }
+
+  const byName = nextWaves.findIndex((wave) => wave.name === existing.name);
+  if (byName !== -1) return byName;
+
+  const fallback =
+    typeof existing.currentWaveIndex === "number" ? existing.currentWaveIndex : 0;
+  return Math.min(Math.max(fallback, 0), nextWaves.length - 1);
+};
+
 // Preserve and infer manual disable intent from admin edits.
 const applyManualAvailabilityOverrides = (
   existingTicketTypes = [],
   nextTicketTypes = []
 ) => {
+  const existingById = new Map(
+    (existingTicketTypes || [])
+      .filter((ticket) => ticket && ticket._id)
+      .map((ticket) => [String(ticket._id), ticket])
+  );
   const existingByKey = new Map(
     (existingTicketTypes || []).map((ticket) => [
       createTicketTypeKey(ticket),
@@ -271,26 +356,57 @@ const applyManualAvailabilityOverrides = (
   );
 
   return (nextTicketTypes || []).map((ticket) => {
-    const existing = existingByKey.get(createTicketTypeKey(ticket));
+    const existing =
+      (ticket._id && existingById.get(String(ticket._id))) ||
+      existingByKey.get(createTicketTypeKey(ticket));
 
-    let manualDisabled = Boolean(existing?.manualDisabled);
+    // Manual disabling is now an *explicit* signal only.
+    //
+    // This used to also infer intent: if the submitted `available` disagreed
+    // with the stored one, the difference was written back as a permanent
+    // `manualDisabled: true`. But `available` is a derived flag that the wave
+    // engine owns, and the edit forms recomputed it client-side with rules that
+    // did not match the server's. Any drift — an admin form that did not
+    // understand a switch mode, a wave that transitioned between page load and
+    // save — turned an untouched round-trip through the edit screen into a
+    // permanently dead wave, which then stalled the rest of the chain behind it.
+    const manualDisabled =
+      typeof ticket.manualDisabled === "boolean"
+        ? ticket.manualDisabled
+        : Boolean(existing?.manualDisabled);
 
-    if (typeof ticket.manualDisabled === "boolean") {
-      manualDisabled = ticket.manualDisabled;
-    } else if (
-      existing &&
-      typeof existing.available === "boolean" &&
-      typeof ticket.available === "boolean" &&
-      existing.available !== ticket.available
-    ) {
-      // If admin flipped availability, persist that intent.
-      manualDisabled = ticket.available === false;
+    // A nested-wave ticket type's own top-level `quantity` is the one
+    // genuinely live, sale-tracked field — applyTicketAvailabilityRules only
+    // ever seeds it from the active wave's config on an actual transition,
+    // so it must never be reset here to whatever (possibly stale) value the
+    // client happened to submit. name/price/description/dates are just
+    // config and get freshly re-synced from `waves[currentWaveIndex]` by
+    // applyTicketAvailabilityRules right after this runs regardless of what
+    // is returned here, so they pass straight through from the submission —
+    // that's what lets an organizer's edit to an already-active wave's name
+    // or price actually take effect. Only the chain *position* needs to be
+    // explicitly carried over (re-resolved in case the wave list was
+    // reordered), so a save with no real change can't accidentally rewind it.
+    if (existing && hasNestedWaves(existing) && hasNestedWaves(ticket)) {
+      return {
+        ...ticket,
+        _id: existing._id,
+        quantity: existing.quantity,
+        currentWaveIndex: resolveCarriedWaveIndex(existing, ticket.waves),
+        manualDisabled,
+        available: manualDisabled ? false : existing.available,
+      };
     }
 
     return {
       ...ticket,
+      // Preserve the subdocument identity across edits. Replacing the array
+      // wholesale would make Mongoose mint fresh _ids for every ticket type,
+      // breaking in-flight checkouts that reference the old ticketTypeId.
+      ...(existing?._id ? { _id: existing._id } : {}),
       manualDisabled,
-      // Keep payload coherent; rules will still enforce windows/quantity for enabled tickets.
+      // Availability itself is always recomputed by applyTicketAvailabilityRules
+      // right after this; never let a stale client value decide what is live.
       available: manualDisabled ? false : ticket.available,
     };
   });
@@ -479,19 +595,28 @@ const buyTicket = async (req, res) => {
     isVerifiedPaid = true;
   }
 
-  event.ticketTypes[index].quantity -= quantity;
-  if (event.ticketTypes[index].quantity === 0) {
-    event.ticketTypes[index].available = false;
+  // Claim the stock atomically. The availability/quantity check above reads a
+  // snapshot that two simultaneous buyers can both pass; only a conditional
+  // decrement in a single database operation can decide who actually gets the
+  // last tickets. This also hands the chain off to the next wave the moment
+  // this one empties.
+  const claim = await claimTicketStock({
+    eventId: event._id,
+    ticketTypeId: selectedType._id,
+    ticketTypeName: selectedType.name,
+    count: quantity,
+    now,
+  });
+
+  if (!claim.claimed) {
+    throw new BadRequestError("Not enough tickets available");
   }
-
-  applyTicketAvailabilityRules(event, now);
-
-  await event.save();
 
   const ticket = await Ticket.create({
     event: event._id,
     user: userId,
     ticketType: selectedType.name,
+    ticketTypeId: selectedType._id,
     price: selectedType.price * quantity,
     ticketCount: quantity,
     purchaseQuantity: quantity,
@@ -542,6 +667,12 @@ const getOrganizerEvents = async (req, res) => {
     ;
 
   await Promise.all(events.map((event) => ensureEventUrlFields(event)));
+
+  for (const event of events) {
+    if (applyTicketAvailabilityRules(event).changed) {
+      await event.save();
+    }
+  }
 
   // Optionally include tickets if requested
   if (includeTickets && events.length > 0) {
@@ -770,6 +901,15 @@ const getAllEvents = async (req, res) => {
 
   await Promise.all(events.map((event) => ensureEventUrlFields(event)));
 
+  // This listing feeds the public homepage, so it has to reflect the live wave
+  // just like the detail endpoints do — otherwise a card can advertise a price
+  // from a wave that already handed off.
+  for (const event of events) {
+    if (applyTicketAvailabilityRules(event).changed) {
+      await event.save();
+    }
+  }
+
   const eventIds = events.map((event) => event._id);
 
   let ticketStatsByEvent = new Map();
@@ -906,9 +1046,21 @@ const getEventDetails = async (req, res) => {
       await event.save();
     }
 
-    res
-      .status(StatusCodes.OK)
-      .json({ status: "success", data: sanitizePublicEvent(event) });
+    // This route serves both the public event page (no auth) and the
+    // organizer/admin edit forms, which need the real ticketTypes shape —
+    // wave config, manualDisabled, currentWaveIndex — to load a wave chain
+    // back into "Manage waves". sanitizePublicEvent strips all of that, so a
+    // privileged caller (the event's own organizer, or an admin) gets the
+    // full document instead; anyone else still gets the sanitized one.
+    const organizerId = String(event.organizer?._id || event.organizer || "");
+    const isPrivileged =
+      !!req.user &&
+      (req.user.role === "admin" || req.user.userId === organizerId);
+
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: isPrivileged ? event.toObject() : sanitizePublicEvent(event),
+    });
   } catch (error) {
     console.error("[EVENT-DETAILS] Error:", error);
     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({

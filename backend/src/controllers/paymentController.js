@@ -8,6 +8,7 @@ const { processSuccessfulPayment } = require("./ticketController");
 const ChapaService = require("../services/chapaService");
 const ChapaGiftCardService = require("../services/chapaGiftCardService");
 const { amountsMatch } = require("../utils/pricing");
+const { markPaymentTerminal } = require("../utils/paymentHold");
 
 // For web-checkout (card/redirect) payments: allow a short grace period before
 // treating a "failed" status as terminal, since the user may still be in-flight.
@@ -94,7 +95,7 @@ class PaymentController {
                 `${Math.round(paymentAgeMs / 60000)} min — marking as EXPIRED`
               );
               payment.status = "CANCELLED";
-              await payment.save();
+              await markPaymentTerminal({ paymentId: payment._id, status: "CANCELLED" });
             } else {
               // ── Single verify call ─────────────────────────────────────
               // For direct-charge: do ONE call and return immediately.
@@ -145,7 +146,7 @@ class PaymentController {
                       const terminalStatus = normalizedPaymentStatus.includes("cancel") ? "CANCELLED" : "FAILED";
                       console.log(`[CHAPA-VERIFY] ❌ Payment ${txn} → ${terminalStatus}`);
                       payment.status = terminalStatus;
-                      await payment.save();
+                      await markPaymentTerminal({ paymentId: payment._id, status: terminalStatus });
                       break;
                     } else {
                       // Still pending — for direct charge this is completely normal
@@ -214,7 +215,7 @@ class PaymentController {
                   }
                 } else if (remoteStatus === "failed" || remoteStatus === "cancelled") {
                   payment.status = remoteStatus === "cancelled" ? "CANCELLED" : "FAILED";
-                  await payment.save();
+                  await markPaymentTerminal({ paymentId: payment._id, status: payment.status });
                 }
                 // "pending" — leave as-is, frontend will poll again
               } catch (err) {
@@ -241,7 +242,7 @@ class PaymentController {
               remoteStatus === "EXPIRED"
             ) {
               payment.status = (remoteStatus === "CANCELLED" || remoteStatus === "CANCELED") ? "CANCELLED" : "FAILED";
-              await payment.save();
+              await markPaymentTerminal({ paymentId: payment._id, status: payment.status });
               console.log(`Payment ${txn} marked as ${payment.status}`);
             }
           }
@@ -259,7 +260,15 @@ class PaymentController {
       let ticketId = null;
       let newUserCredentials = null;
 
-      if (status === "PAID") {
+      if (status === "PAID" && payment.needsManualReview) {
+        // Money was captured but no ticket could be secured (its stock hold
+        // had already expired and the fallback claim also failed) — a
+        // customer must never be told this succeeded when nothing was
+        // issued. Keep reporting a non-terminal state so the frontend
+        // doesn't show a false success; our team follows up manually since
+        // no automatic refund path exists yet.
+        status = "PENDING";
+      } else if (status === "PAID") {
         status = "COMPLETED";
       } else if (status === "CANCELLED") {
         status = "CANCELLED"; // Keep CANCELLED as is for frontend
@@ -366,7 +375,7 @@ class PaymentController {
       // Only cancel if payment is still pending
       if (payment.status === "PENDING") {
         payment.status = "CANCELLED";
-        await payment.save();
+        await markPaymentTerminal({ paymentId: payment._id, status: "CANCELLED" });
         console.log(`[PAYMENT-CANCEL] ✅ Payment ${transactionId} marked as CANCELLED`);
       } else {
         console.log(`[PAYMENT-CANCEL] ⚠️ Payment ${transactionId} status is already ${payment.status}`);

@@ -37,6 +37,17 @@ const serializePublicConfig = (config) => ({
   cinemaGiftCardMode: config.cinemaGiftCardMode,
 });
 
+// GET /active is fully public (no auth) — every checkout page on the site
+// calls it just to know which provider is live. It has no legitimate reason
+// to also hand back the actual gift-card numbers money gets routed to; only
+// the admin gift-card-routing screen needs those, and it already calls this
+// same endpoint with an admin bearer token (adminApi). Anonymous/non-admin
+// callers get the trimmed shape; admins keep the full one.
+const serializePublicConfig = (config) => ({
+  activeProvider: config.activeProvider,
+  giftCardMode: config.giftCardMode,
+});
+
 const getActiveProvider = async (req, res) => {
   try {
     const config = await getOrCreateConfig();
