@@ -1125,16 +1125,17 @@ const getOrganizerInvitations = async (req, res) => {
       });
     }
 
-    const invitations = await Invitation.find({ organizerId })
-      .select(
-        "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
-      )
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const pricing = await InvitationPricing.findOne({ eventType: "public" })
-      .select("emailPrice smsPrice")
-      .lean();
+    const [invitations, pricing] = await Promise.all([
+      Invitation.find({ organizerId })
+        .select(
+          "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
+        )
+        .sort({ createdAt: -1 })
+        .lean(),
+      InvitationPricing.findOne({ eventType: "public" })
+        .select("emailPrice smsPrice")
+        .lean(),
+    ]);
     const emailPrice = pricing ? pricing.emailPrice : 2.5;
     const smsPrice = pricing ? pricing.smsPrice : 7.5;
 
@@ -1165,16 +1166,17 @@ const getInvitationsByEvent = async (req, res) => {
       query.organizerId = req.user._id;
     }
 
-    const invitations = await Invitation.find(query)
-      .select(
-        "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
-      )
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const pricing = await InvitationPricing.findOne({ eventType: "public" })
-      .select("emailPrice smsPrice")
-      .lean();
+    const [invitations, pricing] = await Promise.all([
+      Invitation.find(query)
+        .select(
+          "invitationId eventId organizerId guestName guestEmail guestPhone guestType ticketType type amount status paymentStatus paymentReference ticketId qrCodeData rsvpLink rsvpStatus message createdAt updatedAt"
+        )
+        .sort({ createdAt: -1 })
+        .lean(),
+      InvitationPricing.findOne({ eventType: "public" })
+        .select("emailPrice smsPrice")
+        .lean(),
+    ]);
     const emailPrice = pricing ? pricing.emailPrice : 2.5;
     const smsPrice = pricing ? pricing.smsPrice : 7.5;
 

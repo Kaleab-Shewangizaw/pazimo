@@ -77,6 +77,17 @@ export default function InvitationDetailsModal({
             </div>
             <div>
               <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                Ticket Type
+              </label>
+              <span className="inline-block px-2 py-1 rounded-full text-xs font-medium w-fit bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400">
+                {invitation.ticket?.ticketType || invitation.ticketType || "Regular"}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
                 Status
               </label>
               <div className="flex flex-col gap-1">
