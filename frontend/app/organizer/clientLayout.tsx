@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation"; // Import usePathname
 import { useAuthStore } from "@/store/authStore";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import Sidebar from "@/components/organizer-sidebar/sidebar";
-import OrganizerHeader from "@/components/organizer-header/organizer-header"; // Import the new OrganizerHeader
+import { Menu } from "lucide-react";
 import { toast } from "sonner";
 
 type PersistApi = {
@@ -108,9 +108,18 @@ export default function ClientLayout({
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-black">
       {/* Organizer Sidebar */}
       <Sidebar open={isSidebarOpen} onClose={closeSidebar} />
+      {/* Mobile-only menu trigger — the sidebar itself has no fixed header
+          to host this anymore, so it floats on top of the page. */}
+      {!isSidebarOpen && (
+        <button
+          onClick={toggleSidebar}
+          className="lg:hidden fixed top-4 right-4 z-40 flex h-9 w-9 items-center justify-center rounded-full border bg-background text-foreground shadow-sm"
+          aria-label="Open menu"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Organizer Header */}
-        <OrganizerHeader onMenuClick={toggleSidebar} />
         <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-black">
           {children}
         </main>

@@ -15,6 +15,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 import { toast } from "sonner";
 import Link from "next/link";
 import { buildEventUrl } from "@/lib/event-url";
@@ -326,13 +328,11 @@ export default function EventsPage() {
   const authState = localStorage.getItem("auth-storage");
   if (!authState) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="w-full max-w-[350px]">
           <CardHeader>
-            <CardTitle className="dark:text-gray-100">Authentication Required</CardTitle>
-            <CardDescription className="dark:text-gray-400">
-              Please sign in to view your events
-            </CardDescription>
+            <CardTitle>Authentication Required</CardTitle>
+            <CardDescription>Please sign in to view your events</CardDescription>
           </CardHeader>
           <CardFooter>
             <Button
@@ -353,11 +353,11 @@ export default function EventsPage() {
 
     if (!isAuthenticated || !token || user.role !== "organizer") {
       return (
-        <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-          <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <Card className="w-full max-w-[350px]">
             <CardHeader>
-              <CardTitle className="dark:text-gray-100">Authentication Required</CardTitle>
-              <CardDescription className="dark:text-gray-400">
+              <CardTitle>Authentication Required</CardTitle>
+              <CardDescription>
                 Please sign in as an organizer to view your events
               </CardDescription>
             </CardHeader>
@@ -376,11 +376,11 @@ export default function EventsPage() {
   } catch (error) {
     console.error("Error parsing auth state:", error);
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="w-full max-w-[350px]">
           <CardHeader>
-            <CardTitle className="dark:text-gray-100">Error</CardTitle>
-            <CardDescription className="dark:text-gray-400">
+            <CardTitle>Error</CardTitle>
+            <CardDescription>
               There was an error loading your authentication state
             </CardDescription>
           </CardHeader>
@@ -399,22 +399,19 @@ export default function EventsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <div className="text-center flex flex-col items-center gap-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary dark:text-blue-400" />
-          <p className="text-gray-500 dark:text-gray-400">Loading events...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
-        <Card className="w-full max-w-[350px] dark:bg-black dark:border-gray-800">
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Card className="w-full max-w-[350px]">
           <CardHeader>
-            <CardTitle className="dark:text-gray-100">Error</CardTitle>
-            <CardDescription className="dark:text-gray-400">{error}</CardDescription>
+            <CardTitle>Error</CardTitle>
+            <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardFooter>
             <Button
@@ -434,178 +431,165 @@ export default function EventsPage() {
     );
   }
 
-  return (
-    <div className="container mx-auto py-8 p-5 bg-white dark:bg-black min-h-screen">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">My Events</h1>
-        <Button
-          onClick={() => router.push("/organizer/events/create")}
-          className="flex items-center gap-2"
-        >
-          <PlusCircle className="h-4 w-4" />
-          Create New Event
-        </Button>
-      </div>
+  const statusBadgeVariant = (status: string) =>
+    status === "published"
+      ? "success"
+      : status === "draft"
+      ? "warning"
+      : status === "cancelled"
+      ? "destructive"
+      : "info";
 
-      {events.length === 0 ? (
-        <Card className="dark:bg-black dark:border-gray-800">
-          <CardHeader>
-            <CardTitle className="dark:text-gray-100">No Events Found</CardTitle>
-            <CardDescription className="dark:text-gray-400">
-              You haven't created any events yet
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Button
-              onClick={() => router.push("/organizer/events/create")}
-              className="flex items-center gap-2"
-            >
+  return (
+    <div className="p-4 sm:p-6 lg:p-8 bg-background min-h-screen">
+      <div className="max-w-7xl mx-auto flex flex-col gap-6">
+        <PageHeader
+          title="My Events"
+          actions={
+            <Button onClick={() => router.push("/organizer/events/create")}>
               <PlusCircle className="h-4 w-4" />
-              Create Your First Event
+              Create Event
             </Button>
-          </CardFooter>
-        </Card>
-      ) : (
-        <Card className="dark:bg-black dark:border-gray-800">
-          <CardContent className="p-4">
+          }
+        />
+
+        {events.length === 0 ? (
+          <Card>
+            <CardContent>
+              <EmptyState
+                icon={Calendar}
+                title="No events found"
+                description="You haven't created any events yet."
+                action={
+                  <Button onClick={() => router.push("/organizer/events/create")}>
+                    <PlusCircle className="h-4 w-4" />
+                    Create your first event
+                  </Button>
+                }
+              />
+            </CardContent>
+          </Card>
+        ) : (
+        <Card>
+          <CardContent>
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50/80 dark:bg-gray-900/50 border-gray-200 dark:border-gray-800">
-                  <TableHead className="font-semibold dark:text-gray-300">Event Title</TableHead>
-                  <TableHead className="font-semibold dark:text-gray-300">Date</TableHead>
-                  <TableHead className="font-semibold dark:text-gray-300">Location</TableHead>
-                  <TableHead className="font-semibold dark:text-gray-300">Category</TableHead>
-                  <TableHead className="font-semibold dark:text-gray-300">Capacity</TableHead>
-                  <TableHead className="font-semibold dark:text-gray-300">Status</TableHead>
-                  <TableHead className="font-semibold dark:text-gray-300">Actions</TableHead>
+                <TableRow>
+                  <TableHead>Event title</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Capacity</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {getCurrentPageItems().map((event) => (
                   <TableRow
                     key={event._id}
-                    className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer border-gray-100 dark:border-gray-800"
+                    className="cursor-pointer"
                     onClick={() => handleRowClick(event)}
                   >
-                    <TableCell>
-                      <span className="font-medium text-gray-900 dark:text-gray-100">
-                        {event.title}
-                      </span>
+                    <TableCell className="font-medium max-w-[160px] truncate">
+                      {event.title}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         <span>{formatDate(event.startDate)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="h-4 w-4" />
                         {event.location?.address || "No address"},{" "}
                         {event.location?.city || "No city"}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant="outline"
-                        className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
-                      >
+                      <Badge variant="outline">
                         {event.category?.name || "Uncategorized"}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <Users className="h-4 w-4" />
                         {event.capacity || "N/A"}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <Badge
-                          variant="outline"
-                          className={`${
-                            event.status === "published"
-                              ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
-                              : event.status === "draft"
-                              ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
-                              : event.status === "cancelled"
-                              ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
-                              : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-                          }`}
-                        >
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge variant={statusBadgeVariant(event.status)}>
                           {event.status}
                         </Badge>
                         {event.isSoldOut && (
-                          <Badge
-                            variant="outline"
-                            className="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
-                          >
-                            Sold Out
-                          </Badge>
+                          <Badge variant="destructive">Sold out</Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/organizer/events/edit/${event._id}`);
                           }}
-                          className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 dark:border-gray-700"
-                          title="Edit Event"
+                          className="h-8 w-8"
+                          title="Edit event"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <UsherAccessDialog
                           eventId={event._id}
                           eventTitle={event.title}
                           token={organizerToken || ""}
                           triggerVariant="outline"
-                          triggerClassName="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 dark:border-gray-700"
                         />
                         {beverageEligible && (
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="icon"
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push(`/organizer/events/${event._id}/beverages`);
                             }}
-                            className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 dark:border-gray-700"
+                            className="h-8 w-8"
                             title="Beverage sales"
                           >
-                            <Beer className="h-4 w-4" />
+                            <Beer className="h-3.5 w-3.5" />
                           </Button>
                         )}
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/organizer/qr-scanner?mode=ticket&eventId=${event._id}`);
                           }}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 dark:border-gray-700"
+                          className="h-8 w-8"
                           title="Open scoped scanner"
                         >
-                          <ScanLine className="h-4 w-4" />
+                          <ScanLine className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
                             generateQRCode(event);
                           }}
-                          className="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 dark:border-gray-700"
+                          className="h-8 w-8"
+                          title="Generate QR code"
                         >
-                          <QrCode className="h-4 w-4" />
+                          <QrCode className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="outline"
-                          size="sm"
+                          size="icon"
                           onClick={async (e) => {
                             e.stopPropagation();
                             setIsTogglingSoldOut(event._id);
@@ -613,23 +597,19 @@ export default function EventsPage() {
                             setIsTogglingSoldOut(null);
                           }}
                           disabled={isTogglingSoldOut === event._id}
-                          className={`${
+                          className={
                             event.isSoldOut
-                              ? "text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30"
-                              : "text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 dark:border-gray-700"
-                          }`}
-                          title={
-                            event.isSoldOut
-                              ? "Mark as Available"
-                              : "Mark as Sold Out"
+                              ? "h-8 w-8 text-destructive border-destructive/30 hover:bg-destructive/10"
+                              : "h-8 w-8"
                           }
+                          title={event.isSoldOut ? "Mark as available" : "Mark as sold out"}
                         >
                           {isTogglingSoldOut === event._id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : event.isSoldOut ? (
-                            <Ban className="h-4 w-4" />
+                            <Ban className="h-3.5 w-3.5" />
                           ) : (
-                            <CheckCircle2 className="h-4 w-4" />
+                            <CheckCircle2 className="h-3.5 w-3.5" />
                           )}
                         </Button>
                       </div>
@@ -638,11 +618,12 @@ export default function EventsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
 
             {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 px-2">
-                <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="text-xs text-muted-foreground">
                   Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                   {Math.min(currentPage * itemsPerPage, events.length)}{" "}
                   of {events.length} events
@@ -650,22 +631,22 @@ export default function EventsPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1}
-                    className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="h-8 w-8"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
+                  <div className="text-xs text-muted-foreground">
                     Page {currentPage} of {totalPages}
                   </div>
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="icon"
                     onClick={handleNextPage}
                     disabled={currentPage === totalPages}
-                    className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="h-8 w-8"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -674,90 +655,74 @@ export default function EventsPage() {
             )}
           </CardContent>
         </Card>
-      )}
+        )}
 
       {/* Event Details Modal */}
       <Dialog open={showEventDetailsModal} onOpenChange={handleCloseModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto dark:bg-black dark:border-gray-800">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-bold flex items-center justify-between dark:text-gray-100">
-              <span>Event Details</span>
-            </DialogTitle>
+            <DialogTitle>Event Details</DialogTitle>
           </DialogHeader>
           {selectedEventDetails && (
             <div className="space-y-8">
               {/* Basic Information */}
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold dark:text-gray-100">Basic Information</h3>
+                <h3 className="text-base font-semibold">Basic Information</h3>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Event Title
                       </p>
-                      <p className="text-gray-900 dark:text-gray-100">{selectedEventDetails.title}</p>
+                      <p>{selectedEventDetails.title}</p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Description
                       </p>
-                      <p className="text-gray-600 dark:text-gray-400">
+                      <p className="text-muted-foreground">
                         {selectedEventDetails.description ||
                           "No description available"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Category
                       </p>
-                      <Badge
-                        variant="outline"
-                        className="bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
-                      >
+                      <Badge variant="outline">
                         {selectedEventDetails.category?.name || "Uncategorized"}
                       </Badge>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Status
                       </p>
-                      <Badge
-                        variant="outline"
-                        className={`${
-                          selectedEventDetails.status === "published"
-                            ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800"
-                            : selectedEventDetails.status === "draft"
-                            ? "bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800"
-                            : selectedEventDetails.status === "cancelled"
-                            ? "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800"
-                            : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
-                        }`}
-                      >
+                      <Badge variant={statusBadgeVariant(selectedEventDetails.status)}>
                         {selectedEventDetails.status}
                       </Badge>
                     </div>
                   </div>
                   <div className="space-y-4">
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Date & Time
                       </p>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         <span>
                           Start: {formatDate(selectedEventDetails.startDate)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400 mt-1">
+                      <div className="flex items-center gap-2 text-muted-foreground mt-1">
                         <Calendar className="h-4 w-4" />
                         <span>End: {formatDate(selectedEventDetails.endDate)}</span>
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Location
                       </p>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="h-4 w-4" />
                         <span>
                           {selectedEventDetails.location?.address || "No address"},{" "}
@@ -767,10 +732,10 @@ export default function EventsPage() {
                       </div>
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      <p className="text-xs font-medium text-muted-foreground">
                         Capacity
                       </p>
-                      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+                      <div className="flex items-center gap-2 text-muted-foreground">
                         <Users className="h-4 w-4" />
                         <span>{selectedEventDetails.capacity || "N/A"}</span>
                       </div>
@@ -782,14 +747,10 @@ export default function EventsPage() {
               {/* Tags */}
               {selectedEventDetails.tags && selectedEventDetails.tags.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tags</p>
+                  <p className="text-xs font-medium text-muted-foreground">Tags</p>
                   <div className="flex flex-wrap gap-2">
                     {selectedEventDetails.tags.map((tag: string, index: number) => (
-                      <Badge
-                        key={index}
-                        variant="secondary"
-                        className="flex items-center gap-1 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700"
-                      >
+                      <Badge key={index} variant="secondary" className="gap-1">
                         <Tag className="h-3 w-3" />
                         {tag}
                       </Badge>
@@ -802,38 +763,34 @@ export default function EventsPage() {
               {selectedEventDetails.ticketTypes &&
                 selectedEventDetails.ticketTypes.length > 0 && (
                   <div className="space-y-4">
-                    <h3 className="text-xl font-semibold dark:text-gray-100">Ticket Types</h3>
-                    <div className="grid gap-4">
+                    <h3 className="text-base font-semibold">Ticket Types</h3>
+                    <div className="grid gap-3">
                       {selectedEventDetails.ticketTypes.map(
                         (ticket: any, index: number) => (
-                          <Card key={index} className="dark:bg-gray-900 dark:border-gray-800">
-                            <CardContent className="p-4">
+                          <Card key={index} className="py-4">
+                            <CardContent>
                               <div className="flex justify-between items-start">
                                 <div className="space-y-2">
                                   <div className="flex items-center gap-2">
-                                    <Ticket className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                                    <span className="font-medium dark:text-gray-100">
-                                      {ticket.name}
-                                    </span>
+                                    <Ticket className="h-4 w-4 text-muted-foreground" />
+                                    <span className="font-medium">{ticket.name}</span>
                                   </div>
-                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  <p className="text-sm text-muted-foreground">
                                     {ticket.description}
                                   </p>
                                   {ticket.startDate && ticket.endDate && (
-                                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                                    <p className="text-xs text-muted-foreground">
                                       Available: {formatDate(ticket.startDate)}{" "}
                                       - {formatDate(ticket.endDate)}
                                     </p>
                                   )}
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-medium dark:text-gray-100">
-                                    {ticket.price} Birr
-                                  </p>
-                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  <p className="font-medium">{ticket.price} Birr</p>
+                                  <p className="text-sm text-muted-foreground">
                                     Quantity: {ticket.quantity}
                                   </p>
-                                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                                  <p className="text-sm text-muted-foreground">
                                     Available: {ticket.available ? "Yes" : "No"}
                                   </p>
                                 </div>
@@ -852,44 +809,29 @@ export default function EventsPage() {
 
       {/* QR Code Section */}
       {shareQrDataUrl && qrEvent && (
-        <Card className="mt-6 dark:bg-black dark:border-gray-800">
+        <Card className="mt-6">
           <CardHeader>
-            <CardTitle className="dark:text-gray-100">Event QR Code - {qrEvent.title}</CardTitle>
+            <CardTitle>Event QR code — {qrEvent.title}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row items-center gap-6">
-              <div className="flex-shrink-0">
-                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border-2 border-gray-200 dark:border-gray-700">
-                  <img
-                    src={shareQrDataUrl}
-                    alt="Event QR Code"
-                    className="w-48 h-48"
-                  />
-                </div>
+              <div className="flex-shrink-0 bg-card p-4 rounded-lg border">
+                <img src={shareQrDataUrl} alt="Event QR Code" className="w-48 h-48" />
               </div>
               <div className="flex-1 text-center md:text-left">
-                <h3 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                  Scan to Buy Tickets
-                </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                <h3 className="text-lg font-semibold mb-1">Scan to buy tickets</h3>
+                <p className="text-sm text-muted-foreground mb-4">
                   Open your camera or QR app to start checkout instantly for
                   this event.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <Button
-                    onClick={downloadQRCode}
-                    className="bg-[#0D47A1] hover:bg-[#0D47A1]/90 dark:bg-[#0D47A1] dark:hover:bg-[#0D47A1]/80 text-white"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
+                  <Button onClick={downloadQRCode}>
+                    <Download className="h-4 w-4" />
                     Download QR
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={copyBuyLink}
-                    className="dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy Buy Link
+                  <Button variant="outline" onClick={copyBuyLink}>
+                    <Copy className="h-4 w-4" />
+                    Copy buy link
                   </Button>
                 </div>
               </div>
@@ -897,6 +839,7 @@ export default function EventsPage() {
           </CardContent>
         </Card>
       )}
+      </div>
     </div>
   );
 }

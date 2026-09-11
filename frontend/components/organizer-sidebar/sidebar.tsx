@@ -1,7 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Home,
@@ -19,35 +18,43 @@ import {
   ClipboardList,
   Banknote,
   Beer,
+  ChevronLeft,
+  ChevronRight,
+  SunMedium,
+  MoonStar,
+  LaptopMinimal,
+  type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Button } from "../ui/button";
+import { Badge } from "../ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { toast } from "sonner";
+import { io, type Socket } from "socket.io-client";
+import { cn } from "@/lib/utils";
+
+const COLLAPSED_STORAGE_KEY = "organizer-sidebar-collapsed";
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
 
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: string;
+  count?: number;
+}
+
+
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { user, token, logout } = useAuthStore();
   const router = useRouter();
-  const { theme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Matches the main site header's convention: blue wordmark on light
-  // backgrounds, gold on dark — the brand block below now actually switches
-  // background between the two, so the logo needs to switch with it.
-  const logoSrc =
-    mounted && (theme === "dark" || resolvedTheme === "dark")
-      ? "/logo4.png"
-      : "/logo3.png";
   // Non-eligible organizers must not see Pazimo Capital at all — this check
   // is a UX nicety on top of the real gate, which is the backend's
   // requireCapitalEligible middleware on every capital endpoint.
@@ -56,9 +63,99 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   // backend's requireBeverageEligible gate.
   const [beverageEligible, setBeverageEligible] = useState(false);
 
-   const handleUserClick = () => {
-    router.push("/organizer")
-  }
+  // Desktop-only icon rail toggle — mobile always shows full labels since
+  // the sidebar there is a temporary overlay, not permanent layout space.
+  const [collapsedPref, setCollapsedPref] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem(COLLAPSED_STORAGE_KEY);
+    if (stored === "true") setCollapsedPref(true);
+
+    const mql = window.matchMedia("(min-width: 1024px)");
+    setIsDesktop(mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  const collapsed = collapsedPref && isDesktop;
+  const toggleCollapsed = () => {
+    setCollapsedPref((prev) => {
+      const next = !prev;
+      localStorage.setItem(COLLAPSED_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
+
+  // Unread notification count — just a counter on the existing
+  // "Notifications" nav item now, not a separate dropdown.
+  const [unreadCount, setUnreadCount] = useState(0);
+  const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    if (!token || user?.role !== "organizer") return;
+    const userId = user._id ?? "";
+    if (!userId) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/api/notifications/user/${userId}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            credentials: "include",
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            const fetched = data.data || [];
+            setUnreadCount(fetched.filter((n: any) => !n.read).length);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
+      }
+    };
+
+    fetchUnreadCount();
+
+    if (!socketRef.current) {
+      socketRef.current = io(process.env.NEXT_PUBLIC_SOCKET_URL as string, {
+        auth: { token },
+        transports: ["websocket"],
+      });
+
+      socketRef.current.emit("joinOrganizerRoom", userId);
+
+      socketRef.current.on("eventStatusUpdated", (data: any) => {
+        setUnreadCount((prev) => prev + 1);
+        toast.info(`Event "${data.eventTitle}" status changed to ${data.status}.`);
+      });
+
+      socketRef.current.on("withdrawalStatusUpdated", (data: any) => {
+        setUnreadCount((prev) => prev + 1);
+        toast.info(`Your withdrawal of ${data.amount} Birr has been ${data.status}.`);
+      });
+    }
+
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.off("eventStatusUpdated");
+        socketRef.current.off("withdrawalStatusUpdated");
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [token, user?.role, user?._id]);
+
+  const handleUserClick = () => {
+    router.push("/organizer");
+  };
 
   useEffect(() => {
     if (!token || user?.role !== "organizer") return;
@@ -77,288 +174,241 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       .catch(() => setBeverageEligible(false));
   }, [token, user?.role]);
 
-  const isActive = (path: string) => {
-    return pathname === path;
-  };
+  const isActive = (path: string) => pathname === path;
 
   const handleLogout = () => {
     logout();
     router.push("/sign-in");
-    onClose(); // Close sidebar on logout
+    onClose();
   };
 
   const handleLinkClick = () => {
-    onClose(); // Close sidebar when a link is clicked
+    onClose();
+  };
+
+  const primaryNav: NavItem[] = [
+    { href: "/organizer", label: "Dashboard", icon: Home },
+    { href: "/organizer/events", label: "Events", icon: CalendarDays },
+    { href: "/organizer/rsvp-builder", label: "RSVP", icon: ClipboardList },
+    { href: "/organizer/invitations", label: "Invitations", icon: Mail },
+    { href: "/organizer/customers", label: "Customers", icon: UsersIcon },
+    ...(capitalEligible
+      ? [{ href: "/organizer/capital", label: "Pazimo Capital", icon: Banknote, badge: "New" }]
+      : []),
+    ...(beverageEligible
+      ? [
+          { href: "/organizer/beverages", label: "Beverage sales", icon: Beer, badge: "New" },
+          { href: "/organizer/beverages/withdrawals", label: "Bar withdrawals", icon: Wallet },
+        ]
+      : []),
+    { href: "/organizer/campaign", label: "Campaign", icon: Megaphone },
+    { href: "/organizer/qr-scanner", label: "Scan Ticket", icon: ScanLine },
+    {
+      href: "/organizer/withdrawals",
+      // Only worth qualifying when there is a second pool to confuse it
+      // with — bar takings are settled on the beverages page.
+      label: beverageEligible ? "Ticket withdrawals" : "Withdrawals",
+      icon: Wallet,
+    },
+    { href: "/organizer/account", label: "Account", icon: User },
+  ];
+
+  const otherNav: NavItem[] = [
+    { href: "/organizer/notifications", label: "Notifications", icon: Bell, count: unreadCount },
+    { href: "/organizer/help", label: "Help Center", icon: HelpCircle },
+  ];
+
+  const NavIcon = ({ item }: { item: NavItem }) => (
+    <span className="relative flex-shrink-0">
+      <item.icon className="h-5 w-5" />
+      {!!item.count && (
+        <span className="absolute -top-1.5 -right-2 min-w-3.5 h-3.5 px-0.5 rounded-full bg-destructive text-white text-[9px] leading-3.5 text-center font-medium">
+          {item.count > 99 ? "99+" : item.count}
+        </span>
+      )}
+    </span>
+  );
+
+  const NavLink = ({ item }: { item: NavItem }) => {
+    const link = (
+      <Link
+        href={item.href}
+        onClick={handleLinkClick}
+        className={cn(
+          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+          collapsed && "justify-center px-0",
+          isActive(item.href)
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground"
+        )}
+      >
+        <NavIcon item={item} />
+        {!collapsed && (
+          <>
+            <span className="flex-1 truncate">{item.label}</span>
+            {item.badge && (
+              <Badge variant="info" className="text-[10px] uppercase tracking-wide">
+                {item.badge}
+              </Badge>
+            )}
+          </>
+        )}
+      </Link>
+    );
+
+    if (!collapsed) return link;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{link}</TooltipTrigger>
+        <TooltipContent side="right">
+          {item.label}
+          {item.badge ? ` · ${item.badge}` : ""}
+          {item.count ? ` (${item.count})` : ""}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
+
+  const ThemeRow = () => {
+    const { theme, resolvedTheme, setTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    const isDark = mounted && (theme === "dark" || (theme === "system" && resolvedTheme === "dark"));
+    const toggle = () => setTheme(isDark ? "light" : "dark");
+    const Icon = !mounted ? LaptopMinimal : isDark ? SunMedium : MoonStar;
+    const label = !mounted ? "Theme" : isDark ? "Light mode" : "Dark mode";
+
+    const button = (
+      <button
+        onClick={toggle}
+        disabled={!mounted}
+        className={cn(
+          "w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground transition-colors",
+          collapsed && "justify-center px-0"
+        )}
+      >
+        <Icon className="h-5 w-5 flex-shrink-0" />
+        {!collapsed && <span className="flex-1 text-left truncate">{label}</span>}
+      </button>
+    );
+
+    if (!collapsed) return button;
+
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    );
   };
 
   return (
     <>
-      {/* Sidebar */}
       <aside
-        className={`bg-white dark:bg-black w-full max-w-[280px] fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        } h-screen overflow-hidden lg:relative lg:top-0 lg:h-screen shadow-lg lg:shadow-md border-r border-gray-200 dark:border-gray-800 flex-shrink-0`}
+        className={cn(
+          "bg-sidebar w-full fixed left-3 top-3 bottom-3 z-40 transform transition-[transform,max-width] duration-300 ease-in-out lg:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full",
+          collapsed ? "max-w-[76px]" : "max-w-[280px]",
+          "rounded-2xl shadow-md dark:shadow-none flex-shrink-0",
+          "lg:relative lg:left-auto lg:top-auto lg:bottom-auto lg:my-3 lg:ml-3"
+        )}
       >
-        <div className="flex flex-col h-full">
-          {/* Brand Header */}
-          <div className="relative overflow-hidden bg-white dark:bg-black">
-            
-            
-            
+        {/* Collapse toggle — desktop only; mobile closes via the X below */}
+        <button
+          onClick={toggleCollapsed}
+          className="hidden lg:flex absolute top-1/2 -right-3 -translate-y-1/2 z-10 h-6 w-6 items-center justify-center rounded-full bg-card text-muted-foreground hover:text-foreground shadow-md dark:shadow-none transition-colors"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronLeft className="h-3.5 w-3.5" />
+          )}
+        </button>
 
-            {/* Close button for mobile — absolute so it doesn't disturb centering */}
+        <div className="flex flex-col h-full overflow-hidden rounded-2xl">
+          {/* Brand Header */}
+          <div className="relative">
             <button
               onClick={onClose}
-              className="lg:hidden absolute top-3 right-3 z-10 p-1.5 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100 dark:text-white/70 dark:hover:text-white dark:hover:bg-white/10 transition-colors"
+              className="lg:hidden absolute top-3 right-3 z-10 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
               aria-label="Close menu"
             >
               <X className="h-5 w-5" />
             </button>
 
-             <Button
-                variant="ghost"
-                className="text-[#1a2d5a] font-semibold hover:bg-gradient-to-r h-auto pt-6 pb-3"
-                onClick={handleUserClick}
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-r from-[#1a2d5a] to-[#2a4d7a] rounded-full flex items-center justify-center">
-                    <User className="h-4 w-4 text-white" />
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-sm dark:text-gray-300">{user?.firstName || "Organizer"}</span>
-                    <span className="text-xs text-[#ffc107] font-medium">Organizer</span>
-                  </div>
+            <button
+              onClick={handleUserClick}
+              className={cn(
+                "flex items-center gap-3 w-full pt-6 pb-4 text-left",
+                collapsed ? "justify-center px-0" : "px-4"
+              )}
+            >
+              <div className="w-9 h-9 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
+                <User className="h-4 w-4 text-sidebar-accent-foreground" />
+              </div>
+              {!collapsed && (
+                <div className="flex flex-col min-w-0">
+                  <span className="text-sm font-medium truncate">
+                    {user?.firstName || "Organizer"}
+                  </span>
+                  <span className="text-xs text-muted-foreground">Organizer</span>
                 </div>
-              </Button>
-
-            {/* Full-width divider */}
-            <div className="h-px w-full bg-gradient-to-r from-transparent via-blue-300/70 dark:via-amber-300/50 to-transparent" />
+              )}
+            </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-1">
-            <Link
-              href="/organizer"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <Home className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">
-                Dashboard
-              </span>
-            </Link>
-            <Link
-              href="/organizer/events"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/events")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <CalendarDays className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Events</span>
-            </Link>
-            <Link
-              href="/organizer/rsvp-builder"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/rsvp-builder")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <ClipboardList className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">RSVP</span>
-            </Link>
-            <Link
-              href="/organizer/invitations"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/invitations")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <Mail className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">
-                Invitations
-              </span>
-            </Link>
-            <Link
-              href="/organizer/customers"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/customers")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <UsersIcon className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">
-                Customers
-              </span>
-            </Link>
-            {capitalEligible && (
-              <Link
-                href="/organizer/capital"
-                onClick={handleLinkClick}
-                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/capital")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-              >
-                
-                  <Banknote className="h-5 w-5  dark:text-white" />
-                
-                <span className="font-medium text-sm sm:text-base flex-1">
-                  Pazimo Capital
-                </span>
-                <span className="rounded-full bg-blue-200 border border-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide  dark:bg-yellow-500/60 dark:text-white dark:border-yellow-500 shadow-sm">
-                  New
-                </span>
-              </Link>
-            )}
-            {beverageEligible && (
-              <Link
-                href="/organizer/beverages"
-                onClick={handleLinkClick}
-                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                  isActive("/organizer/beverages")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                <Beer className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base flex-1">
-                  Beverage sales
-                </span>
-                <span className="rounded-full bg-blue-200 border border-blue-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide dark:bg-yellow-500/60 dark:text-white dark:border-yellow-500 shadow-sm">
-                  New
-                </span>
-              </Link>
-            )}
-            {beverageEligible && (
-              <Link
-                href="/organizer/beverages/withdrawals"
-                onClick={handleLinkClick}
-                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                  isActive("/organizer/beverages/withdrawals")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                <Wallet className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">
-                  Bar withdrawals
-                </span>
-              </Link>
-            )}
-            <Link
-              href="/organizer/campaign"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/campaign")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <Megaphone className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Campaign</span>
-            </Link>
-            <Link
-              href="/organizer/qr-scanner"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/qr-scanner")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <ScanLine className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Scan Ticket</span>
-            </Link>
-            <Link
-              href="/organizer/withdrawals"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/withdrawals")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <Wallet className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">
-                {/* Only worth qualifying when there is a second pool to confuse
-                    it with — bar takings are settled on the beverages page. */}
-                {beverageEligible ? "Ticket withdrawals" : "Withdrawals"}
-              </span>
-            </Link>
-            <Link
-              href="/organizer/account"
-              onClick={handleLinkClick}
-              className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                isActive("/organizer/account")
-                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-              }`}
-            >
-              <User className="h-5 w-5 flex-shrink-0" />
-              <span className="font-medium text-sm sm:text-base">Account</span>
-            </Link>
+          {/* Navigation — primary items centered in the available space,
+              secondary items and logout pinned to the bottom. */}
+          <nav className="flex-1 min-h-0 flex flex-col overflow-y-auto overscroll-contain p-3">
+            <div className="flex-1 flex flex-col justify-center space-y-0.5">
+              {primaryNav.map((item) => (
+                <NavLink key={item.href} item={item} />
+              ))}
+            </div>
 
-            <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-800">
-              <div className="text-xs sm:text-sm font-semibold mb-3 text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3">
-                Other
+            <div className="pt-6 mt-2">
+              {!collapsed && (
+                <div className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider px-3">
+                  Other
+                </div>
+              )}
+              <div className="space-y-0.5">
+                {otherNav.map((item) => (
+                  <NavLink key={item.href} item={item} />
+                ))}
+                <ThemeRow />
               </div>
-              <Link
-                href="/organizer/notifications"
-                onClick={handleLinkClick}
-                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                  isActive("/organizer/notifications")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                <Bell className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">
-                  Notifications
-                </span>
-              </Link>
-              <Link
-                href="/organizer/help"
-                onClick={handleLinkClick}
-                className={`flex items-center gap-3 p-3 rounded-md transition-all duration-200 ${
-                  isActive("/organizer/help")
-                    ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-300/10"
-                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:text-gray-900 dark:hover:text-gray-100"
-                }`}
-              >
-                <HelpCircle className="h-5 w-5 flex-shrink-0" />
-                <span className="font-medium text-sm sm:text-base">
-                  Help Center
-                </span>
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 p-3 rounded-md text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-700 dark:hover:text-red-300 transition-all duration-200 group"
-              >
-                <LogOut className="h-5 w-5 flex-shrink-0 group-hover:scale-110 transition-transform duration-200" />
-                <span className="font-medium text-sm sm:text-base">Logout</span>
-              </button>
+              {collapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center justify-center rounded-md px-0 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                    >
+                      <LogOut className="h-5 w-5 flex-shrink-0" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Logout</TooltipContent>
+                </Tooltip>
+              ) : (
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <LogOut className="h-5 w-5 flex-shrink-0" />
+                  <span>Logout</span>
+                </button>
+              )}
             </div>
           </nav>
         </div>
       </aside>
-      {/* Overlay for mobile */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm z-30 lg:hidden transition-opacity duration-300"
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden transition-opacity duration-300"
           onClick={onClose}
         />
       )}
