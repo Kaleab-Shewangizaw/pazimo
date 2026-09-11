@@ -140,6 +140,20 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// Customer refill routes — browsing only, no purchase/payment endpoint yet.
+// Any signed-in user; unlike events, buying from a venue isn't gated behind
+// holding a ticket to anything. Declared before /:venueId/... below, per this
+// file's own route-order rule: a literal segment must come first or Express
+// would try to match it as a :venueId.
+// ---------------------------------------------------------------------------
+router.get("/refill", authenticateUser, venueController.listRefillVenues);
+router.get(
+  "/:venueId/refill-catalog",
+  authenticateUser,
+  venueController.getVenueRefillCatalog
+);
+
+// ---------------------------------------------------------------------------
 // A venue's beverages, sales and money — reached by the owning venue and admins
 // ---------------------------------------------------------------------------
 

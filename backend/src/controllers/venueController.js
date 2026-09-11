@@ -666,6 +666,117 @@ const removeVenueBeverage = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Customer refill routes — browsing only, nothing here takes a payment yet.
+// Any signed-in user; unlike events, a venue sale isn't gated behind holding
+// a ticket to anything, so this is the same shape as the venue-account/admin
+// versions above with the ownership check dropped rather than reused as-is.
+// ---------------------------------------------------------------------------
+
+const listRefillVenues = async (req, res) => {
+  try {
+    // `isActive`/`isAvailable` default to true, and a query filter does not
+    // apply schema defaults to documents where the field was never set —
+    // `{ $ne: false }` is what actually honours "true unless turned off".
+    const venues = await Venue.find({ isActive: { $ne: false }, eligibility: "eligible" })
+      .select("name venueType city image blockedBeverages")
+      .lean();
+    if (!venues.length) {
+      return res.status(StatusCodes.OK).json({ success: true, data: [] });
+    }
+
+    const rows = await VenueBeverage.find({
+      venue: { $in: venues.map((v) => v._id) },
+      isAvailable: { $ne: false },
+    })
+      .select("venue beverage stockTotal sold")
+      .populate("beverage", "isActive")
+      .lean();
+
+    const blockedByVenue = new Map(
+      venues.map((v) => [String(v._id), (v.blockedBeverages || []).map(String)])
+    );
+
+    const countByVenue = new Map();
+    for (const row of rows) {
+      // No populated beverage means the catalogue row it pointed at was deleted.
+      if (!row.beverage || row.beverage.isActive === false) continue;
+      if ((row.stockTotal || 0) - (row.sold || 0) <= 0) continue;
+      const venueKey = String(row.venue);
+      if (blockedByVenue.get(venueKey)?.includes(String(row.beverage._id))) continue;
+      countByVenue.set(venueKey, (countByVenue.get(venueKey) || 0) + 1);
+    }
+
+    const data = venues
+      .filter((v) => countByVenue.has(String(v._id)))
+      .map((v) => ({
+        venueId: v._id,
+        name: v.name,
+        venueType: v.venueType,
+        city: v.city,
+        image: v.image,
+        beverageCount: countByVenue.get(String(v._id)) || 0,
+      }));
+
+    res.status(StatusCodes.OK).json({ success: true, data });
+  } catch (error) {
+    console.error("Error listing refill venues:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const getVenueRefillCatalog = async (req, res) => {
+  try {
+    const { venueId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(venueId)) {
+      throw new NotFoundError("Venue not found");
+    }
+
+    const venue = await Venue.findById(venueId).select(
+      "_id name venueType city isActive eligibility blockedBeverages"
+    );
+    if (!venue || !venue.isActive || venue.eligibility !== "eligible") {
+      throw new NotFoundError("Venue not found");
+    }
+
+    const blocked = (venue.blockedBeverages || []).map(String);
+
+    const rows = await VenueBeverage.find({ venue: venue._id, isAvailable: { $ne: false } })
+      .populate("beverage", "name image color isActive")
+      .lean();
+
+    const data = rows
+      .filter(
+        (row) =>
+          row.beverage &&
+          row.beverage.isActive !== false &&
+          !blocked.includes(String(row.beverage._id)),
+      )
+      .map((row) => ({
+        id: row._id,
+        beverageId: row.beverage._id,
+        name: row.beverage.name,
+        image: row.beverage.image,
+        color: row.beverage.color,
+        price: row.price,
+        currency: row.currency,
+        remaining: Math.max((row.stockTotal || 0) - (row.sold || 0), 0),
+      }))
+      .filter((item) => item.remaining > 0);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data,
+      venue: { _id: venue._id, name: venue.name, venueType: venue.venueType, city: venue.city },
+    });
+  } catch (error) {
+    console.error("Error listing venue refill catalog:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   resolveVenueContext,
   listVenues,
@@ -680,4 +791,6 @@ module.exports = {
   addVenueBeverage,
   updateVenueBeverage,
   removeVenueBeverage,
+  listRefillVenues,
+  getVenueRefillCatalog,
 };

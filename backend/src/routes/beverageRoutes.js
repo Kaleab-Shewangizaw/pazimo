@@ -257,4 +257,18 @@ router.get(
   getAdminBeverageFinance
 );
 
+// --- Customer refill routes -----------------------------------------------
+// Browsing only — no purchase/payment endpoint exists yet. Any signed-in
+// customer; no role restriction, unlike every other route in this file.
+router.get(
+  "/refill/events",
+  authenticateUser,
+  beverageController.listRefillEvents
+);
+router.get(
+  "/refill/events/:eventId/catalog",
+  authenticateUser,
+  beverageController.getEventRefillCatalog
+);
+
 module.exports = router;

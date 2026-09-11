@@ -7,7 +7,8 @@ const OrganizerBeverageProfile = require("../models/OrganizerBeverageProfile");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const EventBeverage = require("../models/EventBeverage");
-const { BadRequestError, NotFoundError } = require("../errors");
+const Ticket = require("../models/Ticket");
+const { BadRequestError, NotFoundError, ForbiddenError } = require("../errors");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -709,6 +710,130 @@ const removeEventBeverage = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Customer refill routes — browsing only, nothing here takes a payment yet.
+// A signed-in customer sees only events they hold a valid, paid ticket for;
+// `listEventBeverages` above (the organizer/admin version) is a different
+// route with different authorization, not reused directly here because its
+// gate is ownership, not ticket-holding.
+// ---------------------------------------------------------------------------
+
+const VALID_TICKET_FILTER = {
+  status: "active",
+  paymentStatus: "completed",
+  ticketCount: { $gt: 0 },
+};
+
+const listRefillEvents = async (req, res) => {
+  try {
+    const eventIds = await Ticket.distinct("event", {
+      user: req.user.userId,
+      ...VALID_TICKET_FILTER,
+    });
+    if (!eventIds.length) {
+      return res.status(StatusCodes.OK).json({ success: true, data: [] });
+    }
+
+    // `isAvailable`/`isActive` both default to true, and a query filter does
+    // not apply schema defaults to documents where the field was never set —
+    // `!== false` is what actually honours "true unless explicitly turned off".
+    const rows = await EventBeverage.find({
+      event: { $in: eventIds },
+      isAvailable: { $ne: false },
+    })
+      .select("event beverage stockTotal sold")
+      .populate("beverage", "isActive")
+      .lean();
+
+    const countByEvent = new Map();
+    for (const row of rows) {
+      // No populated beverage means the catalogue row it pointed at was deleted.
+      if (!row.beverage || row.beverage.isActive === false) continue;
+      if ((row.stockTotal || 0) - (row.sold || 0) <= 0) continue;
+      const key = String(row.event);
+      countByEvent.set(key, (countByEvent.get(key) || 0) + 1);
+    }
+    if (!countByEvent.size) {
+      return res.status(StatusCodes.OK).json({ success: true, data: [] });
+    }
+
+    const events = await Event.find({ _id: { $in: [...countByEvent.keys()] } })
+      .select("title startDate coverImages")
+      .lean();
+
+    const data = events.map((event) => ({
+      eventId: event._id,
+      title: event.title,
+      startDate: event.startDate,
+      coverImages: event.coverImages,
+      beverageCount: countByEvent.get(String(event._id)) || 0,
+    }));
+
+    res.status(StatusCodes.OK).json({ success: true, data });
+  } catch (error) {
+    console.error("Error listing refill events:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const getEventRefillCatalog = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      throw new NotFoundError("Event not found");
+    }
+
+    const event = await Event.findById(eventId).select("_id title startDate organizer");
+    if (!event) throw new NotFoundError("Event not found");
+
+    const hasValidTicket = await Ticket.exists({
+      event: eventId,
+      user: req.user.userId,
+      ...VALID_TICKET_FILTER,
+    });
+    if (!hasValidTicket) {
+      throw new ForbiddenError("You need a ticket to this event to buy drinks here");
+    }
+
+    const profile = await OrganizerBeverageProfile.findOne({ organizer: event.organizer });
+    const blocked = (profile?.blockedBeverages || []).map(String);
+
+    const rows = await EventBeverage.find({ event: event._id, isAvailable: { $ne: false } })
+      .populate("beverage", "name image color isActive")
+      .lean();
+
+    const data = rows
+      .filter(
+        (row) =>
+          row.beverage &&
+          row.beverage.isActive !== false &&
+          !blocked.includes(String(row.beverage._id)),
+      )
+      .map((row) => ({
+        id: row._id,
+        beverageId: row.beverage._id,
+        name: row.beverage.name,
+        image: row.beverage.image,
+        color: row.beverage.color,
+        price: row.price,
+        currency: row.currency,
+        remaining: Math.max((row.stockTotal || 0) - (row.sold || 0), 0),
+      }))
+      .filter((item) => item.remaining > 0);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data,
+      event: { _id: event._id, title: event.title, startDate: event.startDate },
+    });
+  } catch (error) {
+    console.error("Error listing event refill catalog:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   listBeverages,
   getBeverage,
@@ -726,4 +851,6 @@ module.exports = {
   addEventBeverage,
   updateEventBeverage,
   removeEventBeverage,
+  listRefillEvents,
+  getEventRefillCatalog,
 };
