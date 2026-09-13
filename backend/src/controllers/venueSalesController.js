@@ -9,6 +9,8 @@ const { resolveVenueContext } = require("./venueController");
 const {
   recordSale,
   refundSale,
+  listOutstandingForOrder,
+  redeemSale,
 } = require("../services/venueBeverageSalesService");
 const {
   validBeverageSaleMatch,
@@ -139,6 +141,43 @@ const listVenueSales = async (req, res) => {
     });
   } catch (error) {
     console.error("Error listing venue beverage sales:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * What's still owed on one order, for the counter to look up. A venue
+ * purchase has no standing ticket to scan, so the mobile app shows this
+ * order/transaction reference at checkout for the customer to present.
+ */
+const getOutstandingVenueOrder = async (req, res) => {
+  try {
+    const venue = await resolveVenueContext(req);
+    const items = await listOutstandingForOrder({
+      paymentReference: req.params.paymentReference,
+      venueId: venue._id,
+    });
+    res.status(StatusCodes.OK).json({ success: true, data: items });
+  } catch (error) {
+    console.error("Error listing outstanding venue beverage order:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/** Hand a pre-bought item over. */
+const redeemVenueSale = async (req, res) => {
+  try {
+    const venue = await resolveVenueContext(req);
+    const sale = await redeemSale({
+      saleId: req.params.id,
+      venueId: venue._id,
+      redeemedBy: req.user.userId,
+    });
+    res.status(StatusCodes.OK).json({ success: true, data: sale });
+  } catch (error) {
+    console.error("Error redeeming venue beverage sale:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
   }
@@ -616,6 +655,8 @@ const getAdminVenueFinance = async (req, res) => {
 module.exports = {
   createVenueSale,
   listVenueSales,
+  getOutstandingVenueOrder,
+  redeemVenueSale,
   refundVenueSale,
   getVenueDashboard,
   getAdminVenueDashboard,

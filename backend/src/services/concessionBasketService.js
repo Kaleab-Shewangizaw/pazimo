@@ -3,7 +3,9 @@ const EventBeverage = require("../models/EventBeverage");
 const BeverageSale = require("../models/BeverageSale");
 const VenueBeverage = require("../models/VenueBeverage");
 const VenueBeverageSale = require("../models/VenueBeverageSale");
+const HappyHour = require("../models/HappyHour");
 const { BadRequestError } = require("../errors");
+const { resolveEffectivePrice } = require("../utils/happyHour");
 
 // Pricing and fulfilment for drinks bought through checkout.
 //
@@ -112,6 +114,10 @@ const priceBasket = async ({ eventId, items }) => {
   const lines = [];
   let total = 0;
   let currency = "ETB";
+  const now = new Date();
+  // One batch query for every campaign that could touch this event, rather
+  // than one per row — see utils/happyHour.js's resolveEffectivePrice.
+  const happyHours = await HappyHour.find({ event: eventId, cancelledAt: null }).lean();
 
   for (const row of rows) {
     const qty = wanted.get(String(row._id));
@@ -137,7 +143,12 @@ const priceBasket = async ({ eventId, items }) => {
     }
 
     currency = row.currency || "ETB";
-    const lineTotal = round2(row.price * qty);
+    // The happy-hour price when a campaign is running right now, otherwise
+    // the regular price. Re-checked again at fulfilBasket time, for the same
+    // reason the regular price already is: a payment can settle minutes
+    // after this quote was shown.
+    const unitPrice = resolveEffectivePrice(happyHours, row._id, row.price, now);
+    const lineTotal = round2(unitPrice * qty);
     total += lineTotal;
 
     lines.push({
@@ -145,7 +156,7 @@ const priceBasket = async ({ eventId, items }) => {
       beverageId: row.beverage?._id,
       name: row.beverage?.name,
       color: row.beverage?.color || null,
-      unitPrice: row.price,
+      unitPrice,
       quantity: qty,
       lineTotal,
       currency,
@@ -175,6 +186,8 @@ const priceBasket = async ({ eventId, items }) => {
 const fulfilBasket = async ({ eventId, organizerId, lines, customer, customerName, customerPhone, paymentReference }) => {
   const created = [];
   const failed = [];
+  // One batch query for the whole basket, not one per line.
+  const happyHours = await HappyHour.find({ event: eventId, cancelledAt: null }).lean();
 
   for (const line of lines || []) {
     const qty = Number(line.quantity) || 0;
@@ -202,6 +215,11 @@ const fulfilBasket = async ({ eventId, organizerId, lines, customer, customerNam
     }
 
     try {
+      // Re-checked here, not trusted from the quote: a payment can settle
+      // minutes after checkout began, and a happy hour that started, ended,
+      // or was cancelled in between must be reflected in what is actually
+      // charged — same reasoning as re-reading the regular price.
+      const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
       const sale = await BeverageSale.create({
         event: reserved.event,
         organizer: organizerId || reserved.organizer,
@@ -209,9 +227,9 @@ const fulfilBasket = async ({ eventId, organizerId, lines, customer, customerNam
         beverage: reserved.beverage._id,
         beverageName: reserved.beverage.name,
         beverageColor: reserved.beverage.color || null,
-        unitPrice: reserved.price,
+        unitPrice,
         quantity: qty,
-        totalAmount: round2(reserved.price * qty),
+        totalAmount: round2(unitPrice * qty),
         currency: reserved.currency,
         customer: customer || undefined,
         customerName,
@@ -281,6 +299,8 @@ const priceVenueBasket = async ({ venueId, items }) => {
   const lines = [];
   let total = 0;
   let currency = "ETB";
+  const now = new Date();
+  const happyHours = await HappyHour.find({ venue: venueId, cancelledAt: null }).lean();
 
   for (const row of rows) {
     const qty = wanted.get(String(row._id));
@@ -312,7 +332,8 @@ const priceVenueBasket = async ({ venueId, items }) => {
     }
 
     currency = row.currency || "ETB";
-    const lineTotal = round2(row.price * qty);
+    const unitPrice = resolveEffectivePrice(happyHours, row._id, row.price, now);
+    const lineTotal = round2(unitPrice * qty);
     total += lineTotal;
 
     lines.push({
@@ -320,7 +341,7 @@ const priceVenueBasket = async ({ venueId, items }) => {
       beverageId: row.beverage?._id,
       name: row.beverage?.name,
       color: row.beverage?.color || null,
-      unitPrice: row.price,
+      unitPrice,
       quantity: qty,
       lineTotal,
       currency,
@@ -356,6 +377,7 @@ const fulfilVenueBasket = async ({
   if (!mongoose.Types.ObjectId.isValid(String(venueId || ""))) {
     throw new BadRequestError("A valid venue is required to fulfil a venue basket");
   }
+  const happyHours = await HappyHour.find({ venue: venueId, cancelledAt: null }).lean();
 
   for (const line of lines || []) {
     const qty = Number(line.quantity) || 0;
@@ -383,15 +405,18 @@ const fulfilVenueBasket = async ({
     }
 
     try {
+      // Re-checked here, not trusted from the quote — same reasoning as
+      // fulfilBasket's own re-check.
+      const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
       const sale = await VenueBeverageSale.create({
         venue: reserved.venue,
         venueBeverage: reserved._id,
         beverage: reserved.beverage._id,
         beverageName: reserved.beverage.name,
         beverageColor: reserved.beverage.color || null,
-        unitPrice: reserved.price,
+        unitPrice,
         quantity: qty,
-        totalAmount: round2(reserved.price * qty),
+        totalAmount: round2(unitPrice * qty),
         currency: reserved.currency,
         customer: customer || undefined,
         customerName,

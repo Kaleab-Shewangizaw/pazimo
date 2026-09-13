@@ -7,6 +7,8 @@ const mongoose = require("mongoose");
 //
 // The same Beverage can therefore be 120 ETB at one club, 90 at a restaurant and
 // 150 at an event, without the catalogue row ever being duplicated or mutated.
+//
+// A time-boxed discount on this row is NOT stored here — see models/HappyHour.js.
 const VenueBeverageSchema = new mongoose.Schema(
   {
     venue: {

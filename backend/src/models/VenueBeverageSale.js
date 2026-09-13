@@ -160,6 +160,28 @@ const VenueBeverageSaleSchema = new mongoose.Schema(
       sparse: true,
     },
 
+    // --- Collection at the counter -----------------------------------------
+    //
+    // A sale recorded manually by venue staff is handed over as it is rung up,
+    // so it needs no record of collection. A sale bought online (through the
+    // mobile app's "refill" checkout) is a promise: the customer has paid and
+    // shows their order at the counter to collect it. Without a record of
+    // that handover there is nothing to stop the same drink being claimed
+    // twice. Mirrors CinemaBeverageSale exactly.
+    redeemedAt: Date,
+    redeemedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    // Set while a BeverageShare transfer of this sale is outstanding. Mirrors
+    // BeverageSale.pendingShare exactly — see there for why.
+    pendingShare: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BeverageShare",
+      default: null,
+    },
+
     soldAt: {
       type: Date,
       default: Date.now,
@@ -167,6 +189,19 @@ const VenueBeverageSaleSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+/**
+ * "Still owed to this customer", as a query filter — one definition, shared by
+ * the venue counter lookup and the redeem endpoint. `redeemedAt: null` matches
+ * an absent field as well as an explicit null, so rows written before
+ * redemption existed are correctly outstanding.
+ */
+VenueBeverageSaleSchema.statics.OUTSTANDING = {
+  channel: "online",
+  status: "confirmed",
+  redeemedAt: null,
+  pendingShare: null,
+};
 
 // Dashboards read by venue and by drink, newest-first, almost always filtered to
 // confirmed sales.

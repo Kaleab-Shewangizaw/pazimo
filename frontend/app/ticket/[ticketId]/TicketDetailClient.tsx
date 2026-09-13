@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
 import CinemaTicketView, {
   type CinemaTicketData,
 } from "@/components/cinemas/cinema-ticket-view";
-import { Loader2 } from "lucide-react";
+import { Loader2, Martini } from "lucide-react";
 import TicketPassCard, {
   buildPassBackdropStyle,
 } from "@/components/tickets/ticket-pass-card";
@@ -34,6 +36,10 @@ interface TicketDetails {
   status: string;
   qrCode: string;
   ticketCount: number;
+  // True when this ticket's event has at least one drink currently on sale.
+  // Drives the "get the app to order" prompt below — drinks are bought
+  // through the mobile app only, never on the web.
+  hasBeverages?: boolean;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -172,7 +178,7 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
         style={backdropStyle}
       />
 
-      <div className="relative h-full w-full overflow-y-auto px-4 py-6 sm:px-6 flex justify-center items-start pt-20 border-0">
+      <div className="relative h-full w-full overflow-y-auto px-4 py-6 sm:px-6 flex flex-col items-center gap-4 pt-20 border-0">
         <TicketPassCard
           title={ticket.event.title}
           watermark={watermark}
@@ -195,6 +201,35 @@ export default function TicketDetailClient({ ticketId }: { ticketId: string }) {
           shareTitle={`${ticket.event.title} — Ticket`}
           onCaptureFailed={handleCaptureFailed}
         />
+
+        {ticket.hasBeverages && (
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-black/40 p-5 text-center text-white backdrop-blur-md">
+            <Martini className="mx-auto mb-2 h-6 w-6 text-[#ffd900]" />
+            <p className="mb-1 font-semibold">Drinks are on sale at this event</p>
+            <p className="mb-4 text-sm text-gray-300">
+              Get the Pazimo app to order and show this ticket at the counter
+              to collect.
+            </p>
+            <div className="flex justify-center gap-3">
+              <Link href="#" className="inline-block transition-transform hover:scale-105">
+                <Image
+                  src="/footer/applestore.png"
+                  alt="Download on the App Store"
+                  width={120}
+                  height={36}
+                />
+              </Link>
+              <Link href="#" className="inline-block transition-transform hover:scale-105">
+                <Image
+                  src="/footer/googlestore.png"
+                  alt="Get it on Google Play"
+                  width={120}
+                  height={36}
+                />
+              </Link>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

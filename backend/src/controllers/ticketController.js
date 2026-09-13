@@ -33,6 +33,8 @@ const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
 const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
 const { markPaymentTerminal } = require("../utils/paymentHold");
 const { isPhoneBanned } = require("../utils/fraudGuard");
+const beverageSalesService = require("../services/beverageSalesService");
+const EventBeverage = require("../models/EventBeverage");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
 const isEthiopianNumber = (phone) => {
@@ -71,6 +73,18 @@ const processSuccessfulPayment = async (payment) => {
   // existed keeps its behaviour exactly.
   if (payment.salesContext === "CINEMA") {
     return require("./cinemaCheckoutController").settleCinemaPayment(payment);
+  }
+
+  // Beverage "refill" orders (event and venue channels) settle into
+  // BeverageSale/VenueBeverageSale rows, not a Ticket — dispatched here for
+  // the same reason the CINEMA branch above is: this function has four call
+  // sites (webhook, poller, payment controller, manual retry), and a fifth
+  // added later must not be able to settle one of these as an event ticket.
+  if (payment.salesContext === "EVENT_BEVERAGE") {
+    return require("./beverageCheckoutController").settleEventRefillPayment(payment);
+  }
+  if (payment.salesContext === "VENUE_BEVERAGE") {
+    return require("./beverageCheckoutController").settleVenueRefillPayment(payment);
   }
 
   const startTime = Date.now();
@@ -2137,6 +2151,24 @@ const validateQRCode = async (req, res) => {
     
     const userEmail = ticket.user?.email || ticket.guestEmail || "";
 
+    // Drinks this ticket-holder has bought online (mobile app "refill"
+    // checkout) and not yet collected, so staff can hand them over at the
+    // same moment they're already looking at the ticket. Best-effort and
+    // never allowed to block admission — a lookup failure here must not turn
+    // into a customer being refused entry over something unrelated to their
+    // ticket. Guest tickets have no `user`, so nothing to look up.
+    let outstandingBeverages = [];
+    if (ticket.user?._id) {
+      try {
+        outstandingBeverages = await beverageSalesService.listOutstandingForCustomer({
+          eventId: ticket.event?._id,
+          customerId: ticket.user._id,
+        });
+      } catch (error) {
+        console.error("Error listing outstanding beverages for scan:", error.message);
+      }
+    }
+
     // Check if ticket is already checked in
     if (ticket.checkedIn) {
       return res.status(StatusCodes.OK).json({
@@ -2159,6 +2191,7 @@ const validateQRCode = async (req, res) => {
           ticketCount: ticket.ticketCount,
           isInvitation: ticket.isInvitation,
         },
+        outstandingBeverages,
       });
     }
 
@@ -2180,6 +2213,7 @@ const validateQRCode = async (req, res) => {
         ticketCount: ticket.ticketCount,
         isInvitation: ticket.isInvitation,
       },
+      outstandingBeverages,
     });
   } catch (error) {
     console.error("QR code validation error:", error);
@@ -2220,6 +2254,30 @@ const getPublicTicketDetails = async (req, res) => {
       .populate("user", "firstName lastName email")
       .lean(); // Use lean() for faster queries since we don't need Mongoose documents
 
+    // Which of these tickets' events currently have a drink actually available
+    // to buy — same availability rule beverageController.js's refill routes
+    // use (isAvailable, an active catalogue beverage, remaining stock > 0).
+    // Drives the "get the Pazimo app to order drinks" prompt shown right
+    // after a ticket purchase; computed here rather than requiring the
+    // frontend to call the refill-browsing endpoint itself, which additionally
+    // requires proving ticket ownership this page doesn't otherwise need.
+    const eventIds = [...new Set(tickets.map((t) => String(t.event?._id || "")).filter(Boolean))];
+    let eventsWithBeverages = new Set();
+    if (eventIds.length) {
+      const beverageRows = await EventBeverage.find({
+        event: { $in: eventIds },
+        isAvailable: { $ne: false },
+      })
+        .select("event stockTotal sold")
+        .populate("beverage", "isActive")
+        .lean();
+      for (const row of beverageRows) {
+        if (!row.beverage || row.beverage.isActive === false) continue;
+        if ((row.stockTotal || 0) - (row.sold || 0) <= 0) continue;
+        eventsWithBeverages.add(String(row.event));
+      }
+    }
+
     // Attach remaining ticket count for this ticket's type (quantity left, not quantity purchased)
     tickets.forEach((ticket) => {
       const matchedType = ticket.event?.ticketTypes?.find(
@@ -2227,6 +2285,7 @@ const getPublicTicketDetails = async (req, res) => {
       );
       ticket.ticketsRemaining =
         typeof matchedType?.quantity === "number" ? matchedType.quantity : null;
+      ticket.hasBeverages = eventsWithBeverages.has(String(ticket.event?._id || ""));
       // Don't leak the full ticketTypes array (pricing/config for other tiers) to the public endpoint
       if (ticket.event) delete ticket.event.ticketTypes;
     });

@@ -3,6 +3,8 @@ const VenueBeverage = require("../models/VenueBeverage");
 const VenueBeverageSale = require("../models/VenueBeverageSale");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { mirrorSale } = require("./ledgerDualWrite");
+const HappyHour = require("../models/HappyHour");
+const { resolveEffectivePrice } = require("../utils/happyHour");
 
 // The venue channel's twin of beverageSalesService.
 //
@@ -86,15 +88,20 @@ const recordSale = async ({
   }
 
   try {
+    // A counter/manual sale honors a running happy hour exactly like an
+    // online one — the discount is a property of the drink, not of the
+    // channel someone bought it through.
+    const happyHours = await HappyHour.find({ venue: reserved.venue, cancelledAt: null }).lean();
+    const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
     const sale = await VenueBeverageSale.create({
       venue: reserved.venue,
       venueBeverage: reserved._id,
       beverage: line.beverage._id,
       beverageName: line.beverage.name,
       beverageColor: line.beverage.color || null,
-      unitPrice: reserved.price,
+      unitPrice,
       quantity: requested,
-      totalAmount: round2(reserved.price * requested),
+      totalAmount: round2(unitPrice * requested),
       currency: reserved.currency,
       customer: customer || undefined,
       customerName,
@@ -153,4 +160,77 @@ const refundSale = async (saleId, { adminId, reason } = {}) => {
   return sale;
 };
 
-module.exports = { recordSale, refundSale };
+/**
+ * What a customer has paid for online and not yet collected, for one order.
+ *
+ * Keyed by the payment reference — a venue purchase has no standing ticket to
+ * scan, so the mobile app shows the order/transaction reference at checkout
+ * for the customer to present at the counter. Mirrors
+ * cinemaBeverageSalesService.listOutstandingForOrder exactly.
+ */
+const listOutstandingForOrder = async ({ paymentReference, venueId }) => {
+  if (!paymentReference) return [];
+  return VenueBeverageSale.find({
+    paymentReference,
+    ...(venueId ? { venue: venueId } : {}),
+    ...VenueBeverageSale.OUTSTANDING,
+  })
+    .select("referenceNumber beverageName quantity unitPrice totalAmount soldAt")
+    .lean();
+};
+
+/**
+ * Hand a pre-bought item over.
+ *
+ * The guard is a single findOneAndUpdate matching OUTSTANDING, so two staff
+ * at the same counter cannot both hand over the same drink. Scoped to
+ * `venueId` so a redeem call can't reach another venue's sale even if a route
+ * is later mis-wired. Mirrors cinemaBeverageSalesService.redeemSale exactly.
+ */
+const redeemSale = async ({ saleId, venueId, redeemedBy }) => {
+  if (!mongoose.Types.ObjectId.isValid(saleId)) {
+    throw new NotFoundError("That item is not on this order");
+  }
+
+  const redeemed = await VenueBeverageSale.findOneAndUpdate(
+    {
+      _id: saleId,
+      ...(venueId ? { venue: venueId } : {}),
+      ...VenueBeverageSale.OUTSTANDING,
+    },
+    { $set: { redeemedAt: new Date(), redeemedBy: redeemedBy || undefined } },
+    { new: true }
+  );
+
+  if (redeemed) return redeemed;
+
+  const sale = await VenueBeverageSale.findOne({
+    _id: saleId,
+    ...(venueId ? { venue: venueId } : {}),
+  }).lean();
+
+  if (!sale) throw new NotFoundError("That item is not on this order");
+  if (sale.status === "refunded") {
+    throw new BadRequestError("That item was refunded and is not owed");
+  }
+  if (sale.channel !== "online") {
+    throw new BadRequestError(
+      "That was sold at the counter and was handed over at the time"
+    );
+  }
+  if (sale.pendingShare) {
+    throw new BadRequestError(
+      "This drink is being transferred to someone else and can't be collected until that finishes"
+    );
+  }
+  throw new BadRequestError(
+    `Already collected at ${sale.redeemedAt ? new Date(sale.redeemedAt).toLocaleString() : "an earlier time"}`
+  );
+};
+
+module.exports = {
+  recordSale,
+  refundSale,
+  listOutstandingForOrder,
+  redeemSale,
+};

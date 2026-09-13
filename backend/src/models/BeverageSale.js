@@ -156,6 +156,33 @@ const BeverageSaleSchema = new mongoose.Schema(
       sparse: true,
     },
 
+    // --- Collection at the counter -----------------------------------------
+    //
+    // A sale recorded manually by staff is handed over as it is rung up, so it
+    // needs no record of collection. A sale bought online (through the mobile
+    // app's "refill" checkout) is a promise: the ticket-holder has paid and at
+    // some later point shows their ticket at the counter to collect it.
+    // Without a record of that handover there is nothing to stop the same
+    // drink being claimed twice. Mirrors CinemaBeverageSale exactly — see the
+    // reasoning there for why this is a plain field pair rather than a virtual.
+    redeemedAt: Date,
+    redeemedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    // Set while a BeverageShare transfer of this sale is outstanding (see
+    // services/beverageShareService.js) — locks it against redemption or a
+    // second, overlapping transfer until the recipient accepts, declines, or
+    // it expires. Mirrors Ticket.pendingShare exactly, same reasoning:
+    // ownership of a purchased-but-not-collected drink must never be
+    // ambiguous while a hand-off is in flight.
+    pendingShare: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BeverageShare",
+      default: null,
+    },
+
     soldAt: {
       type: Date,
       default: Date.now,
@@ -163,6 +190,25 @@ const BeverageSaleSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+/**
+ * "Still owed to this customer", as a query filter — one definition, shared by
+ * the door scanner and the redeem endpoint, so they can never disagree about
+ * whether a line still needs collecting. `redeemedAt: null` matches an absent
+ * field as well as an explicit null, so rows written before redemption existed
+ * are correctly outstanding.
+ */
+BeverageSaleSchema.statics.OUTSTANDING = {
+  channel: "online",
+  status: "confirmed",
+  redeemedAt: null,
+  // A sale mid-transfer is in escrow, not the original buyer's to collect —
+  // and not yet the recipient's either, until they accept. Folding this into
+  // the one OUTSTANDING definition (rather than a separate check in
+  // redeemSale) is what makes it impossible for the counter and a transfer
+  // to disagree about who currently owns a drink.
+  pendingShare: null,
+};
 
 // Dashboards read by event, by organizer and by drink, always newest-first and
 // almost always filtered to confirmed sales.

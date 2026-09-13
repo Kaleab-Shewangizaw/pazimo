@@ -43,6 +43,19 @@ export interface VenueSale {
   venue?: { _id: string; name: string; venueType?: string; city?: string };
 }
 
+// One drink a customer paid for online (the mobile app's "refill" checkout)
+// and hasn't collected yet, for one order — looked up by the order/
+// transaction reference the customer shows at the counter.
+export interface VenueOutstandingItem {
+  _id: string;
+  referenceNumber?: string;
+  beverageName: string;
+  quantity: number;
+  unitPrice?: number;
+  totalAmount?: number;
+  soldAt?: string;
+}
+
 export interface VenueFinance {
   currency: string;
   venue: {

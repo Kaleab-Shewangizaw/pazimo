@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Info,
   Loader2,
+  Martini,
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -52,10 +53,25 @@ type RsvpScanData = {
   responseDetails?: ResponseDetail[];
 };
 
+// A drink this ticket-holder paid for online (the mobile app's "refill"
+// checkout) and hasn't collected yet — same shape the door needs to show for
+// a cinema order's outstanding snacks, one level up: keyed by ticket/event
+// rather than by a single order, since a refill can happen more than once
+// over the course of an event.
+type OwedBeverage = {
+  _id: string;
+  referenceNumber?: string;
+  beverageName: string;
+  quantity: number;
+  unitPrice?: number;
+  totalAmount?: number;
+};
+
 type ValidateResult = {
   success?: boolean;
   message?: string;
   alreadyCheckedIn?: boolean;
+  outstandingBeverages?: OwedBeverage[];
   data?: RsvpScanData & {
     entryType?: ScanTarget;
     ticketId?: string;
@@ -155,6 +171,12 @@ export default function QRScanner() {
   const [ticketCheckInOpen, setTicketCheckInOpen] = useState(false);
   const [ticketData, setTicketData] = useState<ValidateResult['data'] | null>(null);
   const [checkInCount, setCheckInCount] = useState(1);
+  // Drinks bought online for this ticket-holder, still owed. Shown in the
+  // same dialog as check-in — sometimes instead of it, when the ticket was
+  // already checked in earlier and this scan is purely a refill collection.
+  const [outstandingBeverages, setOutstandingBeverages] = useState<OwedBeverage[]>([]);
+  const [ticketAlreadyCheckedIn, setTicketAlreadyCheckedIn] = useState(false);
+  const [collectingBeverageId, setCollectingBeverageId] = useState<string | null>(null);
 
   const scope = useMemo(() => {
     const mode = searchParams.get("mode");
@@ -307,8 +329,23 @@ export default function QRScanner() {
     }
 
     const scanData = validateResult.data;
+    const owed = validateResult.outstandingBeverages || [];
 
     if (validateResult.alreadyCheckedIn || scanData.checkedIn) {
+      // Already admitted — normally nothing left to do here. But a refill
+      // purchase can happen any time over the course of an event, so a
+      // re-scan of the same ticket is also how the door finds out there are
+      // drinks to hand over. Only bail with the plain error when there is
+      // nothing else to show.
+      if (owed.length) {
+        setTicketData(scanData);
+        setOutstandingBeverages(owed);
+        setTicketAlreadyCheckedIn(true);
+        setTicketCheckInOpen(true);
+        busyRef.current = false;
+        setOverlay({ tone: "idle", title: "", detail: "" });
+        return;
+      }
       const message = validateResult.message || "Ticket already checked in";
       showOverlay("error", "Already checked in", message);
       toast.error(message);
@@ -317,6 +354,8 @@ export default function QRScanner() {
 
     // Show confirmation dialog instead of auto-checking in
     setTicketData(scanData);
+    setOutstandingBeverages(owed);
+    setTicketAlreadyCheckedIn(false);
     setCheckInCount(scanData.purchaseQuantity || scanData.ticketCount || 1);
     setTicketCheckInOpen(true);
     busyRef.current = false;
@@ -355,6 +394,8 @@ export default function QRScanner() {
 
     setTicketCheckInOpen(false);
     setTicketData(null);
+    setOutstandingBeverages([]);
+    setTicketAlreadyCheckedIn(false);
 
     if (!checkInResponse.ok || !checkInResult.success) {
       const message = checkInResult.message || "Check-in failed";
@@ -455,7 +496,39 @@ export default function QRScanner() {
     setTicketCheckInOpen(false);
     setTicketData(null);
     setCheckInCount(1);
+    setOutstandingBeverages([]);
+    setTicketAlreadyCheckedIn(false);
     busyRef.current = false;
+  };
+
+  const collectBeverage = async (item: OwedBeverage) => {
+    const authToken = resolveAuthToken();
+    if (!authToken) {
+      toast.error("Authentication required");
+      return;
+    }
+
+    setCollectingBeverageId(item._id);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/beverages/sales/${item._id}/redeem`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${authToken}` },
+        }
+      );
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        toast.error(result.message || "Could not mark this as handed over");
+        return;
+      }
+      setOutstandingBeverages((items) => items.filter((i) => i._id !== item._id));
+      toast.success(`${item.beverageName} handed over`);
+    } catch {
+      toast.error("Could not mark this as handed over");
+    } finally {
+      setCollectingBeverageId(null);
+    }
   };
 
   const overlayClasses =
@@ -620,7 +693,7 @@ export default function QRScanner() {
       <Dialog open={ticketCheckInOpen} onOpenChange={setTicketCheckInOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Confirm Check-in</DialogTitle>
+            <DialogTitle>{ticketAlreadyCheckedIn ? "Drinks to collect" : "Confirm Check-in"}</DialogTitle>
             <DialogDescription>
               {ticketData ? `${ticketData.userName} · ${ticketData.eventTitle}` : "Ticket details"}
             </DialogDescription>
@@ -628,28 +701,59 @@ export default function QRScanner() {
 
           {ticketData && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
-                <p className="font-medium text-slate-900 dark:text-white">{ticketData.eventTitle}</p>
-                
-                <p className="text-slate-600 dark:text-slate-400">
-                  Total tickets: {ticketData.purchaseQuantity || ticketData.ticketCount || 1}
-                </p>
-              </div>
+              {!ticketAlreadyCheckedIn && (
+                <>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-800 dark:bg-slate-900">
+                    <p className="font-medium text-slate-900 dark:text-white">{ticketData.eventTitle}</p>
 
-              <div className="space-y-2">
-                <label htmlFor="checkInCount" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Number of tickets to check in
-                </label>
-                <Input
-                  id="checkInCount"
-                  type="number"
-                  min="1"
-                  max={ticketData.purchaseQuantity || ticketData.ticketCount || 1}
-                  value={checkInCount}
-                  onChange={(e) => setCheckInCount(Math.max(1, Math.min(parseInt(e.target.value) || 1, ticketData.purchaseQuantity || ticketData.ticketCount || 1)))}
-                  className="w-full"
-                />
-              </div>
+                    <p className="text-slate-600 dark:text-slate-400">
+                      Total tickets: {ticketData.purchaseQuantity || ticketData.ticketCount || 1}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="checkInCount" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Number of tickets to check in
+                    </label>
+                    <Input
+                      id="checkInCount"
+                      type="number"
+                      min="1"
+                      max={ticketData.purchaseQuantity || ticketData.ticketCount || 1}
+                      value={checkInCount}
+                      onChange={(e) => setCheckInCount(Math.max(1, Math.min(parseInt(e.target.value) || 1, ticketData.purchaseQuantity || ticketData.ticketCount || 1)))}
+                      className="w-full"
+                    />
+                  </div>
+                </>
+              )}
+
+              {outstandingBeverages.length > 0 && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
+                  <p className="mb-2 flex items-center gap-2 font-medium text-amber-900 dark:text-amber-300">
+                    <Martini className="h-4 w-4" /> Paid for, not collected
+                  </p>
+                  <div className="space-y-2">
+                    {outstandingBeverages.map((item) => (
+                      <div key={item._id} className="flex items-center justify-between gap-3">
+                        <span className="text-amber-900 dark:text-amber-200">
+                          {item.quantity} × {item.beverageName}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full border-amber-400 text-amber-900 hover:bg-amber-100 dark:text-amber-200"
+                          disabled={collectingBeverageId === item._id}
+                          onClick={() => collectBeverage(item)}
+                        >
+                          {collectingBeverageId === item._id ? "Handing over…" : "Handed over"}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -660,15 +764,17 @@ export default function QRScanner() {
               className="rounded-full"
               onClick={dismissTicketCheckIn}
             >
-              Cancel
+              {ticketAlreadyCheckedIn ? "Close" : "Cancel"}
             </Button>
-            <Button
-              type="button"
-              className="rounded-full bg-[#1a2d5a] hover:bg-[#2a4d7a]"
-              onClick={performCheckIn}
-            >
-              Check in
-            </Button>
+            {!ticketAlreadyCheckedIn && (
+              <Button
+                type="button"
+                className="rounded-full bg-[#1a2d5a] hover:bg-[#2a4d7a]"
+                onClick={performCheckIn}
+              >
+                Check in
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

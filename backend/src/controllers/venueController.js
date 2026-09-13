@@ -8,6 +8,8 @@ const VenueBeverage = require("../models/VenueBeverage");
 const VenueBeverageSale = require("../models/VenueBeverageSale");
 const User = require("../models/User");
 const { BadRequestError, NotFoundError } = require("../errors");
+const HappyHour = require("../models/HappyHour");
+const { getCampaignState, resolveLineupHappyHour } = require("../utils/happyHour");
 const {
   MIN_COMMISSION_RATE,
   MAX_COMMISSION_RATE,
@@ -515,9 +517,12 @@ const listVenueBeverages = async (req, res) => {
     // but the venue needs to see that it will not sell, so each one carries why
     // it is currently unsellable rather than silently disappearing.
     const blocked = (venue.blockedBeverages || []).map(String);
+    const now = new Date();
+    const happyHours = await HappyHour.find({ venue: venue._id, cancelledAt: null }).lean();
     const data = rows.map((row) => ({
       ...row,
       remaining: Math.max((row.stockTotal || 0) - (row.sold || 0), 0),
+      happyHourStatus: resolveLineupHappyHour(happyHours, row._id, now),
       unavailableReason: !row.beverage
         ? "removed"
         : !row.beverage.isActive
@@ -629,6 +634,207 @@ const updateVenueBeverage = async (req, res) => {
     res.status(StatusCodes.OK).json({ success: true, data: populated });
   } catch (error) {
     console.error("Error updating venue beverage:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Happy hour — a campaign: pick one or more drinks already sold at this
+// venue, price each, publish. Mirrors the event channel's version in
+// beverageController.js exactly; see there and utils/happyHour.js and
+// models/HappyHour.js for the reasoning.
+// ---------------------------------------------------------------------------
+
+const notifyVenueBeverageRoom = (req, venueId, event, payload) => {
+  try {
+    const io = req.app.get("io");
+    if (io) io.to(`venue_${venueId}_beverages`).emit(event, payload);
+  } catch (error) {
+    console.error(`Failed to emit ${event} to venue ${venueId}:`, error.message);
+  }
+};
+
+const parseHappyHourTiming = (body) => {
+  const durationMinutes = Number(body.durationMinutes);
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 1) {
+    throw new BadRequestError("durationMinutes must be a whole number of at least 1");
+  }
+  const startMode = body.startMode;
+  if (!["manual", "scheduled"].includes(startMode)) {
+    throw new BadRequestError('startMode must be "manual" or "scheduled"');
+  }
+  let scheduledStartAt;
+  if (startMode === "scheduled") {
+    scheduledStartAt = new Date(body.scheduledStartAt);
+    if (Number.isNaN(scheduledStartAt.getTime())) {
+      throw new BadRequestError("A valid scheduledStartAt is required for a scheduled happy hour");
+    }
+    if (scheduledStartAt <= new Date()) {
+      throw new BadRequestError("scheduledStartAt must be in the future");
+    }
+  }
+  return { durationMinutes, startMode, scheduledStartAt };
+};
+
+const assertNoOverlap = async (venueId, lineupIds, now = new Date()) => {
+  const candidates = await HappyHour.find({
+    venue: venueId,
+    cancelledAt: null,
+    "items.lineup": { $in: lineupIds },
+  }).lean();
+
+  for (const candidate of candidates) {
+    const state = getCampaignState(candidate, now);
+    if (state.status !== "active" && state.status !== "scheduled") continue;
+    const clashing = candidate.items.find((item) =>
+      lineupIds.some((id) => String(id) === String(item.lineup))
+    );
+    if (clashing) {
+      throw new BadRequestError(
+        `One of these drinks is already in a ${state.status} happy hour — cancel it first`
+      );
+    }
+  }
+};
+
+const listVenueHappyHours = async (req, res) => {
+  try {
+    const venue = await resolveVenueContext(req);
+    const campaigns = await HappyHour.find({ venue: venue._id }).sort("-createdAt").lean();
+
+    const lineupIds = [...new Set(campaigns.flatMap((c) => c.items.map((i) => String(i.lineup))))];
+    const lineupById = new Map(
+      (
+        await VenueBeverage.find({ _id: { $in: lineupIds } })
+          .populate("beverage", "name color")
+          .lean()
+      ).map((l) => [String(l._id), l])
+    );
+
+    const now = new Date();
+    const data = campaigns.map((campaign) => ({
+      ...campaign,
+      state: getCampaignState(campaign, now),
+      items: campaign.items.map((item) => ({
+        ...item,
+        beverage: lineupById.get(String(item.lineup))?.beverage || null,
+        regularPrice: lineupById.get(String(item.lineup))?.price ?? null,
+      })),
+    }));
+
+    res.status(StatusCodes.OK).json({ success: true, data });
+  } catch (error) {
+    console.error("Error listing venue happy hours:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const createVenueHappyHour = async (req, res) => {
+  try {
+    const venue = await resolveVenueContext(req);
+
+    const rawItems = Array.isArray(req.body.items) ? req.body.items : [];
+    if (!rawItems.length) throw new BadRequestError("Pick at least one drink");
+
+    const lineupIds = rawItems.map((i) => String(i.venueBeverageId || i.id || ""));
+    if (lineupIds.some((id) => !mongoose.Types.ObjectId.isValid(id))) {
+      throw new BadRequestError("One or more drinks are invalid");
+    }
+
+    const rows = await VenueBeverage.find({ _id: { $in: lineupIds }, venue: venue._id });
+    if (rows.length !== new Set(lineupIds).size) {
+      throw new BadRequestError("One or more drinks are not sold at this venue");
+    }
+    const rowById = new Map(rows.map((r) => [String(r._id), r]));
+
+    const items = rawItems.map((raw) => {
+      const id = String(raw.venueBeverageId || raw.id);
+      const row = rowById.get(id);
+      const price = parsePrice(raw.price);
+      if (price >= row.price) {
+        throw new BadRequestError(
+          `${price} isn't lower than ${row.price} for that drink's regular price`
+        );
+      }
+      return { lineup: row._id, price };
+    });
+
+    await assertNoOverlap(venue._id, items.map((i) => i.lineup));
+
+    const timing = parseHappyHourTiming(req.body);
+
+    const campaign = await HappyHour.create({
+      scope: "VENUE",
+      venue: venue._id,
+      items,
+      ...timing,
+      createdBy: req.user.userId,
+    });
+
+    if (timing.startMode === "scheduled") {
+      notifyVenueBeverageRoom(req, venue._id, "happyHour:scheduled", {
+        happyHourId: campaign._id,
+        scheduledStartAt: timing.scheduledStartAt,
+      });
+    }
+
+    res.status(StatusCodes.CREATED).json({ success: true, data: campaign });
+  } catch (error) {
+    console.error("Error creating venue happy hour:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const startVenueHappyHour = async (req, res) => {
+  try {
+    const venue = await resolveVenueContext(req);
+    const campaign = await HappyHour.findOne({ _id: req.params.id, venue: venue._id });
+    if (!campaign) throw new NotFoundError("Happy hour not found");
+
+    if (campaign.startMode !== "manual") {
+      throw new BadRequestError("This happy hour starts automatically, not manually");
+    }
+    if (campaign.cancelledAt) throw new BadRequestError("This happy hour was cancelled");
+    if (campaign.startedAt) throw new BadRequestError("This happy hour was already started");
+
+    campaign.startedAt = new Date();
+    await campaign.save();
+
+    const state = getCampaignState(campaign);
+    notifyVenueBeverageRoom(req, venue._id, "happyHour:started", {
+      happyHourId: campaign._id,
+      endsAt: state.endsAt,
+      items: campaign.items,
+    });
+
+    res.status(StatusCodes.OK).json({ success: true, data: campaign });
+  } catch (error) {
+    console.error("Error starting venue happy hour:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+const cancelVenueHappyHour = async (req, res) => {
+  try {
+    const venue = await resolveVenueContext(req);
+    const campaign = await HappyHour.findOne({ _id: req.params.id, venue: venue._id });
+    if (!campaign) throw new NotFoundError("Happy hour not found");
+    if (campaign.cancelledAt) throw new BadRequestError("This happy hour was already cancelled");
+
+    campaign.cancelledAt = new Date();
+    await campaign.save();
+
+    notifyVenueBeverageRoom(req, venue._id, "happyHour:cancelled", {
+      happyHourId: campaign._id,
+    });
+
+    res.status(StatusCodes.OK).json({ success: true, data: campaign });
+  } catch (error) {
+    console.error("Error cancelling venue happy hour:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
   }
@@ -746,6 +952,8 @@ const getVenueRefillCatalog = async (req, res) => {
       .populate("beverage", "name image color isActive")
       .lean();
 
+    const now = new Date();
+    const happyHours = await HappyHour.find({ venue: venue._id, cancelledAt: null }).lean();
     const data = rows
       .filter(
         (row) =>
@@ -753,16 +961,21 @@ const getVenueRefillCatalog = async (req, res) => {
           row.beverage.isActive !== false &&
           !blocked.includes(String(row.beverage._id)),
       )
-      .map((row) => ({
-        id: row._id,
-        beverageId: row.beverage._id,
-        name: row.beverage.name,
-        image: row.beverage.image,
-        color: row.beverage.color,
-        price: row.price,
-        currency: row.currency,
-        remaining: Math.max((row.stockTotal || 0) - (row.sold || 0), 0),
-      }))
+      .map((row) => {
+        const happyHour = resolveLineupHappyHour(happyHours, row._id, now);
+        return {
+          id: row._id,
+          beverageId: row.beverage._id,
+          name: row.beverage.name,
+          image: row.beverage.image,
+          color: row.beverage.color,
+          price: happyHour.status === "active" ? happyHour.price : row.price,
+          regularPrice: row.price,
+          currency: row.currency,
+          remaining: Math.max((row.stockTotal || 0) - (row.sold || 0), 0),
+          happyHour,
+        };
+      })
       .filter((item) => item.remaining > 0);
 
     res.status(StatusCodes.OK).json({
@@ -791,6 +1004,10 @@ module.exports = {
   addVenueBeverage,
   updateVenueBeverage,
   removeVenueBeverage,
+  listVenueHappyHours,
+  createVenueHappyHour,
+  startVenueHappyHour,
+  cancelVenueHappyHour,
   listRefillVenues,
   getVenueRefillCatalog,
 };

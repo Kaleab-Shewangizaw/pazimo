@@ -8,6 +8,10 @@ const mongoose = require("mongoose");
 // Customer purchases will hang off this row rather than off Beverage, so a row
 // is never rewritten in place once sales exist — price changes and withdrawal
 // from sale are expressed through the fields below.
+//
+// A time-boxed discount on this row is NOT stored here — see models/HappyHour.js,
+// which is its own campaign referencing one or more of these rows by id, each
+// with its own discounted price.
 const EventBeverageSchema = new mongoose.Schema(
   {
     event: {

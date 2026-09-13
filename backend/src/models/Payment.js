@@ -29,7 +29,7 @@ const Payment = new mongoose.Schema({
   // keeps its current behaviour untouched.
   salesContext: {
     type: String,
-    enum: ["EVENT", "CINEMA"],
+    enum: ["EVENT", "CINEMA", "EVENT_BEVERAGE", "VENUE_BEVERAGE"],
     index: true,
   },
 

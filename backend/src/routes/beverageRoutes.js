@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const beverageController = require("../controllers/beverageController");
 const beverageSalesController = require("../controllers/beverageSalesController");
+const beverageCheckoutController = require("../controllers/beverageCheckoutController");
 const upload = require("../middlewares/upload");
 const {
   getOrganizerBeverageFinance,
@@ -10,6 +11,7 @@ const {
 } = require("../controllers/beverageFinanceController");
 const {
   authenticateUser,
+  protect,
   restrictTo,
   requireBeverageEligible,
 } = require("../middlewares/auth");
@@ -72,6 +74,33 @@ router.delete(
   authenticateUser,
   restrictTo("admin"),
   beverageController.removeEventBeverage
+);
+// Happy hour campaigns — visible and manageable by admin the same way every
+// other beverage surface is: same handlers the organizer routes call below,
+// which resolve the event's real owner rather than trusting the caller.
+router.get(
+  "/admin/events/:eventId/happy-hours",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.listEventHappyHours
+);
+router.post(
+  "/admin/events/:eventId/happy-hours",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.createEventHappyHour
+);
+router.post(
+  "/admin/events/:eventId/happy-hours/:id/start",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.startEventHappyHour
+);
+router.delete(
+  "/admin/events/:eventId/happy-hours/:id",
+  authenticateUser,
+  restrictTo("admin"),
+  beverageController.cancelEventHappyHour
 );
 
 // --- Sales & dashboards ----------------------------------------------------
@@ -219,6 +248,37 @@ router.delete(
   requireBeverageEligible,
   beverageController.removeEventBeverage
 );
+// Happy hour campaigns for this event — pick one or more drinks already on
+// the line-up above, price each, publish. One campaign covers as many drinks
+// as the organizer picks; it is not per-drink.
+router.get(
+  "/organizer/events/:eventId/happy-hours",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.listEventHappyHours
+);
+router.post(
+  "/organizer/events/:eventId/happy-hours",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.createEventHappyHour
+);
+router.post(
+  "/organizer/events/:eventId/happy-hours/:id/start",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.startEventHappyHour
+);
+router.delete(
+  "/organizer/events/:eventId/happy-hours/:id",
+  authenticateUser,
+  restrictTo("organizer"),
+  requireBeverageEligible,
+  beverageController.cancelEventHappyHour
+);
 
 // Beverage finance — its own dashboard, separate from ticket revenue.
 //
@@ -269,6 +329,36 @@ router.get(
   "/refill/events/:eventId/catalog",
   authenticateUser,
   beverageController.getEventRefillCatalog
+);
+
+// --- Customer refill checkout (Chapa only, gift cards optional) -----------
+// Paying for the basket a customer just browsed above. Same auth as browsing
+// — the controller re-verifies ticket ownership itself rather than trusting
+// that a customer who could browse a minute ago still can now.
+router.post(
+  "/refill/events/:eventId/checkout/quote",
+  authenticateUser,
+  beverageCheckoutController.quoteEventRefillCheckout
+);
+router.post(
+  "/refill/events/:eventId/checkout",
+  authenticateUser,
+  beverageCheckoutController.startEventRefillCheckout
+);
+router.get(
+  "/refill/orders/:transactionId",
+  authenticateUser,
+  beverageCheckoutController.getEventRefillOrder
+);
+
+// --- Collecting a pre-bought drink at the door -----------------------------
+// Same roles as ticket scanning (routes/ticketRoutes.js's validate-qr and
+// check-in) since this is the same door staff, looking at the same ticket.
+router.post(
+  "/sales/:saleId/redeem",
+  protect,
+  restrictTo("admin", "organizer", "partner", "usher"),
+  beverageSalesController.redeemBeverageSale
 );
 
 module.exports = router;

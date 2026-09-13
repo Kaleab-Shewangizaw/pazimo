@@ -2,14 +2,122 @@
 
 import { useEffect, useState } from "react";
 import { VenueGate } from "@/components/venue/venue-gate";
-import { venueRequest, type VenueSale } from "@/lib/venue-api";
+import { venueRequest, type VenueSale, type VenueOutstandingItem } from "@/lib/venue-api";
 import { formatCompactMoney } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Receipt, RotateCcw } from "lucide-react";
+import { Martini, Receipt, RotateCcw, Search } from "lucide-react";
+import { toast } from "sonner";
+
+/**
+ * Look up an order by the reference the customer shows at the counter (a
+ * venue purchase has no standing ticket to scan, unlike an event), and hand
+ * its drinks over one at a time.
+ */
+function CollectOrderCard({ venue, token }: { venue: { _id: string; name: string }; token: string }) {
+  const [reference, setReference] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<VenueOutstandingItem[] | null>(null);
+  const [collectingId, setCollectingId] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+
+  const lookup = async () => {
+    const ref = reference.trim();
+    if (!ref) return;
+    setLoading(true);
+    setSearched(true);
+    try {
+      const res = await venueRequest<{ data: VenueOutstandingItem[] }>(
+        `/api/venues/${venue._id}/sales/outstanding/${encodeURIComponent(ref)}`,
+        token
+      );
+      setItems(res.data);
+    } catch (e: any) {
+      toast.error(e.message || "Could not look up that order");
+      setItems(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const collect = async (item: VenueOutstandingItem) => {
+    setCollectingId(item._id);
+    try {
+      await venueRequest(`/api/venues/${venue._id}/sales/${item._id}/redeem`, token, {
+        method: "POST",
+      });
+      setItems((current) => current?.filter((i) => i._id !== item._id) ?? null);
+      toast.success(`${item.beverageName} handed over`);
+    } catch (e: any) {
+      toast.error(e.message || "Could not mark this as handed over");
+    } finally {
+      setCollectingId(null);
+    }
+  };
+
+  return (
+    <Card className="mb-6 border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
+      <CardContent className="space-y-4 p-5">
+        <div>
+          <h2 className="flex items-center gap-2 font-semibold text-gray-900 dark:text-gray-100">
+            <Martini className="h-4 w-4" /> Collect a drink
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            A customer who paid through the app shows their order reference —
+            look it up here and hand over what&apos;s still owed.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            placeholder="Order reference (e.g. VBEV-…)"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && lookup()}
+            className="max-w-xs"
+          />
+          <Button onClick={lookup} disabled={loading || !reference.trim()}>
+            <Search className="mr-2 h-4 w-4" /> {loading ? "Looking up…" : "Look up"}
+          </Button>
+        </div>
+
+        {searched && !loading && (
+          items && items.length > 0 ? (
+            <div className="space-y-2">
+              {items.map((item) => (
+                <div
+                  key={item._id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm dark:border-amber-500/40 dark:bg-amber-500/10"
+                >
+                  <span className="text-amber-900 dark:text-amber-200">
+                    {item.quantity} × {item.beverageName}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full border-amber-400 text-amber-900 hover:bg-amber-100 dark:text-amber-200"
+                    disabled={collectingId === item._id}
+                    onClick={() => collect(item)}
+                  >
+                    {collectingId === item._id ? "Handing over…" : "Handed over"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Nothing outstanding on that reference.
+            </p>
+          )
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 interface SalesResponse {
   data: VenueSale[];
@@ -66,6 +174,8 @@ function VenueSalesContent({ venue, token }: { venue: { _id: string; name: strin
           </Button>
         </div>
       </div>
+
+      <CollectOrderCard venue={venue} token={token} />
 
       <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
         <CardContent className="p-0">

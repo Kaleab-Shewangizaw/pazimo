@@ -33,6 +33,32 @@ const PaymentConfigSchema = new mongoose.Schema(
       ETB: { type: String, default: null },
       USD: { type: String, default: null },
     },
+    // The event-beverage "refill" channel's own version of the two fields
+    // above, for the same reason cinema has its own: a ticket-holder's drink
+    // money is a different pool from their ticket money and must be able to
+    // route to a different card without the two becoming inseparable inside
+    // one card's transaction history. Read only by beverageCheckoutController's
+    // event-refill checkout.
+    beverageGiftCardMode: {
+      type: Boolean,
+      default: false,
+    },
+    beverageGiftCardRouting: {
+      ETB: { type: String, default: null },
+      USD: { type: String, default: null },
+    },
+    // The venue channel's own version, kept separate from the event-beverage
+    // pair above for the same reason — a venue's drink takings are a
+    // different owner's money entirely. Read only by
+    // beverageCheckoutController's venue-refill checkout.
+    venueBeverageGiftCardMode: {
+      type: Boolean,
+      default: false,
+    },
+    venueBeverageGiftCardRouting: {
+      ETB: { type: String, default: null },
+      USD: { type: String, default: null },
+    },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

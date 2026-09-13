@@ -3,8 +3,9 @@ const { StatusCodes } = require("http-status-codes");
 const Event = require("../models/Event");
 const EventBeverage = require("../models/EventBeverage");
 const BeverageSale = require("../models/BeverageSale");
+const UsherEventAccess = require("../models/UsherEventAccess");
 const { BadRequestError, NotFoundError, ForbiddenError } = require("../errors");
-const { recordSale, refundSale } = require("../services/beverageSalesService");
+const { recordSale, refundSale, redeemSale } = require("../services/beverageSalesService");
 
 // Only confirmed sales count as revenue; refunds stay in the ledger but out of
 // every total.
@@ -408,6 +409,56 @@ const refund = async (req, res) => {
   }
 };
 
+// Collecting a pre-bought drink at the door.
+//
+// Same authorization shape as ticketController.js's validateQRCode/
+// checkInTicket: admins and partners pass straight through, an organizer must
+// own the event the sale belongs to, and an usher must hold a live
+// UsherEventAccess grant for it. Kept as its own check rather than importing
+// ticketController's (that file is route-handler code, not a reusable guard)
+// — a handful of lines, not worth coupling the two controllers over.
+const redeemBeverageSale = async (req, res) => {
+  try {
+    const { saleId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(saleId)) {
+      throw new NotFoundError("That drink is not on this order");
+    }
+
+    const sale = await BeverageSale.findById(saleId).select("event");
+    if (!sale) throw new NotFoundError("That drink is not on this order");
+
+    const requesterId = req.user?.userId || req.user?._id;
+
+    if (req.user.role === "organizer") {
+      const event = await Event.findById(sale.event).select("organizer");
+      if (!event || String(event.organizer) !== String(requesterId)) {
+        throw new ForbiddenError("You can only collect drinks for your own events");
+      }
+    } else if (req.user.role === "usher") {
+      const hasAccess = await UsherEventAccess.exists({
+        usher: requesterId,
+        event: sale.event,
+        revokedAt: null,
+      });
+      if (!hasAccess) {
+        throw new ForbiddenError("You don't have access to this event");
+      }
+    }
+
+    const redeemed = await redeemSale({
+      saleId,
+      eventId: sale.event,
+      redeemedBy: requesterId,
+    });
+
+    res.status(StatusCodes.OK).json({ success: true, data: redeemed });
+  } catch (error) {
+    console.error("Error redeeming beverage sale:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAdminDashboard,
   getOrganizerDashboard,
@@ -415,4 +466,5 @@ module.exports = {
   createSale,
   listSales,
   refund,
+  redeemBeverageSale,
 };

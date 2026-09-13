@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const venueController = require("../controllers/venueController");
 const venueSalesController = require("../controllers/venueSalesController");
+const beverageCheckoutController = require("../controllers/beverageCheckoutController");
 const upload = require("../middlewares/upload");
 const {
   authenticateUser,
@@ -153,6 +154,25 @@ router.get(
   venueController.getVenueRefillCatalog
 );
 
+// --- Customer refill checkout (Chapa only, gift cards optional) -----------
+// Paying for the basket a customer just browsed above. Same auth as
+// browsing — the controller re-verifies venue eligibility itself.
+router.post(
+  "/:venueId/refill/checkout/quote",
+  authenticateUser,
+  beverageCheckoutController.quoteVenueRefillCheckout
+);
+router.post(
+  "/:venueId/refill/checkout",
+  authenticateUser,
+  beverageCheckoutController.startVenueRefillCheckout
+);
+router.get(
+  "/refill/orders/:transactionId",
+  authenticateUser,
+  beverageCheckoutController.getVenueRefillOrder
+);
+
 // ---------------------------------------------------------------------------
 // A venue's beverages, sales and money — reached by the owning venue and admins
 // ---------------------------------------------------------------------------
@@ -189,6 +209,36 @@ router.delete(
   adminOrEligibleVenue,
   venueController.removeVenueBeverage
 );
+// Happy hour campaigns for this venue — pick one or more drinks already sold
+// here, price each, publish. One campaign covers as many drinks as picked;
+// it is not per-drink. adminOrVenueAccount for the read (browsing your own
+// campaigns shouldn't be blocked by an eligibility lapse), adminOrEligibleVenue
+// for anything that publishes/changes one — same split every other
+// money-creating venue route already uses.
+router.get(
+  "/:venueId/happy-hours",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueController.listVenueHappyHours
+);
+router.post(
+  "/:venueId/happy-hours",
+  authenticateUser,
+  adminOrEligibleVenue,
+  venueController.createVenueHappyHour
+);
+router.post(
+  "/:venueId/happy-hours/:id/start",
+  authenticateUser,
+  adminOrEligibleVenue,
+  venueController.startVenueHappyHour
+);
+router.delete(
+  "/:venueId/happy-hours/:id",
+  authenticateUser,
+  adminOrEligibleVenue,
+  venueController.cancelVenueHappyHour
+);
 
 // Recording a sale by hand. Restricted to admins and the owning venue — see the
 // controller for why this is not open to customers.
@@ -203,6 +253,20 @@ router.get(
   authenticateUser,
   adminOrVenueAccount,
   venueSalesController.listVenueSales
+);
+// Collecting a pre-bought drink at the counter. Same staff who can already
+// see this venue's sales.
+router.get(
+  "/:venueId/sales/outstanding/:paymentReference",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueSalesController.getOutstandingVenueOrder
+);
+router.post(
+  "/:venueId/sales/:id/redeem",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueSalesController.redeemVenueSale
 );
 router.get(
   "/:venueId/dashboard",

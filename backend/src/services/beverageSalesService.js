@@ -3,6 +3,8 @@ const EventBeverage = require("../models/EventBeverage");
 const BeverageSale = require("../models/BeverageSale");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { mirrorSale } = require("./ledgerDualWrite");
+const HappyHour = require("../models/HappyHour");
+const { resolveEffectivePrice } = require("../utils/happyHour");
 
 // Sales are recorded here rather than in the controller so the eventual
 // customer checkout can call recordSale() directly from the payment webhook,
@@ -68,6 +70,11 @@ const recordSale = async ({
   }
 
   try {
+    // A counter/manual sale honors a running happy hour exactly like an
+    // online one — the discount is a property of the drink, not of the
+    // channel someone bought it through.
+    const happyHours = await HappyHour.find({ event: reserved.event, cancelledAt: null }).lean();
+    const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
     const sale = await BeverageSale.create({
       event: reserved.event,
       organizer: reserved.organizer,
@@ -75,9 +82,9 @@ const recordSale = async ({
       beverage: line.beverage._id,
       beverageName: line.beverage.name,
       beverageColor: line.beverage.color || null,
-      unitPrice: reserved.price,
+      unitPrice,
       quantity: requested,
-      totalAmount: Math.round(reserved.price * requested * 100) / 100,
+      totalAmount: Math.round(unitPrice * requested * 100) / 100,
       currency: reserved.currency,
       customer: customer || undefined,
       customerName,
@@ -131,4 +138,82 @@ const refundSale = async (saleId, { adminId, reason } = {}) => {
   return sale;
 };
 
-module.exports = { recordSale, refundSale };
+/**
+ * What a ticket-holder has paid for online and not yet collected, across
+ * every "refill" order they've made at this event.
+ *
+ * Keyed by event + customer rather than by one order/paymentReference: a
+ * refill purchase can happen more than once over the course of an event, and
+ * the customer should be able to show the same ticket QR at the counter each
+ * time rather than a fresh code per purchase.
+ */
+const listOutstandingForCustomer = async ({ eventId, customerId }) => {
+  if (!eventId || !customerId) return [];
+  return BeverageSale.find({
+    event: eventId,
+    customer: customerId,
+    ...BeverageSale.OUTSTANDING,
+  })
+    .select("referenceNumber beverageName quantity unitPrice totalAmount soldAt")
+    .lean();
+};
+
+/**
+ * Hand a pre-bought drink over.
+ *
+ * The guard is a single findOneAndUpdate matching OUTSTANDING: the "has this
+ * already been collected?" check and the write happen in one operation, so
+ * two staff at the same door cannot both hand over the same drink. Scoped to
+ * `eventId` so a redeem call can't reach another event's sale even if a route
+ * is later mis-wired.
+ *
+ * Refusal is deliberately specific — "already collected at 19:42" is what
+ * lets staff resolve a dispute at the door, where a generic failure would not.
+ */
+const redeemSale = async ({ saleId, eventId, redeemedBy }) => {
+  if (!mongoose.Types.ObjectId.isValid(saleId)) {
+    throw new NotFoundError("That drink is not on this order");
+  }
+
+  const redeemed = await BeverageSale.findOneAndUpdate(
+    {
+      _id: saleId,
+      ...(eventId ? { event: eventId } : {}),
+      ...BeverageSale.OUTSTANDING,
+    },
+    { $set: { redeemedAt: new Date(), redeemedBy: redeemedBy || undefined } },
+    { new: true }
+  );
+
+  if (redeemed) return redeemed;
+
+  const sale = await BeverageSale.findOne({
+    _id: saleId,
+    ...(eventId ? { event: eventId } : {}),
+  }).lean();
+
+  if (!sale) throw new NotFoundError("That drink is not on this order");
+  if (sale.status === "refunded") {
+    throw new BadRequestError("That drink was refunded and is not owed");
+  }
+  if (sale.channel !== "online") {
+    throw new BadRequestError(
+      "That was sold at the counter and was handed over at the time"
+    );
+  }
+  if (sale.pendingShare) {
+    throw new BadRequestError(
+      "This drink is being transferred to someone else and can't be collected until that finishes"
+    );
+  }
+  throw new BadRequestError(
+    `Already collected at ${sale.redeemedAt ? new Date(sale.redeemedAt).toLocaleString() : "an earlier time"}`
+  );
+};
+
+module.exports = {
+  recordSale,
+  refundSale,
+  listOutstandingForCustomer,
+  redeemSale,
+};

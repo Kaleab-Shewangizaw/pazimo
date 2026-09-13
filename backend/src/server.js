@@ -29,6 +29,16 @@ io.on("connection", (socket) => {
     // console.log(`Socket ${socket.id} joined room ${roomName}`);
   });
 
+  // Live happy-hour updates for whoever is browsing one event's or venue's
+  // drink catalog (see beverageController/venueController's
+  // notify*BeverageRoom). No auth needed to join — a happy hour price and
+  // countdown are public information the refill catalog already returns to
+  // anyone who can browse it; the room only saves that browser from polling.
+  socket.on("subscribeBeverages", ({ eventId, venueId } = {}) => {
+    if (eventId) socket.join(`event_${eventId}_beverages`);
+    if (venueId) socket.join(`venue_${venueId}_beverages`);
+  });
+
   // Joins a per-user room so events like a ticket transfer (see
   // ticketShareController) can be pushed to exactly the account they concern
   // — never broadcast, and never joinable by a client just guessing another

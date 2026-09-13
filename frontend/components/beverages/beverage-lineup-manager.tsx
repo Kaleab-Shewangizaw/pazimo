@@ -1,11 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io, type Socket } from "socket.io-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -26,7 +31,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
-import { Beer, Plus, Pencil, Trash2, Power, AlertTriangle } from "lucide-react";
+import {
+  Beer,
+  Plus,
+  Pencil,
+  Trash2,
+  Power,
+  AlertTriangle,
+  Zap,
+  Timer,
+  X,
+} from "lucide-react";
 import { getBeverageColorVars } from "@/lib/beverage-color";
 
 export interface CatalogBeverage {
@@ -34,6 +49,43 @@ export interface CatalogBeverage {
   name: string;
   image?: string | null;
   color?: string | null;
+}
+
+/**
+ * A happy hour's state right now, computed server-side (see
+ * backend/src/utils/happyHour.js) — never trust a locally-derived status,
+ * only the countdown target it hands back.
+ *
+ * `startsAt: null` on a "scheduled" row is the signal that this is a MANUAL
+ * happy hour still waiting on the "Start now" button, not a scheduled one
+ * counting down to a future time — the two need different UI.
+ */
+export interface HappyHourStatus {
+  status: "none" | "scheduled" | "active" | "ended";
+  price?: number;
+  startsAt?: string | null;
+  endsAt?: string;
+  endedAt?: string;
+}
+
+export interface HappyHourCampaignItem {
+  lineup: string;
+  price: number;
+  beverage?: { _id: string; name: string; color?: string | null } | null;
+  regularPrice?: number | null;
+}
+
+/** A published happy-hour campaign — see backend/src/models/HappyHour.js. */
+export interface HappyHourCampaign {
+  _id: string;
+  scope: "EVENT" | "VENUE";
+  items: HappyHourCampaignItem[];
+  durationMinutes: number;
+  startMode: "manual" | "scheduled";
+  scheduledStartAt?: string | null;
+  startedAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
 }
 
 export interface LineupRow {
@@ -48,12 +100,36 @@ export interface LineupRow {
   // Set by the API when a drink is no longer sellable — paused centrally,
   // blocked for this organizer, or deleted from the catalogue.
   unavailableReason: "inactive" | "blocked" | "removed" | null;
+  happyHourStatus?: HappyHourStatus;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export const buildBeverageImageUrl = (image?: string | null) =>
   image ? `${API_URL}${image}` : null;
+
+/**
+ * Client-side mirror of backend/src/utils/happyHour.js's getCampaignState —
+ * for DISPLAY only (countdowns, badges). The server is still the only thing
+ * that ever decides what a customer actually pays; this just avoids a
+ * network round trip on every tick to know whether a campaign is still
+ * "scheduled" or has flipped to "active" on the clock alone.
+ */
+const computeCampaignState = (
+  campaign: HappyHourCampaign,
+  nowMs: number
+): { status: "cancelled" | "scheduled" | "active" | "ended"; startsAt?: string | null; endsAt?: string } => {
+  if (campaign.cancelledAt) return { status: "cancelled" };
+  const effectiveStart = campaign.startMode === "manual" ? campaign.startedAt : campaign.scheduledStartAt;
+  if (!effectiveStart) return { status: "scheduled", startsAt: null };
+  const startsAtMs = new Date(effectiveStart).getTime();
+  if (nowMs < startsAtMs) return { status: "scheduled", startsAt: effectiveStart };
+  const endsAtMs = startsAtMs + campaign.durationMinutes * 60 * 1000;
+  if (nowMs < endsAtMs) {
+    return { status: "active", startsAt: effectiveStart, endsAt: new Date(endsAtMs).toISOString() };
+  }
+  return { status: "ended" };
+};
 
 const UNAVAILABLE_COPY: Record<string, string> = {
   inactive: "Pazimo has paused this drink. It won't be sold until it returns.",
@@ -129,6 +205,30 @@ export function BeverageLineupManager({
   const [removeTarget, setRemoveTarget] = useState<LineupRow | null>(null);
   const [busyRow, setBusyRow] = useState<string | null>(null);
 
+  // Happy hour — a CAMPAIGN: pick one or more drinks from the line-up above,
+  // price each, publish. `campaigns` is the list of published campaigns for
+  // this event/venue (any status — the list doubles as history, which is how
+  // admin sees what an organizer/venue has run). A local per-second tick
+  // moves every countdown without any server traffic; see
+  // backend/src/utils/happyHour.js for why the server never has to push a
+  // tick itself.
+  const [campaigns, setCampaigns] = useState<HappyHourCampaign[]>([]);
+  const [hhDialogOpen, setHhDialogOpen] = useState(false);
+  const [hhSelectedPrices, setHhSelectedPrices] = useState<Record<string, string>>({});
+  const [hhDuration, setHhDuration] = useState("60");
+  const [hhStartMode, setHhStartMode] = useState<"manual" | "scheduled">("manual");
+  const [hhScheduledAt, setHhScheduledAt] = useState("");
+  const [hhSaving, setHhSaving] = useState(false);
+  const [busyCampaign, setBusyCampaign] = useState<string | null>(null);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  const contextId = context.kind === "event" ? context.eventId : context.venueId;
+  const happyHoursUrl =
+    context.kind === "venue"
+      ? `${API_URL}/api/venues/${context.venueId}/happy-hours`
+      : `${API_URL}/api/beverages/${context.scope}/events/${context.eventId}/happy-hours`;
+  const lineupIdField = context.kind === "venue" ? "venueBeverageId" : "eventBeverageId";
+
   const fetchLineup = useCallback(async () => {
     if (!token) return;
     try {
@@ -159,9 +259,61 @@ export function BeverageLineupManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lineupUrl, token]);
 
+  const fetchCampaigns = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(happyHoursUrl, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok && data.success) setCampaigns(data.data);
+    } catch {
+      // Non-fatal — the drinks grid above still works without campaign history.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [happyHoursUrl, token]);
+
   useEffect(() => {
     fetchLineup();
-  }, [fetchLineup]);
+    fetchCampaigns();
+  }, [fetchLineup, fetchCampaigns]);
+
+  // Ticks once a second, but only while at least one campaign actually has a
+  // countdown running — no point re-rendering every card every second when
+  // nothing on the page is timed.
+  useEffect(() => {
+    const hasLive =
+      rows.some((row) => ["scheduled", "active"].includes(row.happyHourStatus?.status || "none")) ||
+      campaigns.some((c) => ["scheduled", "active"].includes(computeCampaignState(c, Date.now()).status));
+    if (!hasLive) return;
+    const id = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [rows, campaigns]);
+
+  // Live push for the transitions the server can't be predicted from data
+  // alone — someone else on this event/venue's dashboard hitting "Start now"
+  // or cancelling. A refetch is simpler than reconciling the socket payload
+  // by hand and this is a low-frequency event, not a per-second stream.
+  useEffect(() => {
+    if (!token || !contextId) return;
+    const socket: Socket = io(process.env.NEXT_PUBLIC_SOCKET_URL as string, {
+      auth: { token },
+      transports: ["websocket"],
+    });
+    socket.emit(
+      "subscribeBeverages",
+      context.kind === "event" ? { eventId: contextId } : { venueId: contextId }
+    );
+    const refresh = () => {
+      fetchLineup();
+      fetchCampaigns();
+    };
+    socket.on("happyHour:started", refresh);
+    socket.on("happyHour:cancelled", refresh);
+    socket.on("happyHour:scheduled", refresh);
+    return () => {
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, context.kind, contextId]);
 
   const request = async (url: string, method: string, body?: Record<string, unknown>) => {
     const res = await fetch(url, {
@@ -280,6 +432,116 @@ export function BeverageLineupManager({
     }
   };
 
+  const openHappyHourDialog = () => {
+    setHhSelectedPrices({});
+    setHhDuration("60");
+    setHhStartMode("manual");
+    setHhScheduledAt("");
+    setHhDialogOpen(true);
+  };
+
+  const toggleHhSelection = (rowId: string) => {
+    setHhSelectedPrices((prev) => {
+      const next = { ...prev };
+      if (rowId in next) delete next[rowId];
+      else next[rowId] = "";
+      return next;
+    });
+  };
+
+  const handlePublishHappyHour = async () => {
+    const entries = Object.entries(hhSelectedPrices);
+    if (!entries.length) {
+      toast.error("Pick at least one drink");
+      return;
+    }
+    for (const [rowId, priceStr] of entries) {
+      const row = rows.find((r) => r._id === rowId);
+      const price = Number(priceStr);
+      if (!row || !(price > 0) || price >= row.price) {
+        toast.error(
+          `Enter a price lower than ${formatCompactMoney(row?.price ?? 0, row?.currency ?? "ETB")} for ${
+            row?.beverage?.name || "that drink"
+          }`
+        );
+        return;
+      }
+    }
+    if (!Number.isInteger(Number(hhDuration)) || Number(hhDuration) < 1) {
+      toast.error("Enter how many minutes it should run");
+      return;
+    }
+    if (hhStartMode === "scheduled" && !hhScheduledAt) {
+      toast.error("Pick when it should start");
+      return;
+    }
+
+    try {
+      setHhSaving(true);
+      await request(happyHoursUrl, "POST", {
+        items: entries.map(([rowId, priceStr]) => ({ [lineupIdField]: rowId, price: priceStr })),
+        durationMinutes: hhDuration,
+        startMode: hhStartMode,
+        ...(hhStartMode === "scheduled"
+          ? { scheduledStartAt: new Date(hhScheduledAt).toISOString() }
+          : {}),
+      });
+      toast.success(
+        hhStartMode === "manual"
+          ? "Happy hour published — start it whenever you're ready"
+          : "Happy hour scheduled"
+      );
+      setHhDialogOpen(false);
+      fetchLineup();
+      fetchCampaigns();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to publish the happy hour");
+    } finally {
+      setHhSaving(false);
+    }
+  };
+
+  const handleStartCampaign = async (campaign: HappyHourCampaign) => {
+    try {
+      setBusyCampaign(campaign._id);
+      await request(`${happyHoursUrl}/${campaign._id}/start`, "POST");
+      toast.success("Happy hour started");
+      fetchLineup();
+      fetchCampaigns();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to start the happy hour");
+    } finally {
+      setBusyCampaign(null);
+    }
+  };
+
+  const handleCancelCampaign = async (campaign: HappyHourCampaign) => {
+    try {
+      setBusyCampaign(campaign._id);
+      await request(`${happyHoursUrl}/${campaign._id}`, "DELETE");
+      toast.success("Happy hour cancelled");
+      fetchLineup();
+      fetchCampaigns();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to cancel the happy hour");
+    } finally {
+      setBusyCampaign(null);
+    }
+  };
+
+  /** mm:ss under an hour, otherwise "Xh Ym" — ticks off `nowTick`. */
+  const formatCountdown = (targetIso?: string | null) => {
+    if (!targetIso) return null;
+    const diffMs = new Date(targetIso).getTime() - nowTick;
+    if (diffMs <= 0) return "0:00";
+    const totalSeconds = Math.floor(diffMs / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  };
+
   // Already-added drinks are filtered out of the picker rather than offered and
   // then rejected on submit.
   const addable = catalog.filter(
@@ -312,7 +574,16 @@ export function BeverageLineupManager({
         </p>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={openHappyHourDialog}
+          disabled={notApproved || rows.length === 0}
+          className="border-amber-400 text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950/30"
+        >
+          <Zap className="mr-2 h-4 w-4" /> Happy hour
+        </Button>
         <Button
           type="button"
           onClick={openAdd}
@@ -322,6 +593,66 @@ export function BeverageLineupManager({
           <Plus className="mr-2 h-4 w-4" /> Add a drink
         </Button>
       </div>
+
+      {campaigns.length > 0 && (
+        <div className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/10">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-amber-900 dark:text-amber-300">
+            <Zap className="h-4 w-4" /> Happy hours
+          </h3>
+          <div className="space-y-2">
+            {campaigns.map((campaign) => {
+              const state = computeCampaignState(campaign, nowTick);
+              const names = campaign.items
+                .map((item) => item.beverage?.name || "Removed drink")
+                .join(", ");
+              return (
+                <div
+                  key={campaign._id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-sm shadow-sm dark:bg-gray-900"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-gray-900 dark:text-gray-100">{names}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {state.status === "cancelled" && "Cancelled"}
+                      {state.status === "ended" && "Ended"}
+                      {state.status === "active" && `Running — ends in ${formatCountdown(state.endsAt)}`}
+                      {state.status === "scheduled" &&
+                        (state.startsAt
+                          ? `Starts in ${formatCountdown(state.startsAt)}`
+                          : "Ready — waiting to be started")}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {state.status === "scheduled" && !state.startsAt && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={busyCampaign === campaign._id}
+                        className="bg-amber-500 hover:bg-amber-600 text-white"
+                        onClick={() => handleStartCampaign(campaign)}
+                      >
+                        Start now
+                      </Button>
+                    )}
+                    {(state.status === "scheduled" || state.status === "active") && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={busyCampaign === campaign._id}
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => handleCancelCampaign(campaign)}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5" /> Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {rows.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 px-6 py-12 text-center dark:border-gray-700">
@@ -381,10 +712,44 @@ export function BeverageLineupManager({
                       <span className="text-xs uppercase tracking-wide text-gray-500">
                         {isAdmin ? `${copy.owner === "venue" ? "Venue" : "Organizer"}'s price` : "Your price"}
                       </span>
-                      <span className="font-semibold text-gray-900 dark:text-gray-100">
-                        {formatCompactMoney(row.price, row.currency)}
-                      </span>
+                      {row.happyHourStatus?.status === "active" ? (
+                        <span className="flex items-baseline gap-1.5">
+                          <span className="text-xs text-gray-400 line-through">
+                            {formatCompactMoney(row.price, row.currency)}
+                          </span>
+                          <span className="font-semibold text-amber-600 dark:text-amber-400">
+                            {formatCompactMoney(row.happyHourStatus.price ?? row.price, row.currency)}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                          {formatCompactMoney(row.price, row.currency)}
+                        </span>
+                      )}
                     </div>
+
+                    {row.happyHourStatus?.status === "active" && (
+                      <div className="flex w-full items-center justify-between gap-2 rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                        <span className="flex items-center gap-1">
+                          <Zap className="h-3.5 w-3.5" /> Happy hour
+                        </span>
+                        <span className="tabular-nums">
+                          Ends in {formatCountdown(row.happyHourStatus.endsAt)}
+                        </span>
+                      </div>
+                    )}
+                    {row.happyHourStatus?.status === "scheduled" && (
+                      <div className="flex w-full items-center justify-between gap-2 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                        <span className="flex items-center gap-1">
+                          <Timer className="h-3.5 w-3.5" /> Happy hour
+                        </span>
+                        <span className="tabular-nums">
+                          {row.happyHourStatus.startsAt
+                            ? `Starts in ${formatCountdown(row.happyHourStatus.startsAt)}`
+                            : "Ready to start"}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Stock as a bar rather than a bare number: how close a
                         drink is to selling out is the thing worth seeing. */}
@@ -618,6 +983,136 @@ export function BeverageLineupManager({
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               {saving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Happy hour — create a campaign: pick drinks, price each, set timing,
+          publish. Managing an existing campaign (start/cancel) happens in the
+          "Happy hours" list above, not here. */}
+      <Dialog open={hhDialogOpen} onOpenChange={setHhDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Zap className="h-4 w-4 text-amber-500" /> New happy hour
+            </DialogTitle>
+            <DialogDescription>
+              Pick the drinks it covers and what each one costs while it runs.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="max-h-[35vh] space-y-1.5 overflow-y-auto pr-1">
+              {rows
+                .filter((row) => (row.happyHourStatus?.status || "none") === "none" || row.happyHourStatus?.status === "ended")
+                .map((row) => {
+                  const checked = row._id in hhSelectedPrices;
+                  return (
+                    <div
+                      key={row._id}
+                      className={`flex items-center gap-3 rounded-lg border p-2.5 ${
+                        checked
+                          ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20"
+                          : "border-gray-200 dark:border-gray-700"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleHhSelection(row._id)}
+                        className="h-4 w-4 accent-amber-500"
+                        aria-label={`Include ${row.beverage?.name}`}
+                      />
+                      <span className="flex-1 truncate text-sm font-medium">
+                        {row.beverage?.name || "Removed drink"}
+                        <span className="ml-1.5 text-xs font-normal text-gray-500">
+                          (regular {formatCompactMoney(row.price, row.currency)})
+                        </span>
+                      </span>
+                      {checked && (
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder={`< ${row.price}`}
+                          value={hhSelectedPrices[row._id]}
+                          onChange={(e) =>
+                            setHhSelectedPrices((prev) => ({ ...prev, [row._id]: e.target.value }))
+                          }
+                          className="w-24"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              {rows.every(
+                (row) => !["none", "ended"].includes(row.happyHourStatus?.status || "none")
+              ) && (
+                <p className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  Every drink here is already in a happy hour.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="hh-duration">Duration (minutes)</Label>
+              <Input
+                id="hh-duration"
+                type="number"
+                min="1"
+                step="1"
+                value={hhDuration}
+                onChange={(e) => setHhDuration(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Start it</Label>
+              <RadioGroup
+                value={hhStartMode}
+                onValueChange={(v) => setHhStartMode(v as "manual" | "scheduled")}
+                className="space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="manual" id="hh-manual" />
+                  <Label htmlFor="hh-manual" className="cursor-pointer font-normal">
+                    Manually — I&apos;ll press Start when I&apos;m ready
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="scheduled" id="hh-scheduled" />
+                  <Label htmlFor="hh-scheduled" className="cursor-pointer font-normal">
+                    At a scheduled time
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {hhStartMode === "scheduled" && (
+              <div className="space-y-1.5">
+                <Label htmlFor="hh-scheduled-at">Starts at</Label>
+                <Input
+                  id="hh-scheduled-at"
+                  type="datetime-local"
+                  value={hhScheduledAt}
+                  onChange={(e) => setHhScheduledAt(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setHhDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handlePublishHappyHour}
+              disabled={hhSaving}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              {hhSaving ? "Publishing..." : "Publish"}
             </Button>
           </DialogFooter>
         </DialogContent>
