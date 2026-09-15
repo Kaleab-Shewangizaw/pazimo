@@ -680,6 +680,60 @@ const getRefillSaleBarcode = async (req, res) => {
   }
 };
 
+/**
+ * Every drink this account currently holds that is free to send to a friend
+ * — the mobile "send a drink" picker's data source. `OUTSTANDING` already
+ * requires `pendingShare: null` (see BeverageSale.js/VenueBeverageSale.js),
+ * so a sale already mid-transfer to someone else never shows up here twice.
+ */
+const listTransferableRefillSales = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const [eventSales, venueSales] = await Promise.all([
+      BeverageSale.find({ customer: userId, ...BeverageSale.OUTSTANDING })
+        .select("beverageName quantity unitPrice totalAmount currency event")
+        .populate("event", "title")
+        .lean(),
+      VenueBeverageSale.find({ customer: userId, ...VenueBeverageSale.OUTSTANDING })
+        .select("beverageName quantity unitPrice totalAmount currency venue")
+        .populate("venue", "name")
+        .lean(),
+    ]);
+
+    const data = [
+      ...eventSales.map((sale) => ({
+        saleId: sale._id,
+        salesContext: "EVENT_BEVERAGE",
+        beverageName: sale.beverageName,
+        title: sale.event?.title || "Drinks",
+        quantity: sale.quantity,
+        unitPrice: sale.unitPrice,
+        totalAmount: sale.totalAmount,
+        currency: sale.currency,
+      })),
+      ...venueSales.map((sale) => ({
+        saleId: sale._id,
+        salesContext: "VENUE_BEVERAGE",
+        beverageName: sale.beverageName,
+        title: sale.venue?.name || "Drinks",
+        quantity: sale.quantity,
+        unitPrice: sale.unitPrice,
+        totalAmount: sale.totalAmount,
+        currency: sale.currency,
+      })),
+    ];
+
+    res.status(StatusCodes.OK).json({ success: true, data });
+  } catch (error) {
+    console.error("Error listing transferable refill sales:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "We could not load your drinks. Please try again.",
+    });
+  }
+};
+
 module.exports = {
   quoteEventRefillCheckout,
   startEventRefillCheckout,
@@ -691,4 +745,5 @@ module.exports = {
   getVenueRefillOrder,
   listMyRefillOrders,
   getRefillSaleBarcode,
+  listTransferableRefillSales,
 };

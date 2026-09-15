@@ -369,6 +369,15 @@ router.get(
   beverageCheckoutController.getRefillSaleBarcode
 );
 
+// What this account can currently send to a friend — feeds the "send a
+// drink" picker in the chat/share UI (see beverageShareRoutes.js for the
+// actual transfer).
+router.get(
+  "/refill/transferable",
+  authenticateUser,
+  beverageCheckoutController.listTransferableRefillSales
+);
+
 // --- Collecting a pre-bought drink at the door -----------------------------
 // Same roles as ticket scanning (routes/ticketRoutes.js's validate-qr and
 // check-in) since this is the same door staff, looking at the same ticket.
