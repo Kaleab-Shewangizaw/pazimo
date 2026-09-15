@@ -269,6 +269,18 @@ const CinemaTicketSchema = new mongoose.Schema(
     },
     refundReason: String,
 
+    // Set while a CinemaShare transfer of this ticket is outstanding (see
+    // services/cinemaShareService.js) — locks it against check-in or a
+    // second, overlapping transfer until the recipient accepts, declines, or
+    // it expires. Mirrors Ticket.pendingShare exactly, same reasoning:
+    // ownership of an admitting seat must never be ambiguous while a
+    // hand-off is in flight.
+    pendingShare: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CinemaShare",
+      default: null,
+    },
+
     purchaseDate: {
       type: Date,
       default: Date.now,

@@ -24,9 +24,9 @@ const {
 const CinemaBeverageSaleSchema = new mongoose.Schema(
   {
     // Human-facing tracking number, e.g. "PZC-SL-000042". A distinct prefix from
-    // the event ledger's "PZB-SL-" and the venue ledger's "PZV-SL-" so a
-    // reference alone identifies which channel — and which collection — a sale
-    // belongs to, without a lookup.
+    // the event ledger's "EV-" and the venue ledger's "VB-" (see
+    // utils/referenceCode.js) so a reference alone identifies which channel —
+    // and which collection — a sale belongs to, without a lookup.
     referenceNumber: {
       type: String,
     },
@@ -184,6 +184,17 @@ const CinemaBeverageSaleSchema = new mongoose.Schema(
       ref: "User",
     },
 
+    // Set while a CinemaShare transfer of this sale is outstanding (see
+    // services/cinemaShareService.js) — mirrors BeverageSale.pendingShare
+    // exactly. Folded into OUTSTANDING below, the same way BeverageSale's is,
+    // so redeemSale's findOneAndUpdate can never hand over a snack that is
+    // mid-transfer to someone else.
+    pendingShare: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "CinemaShare",
+      default: null,
+    },
+
     soldAt: {
       type: Date,
       default: Date.now,
@@ -209,11 +220,15 @@ CinemaBeverageSaleSchema.statics.OUTSTANDING = {
   channel: "online",
   status: "confirmed",
   redeemedAt: null,
+  pendingShare: null,
 };
 
 /** The same question about one already-loaded row, lean or not. */
 CinemaBeverageSaleSchema.statics.isOutstanding = (sale) =>
-  sale?.channel === "online" && sale?.status === "confirmed" && !sale?.redeemedAt;
+  sale?.channel === "online" &&
+  sale?.status === "confirmed" &&
+  !sale?.redeemedAt &&
+  !sale?.pendingShare;
 
 // Dashboards read by cinema, by product and by screening, newest-first, almost
 // always filtered to confirmed sales.

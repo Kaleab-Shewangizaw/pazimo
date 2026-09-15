@@ -3,7 +3,7 @@ const CinemaShowtime = require("../models/CinemaShowtime");
 const CinemaTicket = require("../models/CinemaTicket");
 const CinemaHall = require("../models/CinemaHall");
 const seatService = require("./cinemaSeatService");
-const { BadRequestError, NotFoundError } = require("../errors");
+const { BadRequestError, ConflictError, NotFoundError } = require("../errors");
 const { mirrorSale } = require("./ledgerDualWrite");
 
 // Cinema ticket issuing.
@@ -446,6 +446,15 @@ const checkInTicket = async ({ ticketId, cinemaId, checkedInBy, seatKeys }) => {
       `Already admitted at ${ticket.checkedAt?.toISOString() || "an earlier time"}`
     );
   }
+  // Ownership is mid-transfer until the recipient accepts or the share
+  // lapses — admitting it now would let whoever is holding the phone in at
+  // the door decide the outcome of a hand-off that isn't final yet. Mirrors
+  // ticketController.js's identical guard for the event-ticket door.
+  if (ticket.pendingShare) {
+    throw new ConflictError(
+      "This ticket has a pending share and can't be checked in until it's resolved"
+    );
+  }
 
   if (ticket.seats.length === 0) {
     // No seat identity to admit by — the original one-shot behavior.
@@ -538,6 +547,9 @@ const checkInOrder = async ({ reference, cinemaId, checkedInBy, seatKeys }) => {
         checkedIn: false,
         paymentStatus: "completed",
         status: { $nin: ["cancelled", "refunded"] },
+        // A ticket mid-transfer (see CinemaShare) is excluded the same way
+        // checkInTicket's single-document guard excludes it above.
+        pendingShare: null,
       },
       {
         $set: {
@@ -561,6 +573,11 @@ const checkInOrder = async ({ reference, cinemaId, checkedInBy, seatKeys }) => {
       );
       if (!usable) {
         throw new BadRequestError("Every seat on this order was refunded or cancelled");
+      }
+      if (all.some((t) => t.pendingShare && !t.checkedIn)) {
+        throw new ConflictError(
+          "This order has a ticket with a pending share and can't be admitted until it's resolved"
+        );
       }
       throw new BadRequestError("This order has already been admitted");
     }
@@ -589,7 +606,9 @@ const checkInOrder = async ({ reference, cinemaId, checkedInBy, seatKeys }) => {
     // A line with no named seats (unassigned-hall) has nothing here for a
     // seatKey to match — one hall is either entirely assigned-seating or
     // entirely not, so this only ever skips a line, never half-admits one.
-    if (ticket.checkedIn || ticket.seats.length === 0) continue;
+    // A line mid-transfer (CinemaShare) is skipped the same way a
+    // checked-in one is — see checkInTicket's single-document guard above.
+    if (ticket.checkedIn || ticket.seats.length === 0 || ticket.pendingShare) continue;
 
     const targets = ticket.seats.filter((s) => !s.admittedAt && requested.has(s.seatKey));
     if (targets.length === 0) continue;

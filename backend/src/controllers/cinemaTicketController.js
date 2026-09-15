@@ -1,5 +1,6 @@
 const { StatusCodes } = require("http-status-codes");
 const CinemaTicket = require("../models/CinemaTicket");
+const CinemaBeverageSale = require("../models/CinemaBeverageSale");
 const CinemaShowtime = require("../models/CinemaShowtime");
 const cinemaTicketService = require("../services/cinemaTicketService");
 const cinemaSeatService = require("../services/cinemaSeatService");
@@ -573,6 +574,102 @@ const listMyTickets = async (req, res) => {
   }
 };
 
+/**
+ * Every cinema ticket this account currently holds that is free to send to a
+ * friend — the mobile "send a ticket" picker's data source (see
+ * cinemaShareService.js). `pendingShare: null` excludes one already mid
+ * transfer, the same way `getTransferableTickets` does for event tickets.
+ */
+const listTransferableTickets = async (req, res) => {
+  try {
+    const tickets = await CinemaTicket.find({
+      customer: req.user.userId,
+      pendingShare: null,
+      paymentStatus: "completed",
+      // "active" specifically — an already-admitted ticket flips to "used"
+      // and has nothing left worth sending.
+      status: "active",
+    })
+      .select("ticketId movieTitle hallName showtimeStartsAt ticketType quantity currency")
+      .populate("cinema", "name city")
+      .sort("-purchaseDate")
+      .lean();
+
+    res.status(StatusCodes.OK).json({ success: true, data: tickets });
+  } catch (error) {
+    console.error("Error listing transferable cinema tickets:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Could not load your tickets. Please try again.",
+    });
+  }
+};
+
+/**
+ * Every cinema order this account has paid for, tickets and snacks folded
+ * together the same way `checkoutController.getOrder` folds them for a
+ * fresh payment — this is that same shape, replayed as history so the
+ * Tickets tab can show a movie ticket again after the checkout screen is
+ * gone. `paymentReference` (set once, at sale time, from the payment that
+ * funded the row — never client input) is what ties a ticket to the snacks
+ * bought alongside it in the same checkout.
+ *
+ * Scoped to `req.user.userId` and nothing else — there is no id in this
+ * route for a caller to substitute another customer's.
+ */
+const listMyOrders = async (req, res) => {
+  try {
+    const [tickets, concessions] = await Promise.all([
+      CinemaTicket.find({ customer: req.user.userId, paymentStatus: "completed" })
+        .populate("movie", "title poster")
+        .populate("cinema", "name address city")
+        .select(
+          "ticketId movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency seats status paymentStatus purchaseDate paymentReference movie cinema"
+        )
+        .sort("-purchaseDate")
+        .lean(),
+      CinemaBeverageSale.find({ customer: req.user.userId, paymentReference: { $ne: null } })
+        .select(
+          "referenceNumber cinemaBeverage beverageName beverageColor beverageCategory unitPrice quantity totalAmount currency status redeemedAt soldAt paymentReference"
+        )
+        .lean(),
+    ]);
+
+    const orders = new Map();
+    for (const ticket of tickets) {
+      const key = ticket.paymentReference;
+      if (!key) continue;
+      if (!orders.has(key)) {
+        orders.set(key, { transactionId: key, status: "PAID", total: 0, currency: ticket.currency, tickets: [], concessions: [] });
+      }
+      const order = orders.get(key);
+      order.tickets.push(ticket);
+      order.total += ticket.totalAmount;
+    }
+    // A snack only belongs on the Tickets tab when it rode in on a ticket
+    // order — one bought standalone at the counter has no admission to sit
+    // under here.
+    for (const sale of concessions) {
+      const order = orders.get(sale.paymentReference);
+      if (!order) continue;
+      order.concessions.push(sale);
+      order.total += sale.totalAmount;
+    }
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      // Map insertion order follows `tickets`, already newest-first.
+      data: [...orders.values()],
+    });
+  } catch (error) {
+    console.error("Error listing customer cinema orders:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to list orders",
+    });
+  }
+};
+
 module.exports = {
   buildCinemaQrPayload,
   buildCinemaOrderQrPayload,
@@ -589,4 +686,6 @@ module.exports = {
   getTicketQr,
   getOrderQr,
   listMyTickets,
+  listTransferableTickets,
+  listMyOrders,
 };

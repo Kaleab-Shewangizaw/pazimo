@@ -126,6 +126,26 @@ router.get("/public/orders/:reference/qr.png", (req, res) => {
 // different subjects depending on who is asking.
 router.get("/my-tickets", authenticateUser, ticketController.listMyTickets);
 
+// Every cinema order this account has paid for — tickets and their snacks
+// folded together the way a fresh checkout's receipt is, so the Tickets tab
+// can show a movie order again after that one-time screen is gone.
+router.get("/my-orders", authenticateUser, ticketController.listMyOrders);
+
+// What this account can currently send to a friend — feeds the "send a
+// ticket"/"send a snack" pickers in the chat/share UI (see
+// routes/cinemaShareRoutes.js for the actual transfer). Same "not under /me"
+// reasoning as /my-tickets above.
+router.get(
+  "/my-tickets/transferable",
+  authenticateUser,
+  ticketController.listTransferableTickets
+);
+router.get(
+  "/my-concessions/transferable",
+  authenticateUser,
+  beverageController.listTransferableConcessions
+);
+
 // ---------------------------------------------------------------------------
 // Cinema self-service
 // ---------------------------------------------------------------------------

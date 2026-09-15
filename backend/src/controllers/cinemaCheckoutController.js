@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const Payment = require("../models/Payment");
 const PaymentConfig = require("../models/PaymentConfig");
 const CinemaTicket = require("../models/CinemaTicket");
+const CinemaBeverageSale = require("../models/CinemaBeverageSale");
 const checkoutService = require("../services/cinemaCheckoutService");
 const settlementService = require("../services/cinemaSettlementService");
 const seatService = require("../services/cinemaSeatService");
@@ -574,13 +575,26 @@ const getOrder = async (req, res) => {
       );
     }
 
-    const tickets = await CinemaTicket.find({ paymentReference: transactionId })
-      .populate("movie", "title poster")
-      .populate("cinema", "name address city")
-      .select(
-        "ticketId movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency seats status paymentStatus purchaseDate movie cinema"
-      )
-      .lean();
+    const [tickets, concessions] = await Promise.all([
+      CinemaTicket.find({ paymentReference: transactionId })
+        .populate("movie", "title poster")
+        .populate("cinema", "name address city")
+        .select(
+          "ticketId movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency seats status paymentStatus purchaseDate movie cinema"
+        )
+        .lean(),
+      // Real CinemaBeverageSale documents, not the priced-basket snapshot
+      // `payment.ticketDetails.cinemaOrder.concessions` used to be read from
+      // — that snapshot carries no `_id` (nothing to redeem or send to a
+      // friend by) and can never reflect a later refund or collection.
+      // `cinemaSettlementService` creates exactly one of these per basket
+      // line, so this is an unambiguous 1:1 swap.
+      CinemaBeverageSale.find({ paymentReference: transactionId })
+        .select(
+          "referenceNumber cinemaBeverage beverageName beverageColor beverageCategory unitPrice quantity totalAmount currency status redeemedAt soldAt"
+        )
+        .lean(),
+    ]);
 
     res.status(StatusCodes.OK).json({
       success: true,
@@ -590,9 +604,7 @@ const getOrder = async (req, res) => {
         total: payment.price,
         currency: payment.currency,
         tickets,
-        // Straight off the stored basket: the snacks were paid for as part of
-        // this order and the customer needs to see them on the same page.
-        concessions: payment.ticketDetails?.cinemaOrder?.concessions || [],
+        concessions,
       },
     });
   } catch (error) {

@@ -1,9 +1,8 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
-const BeverageShare = require("../models/BeverageShare");
-const BeverageSale = require("../models/BeverageSale");
-const VenueBeverageSale = require("../models/VenueBeverageSale");
-const { round2 } = require("../config/rates");
+const CinemaShare = require("../models/CinemaShare");
+const CinemaTicket = require("../models/CinemaTicket");
+const CinemaBeverageSale = require("../models/CinemaBeverageSale");
 const { searchRecipients } = require("./ticketShareService");
 const { touchConversation } = require("./conversationService");
 const {
@@ -13,10 +12,13 @@ const {
   ConflictError,
 } = require("../errors");
 
-// The drinks twin of ticketShareService.js — see BeverageShare's model
-// comment for where and why the two diverge. `searchRecipients` is reused
-// unchanged (it's a pure User lookup, nothing ticket-specific about it);
-// everything else here is BeverageShare's own version of the same shape.
+// The cinema twin of beverageShareService.js — same shape, but FULL-only:
+// a cinema ticket admits a specific set of seats and a concession sale is one
+// counter handover, and neither has a meaningful "send half of it" reading
+// the way a multi-admission event ticket or a multi-unit drink sale does. So
+// there is no transferType, no resultingItem, no split-math, no child
+// document — accepting a share just reassigns `customer` on the same
+// document, exactly like Ticket's FULL branch, and nothing else changes.
 
 const SHARE_EXPIRY_DAYS = 3;
 const MAX_ITEMS_PER_SHARE = 20;
@@ -24,11 +26,12 @@ const CONTACTS_LIMIT = 30;
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 
-const SaleModelFor = (salesContext) =>
-  salesContext === "VENUE_BEVERAGE" ? VenueBeverageSale : BeverageSale;
+const ItemModelFor = (itemType) =>
+  itemType === "CINEMA_CONCESSION" ? CinemaBeverageSale : CinemaTicket;
 
 // Same "transaction where the deployment supports it, best-effort sequential
-// writes where it doesn't" convention ticketShareService.js uses.
+// writes where it doesn't" convention ticketShareService.js/
+// beverageShareService.js use.
 let transactionSupport;
 const supportsTransactions = async () => {
   if (transactionSupport !== undefined) return transactionSupport;
@@ -57,95 +60,87 @@ const withOptionalTransaction = async (fn) => {
 };
 
 // ---------------------------------------------------------------------------
-// Populating a share's drink details
+// Populating a share's item details
 //
-// items.sale/resultingSale carry no schema `ref` (the target collection
-// depends on the share's own salesContext), so population is done by hand
-// here rather than via Mongoose. Batched per salesContext across every share
-// passed in, so listShares costs a handful of queries total, not one per row.
+// items.item carries no schema `ref` (the target collection depends on the
+// share's own itemType), so population is done by hand here, batched per
+// itemType across every share passed in — the same reasoning
+// beverageShareService's attachSaleDetails gives.
 // ---------------------------------------------------------------------------
 
-const saleSelect =
-  "referenceNumber quantity unitPrice totalAmount currency status redeemedAt soldAt";
+const ticketSelect =
+  "ticketId movieTitle hallName showtimeStartsAt ticketType price quantity totalAmount currency seats status checkedIn";
+const concessionSelect =
+  "referenceNumber beverageName beverageColor beverageCategory unitPrice quantity totalAmount currency status redeemedAt soldAt";
 
-const attachSaleDetails = async (shares) => {
+const attachItemDetails = async (shares) => {
   const list = Array.isArray(shares) ? shares : [shares];
   if (!list.length) return list;
 
-  const byContext = { EVENT_BEVERAGE: new Set(), VENUE_BEVERAGE: new Set() };
+  const ticketIds = new Set();
+  const concessionIds = new Set();
   for (const share of list) {
-    for (const item of share.items) {
-      byContext[share.salesContext]?.add(String(item.sale));
-      if (item.resultingSale) byContext[share.salesContext]?.add(String(item.resultingSale));
-    }
+    const bucket = share.itemType === "CINEMA_CONCESSION" ? concessionIds : ticketIds;
+    for (const item of share.items) bucket.add(String(item.item));
   }
 
-  const [eventSales, venueSales] = await Promise.all([
-    byContext.EVENT_BEVERAGE.size
-      ? BeverageSale.find({ _id: { $in: [...byContext.EVENT_BEVERAGE] } })
-          .select(saleSelect)
-          .populate("beverage", "name color")
-          .populate("event", "title startDate location")
+  const [tickets, concessions] = await Promise.all([
+    ticketIds.size
+      ? CinemaTicket.find({ _id: { $in: [...ticketIds] } })
+          .select(ticketSelect)
+          .populate("movie", "title poster")
+          .populate("cinema", "name city")
           .lean()
       : [],
-    byContext.VENUE_BEVERAGE.size
-      ? VenueBeverageSale.find({ _id: { $in: [...byContext.VENUE_BEVERAGE] } })
-          .select(saleSelect)
-          .populate("beverage", "name color")
-          .populate("venue", "name venueType city")
+    concessionIds.size
+      ? CinemaBeverageSale.find({ _id: { $in: [...concessionIds] } })
+          .select(concessionSelect)
+          .populate("cinema", "name city")
           .lean()
       : [],
   ]);
 
-  const detailsById = new Map(
-    [...eventSales, ...venueSales].map((s) => [String(s._id), s])
-  );
+  const detailsById = new Map([...tickets, ...concessions].map((d) => [String(d._id), d]));
 
   return list.map((share) => {
     const obj = share.toObject ? share.toObject() : share;
     obj.items = obj.items.map((item) => ({
       ...item,
-      saleDetails: detailsById.get(String(item.sale)) || null,
-      resultingSaleDetails: item.resultingSale
-        ? detailsById.get(String(item.resultingSale)) || null
-        : null,
+      itemDetails: detailsById.get(String(item.item)) || null,
     }));
     return obj;
   });
 };
 
-const saleIdsOf = (share) => share.items.map((i) => i.sale);
+const itemIdsOf = (share) => share.items.map((i) => i.item);
 
 // ---------------------------------------------------------------------------
 // Expiry
 // ---------------------------------------------------------------------------
 
-// Same lazy-expiry approach as ticketShareService.expireDueShares: no cron,
-// called from every read path so history reflects reality by the time
-// anyone looks at it.
 const expireDueShares = async (extraFilter = {}) => {
   const now = new Date();
-  const stale = await BeverageShare.find({
+  const stale = await CinemaShare.find({
     status: "pending",
     expiresAt: { $lt: now },
     ...extraFilter,
-  }).select("_id salesContext items.sale");
+  }).select("_id itemType items.item");
 
   if (!stale.length) return;
 
   const shareIds = stale.map((s) => s._id);
-  await BeverageShare.updateMany(
+  await CinemaShare.updateMany(
     { _id: { $in: shareIds } },
     { $set: { status: "expired", respondedAt: now } }
   );
 
-  for (const salesContext of ["EVENT_BEVERAGE", "VENUE_BEVERAGE"]) {
-    const relevant = stale.filter((s) => s.salesContext === salesContext);
+  for (const itemType of ["CINEMA_TICKET", "CINEMA_CONCESSION"]) {
+    const relevant = stale.filter((s) => s.itemType === itemType);
     if (!relevant.length) continue;
-    const saleIds = relevant.flatMap(saleIdsOf);
+    const itemIds = relevant.flatMap(itemIdsOf);
     const relevantShareIds = relevant.map((s) => s._id);
-    await SaleModelFor(salesContext).updateMany(
-      { _id: { $in: saleIds }, pendingShare: { $in: relevantShareIds } },
+    await ItemModelFor(itemType).updateMany(
+      { _id: { $in: itemIds }, pendingShare: { $in: relevantShareIds } },
       { $set: { pendingShare: null } }
     );
   }
@@ -155,12 +150,10 @@ const expireDueShares = async (extraFilter = {}) => {
 // Recipient search / recents
 // ---------------------------------------------------------------------------
 
-// "Auto-saved recents", the BeverageShare equivalent of
-// ticketShareService.listContacts — derived from past drink transfers.
 const listContacts = async ({ currentUserId }) => {
   const uid = new mongoose.Types.ObjectId(currentUserId);
 
-  return BeverageShare.aggregate([
+  return CinemaShare.aggregate([
     { $match: { $or: [{ fromUser: uid }, { toUser: uid }] } },
     { $sort: { createdAt: -1 } },
     {
@@ -179,7 +172,7 @@ const listContacts = async ({ currentUserId }) => {
     { $limit: CONTACTS_LIMIT },
     {
       $lookup: {
-        from: User.collection.name,
+        from: "users",
         localField: "_id",
         foreignField: "_id",
         as: "user",
@@ -192,6 +185,7 @@ const listContacts = async ({ currentUserId }) => {
         userId: "$_id",
         firstName: "$user.firstName",
         lastName: "$user.lastName",
+        phoneNumber: "$user.phoneNumber",
         username: "$user.username",
         lastSharedAt: 1,
         shareCount: 1,
@@ -207,61 +201,61 @@ const listContacts = async ({ currentUserId }) => {
 const createShare = async ({
   fromUserId,
   toUserId,
-  salesContext,
+  itemType,
   items,
   message,
   idempotencyKey,
 }) => {
-  if (!["EVENT_BEVERAGE", "VENUE_BEVERAGE"].includes(salesContext)) {
-    throw new BadRequestError("A valid salesContext is required");
+  if (!["CINEMA_TICKET", "CINEMA_CONCESSION"].includes(itemType)) {
+    throw new BadRequestError("A valid itemType is required");
   }
-  const SaleModel = SaleModelFor(salesContext);
+  const ItemModel = ItemModelFor(itemType);
 
   if (!toUserId || !isValidId(toUserId)) {
     throw new BadRequestError("A valid recipient is required");
   }
   if (String(toUserId) === String(fromUserId)) {
-    throw new BadRequestError("You can't send a drink to yourself");
+    throw new BadRequestError("You can't send this to yourself");
   }
 
   const trimmedKey = idempotencyKey ? String(idempotencyKey).trim().slice(0, 200) : undefined;
   if (trimmedKey) {
-    const existing = await BeverageShare.findOne({
+    const existing = await CinemaShare.findOne({
       fromUser: fromUserId,
       idempotencyKey: trimmedKey,
     });
     if (existing) {
-      const [populated] = await attachSaleDetails(existing);
+      const [populated] = await attachItemDetails(existing);
       return populated;
     }
   }
 
   const rawItems = Array.isArray(items) ? items : [];
   if (!rawItems.length) {
-    throw new BadRequestError("Select at least one drink to send");
+    throw new BadRequestError("Select at least one item to send");
   }
   if (rawItems.length > MAX_ITEMS_PER_SHARE) {
-    throw new BadRequestError(`You can send at most ${MAX_ITEMS_PER_SHARE} drinks at once`);
+    throw new BadRequestError(`You can send at most ${MAX_ITEMS_PER_SHARE} items at once`);
   }
 
   const seen = new Set();
   const parsedItems = rawItems.map((raw) => {
-    const saleId = String(raw?.saleId || raw?.sale || "");
-    if (!isValidId(saleId)) {
-      throw new BadRequestError("One or more drink ids are invalid");
+    const itemId = String(raw?.itemId || raw?.item || "");
+    if (!isValidId(itemId)) {
+      throw new BadRequestError("One or more item ids are invalid");
     }
-    if (seen.has(saleId)) {
-      throw new BadRequestError("Each drink can only appear once per share");
+    if (seen.has(itemId)) {
+      throw new BadRequestError("Each item can only appear once per share");
     }
-    seen.add(saleId);
+    seen.add(itemId);
 
     const quantity = Number(raw?.quantity ?? 1);
     if (!Number.isInteger(quantity) || quantity < 1) {
       throw new BadRequestError(
-        `Invalid quantity for ${saleId} — must be a whole number of at least 1`
+        `Invalid quantity for ${itemId} — must be a whole number of at least 1`
       );
     }
-    return { saleId, quantity };
+    return { itemId, quantity };
   });
 
   const trimmedMessage = message ? String(message).trim() : undefined;
@@ -278,6 +272,15 @@ const createShare = async ({
     throw new NotFoundError("Recipient not found");
   }
 
+  // "active" specifically, not just "not cancelled/refunded" — a ticket
+  // that has already been admitted flips to "used" (see
+  // cinemaTicketService.checkInTicket), and there is no reason to let an
+  // already-consumed seat be handed to someone else.
+  const eligibilityFilter =
+    itemType === "CINEMA_CONCESSION"
+      ? { channel: "online", status: "confirmed", redeemedAt: null }
+      : { paymentStatus: "completed", status: "active" };
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + SHARE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   const shareId = new mongoose.Types.ObjectId();
@@ -286,41 +289,44 @@ const createShare = async ({
     const opts = session ? { session } : {};
 
     const lockedItems = [];
-    for (const { saleId, quantity } of parsedItems) {
-      // Conditional on every field that makes a drink shareable, so this one
+    for (const { itemId, quantity } of parsedItems) {
+      // Conditional on every field that makes an item shareable, so this one
       // atomic update both locks it and re-validates it — closing the race
-      // window against a concurrent share or redemption of the same sale.
-      const locked = await SaleModel.findOneAndUpdate(
+      // window against a concurrent share, check-in, or redemption of the
+      // same item.
+      const locked = await ItemModel.findOneAndUpdate(
         {
-          _id: saleId,
+          _id: itemId,
           customer: fromUserId,
-          channel: "online",
-          status: "confirmed",
-          redeemedAt: null,
           pendingShare: null,
-          quantity: { $gte: quantity },
+          ...eligibilityFilter,
         },
         { $set: { pendingShare: shareId } },
         { new: true, ...opts }
       ).select("quantity");
       if (!locked) {
         throw new ConflictError(
-          `One of your drinks isn't available to send right now (already collected, refunded, doesn't have ${quantity} left, or already part of another pending transfer)`
+          "One of your items isn't available to send right now (already used, refunded, or already part of another pending transfer)"
         );
       }
 
-      lockedItems.push({
-        sale: saleId,
-        quantity,
-        transferType: quantity === locked.quantity ? "FULL" : "PARTIAL",
-      });
+      // FULL only: a cinema ticket's seats and a concession sale's units
+      // don't split, so the request must name exactly what the item holds.
+      if (quantity !== locked.quantity) {
+        await ItemModel.updateOne({ _id: itemId }, { $set: { pendingShare: null } }, opts);
+        throw new BadRequestError(
+          `This can only be sent in full — it has ${locked.quantity}, not ${quantity}`
+        );
+      }
+
+      lockedItems.push({ item: itemId, quantity });
     }
 
-    const created = await BeverageShare.create(
+    const created = await CinemaShare.create(
       [
         {
           _id: shareId,
-          salesContext,
+          itemType,
           items: lockedItems,
           fromUser: fromUserId,
           toUser: toUserId,
@@ -334,17 +340,17 @@ const createShare = async ({
     );
 
     // Best-effort, outside the transaction — see ticketShareService's
-    // identical call for why this must never fail a real drink transfer.
+    // identical call for why this must never fail a real transfer.
     touchConversation({
       userAId: fromUserId,
       userBId: toUserId,
       senderId: fromUserId,
-      preview: "🥤 Drink sent",
-      kind: "BEVERAGE",
+      preview: itemType === "CINEMA_CONCESSION" ? "🍿 Snack sent" : "🎬 Cinema ticket sent",
+      kind: itemType,
       at: created[0].createdAt,
-    }).catch((error) => console.error("Failed to touch conversation for beverage share:", error.message));
+    }).catch((error) => console.error("Failed to touch conversation for cinema share:", error.message));
 
-    const [populated] = await attachSaleDetails(created[0]);
+    const [populated] = await attachItemDetails(created[0]);
     return populated;
   });
 };
@@ -362,13 +368,13 @@ const listShares = async ({ userId, direction, status }) => {
   else filter.$or = [{ fromUser: userId }, { toUser: userId }];
   if (status) filter.status = status;
 
-  const shares = await BeverageShare.find(filter)
+  const shares = await CinemaShare.find(filter)
     .populate("fromUser", "firstName lastName username")
     .populate("toUser", "firstName lastName username")
     .sort("-createdAt")
     .lean();
 
-  return attachSaleDetails(shares);
+  return attachItemDetails(shares);
 };
 
 const getShareForUser = async ({ shareId, userId }) => {
@@ -376,7 +382,7 @@ const getShareForUser = async ({ shareId, userId }) => {
 
   await expireDueShares({ _id: shareId });
 
-  const share = await BeverageShare.findById(shareId)
+  const share = await CinemaShare.findById(shareId)
     .populate("fromUser", "firstName lastName username")
     .populate("toUser", "firstName lastName username")
     .lean();
@@ -389,52 +395,8 @@ const getShareForUser = async ({ shareId, userId }) => {
     throw new ForbiddenError("Not authorized to view this share");
   }
 
-  const [populated] = await attachSaleDetails(share);
+  const [populated] = await attachItemDetails(share);
   return populated;
-};
-
-// ---------------------------------------------------------------------------
-// Building a split child sale
-// ---------------------------------------------------------------------------
-
-// Field names differ between BeverageSale (event/organizer/eventBeverage/
-// organizerVatRate) and VenueBeverageSale (venue/venueBeverage/venueVatRate)
-// — this is the one place that has to know both shapes, so the accept logic
-// below doesn't.
-const buildChildData = (salesContext, sale, toUser, quantity, childAmount) => {
-  const base = {
-    beverage: sale.beverage,
-    beverageName: sale.beverageName,
-    beverageColor: sale.beverageColor,
-    unitPrice: sale.unitPrice,
-    quantity,
-    totalAmount: childAmount,
-    currency: sale.currency,
-    customer: toUser,
-    status: "confirmed",
-    channel: "online",
-    paymentReference: sale.paymentReference,
-    commissionRate: sale.commissionRate,
-    // Kept from the parent rather than defaulting to now: a transfer is not a
-    // new sale event financially, and revenue-by-date reporting must not
-    // shift money to the day it happened to be handed off.
-    soldAt: sale.soldAt,
-  };
-  if (salesContext === "VENUE_BEVERAGE") {
-    return {
-      ...base,
-      venue: sale.venue,
-      venueBeverage: sale.venueBeverage,
-      venueVatRate: sale.venueVatRate,
-    };
-  }
-  return {
-    ...base,
-    event: sale.event,
-    organizer: sale.organizer,
-    eventBeverage: sale.eventBeverage,
-    organizerVatRate: sale.organizerVatRate,
-  };
 };
 
 // ---------------------------------------------------------------------------
@@ -444,14 +406,11 @@ const buildChildData = (salesContext, sale, toUser, quantity, childAmount) => {
 const respondToShare = async ({ shareId, userId, accept }) => {
   if (!isValidId(shareId)) throw new NotFoundError("Share not found");
 
-  // Settled outside the transaction below — see ticketShareService's
-  // identical comment on why (an abort here must not roll back a real
-  // expiry that already happened).
   await expireDueShares({ _id: shareId });
 
   return withOptionalTransaction(async (session) => {
     const opts = session ? { session } : {};
-    const share = await BeverageShare.findById(shareId, null, opts);
+    const share = await CinemaShare.findById(shareId, null, opts);
     if (!share) throw new NotFoundError("Share not found");
 
     if (String(share.toUser) !== String(userId)) {
@@ -461,57 +420,32 @@ const respondToShare = async ({ shareId, userId, accept }) => {
       throw new ConflictError(`This share was already ${share.status}`);
     }
 
-    const SaleModel = SaleModelFor(share.salesContext);
+    const ItemModel = ItemModelFor(share.itemType);
 
     if (accept) {
       for (const item of share.items) {
-        const sale = await SaleModel.findOne(
-          { _id: item.sale, pendingShare: share._id },
+        const doc = await ItemModel.findOne(
+          { _id: item.item, pendingShare: share._id },
           null,
           opts
         );
-        if (!sale) {
-          throw new ConflictError("A drink in this share is no longer available");
+        if (!doc) {
+          throw new ConflictError("An item in this share is no longer available");
         }
 
-        if (item.transferType === "FULL") {
-          // The whole sale changes hands — same document, only ownership
-          // moves. customerName/customerPhone stay as the snapshot of who
-          // originally bought it (same reasoning unitPrice/commissionRate are
-          // never rewritten); `customer` is the one field that says who holds
-          // it now.
-          sale.customer = share.toUser;
-          sale.pendingShare = null;
-          await sale.save(opts);
-          item.resultingSale = sale._id;
-        } else {
-          if (sale.quantity < item.quantity) {
-            // Guarded already by the lock at share-creation time, so this is
-            // belt-and-suspenders, not an expected path.
-            throw new ConflictError("A drink in this share no longer has enough left");
-          }
-
-          const childAmount = round2(sale.unitPrice * item.quantity);
-          const remainingAmount = sale.totalAmount - childAmount;
-          const remainingQuantity = sale.quantity - item.quantity;
-
-          sale.quantity = remainingQuantity;
-          sale.totalAmount = remainingAmount;
-          sale.pendingShare = null;
-          await sale.save(opts);
-
-          const createdChild = await SaleModel.create(
-            [buildChildData(share.salesContext, sale, share.toUser, item.quantity, childAmount)],
-            opts
-          );
-          item.resultingSale = createdChild[0]._id;
-        }
+        // FULL only — the same document just changes hands, same as Ticket's
+        // FULL branch and BeverageShare's. Snapshot fields (customerName/
+        // customerPhone) stay as who originally bought it; `customer` is the
+        // one field that says who holds it now.
+        doc.customer = share.toUser;
+        doc.pendingShare = null;
+        await doc.save(opts);
       }
 
       share.status = "accepted";
     } else {
-      await SaleModel.updateMany(
-        { _id: { $in: saleIdsOf(share) }, pendingShare: share._id },
+      await ItemModel.updateMany(
+        { _id: { $in: itemIdsOf(share) }, pendingShare: share._id },
         { $set: { pendingShare: null } },
         opts
       );
@@ -521,7 +455,7 @@ const respondToShare = async ({ shareId, userId, accept }) => {
     share.respondedAt = new Date();
     await share.save(opts);
 
-    const [populated] = await attachSaleDetails(share);
+    const [populated] = await attachItemDetails(share);
     return populated;
   });
 };
@@ -533,7 +467,7 @@ const cancelShare = async ({ shareId, userId }) => {
 
   return withOptionalTransaction(async (session) => {
     const opts = session ? { session } : {};
-    const share = await BeverageShare.findById(shareId, null, opts);
+    const share = await CinemaShare.findById(shareId, null, opts);
     if (!share) throw new NotFoundError("Share not found");
 
     if (String(share.fromUser) !== String(userId)) {
@@ -543,8 +477,8 @@ const cancelShare = async ({ shareId, userId }) => {
       throw new ConflictError(`This share was already ${share.status}`);
     }
 
-    await SaleModelFor(share.salesContext).updateMany(
-      { _id: { $in: saleIdsOf(share) }, pendingShare: share._id },
+    await ItemModelFor(share.itemType).updateMany(
+      { _id: { $in: itemIdsOf(share) }, pendingShare: share._id },
       { $set: { pendingShare: null } },
       opts
     );
@@ -552,7 +486,7 @@ const cancelShare = async ({ shareId, userId }) => {
     share.respondedAt = new Date();
     await share.save(opts);
 
-    const [populated] = await attachSaleDetails(share);
+    const [populated] = await attachItemDetails(share);
     return populated;
   });
 };
@@ -566,4 +500,5 @@ module.exports = {
   getShareForUser,
   respondToShare,
   cancelShare,
+  expireDueShares,
 };

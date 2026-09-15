@@ -200,6 +200,17 @@ const ticketShareWriteLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many share requests. Please wait a few minutes and try again."),
 });
 
+// Guards sending a chat message — a much higher-cadence action than a share
+// (real typing, not a deliberate multi-step transfer), so the window is
+// short and the ceiling generous rather than mirroring ticketShareWriteLimiter's.
+const messageWriteLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 40, // messages per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("You're sending messages too fast. Please slow down."),
+});
+
 module.exports = {
   cinemaCheckoutLimiter,
   adminWriteLimiter,
@@ -218,4 +229,5 @@ module.exports = {
   unifiedAuthLimiter,
   ticketShareSearchLimiter,
   ticketShareWriteLimiter,
+  messageWriteLimiter,
 };

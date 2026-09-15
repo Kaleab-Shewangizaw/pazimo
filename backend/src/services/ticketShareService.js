@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Ticket = require("../models/Ticket");
 const User = require("../models/User");
 const TicketShare = require("../models/TicketShare");
+const { touchConversation } = require("./conversationService");
 const { normalizePhone } = require("../utils/phone");
 const { round2 } = require("../config/rates");
 const {
@@ -320,6 +321,19 @@ const createShare = async ({
       ],
       opts
     );
+
+    // Best-effort and deliberately outside the transaction/session above: the
+    // chat list surfacing this counterparty is a nicety, not part of what
+    // makes the transfer itself valid, so a Conversation hiccup must never
+    // roll back or fail a real ticket hand-off.
+    touchConversation({
+      userAId: fromUserId,
+      userBId: toUserId,
+      senderId: fromUserId,
+      preview: "🎟️ Ticket sent",
+      kind: "TICKET",
+      at: created[0].createdAt,
+    }).catch((error) => console.error("Failed to touch conversation for ticket share:", error.message));
 
     return TicketShare.findById(created[0]._id, null, opts).populate(
       sharePopulateOptions

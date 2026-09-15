@@ -553,6 +553,33 @@ const listPublicLineup = async (req, res) => {
   }
 };
 
+/**
+ * Every cinema concession this account currently holds that is free to send
+ * to a friend — the mobile "send a snack" picker's data source (see
+ * cinemaShareService.js). `OUTSTANDING` already requires `pendingShare: null`
+ * (see CinemaBeverageSale.js), so one already mid-transfer is excluded.
+ */
+const listTransferableConcessions = async (req, res) => {
+  try {
+    const sales = await CinemaBeverageSale.find({
+      customer: req.user.userId,
+      ...CinemaBeverageSale.OUTSTANDING,
+    })
+      .select("beverageName beverageColor quantity unitPrice totalAmount currency")
+      .populate("cinema", "name city")
+      .sort("-soldAt")
+      .lean();
+
+    res.status(StatusCodes.OK).json({ success: true, data: sales });
+  } catch (error) {
+    console.error("Error listing transferable cinema concessions:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Could not load your snacks. Please try again.",
+    });
+  }
+};
+
 module.exports = {
   listSellableCatalog,
   listLineup,
@@ -566,4 +593,5 @@ module.exports = {
   listOutstandingForOrder,
   refundSale,
   listPublicLineup,
+  listTransferableConcessions,
 };
