@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { getNextSequence } = require("./Counter");
+const { generateReferenceNumber } = require("../utils/referenceCode");
 const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
@@ -32,10 +32,11 @@ const {
 // the catalogue, must never restate what a past sale was worth.
 const VenueBeverageSaleSchema = new mongoose.Schema(
   {
-    // Human-facing tracking number, e.g. "PZV-SL-000042", assigned once and
-    // never reassigned. A distinct prefix from the event ledger's "PZB-SL-" so a
-    // reference alone identifies which channel — and which collection — a sale
-    // belongs to, without a lookup.
+    // Human-facing pickup code, e.g. "VB-7K2QXM" — short and randomly drawn
+    // (see utils/referenceCode.js) rather than sequential, since this is what
+    // a customer hands to a stranger at a counter. A distinct prefix from the
+    // event ledger's "EV-" so a reference alone identifies which channel —
+    // and which collection — a sale belongs to, without a lookup.
     referenceNumber: {
       type: String,
     },
@@ -256,8 +257,9 @@ VenueBeverageSaleSchema.pre("validate", async function snapshotCommissionRate(ne
 VenueBeverageSaleSchema.pre("validate", async function assignReferenceNumber(next) {
   if (this.referenceNumber) return next();
   try {
-    const seq = await getNextSequence("venueBeverageSale");
-    this.referenceNumber = `PZV-SL-${String(seq).padStart(6, "0")}`;
+    this.referenceNumber = await generateReferenceNumber("VB", (candidate) =>
+      this.constructor.exists({ referenceNumber: candidate })
+    );
     next();
   } catch (error) {
     next(error);

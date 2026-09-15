@@ -12,6 +12,7 @@ const VenueBeverageSale = require("../models/VenueBeverageSale");
 const concessionBasketService = require("../services/concessionBasketService");
 const ChapaService = require("../services/chapaService");
 const ChapaGiftCardService = require("../services/chapaGiftCardService");
+const { renderBarcodePng } = require("../utils/barcodeRenderer");
 const {
   resolveWebhookBaseUrl,
   describePaymentError,
@@ -570,6 +571,115 @@ const getVenueRefillOrder = async (req, res) => {
   }
 };
 
+// ---------------------------------------------------------------------------
+// History — both channels at once
+// ---------------------------------------------------------------------------
+
+/**
+ * Every refill payment this account has ever started, newest first — what the
+ * mobile app's "Your orders" list is built from. There is no per-channel
+ * equivalent of this: a customer does not think of their drink purchases as
+ * split by channel, so this is the one list that reads both `BeverageSale`'s
+ * and `VenueBeverageSale`'s owning payments together.
+ *
+ * Deliberately thin: just enough to render a row and route back into
+ * `getEventRefillOrder`/`getVenueRefillOrder` (dispatched client-side on the
+ * transaction id's own `BEV-`/`VBEV-` prefix) for the sale-level detail.
+ */
+const listMyRefillOrders = async (req, res) => {
+  try {
+    const payments = await Payment.find({
+      userId: req.user.userId,
+      salesContext: { $in: ["EVENT_BEVERAGE", "VENUE_BEVERAGE"] },
+    })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .select("transactionId salesContext status price currency createdAt ticketDetails")
+      .lean();
+
+    const eventIds = [
+      ...new Set(
+        payments
+          .filter((p) => p.salesContext === "EVENT_BEVERAGE")
+          .map((p) => String(p.ticketDetails?.eventId || ""))
+          .filter(Boolean)
+      ),
+    ];
+    const venueIds = [
+      ...new Set(
+        payments
+          .filter((p) => p.salesContext === "VENUE_BEVERAGE")
+          .map((p) => String(p.ticketDetails?.venueId || ""))
+          .filter(Boolean)
+      ),
+    ];
+
+    const [events, venues] = await Promise.all([
+      Event.find({ _id: { $in: eventIds } }).select("title").lean(),
+      Venue.find({ _id: { $in: venueIds } }).select("name").lean(),
+    ]);
+    const eventTitleById = new Map(events.map((e) => [String(e._id), e.title]));
+    const venueNameById = new Map(venues.map((v) => [String(v._id), v.name]));
+
+    const data = payments.map((payment) => {
+      const isVenue = payment.salesContext === "VENUE_BEVERAGE";
+      const title = isVenue
+        ? venueNameById.get(String(payment.ticketDetails?.venueId || "")) || "Drinks"
+        : eventTitleById.get(String(payment.ticketDetails?.eventId || "")) || "Drinks";
+
+      return {
+        transactionId: payment.transactionId,
+        channel: isVenue ? "VENUE" : "EVENT",
+        status: payment.status,
+        total: payment.price,
+        currency: payment.currency,
+        title,
+        createdAt: payment.createdAt,
+      };
+    });
+
+    res.status(StatusCodes.OK).json({ success: true, data });
+  } catch (error) {
+    console.error("Error listing my refill orders:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "We could not load your orders. Please try again.",
+    });
+  }
+};
+
+/**
+ * The barcode a customer shows at the counter — rendered from the pickup
+ * code alone, so this needs no auth, the same way the ticket QR endpoints
+ * don't: the reference number is the capability (33^6 ≈ 1.3 billion possible
+ * codes, see utils/referenceCode.js), not the session.
+ *
+ * One route serves both channels: the code alone doesn't say whether it came
+ * from an event or a venue, so this checks `BeverageSale` and falls back to
+ * `VenueBeverageSale` rather than requiring the caller to know.
+ */
+const getRefillSaleBarcode = async (req, res) => {
+  try {
+    const { referenceNumber } = req.params;
+    const sale =
+      (await BeverageSale.findOne({ referenceNumber }).select("referenceNumber").lean()) ||
+      (await VenueBeverageSale.findOne({ referenceNumber }).select("referenceNumber").lean());
+    if (!sale) throw new NotFoundError("Order not found");
+
+    // A sale's reference number never changes once assigned, so this image
+    // never changes either — cacheable like the ticket QR it sits beside.
+    res.set("Cache-Control", "private, max-age=86400, immutable");
+    const png = await renderBarcodePng(sale.referenceNumber);
+    res.type("image/png");
+    res.set("Content-Disposition", `inline; filename="${sale.referenceNumber}.png"`);
+    res.send(png);
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status >= 500) console.error("Error rendering refill sale barcode:", error);
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   quoteEventRefillCheckout,
   startEventRefillCheckout,
@@ -579,4 +689,6 @@ module.exports = {
   startVenueRefillCheckout,
   settleVenueRefillPayment,
   getVenueRefillOrder,
+  listMyRefillOrders,
+  getRefillSaleBarcode,
 };

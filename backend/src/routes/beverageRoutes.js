@@ -351,6 +351,24 @@ router.get(
   beverageCheckoutController.getEventRefillOrder
 );
 
+// Every refill payment this account has made, event or venue alike — the
+// mobile app's "Your orders" list. Declared before the `:transactionId` route
+// above would matter only if it were a prefix collision; it isn't, but it
+// stays grouped with the other refill-order reads for the same reason.
+router.get(
+  "/refill/my-orders",
+  authenticateUser,
+  beverageCheckoutController.listMyRefillOrders
+);
+
+// The barcode a customer shows at the counter to collect their drink. No
+// auth, same as the ticket QR routes in ticketRoutes.js/cinemaRoutes.js — the
+// reference number itself is the capability, not the session.
+router.get(
+  "/refill/sales/:referenceNumber/barcode.png",
+  beverageCheckoutController.getRefillSaleBarcode
+);
+
 // --- Collecting a pre-bought drink at the door -----------------------------
 // Same roles as ticket scanning (routes/ticketRoutes.js's validate-qr and
 // check-in) since this is the same door staff, looking at the same ticket.

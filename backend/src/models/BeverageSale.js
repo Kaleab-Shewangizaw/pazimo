@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { getNextSequence } = require("./Counter");
+const { generateReferenceNumber } = require("../utils/referenceCode");
 const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
@@ -16,8 +16,10 @@ const {
 // what it was called — the same reasoning as Loan.limitAtRequest.
 const BeverageSaleSchema = new mongoose.Schema(
   {
-    // Human-facing tracking number, e.g. "PZB-SL-000042", assigned once and
-    // never reassigned. Mirrors Loan's referenceNumber.
+    // Human-facing pickup code, e.g. "EV-7K2QXM" — short and randomly drawn
+    // (see utils/referenceCode.js) rather than sequential, since this is what
+    // a customer hands to a stranger at a counter. Assigned once, never
+    // reassigned.
     referenceNumber: {
       type: String,
     },
@@ -261,8 +263,9 @@ BeverageSaleSchema.pre("validate", async function snapshotCommissionRate(next) {
 BeverageSaleSchema.pre("validate", async function assignReferenceNumber(next) {
   if (this.referenceNumber) return next();
   try {
-    const seq = await getNextSequence("beverageSale");
-    this.referenceNumber = `PZB-SL-${String(seq).padStart(6, "0")}`;
+    this.referenceNumber = await generateReferenceNumber("EV", (candidate) =>
+      this.constructor.exists({ referenceNumber: candidate })
+    );
     next();
   } catch (error) {
     next(error);
