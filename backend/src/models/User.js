@@ -49,7 +49,7 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
       lowercase: true,
-      minlength: [3, "Username must be at least 3 characters"],
+      minlength: [4, "Username must be at least 4 characters"],
       maxlength: [20, "Username must be at most 20 characters"],
       match: [
         /^[a-z0-9_]+$/,
@@ -138,6 +138,15 @@ const userSchema = new mongoose.Schema(
         ref: "Event",
       },
     ],
+    // Stored preferences only, for now — there's no push-token/device
+    // registration anywhere in this backend yet, so these don't gate any
+    // actual delivery. They exist so the account settings screen has real
+    // flags to read and write while that infra gets built.
+    notificationPreferences: {
+      ticketUpdates: { type: Boolean, default: true },
+      chatMessages: { type: Boolean, default: true },
+      promotions: { type: Boolean, default: true },
+    },
     // OTP-based login (organizers only, added 2026-09-03). The code itself
     // never sits in the database in plain form — only its hash does.
     // otpAttempts caps guesses against the 6-digit code independent of the

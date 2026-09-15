@@ -15,6 +15,8 @@ const {
   passwordResetSendLimiter,
   passwordResetVerifyLimiter,
   unifiedAuthLimiter,
+  updatePasswordLimiter,
+  deleteAccountLimiter,
 } = require('../middlewares/rateLimiters');
 
 // Registration route
@@ -37,6 +39,12 @@ router.post('/verify-reset-code', passwordResetVerifyLimiter, authController.ver
 router.post('/reset-password', passwordResetVerifyLimiter, authController.resetPassword);
 router.put('/update-profile', protect, authController.updateProfile);
 router.put('/update-username', protect, authController.updateUsername);
+router.put('/update-password', protect, updatePasswordLimiter, authController.updatePassword);
+
+// Stored preferences only for now — see authController's comment on
+// getNotificationPreferences for why these don't gate delivery yet.
+router.get('/notification-preferences', protect, authController.getNotificationPreferences);
+router.put('/notification-preferences', protect, authController.updateNotificationPreferences);
 
 
 // OTP routes
@@ -61,7 +69,7 @@ router.post('/organizer/reset-password', passwordResetVerifyLimiter, authControl
 router.post('/unified-auth', unifiedAuthLimiter, authController.unifiedAuth);
 
 // Delete account route
-router.delete('/delete-account', protect, authController.deleteAccount);
+router.delete('/delete-account', protect, deleteAccountLimiter, authController.deleteAccount);
 
 // Admin routes
 router.post('/admin/login', adminLoginLimiter, authController.adminLogin);

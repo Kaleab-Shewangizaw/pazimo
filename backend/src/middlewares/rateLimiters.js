@@ -211,6 +211,27 @@ const messageWriteLimiter = rateLimit({
   handler: jsonRateLimitHandler("You're sending messages too fast. Please slow down."),
 });
 
+// Guards a signed-in customer changing their own password against brute-force
+// guessing of the current password, same shape/reasoning as loginLimiter.
+const updatePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 8, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: jsonRateLimitHandler("Too many attempts. Please wait a few minutes and try again."),
+});
+
+// Account deletion is permanent and irreversible — tighter than a login
+// limiter, since a legitimate user has no reason to hit this often.
+const deleteAccountLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many attempts. Please wait a while and try again."),
+});
+
 module.exports = {
   cinemaCheckoutLimiter,
   adminWriteLimiter,
@@ -230,4 +251,6 @@ module.exports = {
   ticketShareSearchLimiter,
   ticketShareWriteLimiter,
   messageWriteLimiter,
+  updatePasswordLimiter,
+  deleteAccountLimiter,
 };

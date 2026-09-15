@@ -8,7 +8,6 @@ const {
   BadRequestError,
   NotFoundError,
   UnauthorizedError,
-  ForbiddenError,
 } = require("../errors");
 const mongoose = require("mongoose");
 const {
@@ -32,7 +31,6 @@ const QRCode = require("qrcode");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
 const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
 const { markPaymentTerminal } = require("../utils/paymentHold");
-const { isPhoneBanned } = require("../utils/fraudGuard");
 const beverageSalesService = require("../services/beverageSalesService");
 const EventBeverage = require("../models/EventBeverage");
 
@@ -246,112 +244,17 @@ const processSuccessfulPayment = async (payment) => {
       (payment.ticketDetails && payment.ticketDetails.message),
   };
 
-  // Handle User vs Guest
+  // Guest checkout no longer exists — ticket purchase requires an
+  // authenticated account (POST /tickets/ticket/initiate* now rejects an
+  // unauthenticated caller), so payment.userId is always set going forward.
+  // If it's ever still missing (e.g. a stale in-flight payment from before
+  // this deployed), this correctly falls through to the isInvitation:true
+  // guest-ticket branch below rather than silently minting a new
+  // password-bearing account the way the old guest-checkout block used to.
   let finalUserId = payment.userId || userId;
-  let user = null; // ⚡ Declare user variable in outer scope
-  
-  console.log(`[TICKET-CREATE] ============================================`);
-  console.log(`[TICKET-CREATE] Initial finalUserId: ${finalUserId}`);
-  console.log(`[TICKET-CREATE] payment.userId: ${payment.userId}`);
-  console.log(`[TICKET-CREATE] payment.ticketDetails.userId: ${userId}`);
-  console.log(`[TICKET-CREATE] payment.contact: ${payment.contact}`);
-  console.log(`[TICKET-CREATE] payment.ticketDetails.email: ${payment.ticketDetails?.email}`);
-  console.log(`[TICKET-CREATE] ============================================`);
+  let user = null;
 
-  if (!finalUserId) {
-    // ⚡ GUEST CHECKOUT ONLY: Try to find existing user by phone or email
-    // For logged-in users, finalUserId is already set, so this block is skipped
-    const rawEmail = payment.ticketDetails?.email;
-    const rawPhone = payment.contact;
-
-    const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
-    const phone = rawPhone ? rawPhone.replace(/\s+/g, "") : null;
-
-    // Guest checkout is the one path that can silently create a brand-new
-    // User account (see the `else if (email && phone)` branch below) or link
-    // to a pre-existing one purely by phone/email match, with no ban check
-    // upstream of it. Refuse to fulfill (create a ticket or account) for a
-    // phone that's on the fraud blacklist, even though the payment already
-    // succeeded — this stops ban evasion via a second email on the same phone.
-    if (phone && (await isPhoneBanned(phone))) {
-      console.error(`[TICKET-CREATE] ❌ BLOCKED: phone ${phone} is fraud-blacklisted — refusing to create ticket/account for txn ${payment.transactionId}`);
-      throw new ForbiddenError("This phone number is not permitted to make purchases.");
-    }
-
-    console.log(`[TICKET-CREATE] GUEST CHECKOUT - Searching for user by phone: ${phone} or email: ${email}`);
-
-    // Check by PHONE first (Priority 1 - most reliable)
-    if (phone) {
-      user = await User.findOne({ phoneNumber: phone });
-      console.log(`[TICKET-CREATE] Searched by phone "${phone}": ${user ? `FOUND user ${user._id}` : 'NOT FOUND'}`);
-    }
-
-    // If not found by phone, check by EMAIL (Priority 2)
-    if (!user && email) {
-      user = await User.findOne({ email: email });
-      console.log(`[TICKET-CREATE] Searched by email "${email}": ${user ? `FOUND user ${user._id}` : 'NOT FOUND'}`);
-    }
-
-    if (user) {
-      console.log(`[TICKET-CREATE] ✅ Found EXISTING user: ${user._id}`);
-      finalUserId = user._id;
-      
-      // ⚡ IMPORTANT: Mark for auto-login even if user exists
-      // This allows guest buyers to auto-login to their existing account
-      if (!payment.userId) {
-        // Only set credentials if payment wasn't initiated by authenticated user
-        payment.newUserCreated = true; // Reuse flag to mean "send credentials"
-        payment.newUserEmail = user.email;
-        payment.newUserPassword = phone; // Phone is always the password
-        await payment.save();
-        console.log(`[TICKET-CREATE] ✅ Set auto-login credentials for existing user ${user._id}`);
-      }
-    } else if (email && phone) {
-      // Create new user ONLY if we have both email and phone
-      try {
-        const splitName = (payment.guestName || "Guest User").split(" ");
-        const firstName = splitName[0];
-        const lastName = splitName.slice(1).join(" ") || "User";
-        const password = phone;
-
-        user = await User.create({
-          firstName,
-          lastName,
-          email,
-          phoneNumber: phone,
-          password: password,
-          role: "customer",
-          isPhoneVerified: true,
-          isActive: true,
-        });
-        finalUserId = user._id;
-        console.log(`[TICKET-CREATE] ✅ AUTO-CREATED NEW USER ${user._id} for ticket`);
-        
-        // ⚡ Mark payment with newUserCreated flag for auto-login
-        payment.newUserCreated = true;
-        payment.newUserEmail = email;
-        payment.newUserPassword = password;
-        payment.userId = user._id; // ⚡ CRITICAL: Update payment.userId
-        await payment.save();
-        console.log(`[TICKET-CREATE] ✅ Updated payment.userId to ${user._id}`);
-        
-      } catch (err) {
-        console.error(`[TICKET-CREATE] ❌ Failed to auto-create user:`, err.message);
-        // If creation fails due to duplicate, try finding the user
-        if (err.code === 11000) {
-          user = await User.findOne({ $or: [{ email: email }, { phoneNumber: phone }] });
-          if (user) {
-            finalUserId = user._id;
-            console.log(`[TICKET-CREATE] Found existing user after duplicate error: ${user._id}`);
-          }
-        }
-      }
-    }
-  }
-
-  console.log(`[TICKET-CREATE] Final resolved userId: ${finalUserId}`);
-
-  // ⚡ Fetch user object if we have finalUserId but no user object (logged-in users)
+  // Fetch the user object for the ticket/SMS below.
   if (finalUserId && !user) {
     user = await User.findById(finalUserId).select('firstName lastName phoneNumber email');
     console.log(`[TICKET-CREATE] Fetched user for SMS: ${user ? `${user.firstName} (${user.phoneNumber})` : 'NOT FOUND'}`);
@@ -406,15 +309,7 @@ const processSuccessfulPayment = async (payment) => {
       process.env.FRONTEND_URL || "https://pazimo.com"
     }/ticket/${ticket.ticketId}`;
 
-    // ⚡ OPTIMIZED: Combine ticket confirmation and credentials into ONE SMS to avoid duplicates
-    let message = `Hi ${userName} 👋\nYour ticket for ${eventTitle} is confirmed 🎟️\nAdmits: ${admitCount} person${admitCount > 1 ? 's' : ''}\n\nAccess your ticket here:\n${ticketLink}`;
-    
-    // If new user created, add credentials to the same message
-    if (user && payment.newUserCreated) {
-      message += `\n\n🔐 Your Account:\nEmail: ${payment.newUserEmail}\nPassword: ${payment.newUserPassword}\n\nLogin at: https://pazimo.com/login`;
-    }
-    
-    message += `\n\n⚠️ Keep this link safe it gives direct access to your ticket.\nPazimo`;
+    const message = `Hi ${userName} 👋\nYour ticket for ${eventTitle} is confirmed 🎟️\nAdmits: ${admitCount} person${admitCount > 1 ? 's' : ''}\n\nAccess your ticket here:\n${ticketLink}\n\n⚠️ Keep this link safe it gives direct access to your ticket.\nPazimo`;
 
     // ⚡ Send SMS in background - don't wait for it!
     sendSMS(smsPhone, message)

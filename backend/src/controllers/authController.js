@@ -24,6 +24,28 @@ const register = async (req, res) => {
     // Whitelist allowed fields — never trust role from the client
     const { email, password, firstName, lastName, phoneNumber } = req.body;
 
+    // Same injection guard as login/unifiedAuth — these fields feed straight
+    // into a User.create() whose values are echoed into indexed fields, so a
+    // query-operator object must never reach it unvalidated.
+    if (
+      isQueryOperatorInjection(email) ||
+      isQueryOperatorInjection(phoneNumber) ||
+      isQueryOperatorInjection(firstName) ||
+      isQueryOperatorInjection(lastName)
+    ) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Invalid request",
+      });
+    }
+
+    if (!firstName || !phoneNumber || !password) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "First name, phone number and password are required",
+      });
+    }
+
     // Block ban evasion: a banned user can't dodge their ban by signing up
     // again with a new email but the same real phone number (differently
     // formatted or not — isPhoneBanned normalizes across "0.../ +251.../251...").
@@ -35,8 +57,19 @@ const register = async (req, res) => {
       });
     }
 
+    // Email is optional from the client; a placeholder keeps the schema's
+    // required+unique constraint satisfied the same way unifiedAuth's guest
+    // path already does, so a no-email signup is still a normal, fully
+    // phone-loggable-in customer account.
+    const trimmedEmail = typeof email === "string" ? email.trim() : "";
+    const resolvedEmail =
+      trimmedEmail ||
+      "customerpazimo" +
+        String(Math.floor(Math.random() * 1000000)).padStart(6, "0") +
+        "@gmail.com";
+
     const user = await User.create({
-      email,
+      email: resolvedEmail,
       password,
       firstName: stripAngleBrackets(firstName),
       lastName: stripAngleBrackets(lastName),
@@ -56,11 +89,32 @@ const register = async (req, res) => {
           email: user.email,
           phoneNumber: user.phoneNumber,
           role: user.role,
+          isActive: user.isActive,
         },
         token,
       },
     });
   } catch (error) {
+    // Duplicate email/phone: hand back a clean, branchable error instead of
+    // the raw E11000 text, so the client can offer "log in instead" rather
+    // than just showing a Mongo error message. Mirrors unifiedAuth's same
+    // keyPattern check below.
+    if (error.code === 11000) {
+      if (error.keyPattern && error.keyPattern.email) {
+        return res.status(StatusCodes.CONFLICT).json({
+          status: "error",
+          code: "EMAIL_TAKEN",
+          message: "That email is already registered — log in instead.",
+        });
+      }
+      if (error.keyPattern && error.keyPattern.phoneNumber) {
+        return res.status(StatusCodes.CONFLICT).json({
+          status: "error",
+          code: "PHONE_TAKEN",
+          message: "That phone number is already registered — log in instead.",
+        });
+      }
+    }
     res.status(StatusCodes.BAD_REQUEST).json({
       status: "error",
       message: error.message,
@@ -71,17 +125,26 @@ const register = async (req, res) => {
 // Login user
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // `identifier` accepts either an email or a phone number; `email` is
+    // kept as a fallback for backward compatibility with any caller still
+    // sending the old field name.
+    const { email, password, identifier: rawIdentifier } = req.body;
+    const identifier = String(rawIdentifier ?? email ?? "").trim();
 
-    // See rejectQueryOperators.js: email/password must be plain strings
+    // See rejectQueryOperators.js: identifier/password must be plain strings
     // before either reaches a query or bcrypt, or a query-operator object
     // (e.g. `{"$ne": null}`) turns the lookup into "match any account".
-    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(password)) {
+    if (isQueryOperatorInjection(identifier) || isQueryOperatorInjection(password)) {
+      throw new UnauthorizedError("Invalid credentials");
+    }
+    if (!identifier || !password) {
       throw new UnauthorizedError("Invalid credentials");
     }
 
-    // Find user
-    const user = await User.findOne({ email }).select("+password");
+    // findUserByIdentifier (below) already knows how to tell an email from
+    // a phone number and match a phone across stored formats — the same
+    // lookup the forgot-password flow uses.
+    const user = await findUserByIdentifier(identifier, null, "+password");
     if (!user) {
       throw new UnauthorizedError("Invalid credentials");
     }
@@ -257,17 +320,22 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    // Check if email is already taken by another user
-    const existingUser = await User.findOne({
-      email,
-      _id: { $ne: req.user._id },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        status: "error",
-        message: "Email is already taken",
+    // Check if email is already taken by another user — only when an email
+    // was actually submitted. An undefined `email` here would otherwise match
+    // Mongoose's own "field doesn't exist" semantics and can find an unrelated
+    // user, wrongly blocking a name-only edit.
+    if (email) {
+      const existingUser = await User.findOne({
+        email,
+        _id: { $ne: req.user._id },
       });
+
+      if (existingUser) {
+        return res.status(400).json({
+          status: "error",
+          message: "Email is already taken",
+        });
+      }
     }
 
     const user = await User.findByIdAndUpdate(
@@ -279,6 +347,68 @@ const updateProfile = async (req, res) => {
     res.status(200).json({
       status: "success",
       data: user,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Notification preferences — stored only for now. There's no push-token/device
+// registration in this backend yet, so these flags don't gate any delivery yet;
+// they exist so the mobile settings screen has something real to read and
+// write while that infrastructure gets built.
+const getNotificationPreferences = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("notificationPreferences");
+    res.status(200).json({
+      status: "success",
+      data: user.notificationPreferences,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const updateNotificationPreferences = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    // Whitelist exactly these three keys — never trust the body wholesale
+    // into a $set on the account document.
+    const update = {};
+    for (const key of ["ticketUpdates", "chatMessages", "promotions"]) {
+      if (typeof req.body[key] === "boolean") {
+        update[`notificationPreferences.${key}`] = req.body[key];
+      }
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: update },
+      { new: true, runValidators: true },
+    ).select("notificationPreferences");
+
+    res.status(200).json({
+      status: "success",
+      data: user.notificationPreferences,
     });
   } catch (error) {
     res.status(400).json({
@@ -304,11 +434,11 @@ const updateUsername = async (req, res) => {
 
     const username = String(req.body.username || "").trim().toLowerCase();
 
-    if (!/^[a-z0-9_]{3,20}$/.test(username)) {
+    if (!/^[a-z0-9_]{4,20}$/.test(username)) {
       return res.status(400).json({
         status: "error",
         message:
-          "Username must be 3-20 characters and contain only lowercase letters, numbers and underscores",
+          "Username must be 4-20 characters and contain only lowercase letters, numbers and underscores",
       });
     }
 
@@ -850,7 +980,7 @@ const verifyOrganizerOtp = async (req, res) => {
 // field, so this works against every existing account with no backfill
 // required. Query-operator injection on `identifier` must be rejected by
 // the caller before this runs — this function trusts its input.
-const findUserByIdentifier = async (identifier, roleFilter) => {
+const findUserByIdentifier = async (identifier, roleFilter, selectFields) => {
   const value = String(identifier || "").trim();
   if (!value) return null;
 
@@ -862,7 +992,8 @@ const findUserByIdentifier = async (identifier, roleFilter) => {
     if (!normalized) return null;
     query.phoneNumber = { $in: phoneVariants(normalized) };
   }
-  return User.findOne(query);
+  const lookup = User.findOne(query);
+  return selectFields ? lookup.select(selectFields) : lookup;
 };
 
 // Forgot password (added 2026-09-03) — same code+channel OTP mechanism as
@@ -1254,13 +1385,30 @@ const deleteAccount = async (req, res) => {
     }
 
     const userId = req.user._id;
+    const { currentPassword } = req.body;
 
-    // Find and delete the user
-    const user = await User.findById(userId);
+    if (!currentPassword) {
+      return res.status(400).json({
+        status: "error",
+        message: "Your current password is required to delete your account",
+      });
+    }
+
+    // `protect` strips `password` (select: false) — re-fetch it to confirm
+    // the caller actually is who they say before doing anything irreversible.
+    const user = await User.findById(userId).select("+password");
     if (!user) {
       return res.status(404).json({
         status: "error",
         message: "User not found",
+      });
+    }
+
+    const isPasswordCorrect = await user.comparePassword(currentPassword);
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        status: "error",
+        message: "Current password is incorrect",
       });
     }
 
@@ -1271,6 +1419,16 @@ const deleteAccount = async (req, res) => {
     // Delete user's wishlist items
     const Wishlist = require("../models/Wishlist");
     await Wishlist.deleteMany({ userId });
+
+    // Drop any Contact/Block edges naming this account on either side, so
+    // deleting an account never leaves a dangling reference in someone
+    // else's contacts or blocked list.
+    const Contact = require("../models/Contact");
+    const Block = require("../models/Block");
+    await Promise.all([
+      Contact.deleteMany({ $or: [{ owner: userId }, { contact: userId }] }),
+      Block.deleteMany({ $or: [{ blocker: userId }, { blocked: userId }] }),
+    ]);
 
     // Delete the user account
     await User.findByIdAndDelete(userId);
@@ -1309,4 +1467,6 @@ module.exports = {
   verifyOrganizerOtp,
   unifiedAuth,
   deleteAccount,
+  getNotificationPreferences,
+  updateNotificationPreferences,
 };

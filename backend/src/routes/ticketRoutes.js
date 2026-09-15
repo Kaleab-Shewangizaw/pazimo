@@ -80,9 +80,9 @@ const findEventForTicketPurchase = async (eventId) => {
   return Event.findOne({ shortId: normalizedEventId.toLowerCase() });
 };
 
-// Public route - NO authentication middleware
-
-router.post("/ticket/initiate", async (req, res) => {
+// Requires a signed-in account — ticket purchase no longer creates a
+// password-bearing account behind the scenes (see authenticateUser).
+router.post("/ticket/initiate", authenticateUser, async (req, res) => {
   try {
     const {
       ticketDetails,
@@ -124,7 +124,7 @@ router.post("/ticket/initiate", async (req, res) => {
       if (phoneNumber) {
         await flagTamperAttempt({
           phone: phoneNumber,
-          userId: ticketDetails.userId,
+          userId: req.user.userId,
           reason: "Amount mismatch on POST /tickets/ticket/initiate (SantimPay)",
           meta: {
             eventId: ticketDetails.eventId,
@@ -140,97 +140,20 @@ router.post("/ticket/initiate", async (req, res) => {
 
     const verifiedAmount = pricing.amount;
 
-    // Require email for guest checkout
-    if (!ticketDetails.userId && !ticketDetails.email) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Email is required for ticket purchase",
-        });
+    // The caller is authenticated (authenticateUser above) — no more
+    // guest-checkout account lookup/creation. Ticket purchase requires a
+    // real, already-signed-up account.
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
     }
-
-    // --- User Creation / Lookup Logic ---
-    let userId = ticketDetails.userId;
-    let token = null;
-    let user = null;
-
-    console.log(`[PAYMENT-INIT] Received userId from frontend: ${userId}`);
-
-    // ⚡ CRITICAL: If userId is provided (logged-in user), fetch the user object
-    if (userId) {
-      user = await User.findById(userId);
-      if (user) {
-        console.log(`[PAYMENT-INIT] ✅ Fetched logged-in user: ${user._id}, phone: ${user.phoneNumber}`);
-      } else {
-        console.error(`[PAYMENT-INIT] ❌ User ${userId} not found in database!`);
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-    }
-    // If no userId provided (guest checkout), try to find or create user
-    else {
-      const email = ticketDetails.email;
-      const phone = phoneNumber; // Use the payment phone number
-
-      // 1. Check by PHONE first (Priority 1 - most reliable)
-      if (phone) {
-        user = await User.findOne({ phoneNumber: phone });
-        console.log(`[PAYMENT-INIT] Searched by phone "${phone}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 2. If not found by phone, check by EMAIL (Priority 2)
-      if (!user && email) {
-        user = await User.findOne({ email: email.toLowerCase() });
-        console.log(`[PAYMENT-INIT] Searched by email "${email.toLowerCase()}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 3. If still not found, create new user (only if BOTH email and phone provided)
-      if (!user && email && phone) {
-        try {
-          const splitName = (ticketDetails.fullName || "Guest User").split(" ");
-          const firstName = splitName[0];
-          const lastName = splitName.slice(1).join(" ") || "User";
-          // Use phone number as password as requested
-          const password = phone;
-
-          user = await User.create({
-            firstName,
-            lastName,
-            email: email.toLowerCase(),
-            phoneNumber: phone,
-            password: password,
-            role: "customer",
-            isPhoneVerified: true,
-            isActive: true,
-          });
-          console.log(`[PAYMENT-INIT] ✅ AUTO-CREATED NEW USER ${user._id} with email: ${email.toLowerCase()}, phone: ${phone}`);
-        } catch (err) {
-          console.error("[PAYMENT-INIT] ❌ Failed to auto-create user:", err.message);
-          // If creation fails (e.g. duplicate), try to find the user again
-          if (err.code === 11000) {
-            user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phoneNumber: phone }] });
-            console.log(`[PAYMENT-INIT] Found existing user after duplicate error: ${user?._id}`);
-          }
-        }
-      }
-
-      if (user) {
-        userId = user._id;
-        // Generate token for auto-login (for BOTH new and existing users)
-        token = user.createJWT();
-        console.log(`[PAYMENT-INIT] ✅ Will use user ${userId} for ticket purchase`);
-      } else {
-        console.log(`[PAYMENT-INIT] ⚠️ No user found/created - proceeding as guest`);
-      }
-    }
-    // ------------------------------------
 
     // The `phoneNumber` check above only covers the number typed into this
     // specific checkout form. A banned user can dodge it by paying with a
     // fresh, non-blacklisted number while still checking out on their own
-    // (banned) account — so also refuse to initiate payment if the resolved
-    // account itself (logged-in via userId, or matched/created by phone or
-    // email during guest checkout above) is banned.
+    // (banned) account — so also refuse to initiate payment if the signed-in
+    // account itself is banned.
     if (user && (user.isBanned || !user.isActive)) {
       return res.status(403).json({
         success: false,
@@ -341,17 +264,6 @@ router.post("/ticket/initiate", async (req, res) => {
       success: true,
       transactionId: transactionId,
       message: "Payment initiated. Please check your phone.",
-      token: token, // Return token to frontend
-      user: user
-        ? {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phoneNumber: user.phoneNumber,
-            role: user.role,
-          }
-        : null,
     });
   } catch (err) {
     console.error("Error initiating payment:", err);
@@ -360,7 +272,7 @@ router.post("/ticket/initiate", async (req, res) => {
 });
 
 // Chapa Payment Initiation Route
-router.post("/ticket/initiate/chapa", async (req, res) => {
+router.post("/ticket/initiate/chapa", authenticateUser, async (req, res) => {
   try {
     const {
       ticketDetails,
@@ -403,7 +315,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       if (phoneNumber) {
         await flagTamperAttempt({
           phone: phoneNumber,
-          userId: ticketDetails.userId,
+          userId: req.user.userId,
           reason: "Amount mismatch on POST /tickets/ticket/initiate/chapa",
           meta: {
             eventId: ticketDetails.eventId,
@@ -419,95 +331,20 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
 
     const verifiedAmount = pricing.amount;
 
-    // Require email for guest checkout
-    if (!ticketDetails.userId && !ticketDetails.email) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Email is required for ticket purchase",
-        });
-    }
-
-    // --- User Creation / Lookup Logic (Same as SantimPay) ---
-    let userId = ticketDetails.userId;
-    let token = null;
-    let user = null;
-    
-    console.log(`[CHAPA-INIT] Received userId from frontend: ${userId}`);
-
-    // ⚡ CRITICAL: If userId is provided (logged-in user), fetch the user object
-    if (userId) {
-      user = await User.findById(userId);
-      if (user) {
-        console.log(`[CHAPA-INIT] ✅ Fetched logged-in user: ${user._id}, phone: ${user.phoneNumber}`);
-      } else {
-        console.error(`[CHAPA-INIT] ❌ User ${userId} not found in database!`);
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-    }
-    // If no userId provided (guest checkout), try to find or create user
-    else if (!userId) {
-      const email = ticketDetails.email;
-      const phone = phoneNumber;
-
-      // 1. Check by PHONE first (Priority 1 - most reliable)
-      if (phone) {
-        user = await User.findOne({ phoneNumber: phone });
-        console.log(`[CHAPA-INIT] Searched by phone "${phone}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 2. If not found by phone, check by EMAIL (Priority 2)
-      if (!user && email) {
-        user = await User.findOne({ email: email.toLowerCase() });
-        console.log(`[CHAPA-INIT] Searched by email "${email.toLowerCase()}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 3. If still not found, create new user (only if BOTH email and phone provided)
-      if (!user && email && phone) {
-        try {
-          const splitName = (ticketDetails.fullName || "Guest User").split(" ");
-          const firstName = splitName[0];
-          const lastName = splitName.slice(1).join(" ") || "User";
-          const password = phone;
-
-          user = await User.create({
-            firstName,
-            lastName,
-            email: email.toLowerCase(),
-            phoneNumber: phone,
-            password: password,
-            role: "customer",
-            isPhoneVerified: true,
-            isActive: true,
-          });
-          console.log(`[CHAPA-INIT] ✅ AUTO-CREATED NEW USER ${user._id} with email: ${email.toLowerCase()}, phone: ${phone}`);
-        } catch (err) {
-          console.error("[CHAPA-INIT] ❌ Failed to auto-create user:", err.message);
-          // If creation fails due to duplicate, try to find the user
-          if (err.code === 11000) {
-            user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phoneNumber: phone }] });
-            console.log(`[CHAPA-INIT] Found existing user after duplicate error: ${user?._id}`);
-          }
-        }
-      }
-
-      if (user) {
-        userId = user._id;
-        // Generate token for auto-login (for BOTH new and existing users)
-        token = user.createJWT();
-        console.log(`[CHAPA-INIT] ✅ Will use user ${userId} for ticket purchase`);
-      } else {
-        console.log(`[CHAPA-INIT] ⚠️ No user found/created - proceeding as guest`);
-      }
+    // The caller is authenticated (authenticateUser above) — no more
+    // guest-checkout account lookup/creation. Ticket purchase requires a
+    // real, already-signed-up account.
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
     }
 
     // The `phoneNumber` check above only covers the number typed into this
     // specific checkout form. A banned user can dodge it by paying with a
     // fresh, non-blacklisted number while still checking out on their own
-    // (banned) account — so also refuse to initiate payment if the resolved
-    // account itself (logged-in via userId, or matched/created by phone or
-    // email during guest checkout above) is banned.
+    // (banned) account — so also refuse to initiate payment if the signed-in
+    // account itself is banned.
     if (user && (user.isBanned || !user.isActive)) {
       return res.status(403).json({
         success: false,
@@ -864,17 +701,6 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       transactionId: transactionId,
       checkoutUrl: checkoutUrl,
       message: "Redirecting to payment...",
-      token: token,
-      user: user
-        ? {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phoneNumber: user.phoneNumber,
-            role: user.role,
-          }
-        : null,
     });
   } catch (err) {
     console.error("Error initiating Chapa payment:", err);
