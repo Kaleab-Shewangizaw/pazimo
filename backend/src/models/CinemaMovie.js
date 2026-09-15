@@ -168,12 +168,16 @@ const CinemaMovieSchema = new mongoose.Schema(
     // the admin surface and the public page behave identically for a film and
     // for an event:
     //
-    //   bannerStatus — the big rotating hero carousel at the top of the page
+    //   bannerStatus — the hero carousel at the top of a cinema page
     //   isTrending   — the "trending" strip further down
     //
-    // ALL THREE ARE ADMIN-ONLY, for the reason isFeatured documents above: these
-    // are shared shelf space across every cinema, so if the party who benefits
-    // could set them, everyone would and the flags would mean nothing.
+    // isTrending stays admin-only for the reason isFeatured documents above.
+    // bannerStatus does NOT: the public bannerStatus row is now read scoped to
+    // one cinema (GET /public/:cinemaId/banner-movies), so a cinema's own
+    // banner only ever shows on that cinema's own page — there is no shared
+    // shelf for a cinema bannering its own film to crowd, so the cinema is
+    // allowed to set this one on its own films (see updateMovie). An admin can
+    // still set it too, e.g. while curating a cinema's page on their behalf.
     bannerStatus: {
       type: Boolean,
       default: false,

@@ -305,6 +305,24 @@ const updateMovie = async (req, res) => {
       }
     }
 
+    // Bannering, unlike isFeatured/isTrending, is the one display slot a
+    // cinema controls over its own catalogue — see CinemaMovie.bannerStatus.
+    // Featured and trending stay admin-only because those rows are shared
+    // shelf space across every cinema on the platform; a cinema's own banner
+    // only ever shows on that cinema's own page, so there is no shared shelf
+    // for a cinema bannering its own film to crowd.
+    if (req.user.role === "cinema") {
+      const banner = parseBoolean(req.body.bannerStatus, undefined);
+      if (banner !== undefined) {
+        if (banner && movie.publicationStatus !== "published") {
+          throw new BadRequestError(
+            "Publish this film before adding it to your banner"
+          );
+        }
+        movie.bannerStatus = banner;
+      }
+    }
+
     // A published film goes back into the review queue when the CINEMA edits
     // what a customer sees (CinemaMovie.requeueOnCustomerFacingEdit) — that is
     // the whole point of the gate. It must not fire here when the editor is an
@@ -1470,18 +1488,32 @@ const getSchedule = async (req, res) => {
 };
 
 /**
- * The admin-curated promoted row on the public cinema page.
+ * The admin-curated promoted row — the platform-wide home/cinemas page, or one
+ * cinema's own banner/hottest row when mounted under `/public/:cinemaId/...`.
  *
- * Spans every cinema, so it is NOT scoped to one — this is the one public
- * cinema endpoint that reads across the platform. Inactive films and suspended
- * cinemas are excluded at the database rather than filtered in the page, so a
- * cinema going dark cannot leave its poster on the front page.
+ * Unscoped (no cinemaId), this spans every cinema — the one public cinema
+ * reader that reads across the platform. Scoped, it is the same flags
+ * (bannerStatus/isTrending) read back through one cinema's own films, so a
+ * cinema's promoted row is exactly the subset of the platform-wide one that
+ * belongs to it, never a second curation mechanism to keep in step.
+ *
+ * Inactive films and suspended cinemas are excluded at the database rather
+ * than filtered in the page, so a cinema going dark cannot leave its poster on
+ * the front page.
  */
 const listMoviesInSlot = (slotField, defaultLimit) => async (req, res) => {
   try {
+    const { cinemaId } = req.params;
+    if (cinemaId && !mongoose.Types.ObjectId.isValid(cinemaId)) {
+      throw new NotFoundError("Cinema not found");
+    }
+
     const limit = Math.min(Number(req.query.limit) || defaultLimit, 30);
 
-    const movies = await CinemaMovie.find({ [slotField]: true, ...PUBLIC_MOVIE_MATCH })
+    const query = { [slotField]: true, ...PUBLIC_MOVIE_MATCH };
+    if (cinemaId) query.cinema = cinemaId;
+
+    const movies = await CinemaMovie.find(query)
       .populate({
         path: "cinema",
         // The match runs on the joined document; a film whose cinema is
@@ -1532,9 +1564,10 @@ const listMoviesInSlot = (slotField, defaultLimit) => async (req, res) => {
     });
   } catch (error) {
     console.error(`Error listing ${slotField} movies:`, error);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({
       success: false,
-      message: "Failed to list movies",
+      message: status === StatusCodes.INTERNAL_SERVER_ERROR ? "Failed to list movies" : error.message,
     });
   }
 };

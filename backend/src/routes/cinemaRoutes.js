@@ -66,6 +66,10 @@ router.get("/public/trending-movies", programmeController.listTrendingMovies);
 // "movies" is a literal segment so it precedes the /:cinemaId patterns.
 router.get("/public/movies/:movieId", programmeController.getPublicMovie);
 router.get("/public/:cinemaId/movies", programmeController.listPublicMovies);
+// This cinema's own promoted row — the same bannerStatus/isTrending flags the
+// platform-wide rows above read, filtered to one cinema's films.
+router.get("/public/:cinemaId/banner-movies", programmeController.listBannerMovies);
+router.get("/public/:cinemaId/trending-movies", programmeController.listTrendingMovies);
 router.get("/public/:cinemaId/showtimes", programmeController.listPublicShowtimes);
 router.get("/public/:cinemaId/concessions", beverageController.listPublicLineup);
 
