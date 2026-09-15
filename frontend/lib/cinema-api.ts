@@ -256,6 +256,9 @@ export interface CinemaMovie {
   status: MovieStatus;
   isActive: boolean;
   showtimeCount?: number;
+  // The cinema's own hero-carousel toggle — see backend CinemaMovie.bannerStatus.
+  bannerStatus: boolean;
+  publicationStatus: "pending" | "published" | "rejected";
 }
 
 export interface CinemaTicketType {
@@ -503,6 +506,15 @@ export const fetchHalls = (token: string) =>
 
 export const fetchMovies = (token: string) =>
   unwrap(cinemaRequest<{ data: CinemaMovie[] }>("/api/cinemas/me/movies", token));
+
+/** Add or remove one of a cinema's own films from its own page's hero banner. */
+export const setMovieBanner = (token: string, movieId: string, bannerStatus: boolean) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaMovie }>(`/api/cinemas/me/movies/${movieId}`, token, {
+      method: "PATCH",
+      body: JSON.stringify({ bannerStatus }),
+    })
+  );
 
 /** What IMDb (via OMDb) has on a film, by its id or link — read-only, fills a form. */
 export interface ImdbMovieData {

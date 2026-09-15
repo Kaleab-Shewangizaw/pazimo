@@ -4,7 +4,7 @@
 // there for why. Everything here is a pure function of its arguments, so it is
 // safe in a server component and a client one alike.
 
-import type { FeaturedMovie } from "./public-cinema-types";
+import type { CinemaMovieCard, FeaturedMovie } from "./public-cinema-types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -124,6 +124,42 @@ export const movieToFeaturedCard = (
   image: posterUrl(movie.poster) || "",
   // A film is never "sold out" at the listing level — individual screenings
   // are, and that belongs on the showtime picker in Phase 2.
+  soldOut: false,
+  ctaLabel: "Book",
+});
+
+/**
+ * A cinema's own "now showing" film, expressed as the same featured-event
+ * card data movieToFeaturedCard produces for the promoted rows — so a film
+ * looks like the exact same object whether it is on a cinema's own listing
+ * grid or in one of the curated rows above it, and both are just the one
+ * FeaturedEventCard component.
+ *
+ * Takes the cinema separately rather than expecting it on the movie, because
+ * `listPublicMovies` (what feeds a cinema's own page) does not repeat the
+ * cinema on every film the way the cross-cinema rows do — the page already
+ * knows which cinema this is.
+ */
+export const cinemaMovieToFeaturedCard = (
+  movie: CinemaMovieCard,
+  cinema?: { name?: string; city?: string; address?: string }
+) => ({
+  id: movie._id,
+  href: buildMovieUrl(movie),
+  title: movie.title,
+  tag: movie.genre?.[0] || "Now showing",
+  dateLabel: movie.nextShowtime ? showtimeLabel(movie.nextShowtime) : "Coming soon",
+  locationLabel:
+    [cinema?.city, cinema?.address].filter(Boolean).join(", ") ||
+    cinema?.name ||
+    "Cinema",
+  priceLabel:
+    typeof movie.fromPrice === "number"
+      ? `from ${movie.fromPrice.toLocaleString()} ETB`
+      : movie.upcomingCount > 0
+        ? `${movie.upcomingCount} showing${movie.upcomingCount === 1 ? "" : "s"}`
+        : "Coming soon",
+  image: posterUrl(movie.poster) || "",
   soldOut: false,
   ctaLabel: "Book",
 });

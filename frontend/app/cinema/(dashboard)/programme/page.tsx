@@ -7,6 +7,7 @@ import {
   fetchHalls,
   fetchMovies,
   importMovieFromImdb,
+  setMovieBanner,
   type CinemaHall,
   type CinemaMovie,
   type CinemaProfile,
@@ -21,7 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Trash2, Film, DoorOpen, LayoutGrid, Pencil, Link2, Loader2, Plus } from "lucide-react";
+import { Trash2, Film, DoorOpen, LayoutGrid, Pencil, Link2, Loader2, Plus, Images } from "lucide-react";
 import SeatMapEditor from "@/components/cinema/seat-map-editor";
 import {
   Dialog,
@@ -348,6 +349,29 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
     }
   };
 
+  // Per-film in-flight guard, so bannering one card does not disable the rest.
+  const [togglingBanner, setTogglingBanner] = useState<string | null>(null);
+
+  const toggleBanner = async (movie: CinemaMovie) => {
+    setTogglingBanner(movie._id);
+    // Optimistic, rolled back below if the write fails — same pattern the
+    // admin curation screen uses for its own slot toggles.
+    const next = !movie.bannerStatus;
+    setMovies((list) =>
+      list.map((m) => (m._id === movie._id ? { ...m, bannerStatus: next } : m))
+    );
+    try {
+      await setMovieBanner(token, movie._id, next);
+    } catch (e) {
+      setMovies((list) =>
+        list.map((m) => (m._id === movie._id ? { ...m, bannerStatus: !next } : m))
+      );
+      toast.error((e as Error).message);
+    } finally {
+      setTogglingBanner(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -414,6 +438,23 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        variant={m.bannerStatus ? "default" : "ghost"}
+                        size="sm"
+                        disabled={
+                          togglingBanner === m._id || m.publicationStatus !== "published"
+                        }
+                        onClick={() => toggleBanner(m)}
+                        title={
+                          m.publicationStatus !== "published"
+                            ? "This film needs to be approved before it can go on your banner"
+                            : m.bannerStatus
+                              ? "Remove from your banner"
+                              : "Add to your banner"
+                        }
+                      >
+                        <Images className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"

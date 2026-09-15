@@ -168,7 +168,7 @@ export default function EventDetailClient() {
   );
 
   // Get user from store directly
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
 
   // Core state - reduced from 19+ to 9 state variables
   const [event, setEvent] = useState<Event | null>(null);
@@ -600,7 +600,10 @@ export default function EventDetailClient() {
 
       const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(requestBody),
       });
 
