@@ -33,6 +33,7 @@ const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock")
 const { markPaymentTerminal } = require("../utils/paymentHold");
 const beverageSalesService = require("../services/beverageSalesService");
 const EventBeverage = require("../models/EventBeverage");
+const { mirrorSale } = require("../services/ledgerDualWrite");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
 const isEthiopianNumber = (phone) => {
@@ -277,6 +278,25 @@ const processSuccessfulPayment = async (payment) => {
   // Create the ticket
   const ticket = await Ticket.create(ticketData);
   console.log(`[TICKET-CREATE] ✅ Ticket created: ${ticket._id} for ${finalUserId ? 'user' : 'guest'}`);
+
+  // Mirror into the ledger, after the ticket exists. mirrorSale swallows its
+  // own errors — a ledger failure must never fail a paid sale while the
+  // ledger is still a shadow copy — so awaiting it here cannot block ticket
+  // delivery below. commissionRate/organizerVatRate come off the saved
+  // ticket (snapshotted by Ticket's own pre-save hook), not recomputed here,
+  // so the ledger records exactly what was charged — same pattern
+  // cinemaTicketService.js uses for cinema seat sales.
+  await mirrorSale({
+    owner: { kind: "organizer", id: event.organizer },
+    stream: "tickets",
+    grossAmount: ticket.price,
+    commissionRate: ticket.commissionRate,
+    ownerVatRate: ticket.organizerVatRate,
+    source: { ticket: ticket._id },
+    reference: `ticket:${ticket._id}`,
+    occurredAt: ticket.purchaseDate,
+    currency: paymentCurrency,
+  });
 
   // ⚡ Event stock was already atomically claimed above; only the user's
   // ticket history still needs updating here.

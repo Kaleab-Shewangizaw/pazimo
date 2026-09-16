@@ -154,6 +154,80 @@ bypass still returns organizer data with no token, same as current prod;
 flag `"false"` → 401). Comments in `userRoutes.js` and
 `checkPublicWriteSurface.js` updated to match.
 
+### ✅ Also done this session (ledger dual-write gaps closed)
+
+Pre-deploy "final recheck" of the ledger, requested 2026-09-16 alongside the
+organizer bypass fix. Ran `src/scripts/reconcileLedger.js` (read-only, safe
+against production per its own header — only run here against local/dev
+data, no production access from this environment) and traced the
+disagreement it showed back to real code gaps, not just a stale snapshot:
+
+1. **Event ticket sales — the biggest revenue stream — were never
+   live-dual-written to the ledger.** `beverageSalesService.js`,
+   `venueBeverageSalesService.js`, `cinemaTicketService.js`, and
+   `cinemaBeverageSalesService.js` all call `mirrorSale` on every sale; the
+   real ticket-purchase path
+   (`ticketController.js`'s `processSuccessfulPayment`, called from both the
+   SantimPay and Chapa webhooks) had zero ledger references. The ledger's
+   "tickets" stream only ever got populated by manually running
+   `backfillLedger.js`, which isn't scheduled anywhere — so it silently fell
+   behind every sale made after the last manual run. **Fixed**: added a
+   `mirrorSale` call right after `Ticket.create(ticketData)` in
+   `processSuccessfulPayment`, using `ticket.commissionRate`/
+   `ticket.organizerVatRate` (already snapshotted by `Ticket`'s own
+   pre-save hook — same pattern `cinemaTicketService.js` uses).
+2. **Organizer withdrawals never mirrored to the ledger at all.**
+   `createVenueWithdrawal`/`createCinemaWithdrawal` both call
+   `mirrorWithdrawal` right after creating the `Withdrawal` row;
+   `createWithdrawal` (the organizer path — the most common one) didn't.
+   **Fixed**: added the same `mirrorWithdrawal` call there.
+3. **A rejected withdrawal never reversed its ledger entry**, for any owner
+   kind. `mirrorWithdrawal` has a `reversal` flag built for exactly this,
+   but nothing ever called it — every withdrawal creation mirrors an
+   immediate "pending" deduction (before an admin ever looks at it), so a
+   later rejection left the ledger permanently short by that amount versus
+   the real (old-formula) balance. **Fixed**: `updateWithdrawalStatus` now
+   fires `mirrorWithdrawal({ reversal: true })` on an actual
+   pending/approved→rejected transition (guarded so it can't double-fire on
+   an already-rejected row), resolving the right owner kind/stream from
+   whichever of `withdrawal.cinema`/`withdrawal.venue`/`withdrawal.organizer`
+   is set.
+
+**Verified, not just written:**
+- Reconciler before any fix, on local data: 2 real disagreements
+  (organizer tickets -50.30 ETB, organizer beverages -16.08 ETB) — script's
+  own verdict: "NOT AGREED — do not cut reads over."
+- Re-ran `backfillLedger.js --write` to catch the pre-existing local gap
+  (this is exactly what production needs too, separately, once these fixes
+  are deployed — the live code only prevents the gap from growing further,
+  it doesn't retroactively fill what's already missing), then re-ran the
+  reconciler: **"AGREED — safe to keep dual-writing," 0 disagreements.**
+- Directly exercised `mirrorWithdrawal`'s reversal round-trip against
+  `LedgerBalance` (bypassing HTTP/auth, model-level): withdrawn goes
+  0 → 10,000 minor units → 0, available goes 0 → -10,000 → 0, exactly as
+  designed.
+- `node -c` on both changed files, and both controllers `require()`
+  successfully with no circular-dependency errors.
+
+**Still true after these fixes, unchanged**: owner-facing reads and the
+withdrawal eligibility check still run on the old formulas, not the ledger
+— none of this touched real user-facing balances, and none of it blocked
+today's deploy. It closes the gap for whenever the "switch reads to
+LedgerBalance" step (still on P3's own TODO list in PAZIMO_PLAN.md) is
+actually attempted.
+
+**Not done**: `mirrorRefund` is defined in `ledgerDualWrite.js` but still
+never called anywhere — no stream's refunds reach the ledger yet. Lower
+urgency (refunds are rarer, and none of the reconciler's disagreements
+traced to this), but worth the same treatment eventually.
+
+**Production still needs, separately, once this is deployed**: run
+`backfillLedger.js --write` on the VPS to catch the real gap that's
+accumulated there since 2026-08-20 (this environment has no production DB
+access to do it from here), then run `reconcileLedger.js` there to confirm
+it agrees on the real numbers — a local "AGREED" proves the code is
+correct, not that production's ledger is caught up.
+
 ### 📋 Still to do
 
 - [ ] **Ticket-purchase dialog fallback when `ACTIVATE_PASSWORDLESS_ROUTE` is

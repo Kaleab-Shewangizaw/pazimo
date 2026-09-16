@@ -343,6 +343,19 @@ const createWithdrawal = async (req, res) => {
       status: "pending",
     });
 
+    // Shadow-write to the ledger — same as createVenueWithdrawal/
+    // createCinemaWithdrawal below. This was missing entirely until now: the
+    // organizer path never mirrored a payout, so the ledger's "organizer"
+    // owner kind was silently short by every organizer withdrawal ever made.
+    await mirrorWithdrawal({
+      owner: { kind: "organizer", id: organizerId },
+      stream,
+      amount: requested,
+      withdrawalId: withdrawal._id,
+      currency,
+      occurredAt: withdrawal.createdAt,
+    });
+
     res.status(StatusCodes.CREATED).json({
       success: true,
       data: withdrawal,
@@ -405,6 +418,8 @@ const updateWithdrawalStatus = async (req, res) => {
       newStatus: status,
     });
 
+    const previousStatus = withdrawal.status;
+
     // Update withdrawal
     withdrawal.status = status;
     withdrawal.notes = notes || withdrawal.notes;
@@ -414,6 +429,40 @@ const updateWithdrawalStatus = async (req, res) => {
 
     await withdrawal.save();
     console.log("Withdrawal updated successfully");
+
+    // createWithdrawal/createVenueWithdrawal/createCinemaWithdrawal all
+    // shadow-write the payout to the ledger the moment the request is made
+    // (status "pending"), before an admin ever looks at it. If it's being
+    // rejected instead of approved/completed, that deduction never actually
+    // happened — mirror the reversal so the ledger doesn't permanently
+    // understate this owner's balance. Guarded on the actual transition
+    // (never fires twice for an already-rejected row); rejected is treated
+    // as terminal here — an admin flipping a rejected row back to
+    // pending/approved would need a fresh ledger mirror this doesn't add,
+    // same as it doesn't get a fresh Withdrawal document either.
+    if (status === "rejected" && previousStatus !== "rejected") {
+      const { CINEMA_WITHDRAWAL_STREAMS } = require("../services/cinemaFinanceService");
+      const owner = withdrawal.cinema
+        ? { kind: "cinema", id: withdrawal.cinema }
+        : withdrawal.venue
+          ? { kind: "venue", id: withdrawal.venue }
+          : { kind: "organizer", id: withdrawal.organizer };
+      const stream = withdrawal.cinema
+        ? CINEMA_WITHDRAWAL_STREAMS[withdrawal.stream]
+        : withdrawal.venue
+          ? "beverages"
+          : withdrawal.stream;
+
+      await mirrorWithdrawal({
+        owner,
+        stream,
+        amount: withdrawal.amount,
+        withdrawalId: withdrawal._id,
+        currency: withdrawal.currency,
+        reversal: true,
+        occurredAt: withdrawal.processedAt,
+      });
+    }
 
     // Emit notification
     const notification = await Notification.create({
