@@ -178,19 +178,25 @@ const protect = async (req, res, next) => {
 };
 
 // ============================================================================
-// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, RESTORED 2026-09-04
+// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, NOW FLAG-CONTROLLED (2026-09-16)
 // ----------------------------------------------------------------------------
 // First added 2026-07-10 for the same reason, removed 2026-08-20 once it
-// looked safe to. It wasn't: the organizer app already published to the
-// App Store / Play Store — a completely separate codebase this repo has no
-// access to, distinct from the in-development pazimo-organizer-mobile — has
-// never sent an auth token on this call, and that app can't be updated (a
-// store review cycle) until pazimo-organizer-mobile replaces it. Removing
-// the bypass on 2026-08-20 broke every organizer on the live app the moment
-// production actually picked up that change today; restoring it is what
-// "align it with what we have here" means in practice. Same shape as
-// ORGANIZER_LOGIN_OTP_ENABLED in authController.js — a compatibility shim
-// for the old app, not a rollback of anything else from 2026-09-04.
+// looked safe to, then restored 2026-09-04 the moment production actually
+// picked up the removal and broke every organizer on the already-published
+// app — a completely separate codebase this repo has no access to, distinct
+// from the in-development pazimo-organizer-mobile — which has never sent an
+// auth token on this call and can't be updated (a store review cycle) until
+// pazimo-organizer-mobile replaces it. Add/remove/restore by hand, three
+// times over six weeks, is how "meant to last two days" turned into six
+// weeks in the first place — this is now ORGANIZER_LEGACY_APP_BYPASS_ENABLED
+// instead, so turning it off (once the old app is actually retired) is one
+// env change, not a careful code edit someone has to remember to make and
+// might get wrong under time pressure.
+//
+// Defaults to enabled (bypass active) when the var is unset, so deploying
+// this refactor does not itself change production behavior — the old app
+// still gets through exactly as before until someone deliberately sets
+// ORGANIZER_LEGACY_APP_BYPASS_ENABLED=false.
 //
 // GET /api/users/:id falls back to trusting the :id in the URL with NO
 // token at all, IF that account's role is admin/organizer. This is a real
@@ -199,12 +205,8 @@ const protect = async (req, res, next) => {
 // NOT exposed by this — only admin/organizer, and only on this one route
 // (PUT/DELETE/list are untouched). Every use of the fallback path is logged
 // below so usage can be audited, and a request that does carry a token is
-// still held to the normal protect()+restrictTo() check.
-//
-// TO REMOVE (once pazimo-organizer-mobile has replaced the old app): delete
-// this whole block and the `protectStrictOrTrustParamId` export, then in
-// userRoutes.js change the GET /:id route back to:
-//   router.get('/:id', protect, restrictTo('admin', 'organizer'), userController.getUser);
+// still held to the normal protect()+restrictTo() check regardless of the
+// flag.
 // ============================================================================
 const protectStrictOrTrustParamId = async (req, res, next) => {
   const token = extractToken(req);
@@ -222,6 +224,12 @@ const protectStrictOrTrustParamId = async (req, res, next) => {
       }
       next();
     });
+  }
+
+  // No token, and the old app's compatibility window has been closed —
+  // reject like the normal (no-bypass) route would.
+  if (process.env.ORGANIZER_LEGACY_APP_BYPASS_ENABLED === "false") {
+    return next(new UnauthorizedError("Not authorized to access this route"));
   }
 
   // No token at all - fallback for the old app. Trust req.params.id directly.

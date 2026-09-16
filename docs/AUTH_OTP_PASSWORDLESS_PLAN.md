@@ -97,13 +97,19 @@ Two different concerns, tangled together:
   pazimo-mobile's registration OTP. The code is confirmed ready (see above);
   whether the build carrying it has actually reached users in production is
   the open question.
-- **Answered 2026-09-16: both still in review, not live yet.** Neither
-  `ORGANIZER_LOGIN_OTP_ENABLED` nor `REGISTER_PHONE_OTP_ENABLED` has been
-  touched in production — only the local `backend/.env` was changed this
-  session (git-ignored, doesn't travel with `git push`). **Do not flip either
-  flag in the production `.env` until the user confirms the corresponding
-  app store release has gone through** — ask again rather than assuming time
-  has passed.
+- **Answered 2026-09-16: neither app is submitted yet — both are still being
+  built.** Earlier phrasing in this doc said "still in review," which is
+  wrong: there's no app-store submission in flight at all right now, just
+  active development. Neither `ORGANIZER_LOGIN_OTP_ENABLED` nor
+  `REGISTER_PHONE_OTP_ENABLED` has been touched on the live VPS — only the
+  local dev machine's `backend/.env` was changed this session, purely for
+  testing (confirmed `.env` is git-ignored; never staged, committed, or
+  pushed — checked `git check-ignore` before editing it, and re-checked the
+  3 pushed commits afterward, neither touches it). The live VPS has its own
+  separate `.env` file, not synced by git at all — untouched.
+  **Do not flip either flag anywhere but local dev until the user says the
+  corresponding app has actually shipped to users** — ask again rather than
+  assuming time has passed; don't infer readiness from repo/commit state.
 
 ### ✅ Also done this session (frontend account creation)
 
@@ -130,6 +136,24 @@ Two different concerns, tangled together:
   organizer path preserved), "Back to Home".
 - Typechecked (`npx tsc --noEmit`) clean for both changed/new files.
 
+### ✅ Also done this session (organizer legacy-app bypass → flag-controlled)
+
+`protectStrictOrTrustParamId` (backend/src/middlewares/auth.js) is the
+TEMP-BYPASS-2026-07-10 shim on `GET /api/users/:id`: when no token is sent,
+it trusts `req.params.id` directly for admin/organizer accounts (a known,
+accepted IDOR for the already-published organizer app — a separate codebase
+from pazimo-organizer-mobile — which never sends a token on this call). It
+had been toggled by hand three times in six weeks (added 07-10, removed
+08-20, restored 09-04 the moment prod picked up the removal and broke every
+organizer on the live app) — exactly the "meant to last two days, lasted
+six weeks" pattern. Now controlled by `ORGANIZER_LEGACY_APP_BYPASS_ENABLED`:
+**defaults to enabled when unset**, so deploying this change alone doesn't
+touch production behavior; set it to `"false"` once the old app is actually
+retired, no code change needed. Tested locally both ways (flag unset →
+bypass still returns organizer data with no token, same as current prod;
+flag `"false"` → 401). Comments in `userRoutes.js` and
+`checkPublicWriteSurface.js` updated to match.
+
 ### 📋 Still to do
 
 - [ ] **Ticket-purchase dialog fallback when `ACTIVATE_PASSWORDLESS_ROUTE` is
@@ -143,13 +167,15 @@ Two different concerns, tangled together:
       the sign-in/create-account pages now use — not a third parallel
       implementation. The create-account page's OTP-step JSX is a reasonable
       template to lift from.
-- [ ] **Blocked, not a code task**: both app-store submissions are still in
-      review as of 2026-09-16 (confirmed with the user). Ask again before
-      flipping `ORGANIZER_LOGIN_OTP_ENABLED=true` /
-      `REGISTER_PHONE_OTP_ENABLED=true` in the **production** `.env` on the
-      VPS (see pazimo-deployment memory for paths/PM2 names) — once
-      confirmed live, restart the backend, smoke-test one real organizer
-      login and one real customer signup.
+- [ ] **Blocked, not a code task**: as of 2026-09-16, neither mobile app has
+      even been submitted to an app store yet — both still under active
+      development (confirmed with the user; earlier note in this doc saying
+      "in review" was wrong). Ask again before flipping
+      `ORGANIZER_LOGIN_OTP_ENABLED=true` / `REGISTER_PHONE_OTP_ENABLED=true`
+      on the live VPS's own `.env` (see pazimo-deployment memory for
+      paths/PM2 names — it's a separate file from this repo's, not touched
+      by git at all) — once confirmed live, restart the backend, smoke-test
+      one real organizer login and one real customer signup.
 - [ ] Decide whether `ACTIVATE_PASSWORDLESS_ROUTE=true` actually ships to
       production, or stays a local-only convenience — the user asked for the
       flag to exist and default the web to old behavior, but hasn't said

@@ -12,11 +12,13 @@ router.post('/', userController.createUser);
 // Listing all users and fraud incidents is mass/sensitive data - admin only.
 router.get('/', protect, restrictTo('admin'), userController.getAllUsers);
 router.get('/:id/fraud-incidents', protect, restrictTo('admin'), userController.getUserFraudIncidents);
-// Reverted 2026-08-20 to the pre-bypass rule, then restored 2026-09-04 —
-// the already-published organizer app (separate codebase, can't be updated
+// The already-published organizer app (separate codebase, can't be updated
 // until pazimo-organizer-mobile replaces it) still sends no token here at
-// all. See the TEMP-BYPASS-2026-07-10 block in middlewares/auth.js for the
-// full reasoning and the exact revert steps.
+// all — protectStrictOrTrustParamId lets that through, controlled by
+// ORGANIZER_LEGACY_APP_BYPASS_ENABLED (defaults on). See the
+// TEMP-BYPASS-2026-07-10 block in middlewares/auth.js for the full
+// reasoning; turn it off there by setting that env var to "false" once the
+// old app is retired, no route change needed.
 router.get('/:id', protectStrictOrTrustParamId, userController.getUser);
 router.put('/:id', protect, restrictTo('admin'), userController.updateUser);
 router.delete('/:id', protect, restrictTo('admin'), userController.deleteUser);
