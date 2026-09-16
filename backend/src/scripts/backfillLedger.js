@@ -29,8 +29,13 @@ const { VAT_RATE, DEFAULT_COMMISSION_RATE } = require("../config/rates");
 // full breakdown rather than just a success line — a backfill that lands the
 // right total by two offsetting errors is not a correct backfill.
 //
-// Safe to re-run: every entry is keyed off its source row, so a second pass
-// writes nothing new (see ledgerService.append).
+// Safe to re-run: sales and payouts are keyed off their own source row, so a
+// second pass writes nothing new for those once recorded (see
+// ledgerService.append). Two exceptions, both correctly re-evaluated every
+// run: the correction pass below retracts a sale whose source row has since
+// stopped being valid revenue, and Pazimo Capital's principal/repayment are
+// cumulative positions that can still grow, so only the delta since last
+// time is ever appended (see writeLoanDelta).
 
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");
@@ -270,6 +275,98 @@ const run = async () => {
     totals.net += channel.net;
   }
 
+  // --- Correction: reverse sales whose source row is no longer valid -------
+  //
+  // A row can pass revenueFilter when it's first backfilled/mirrored and stop
+  // passing it later — a stock-hold-expiry sweep (paymentHold.js) discovers a
+  // "pending" ticket was never actually paid for and flips it to expired days
+  // after the fact, say. The loop above only ever ADDS entries (matching
+  // ledger.append's own idempotency — a source row already recorded is never
+  // touched again), so nothing has ever retracted one of these once its row
+  // stops being valid revenue. Found 2026-09-16 via the reconciler on
+  // production: three organizers each carrying a handful of stale
+  // ticket_sale entries for tickets that expired after the original
+  // 2026-08-20 backfill ran.
+  //
+  // Reverses the EXACT amount already on record for that source (summed from
+  // the entries themselves, not recomputed from today's rates — the reversal
+  // must cancel exactly what was recorded, whatever rate was live when it
+  // was), as a single `refund` entry. Idempotent: keyed off the source id, so
+  // a row already reversed is skipped on a re-run.
+  const LedgerEntry = require("../models/LedgerEntry");
+  let correctionRows = 0, correctionMinor = 0;
+
+  for (const src of SOURCES) {
+    let Model;
+    try {
+      Model = require(`../models/${src.model}`);
+    } catch {
+      continue;
+    }
+
+    const saleKind = src.stream === "beverages" ? "beverage_sale" : "ticket_sale";
+    const refKey = Object.keys(src.sourceRef({ _id: null }))[0];
+
+    const recordedIds = await LedgerEntry.distinct(`source.${refKey}`, {
+      kind: saleKind,
+      stream: src.stream,
+      "owner.kind": src.ownerKind,
+      currency: CURRENCY,
+    });
+    if (!recordedIds.length) continue;
+
+    const stillValidIds = new Set(
+      (
+        await Model.find({ _id: { $in: recordedIds }, ...revenueFilter(src.model, CURRENCY) })
+          .select("_id")
+          .lean()
+      ).map((d) => String(d._id))
+    );
+
+    const invalidIds = recordedIds.filter((id) => !stillValidIds.has(String(id)));
+
+    for (const invalidId of invalidIds) {
+      const entries = await LedgerEntry.find({ [`source.${refKey}`]: invalidId }).lean();
+
+      // recordSale writes to TWO owners per sale: the seller (organizer/
+      // venue/cinema) and a mirrored commission-only entry under `platform`
+      // (see recordSale's "Mirror onto Pazimo's own books"). Both share this
+      // same source.ticket reference, so summing every entry regardless of
+      // owner double-counted the commission into the organizer's reversal —
+      // caught by the reconciler still disagreeing (by exactly the
+      // commission amount) after the first version of this correction ran.
+      // Grouping by owner and reversing each group separately is what keeps
+      // the seller's reversal and the platform's reversal correct
+      // independently.
+      const byOwner = new Map();
+      for (const e of entries) {
+        const key = `${e.owner.kind}:${e.owner.id}`;
+        if (!byOwner.has(key)) byOwner.set(key, { owner: e.owner, netMinor: 0 });
+        byOwner.get(key).netMinor += e.amountMinor;
+      }
+
+      for (const [ownerKey, { owner, netMinor }] of byOwner) {
+        if (netMinor === 0) continue; // already reversed, or nothing to reverse
+
+        correctionRows += 1;
+        correctionMinor += netMinor;
+
+        if (WRITE) {
+          await ledger.append({
+            owner,
+            currency: CURRENCY,
+            stream: src.stream,
+            kind: "refund",
+            amountMinor: Math.abs(netMinor),
+            source: { [refKey]: invalidId, note: "backfill: source row no longer valid revenue" },
+            idempotencyKey: `refund:invalidated:${src.reference({ _id: invalidId })}:${ownerKey}`,
+            occurredAt: new Date(),
+          });
+        }
+      }
+    }
+  }
+
   // --- Withdrawals ---------------------------------------------------------
   const Withdrawal = require("../models/Withdrawal");
   const STREAM_OF = {
@@ -332,6 +429,43 @@ const run = async () => {
     const { getOrganizerLoanFinance } = require("../services/loanRepaymentService");
     const Loan = require("../models/Loan");
 
+    // loan_principal/loan_repayment represent a CUMULATIVE position that
+    // grows over time (a second advance; more of an existing one repaid from
+    // later ticket sales) — unlike a sale or withdrawal, there is no natural
+    // per-event id to key an idempotent append off. Keying by organizer alone
+    // (as this used to) meant the first backfill's figure froze forever: a
+    // re-run found the key already claimed and skipped, even as the real
+    // total kept growing. Found 2026-09-16 via the reconciler, alongside the
+    // ticket-invalidation correction above — one organizer's ledger balance
+    // was inflated by the full 103,120 ETB gap this alone was hiding. Writes
+    // only the delta since last time, keyed by the new cumulative total, so
+    // the key changes whenever the truth does and a no-op re-run (nothing
+    // has changed) correctly writes nothing.
+    const writeLoanDelta = async ({ owner, kind, currentTotalMinor, note }) => {
+      const [existing] = await LedgerEntry.aggregate([
+        {
+          $match: {
+            "owner.kind": owner.kind,
+            "owner.id": owner.id,
+            stream: "tickets",
+            currency: CURRENCY,
+            kind,
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$amountMinor" } } },
+      ]);
+      const recordedMinor = Math.abs(existing?.total || 0);
+      const delta = currentTotalMinor - recordedMinor;
+      if (delta <= 0) return;
+
+      await ledger.append({
+        owner, currency: CURRENCY, stream: "tickets",
+        kind, amountMinor: delta,
+        source: { note },
+        idempotencyKey: `${kind}:${owner.id}:${CURRENCY}:upto:${currentTotalMinor}`,
+      });
+    };
+
     const borrowers = await Loan.distinct("organizer", {
       ...currencyMatch(CURRENCY),
       status: { $in: ["active", "repaid"] },
@@ -346,14 +480,9 @@ const run = async () => {
       if (principal > 0) {
         principalMinor += principal;
         if (WRITE) {
-          await ledger.append({
-            owner, currency: CURRENCY, stream: "tickets",
-            kind: "loan_principal", amountMinor: principal,
-            source: { note: "backfill: capital principal" },
-            // Keyed on the organizer rather than a loan row because this is the
-            // aggregate position the old formula credits. Re-running replaces
-            // nothing and adds nothing.
-            idempotencyKey: `loan_principal:${organizerId}:${CURRENCY}`,
+          await writeLoanDelta({
+            owner, kind: "loan_principal", currentTotalMinor: principal,
+            note: "backfill: capital principal",
           });
         }
       }
@@ -362,11 +491,9 @@ const run = async () => {
       if (repaid > 0) {
         repaidMinor += repaid;
         if (WRITE) {
-          await ledger.append({
-            owner, currency: CURRENCY, stream: "tickets",
-            kind: "loan_repayment", amountMinor: repaid,
-            source: { note: "backfill: capital repayment" },
-            idempotencyKey: `loan_repayment:${organizerId}:${CURRENCY}`,
+          await writeLoanDelta({
+            owner, kind: "loan_repayment", currentTotalMinor: repaid,
+            note: "backfill: capital repayment",
           });
         }
       }
@@ -410,6 +537,10 @@ const run = async () => {
   console.log("  Paid / approved       " + col(withdrawnMinor));
   console.log("  Pending               " + col(pendingMinor));
   console.log("  Rows                  " + String(payoutRows).padStart(18));
+
+  console.log("\nCorrections (sales reversed — source row no longer valid revenue)");
+  console.log("  Reversed              " + col(-Math.abs(correctionMinor)));
+  console.log("  Rows                  " + String(correctionRows).padStart(18));
 
   // The identity that must hold for the books to be coherent.
   const identity = totals.commission + totals.vat + totals.ownerVat + totals.net;
