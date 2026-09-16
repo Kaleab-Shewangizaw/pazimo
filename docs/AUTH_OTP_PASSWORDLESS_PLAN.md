@@ -310,6 +310,55 @@ read-only there):
       user was actively editing; flagging in case it was a typo rather than
       deliberate.
 
+### ✅ Also done this session (VAT policy held back, every money display now agrees)
+
+The user pasted real numbers from the live production dashboard alongside
+this branch's numbers on the synced mirror — they didn't match, by enough
+money (hundreds of thousands of ETB) to be a trust problem if deployed as
+was. Traced to three separate causes, all now fixed and pushed (`20d4913`):
+
+1. **The organizer's real deduction has been 3.45% (3% commission + 15% VAT
+   on it) in this codebase since Aug 11-13 (`fbaeb25`/`3d0d65f`), but
+   production has never deployed it** — confirmed arithmetically against a
+   real production pull (it matches flat 97% exactly). Asked the user
+   directly whether this was meant to go live: **answer was no, hold it
+   back**. `VAT_RATE` is now `0` in `backend/src/config/rates.js` — the
+   single source every formula and the ledger derive from, so nothing else
+   needed to change. Re-enabling later is a one-line change back to `0.15`.
+2. **`ledgerReadService.js`'s "ownerRevenue"** (the ledger card's "Seller
+   earned" / "Available, all pools") was sourced from `netMinor`, which also
+   carries Pazimo Capital loan movements — correct for `availableBalance`,
+   wrong for a field meant to mean "revenue earned." Off by the net loan
+   position (~23,000 ETB on the mirror). Fixed to `gross - commission - vat
+   - ownerVat`, matching every other revenue reader.
+3. **`getDashboardStats`/`getCommissionSummary` counted tickets whose event
+   had since been deleted** — the ledger correctly has no owner to mirror
+   an orphaned ticket onto and drops it; these two didn't have the
+   equivalent check. 146 tickets / ~4,300 ETB. Both now scope to
+   currently-existing events.
+
+**Verified, not assumed**: after all three fixes, directly compared (not
+through the browser — called the actual controller logic against the
+mirror) dashboard stats, the ledger partition card, the ledger totals row,
+and the platform commission figure — all agree **to the cent**. Reconciler:
+148/148 exact, 0 disagreements, unchanged from before these fixes (they
+didn't touch per-organizer balance math, only the platform-wide/display
+layer, so re-confirming this was a real regression check, not a formality).
+
+Also fixed in the same pass: the local dev backend needed a restart to pick
+up `rates.js` (nodemon doesn't restart on `.env` changes, and the `.env`
+`pazmimo_mirror` → `pazimo_mirror` typo from earlier had already been
+corrected by the user by the time this was checked). And: the commission-
+by-event admin table had a hardcoded `limit=20` with no page param and no
+controls, despite the backend already supporting real pagination — wired up
+in `CommissionPanel.tsx` using the existing `PaginationControls` component.
+
+**Still true**: none of this has touched production. Every verification in
+this session used either the read-only production credential (never
+writes) or the local `pazimo_mirror` (fully synced, safe to write).
+Deploying this branch is still a separate, deliberate step — see the
+production checklist below.
+
 ### 📋 Still to do
 
 - [ ] **Ticket-purchase dialog fallback when `ACTIVATE_PASSWORDLESS_ROUTE` is
