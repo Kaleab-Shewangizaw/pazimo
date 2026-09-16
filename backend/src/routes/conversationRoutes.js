@@ -17,6 +17,7 @@ const {
   blockUser,
   unblockUser,
   clearConversation,
+  markRead,
 } = require("../controllers/conversationController");
 
 // Keyed by counterparty user id, not a conversation id — the client never
@@ -38,6 +39,9 @@ router.get("/:counterpartyId/messages", listMessages);
 router.post("/:counterpartyId/messages", messageWriteLimiter, sendMessage);
 router.patch("/:counterpartyId/messages/:messageId", messageWriteLimiter, editMessage);
 router.delete("/:counterpartyId/messages/:messageId", messageWriteLimiter, deleteMessage);
+// Marks this account's unread messages FROM counterpartyId as read — called
+// when the thread screen opens, clearing that conversation's chat-list badge.
+router.post("/:counterpartyId/read", markRead);
 
 // The chat header's "contact card" — a person's username always, their phone
 // number only once both sides have added each other (see contactService.js).

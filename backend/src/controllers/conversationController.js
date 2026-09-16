@@ -144,6 +144,14 @@ const clearConversation = async (req, res) => {
   res.status(StatusCodes.OK).json({ success: true });
 };
 
+const markRead = async (req, res) => {
+  const userId = requireUserId(req);
+  const { counterpartyId } = req.params;
+
+  await conversationService.markConversationRead({ userId, counterpartyId });
+  res.status(StatusCodes.OK).json({ success: true });
+};
+
 module.exports = {
   listConversations,
   listMessages,
@@ -158,4 +166,5 @@ module.exports = {
   blockUser,
   unblockUser,
   clearConversation,
+  markRead,
 };

@@ -84,6 +84,24 @@ const listConversationsForUser = async ({ userId }) => {
     .populate("participants", "firstName lastName username")
     .lean();
 
+  // One aggregate for every conversation's badge count, not one query per
+  // row — grouped by `conversation` so each row's count can only ever
+  // reflect messages actually sent to THIS user in THAT thread, never a
+  // total that bleeds across counterparties the way a single global
+  // "unread" flag would. `readAt` is unset until `markConversationRead`
+  // (below) runs, which is the only place that ever writes it.
+  const unreadRows = await Message.aggregate([
+    {
+      $match: {
+        recipient: new mongoose.Types.ObjectId(userId),
+        readAt: null,
+        deletedAt: null,
+      },
+    },
+    { $group: { _id: "$conversation", count: { $sum: 1 } } },
+  ]);
+  const unreadCounts = new Map(unreadRows.map((row) => [String(row._id), row.count]));
+
   return conversations
     .filter((conversation) => {
       // `.lean()` gives back the Map as a plain object, not a Map instance.
@@ -104,8 +122,33 @@ const listConversationsForUser = async ({ userId }) => {
         lastMessagePreview: conversation.lastMessagePreview,
         lastMessageSenderId: conversation.lastMessageSender,
         lastMessageKind: conversation.lastMessageKind,
+        unreadCount: unreadCounts.get(String(conversation._id)) || 0,
       };
     });
+};
+
+/**
+ * Marks every message this user has received from `counterpartyId` as read —
+ * scoped by both `conversation` and `recipient`, so it can only ever touch
+ * this one thread's messages TO this one user, never another thread's
+ * messages or the sender's own copy of what they sent. Called when the
+ * thread screen opens (and again as more of it loads), the same "read on
+ * view" behavior Telegram's unread badge has.
+ */
+const markConversationRead = async ({ userId, counterpartyId }) => {
+  if (!isValidId(counterpartyId)) throw new NotFoundError("Conversation not found");
+
+  const conversation = await Conversation.findOne({
+    pairKey: pairKeyFor(userId, counterpartyId),
+  }).select("_id");
+
+  // No conversation yet — nothing to mark read, not an error.
+  if (!conversation) return;
+
+  await Message.updateMany(
+    { conversation: conversation._id, recipient: userId, readAt: null },
+    { $set: { readAt: new Date() } }
+  );
 };
 
 const MAX_MESSAGES_PAGE = 50;
@@ -329,4 +372,5 @@ module.exports = {
   editMessage,
   deleteMessage,
   clearConversation,
+  markConversationRead,
 };
