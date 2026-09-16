@@ -77,8 +77,33 @@ const register = async (req, res) => {
       phoneNumber,
       role: 'customer',
     });
-    const token = signToken(user._id, user.role);
 
+    // Gated the same way as ORGANIZER_LOGIN_OTP_ENABLED below, and for the
+    // identical reason: any pazimo-mobile install from before this shipped
+    // (added 2026-09-16) has no idea what to do with a `requiresOtp` reply
+    // from /register — it expects an immediate token. Flip
+    // REGISTER_PHONE_OTP_ENABLED=true once that build has actually reached
+    // users; until then this endpoint behaves exactly as it always has.
+    if (process.env.REGISTER_PHONE_OTP_ENABLED === "true") {
+      // The account exists but is unverified — no token yet. The client
+      // completes sign-up with POST /api/auth/verify-register-otp using the
+      // email below and the code just sent, which issues the token. Same
+      // requiresOtp/maskedDestination response shape as the login second
+      // factor below, so the mobile client's existing OTP-entry step covers
+      // both.
+      const maskedDestination = await generateAndSendOtp(user, "sms", "register");
+      return res.status(StatusCodes.CREATED).json({
+        status: "success",
+        requiresOtp: true,
+        data: {
+          email: user.email,
+          channel: "sms",
+          maskedDestination,
+        },
+      });
+    }
+
+    const token = signToken(user._id, user.role);
     res.status(StatusCodes.CREATED).json({
       status: "success",
       data: {
@@ -91,6 +116,7 @@ const register = async (req, res) => {
           phoneNumber: user.phoneNumber,
           role: user.role,
           isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
         },
         token,
       },
@@ -193,7 +219,16 @@ const login = async (req, res) => {
     // fix, data-exposure fixes) stays on; only this one flag is off.
     // Set ORGANIZER_LOGIN_OTP_ENABLED=true (and restart) once the mobile
     // app ships OTP support — no code change needed to re-enable.
-    if (user.role === "organizer" && process.env.ORGANIZER_LOGIN_OTP_ENABLED === "true") {
+    //
+    // `user.otpEnabled` (added 2026-09-16) is the unrelated, per-account
+    // path: any customer who has turned on login codes in account settings
+    // gets the same second factor regardless of this env flag. Settings
+    // only lets otpEnabled be set true once isPhoneVerified is true (see
+    // updateOtpPreference), so this never sends a code to an unconfirmed
+    // number.
+    const organizerForcedOtp =
+      user.role === "organizer" && process.env.ORGANIZER_LOGIN_OTP_ENABLED === "true";
+    if (organizerForcedOtp || user.otpEnabled) {
       const maskedDestination = await generateAndSendOtp(user, "sms");
       return res.status(StatusCodes.OK).json({
         status: "success",
@@ -221,6 +256,8 @@ const login = async (req, res) => {
           phoneNumber: user.phoneNumber,
           role: user.role,
           isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
+          otpEnabled: user.otpEnabled,
         },
         token,
       },
@@ -585,43 +622,111 @@ const updatePhoneNumber = async (req, res) => {
   }
 };
 
-// Add new method to verify phone number
+// Sends a phone-verification code to the signed-in user's own number —
+// the settings-screen counterpart to the code registration now sends
+// automatically. Needed for any account created before this feature (every
+// existing customer shows isPhoneVerified:false) that wants to turn on login
+// codes. Shares the register-purpose OTP fields with verify-register-otp:
+// "prove you own this phone" is the same claim either way, just reached from
+// a different entry point (unauthenticated right after sign-up vs.
+// authenticated from account settings).
+const sendPhoneVerifyOtp = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ status: "error", message: "User not authenticated" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: "error", message: "User not found" });
+    }
+
+    if (user.isPhoneVerified) {
+      return res.status(200).json({
+        status: "success",
+        alreadyVerified: true,
+        message: "Your phone number is already verified.",
+      });
+    }
+
+    const maskedDestination = await generateAndSendOtp(user, "sms", "register");
+    res.status(200).json({
+      status: "success",
+      channel: "sms",
+      maskedDestination,
+      message: `We sent a verification code to ${maskedDestination}.`,
+    });
+  } catch (error) {
+    console.error("Send phone verify OTP error:", error);
+    res.status(500).json({ status: "error", message: "Failed to send verification code" });
+  }
+};
+
+// Verifies the code sendPhoneVerifyOtp just sent. Real check against the
+// hashed, expiring, attempt-capped code on the user's own document — this
+// used to be a stub that accepted any code unconditionally, but nothing
+// ever called it (verify-phone-otp was never routed), so there is no prior
+// behavior to preserve.
 const verifyPhoneNumber = async (req, res) => {
   try {
-    const { verificationCode } = req.body;
+    const { code } = req.body;
 
     if (!req.user || !req.user.id) {
-      return res.status(401).json({
+      return res.status(401).json({ status: "error", message: "User not authenticated" });
+    }
+    if (isQueryOperatorInjection(code) || !code) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user || !user.registerOtpCodeHash || !user.registerOtpExpires) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpExpires < Date.now()) {
+      user.registerOtpCodeHash = undefined;
+      user.registerOtpExpires = undefined;
+      user.registerOtpAttempts = 0;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
         status: "error",
-        message: "User not authenticated",
+        message: "Too many incorrect attempts. Request a new code.",
       });
     }
 
-    const userId = req.user.id;
-
-    // Here you would typically verify the code against what was sent to the user
-    // This is a placeholder for the actual verification logic
-    const isValidCode = true; // Replace with actual verification logic
-
-    if (!isValidCode) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid verification code",
-      });
+    const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+    if (submittedHash !== user.registerOtpCodeHash) {
+      user.registerOtpAttempts += 1;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
     }
 
-    // Update user's phone verification status
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { isPhoneVerified: true },
-      { new: true },
-    );
-
-    user.password = undefined;
+    user.registerOtpCodeHash = undefined;
+    user.registerOtpExpires = undefined;
+    user.registerOtpAttempts = 0;
+    user.isPhoneVerified = true;
+    await user.save({ validateBeforeSave: false });
 
     res.status(200).json({
       status: "success",
-      data: { user },
+      data: {
+        user: {
+          _id: user._id,
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
+          otpEnabled: user.otpEnabled,
+        },
+      },
     });
   } catch (error) {
     res.status(400).json({
@@ -821,6 +926,11 @@ const maskEmailForDisplay = (email) => {
 const OTP_FIELDS_BY_PURPOSE = {
   login: { hash: "otpCodeHash", expires: "otpExpires", attempts: "otpAttempts" },
   reset: { hash: "resetOtpCodeHash", expires: "resetOtpExpires", attempts: "resetOtpAttempts" },
+  register: {
+    hash: "registerOtpCodeHash",
+    expires: "registerOtpExpires",
+    attempts: "registerOtpAttempts",
+  },
 };
 
 // Shared by sendOrganizerOtp (the standalone "sign in with a code" path),
@@ -858,11 +968,17 @@ const generateAndSendOtp = async (user, channel, purpose = "login") => {
           emailHtml: `<p>Your Pazimo password reset code is <strong>${code}</strong>. It expires in 10 minutes. If you didn't request this, you can ignore this message — your password won't change unless this code is used.</p>`,
           sms: `PAZIMO OTP: ${code}\nUse this code to reset your Pazimo account password. Do not share it with anyone.`,
         }
-      : {
-          emailSubject: "Your Pazimo verification code",
-          emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
-          sms: `PAZIMO OTP: ${code}\nUse this code to sign in to your organizer account. Do not share it with anyone.`,
-        };
+      : purpose === "register"
+        ? {
+            emailSubject: "Your Pazimo verification code",
+            emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+            sms: `PAZIMO OTP: ${code}\nUse this code to verify your phone number on Pazimo. Do not share it with anyone.`,
+          }
+        : {
+            emailSubject: "Your Pazimo verification code",
+            emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+            sms: `PAZIMO OTP: ${code}\nUse this code to sign in to your Pazimo account. Do not share it with anyone.`,
+          };
 
   // Fire-and-forget — the caller's response doesn't wait on the SMTP round
   // trip. Zoho (smtp.zoho.com), same transporter shape as
@@ -943,6 +1059,12 @@ const sendOrganizerOtp = async (req, res) => {
   }
 };
 
+// Despite the /organizer/ path, this also verifies the login code sent to
+// any customer who has turned on otpEnabled (see login()'s comment above) —
+// pazimo-mobile's AuthSheet calls this same endpoint for both. Widened
+// 2026-09-16 from `{email, role:"organizer"}` to a plain email lookup for
+// that reason; every message below was already role-generic, so this is not
+// a behavior change for organizers.
 const verifyOrganizerOtp = async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -956,7 +1078,7 @@ const verifyOrganizerOtp = async (req, res) => {
       return res.status(400).json({ status: "error", message: "Invalid or expired code" });
     }
 
-    const organizer = await User.findOne({ email, role: "organizer" });
+    const organizer = await User.findOne({ email });
     if (!organizer || !organizer.otpCodeHash || !organizer.otpExpires) {
       return res.status(400).json({ status: "error", message: "Invalid or expired code" });
     }
@@ -1021,6 +1143,8 @@ const verifyOrganizerOtp = async (req, res) => {
           phoneNumber: organizer.phoneNumber,
           role: organizer.role,
           isActive: organizer.isActive,
+          isPhoneVerified: organizer.isPhoneVerified,
+          otpEnabled: organizer.otpEnabled,
         },
         token,
       },
@@ -1031,6 +1155,145 @@ const verifyOrganizerOtp = async (req, res) => {
       status: "error",
       message: "Failed to verify code",
     });
+  }
+};
+
+// Completes registration: the account already exists (register() created it
+// with isPhoneVerified:false), this checks the register-purpose code that
+// sent and, on success, is the first point a token is ever issued for it —
+// so an account whose owner never proves the number isn't reachable can
+// never actually sign in.
+const verifyRegisterOtp = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(code) || !email || !code) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user || !user.registerOtpCodeHash || !user.registerOtpExpires) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpExpires < Date.now()) {
+      user.registerOtpCodeHash = undefined;
+      user.registerOtpExpires = undefined;
+      user.registerOtpAttempts = 0;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        status: "error",
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+    if (submittedHash !== user.registerOtpCodeHash) {
+      user.registerOtpAttempts += 1;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    user.registerOtpCodeHash = undefined;
+    user.registerOtpExpires = undefined;
+    user.registerOtpAttempts = 0;
+    user.isPhoneVerified = true;
+    await user.save({ validateBeforeSave: false });
+
+    const token = signToken(user._id, user.role);
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: {
+        user: {
+          _id: user._id,
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
+          otpEnabled: user.otpEnabled,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("Verify register OTP error:", error);
+    res.status(500).json({ status: "error", message: "Failed to verify code" });
+  }
+};
+
+// Re-sends the registration code — the phone-pad equivalent of "resend" on
+// the forgot-password/organizer-OTP screens. Scoped to accounts that are
+// still unverified so this can't be used to spam a code at an account whose
+// owner already proved the number and moved on.
+const resendRegisterOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (isQueryOperatorInjection(email) || !email) {
+      return res.status(400).json({ status: "error", message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email, isPhoneVerified: false });
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "No pending verification found for that account.",
+      });
+    }
+
+    const maskedDestination = await generateAndSendOtp(user, "sms", "register");
+    res.status(200).json({
+      status: "success",
+      channel: "sms",
+      maskedDestination,
+      message: `We sent a new verification code to ${maskedDestination}.`,
+    });
+  } catch (error) {
+    console.error("Resend register OTP error:", error);
+    res.status(500).json({ status: "error", message: "Failed to resend verification code" });
+  }
+};
+
+// Self-serve login-code toggle (see User.js's otpEnabled comment). Gated on
+// isPhoneVerified so the account can only ever ask for a code somewhere it's
+// actually confirmed to be reachable.
+const updateOtpPreference = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ status: "error", message: "User not authenticated" });
+    }
+
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ status: "error", message: "enabled must be a boolean" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: "error", message: "User not found" });
+    }
+
+    if (enabled && !user.isPhoneVerified) {
+      return res.status(400).json({
+        status: "error",
+        message: "Verify your phone number before turning on login codes.",
+      });
+    }
+
+    user.otpEnabled = enabled;
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({ status: "success", data: { otpEnabled: user.otpEnabled } });
+  } catch (error) {
+    res.status(400).json({ status: "error", message: error.message });
   }
 };
 
@@ -1526,6 +1789,10 @@ module.exports = {
   sendOtp,
   sendOrganizerOtp,
   verifyOrganizerOtp,
+  verifyRegisterOtp,
+  resendRegisterOtp,
+  sendPhoneVerifyOtp,
+  updateOtpPreference,
   unifiedAuth,
   deleteAccount,
   getNotificationPreferences,

@@ -37,6 +37,22 @@ router.get('/me', protect, authController.getMe);
 router.post('/forgot-password', passwordResetSendLimiter, authController.forgotPassword);
 router.post('/verify-reset-code', passwordResetVerifyLimiter, authController.verifyPasswordResetCode);
 router.post('/reset-password', passwordResetVerifyLimiter, authController.resetPassword);
+
+// Registration phone verification (added 2026-09-16) — register() now sends
+// a code instead of a token; these two complete that journey. See
+// verifyRegisterOtp's comment in authController.js.
+router.post('/verify-register-otp', organizerOtpVerifyLimiter, authController.verifyRegisterOtp);
+router.post('/resend-register-otp', otpLimiter, authController.resendRegisterOtp);
+
+// Settings-screen phone verification, for any account that predates this
+// feature and still shows isPhoneVerified:false — required before
+// otp-preference below will accept enabled:true.
+router.post('/send-phone-verify-otp', protect, otpLimiter, authController.sendPhoneVerifyOtp);
+router.post('/verify-phone-otp', protect, organizerOtpVerifyLimiter, authController.verifyPhoneNumber);
+
+// Self-serve login-code (2FA) toggle.
+router.put('/otp-preference', protect, authController.updateOtpPreference);
+
 router.put('/update-profile', protect, authController.updateProfile);
 router.put('/update-username', protect, authController.updateUsername);
 router.put('/update-password', protect, updatePasswordLimiter, authController.updatePassword);

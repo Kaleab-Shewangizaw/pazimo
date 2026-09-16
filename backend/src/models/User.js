@@ -99,6 +99,13 @@ const userSchema = new mongoose.Schema(
       },
       trim: true,
     },
+    // Relative path (e.g. "/uploads/1234.jpg") — same convention as
+    // Beverage/Event/Category images. The API host serves /uploads
+    // statically; clients prefix their own API origin.
+    profilePicture: {
+      type: String,
+      default: null,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -178,6 +185,27 @@ const userSchema = new mongoose.Schema(
     resetOtpAttempts: {
       type: Number,
       default: 0,
+    },
+    // Phone-verification OTP — proves the number on the account is reachable
+    // by its owner. Used right after registration (before a token is issued)
+    // and again from account settings for any pre-existing account that
+    // still shows isPhoneVerified:false. Separate fields for the same reason
+    // as resetOtp* above: a code issued to prove phone ownership must never
+    // be replayable against the sign-in or password-reset endpoints.
+    registerOtpCodeHash: String,
+    registerOtpExpires: Date,
+    registerOtpAttempts: {
+      type: Number,
+      default: 0,
+    },
+    // Self-serve login 2FA (added 2026-09-16) — a customer opts into this
+    // from account settings once isPhoneVerified is true; unrelated to
+    // ORGANIZER_LOGIN_OTP_ENABLED below, which is a role-wide env-gated
+    // switch rather than a per-account choice. See login()'s comment in
+    // authController.js for how the two combine.
+    otpEnabled: {
+      type: Boolean,
+      default: false,
     },
   },
   {
