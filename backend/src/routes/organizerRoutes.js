@@ -25,6 +25,12 @@ router.post(
 // Protected routes
 router.get("/profile", authenticateUser, organizerController.getProfile);
 router.put("/profile", authenticateUser, organizerController.updateProfile);
+router.put(
+  "/profile/picture",
+  authenticateUser,
+  upload.single("profilePicture"),
+  organizerController.updateProfilePicture,
+);
 router.put("/security", authenticateUser, organizerController.updatePassword);
 router.get(
   "/:organizerId/dashboard",
