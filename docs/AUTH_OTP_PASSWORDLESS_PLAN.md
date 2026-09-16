@@ -359,6 +359,23 @@ writes) or the local `pazimo_mirror` (fully synced, safe to write).
 Deploying this branch is still a separate, deliberate step — see the
 production checklist below.
 
+### ✅ Also done this session (separate Pazimo Capital revenue dashboard)
+
+Requested after the loan-cash-flow-bleeding-into-ticket-revenue finding
+above — a dedicated view so lending's own numbers (what Pazimo actually
+earns from the 15% flat fee) stop getting mixed into ticket-revenue cards
+anywhere. New "Revenue" tab on `app/admin/(admin)/capital/page.tsx`, backed
+by `GET /api/capital/admin/revenue` (`capitalController.
+getCapitalRevenueSummary`): interest earned vs. contracted, interest
+outstanding, principal disbursed vs. recovered, total still owed, a
+combined recovery-rate bar, pending request count/amount, and a per-loan
+table. Interest recovered is proportional to each loan's actual combined
+repayment (`repaid × feeAmount/totalRepayable`), not assumed principal-
+first — lands on exactly `feeAmount` once a loan is fully "repaid".
+Verified directly against the mirror: 3 repaid loans, 23,000.75 ETB total
+interest, 100% recovered, matching the earlier finding exactly. Pushed as
+`bdce91e`.
+
 ### 📋 Still to do
 
 - [ ] **Ticket-purchase dialog fallback when `ACTIVATE_PASSWORDLESS_ROUTE` is
