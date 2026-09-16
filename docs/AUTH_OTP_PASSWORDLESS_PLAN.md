@@ -228,6 +228,88 @@ access to do it from here), then run `reconcileLedger.js` there to confirm
 it agrees on the real numbers — a local "AGREED" proves the code is
 correct, not that production's ledger is caught up.
 
+### ✅ Also done this session (production ledger verified against real numbers, 2 more real bugs found and fixed)
+
+The user gave a **read-only** production credential
+(`mongodb+srv://read_only:...@cluster0.psywky.mongodb.net`, the cluster
+documented in the pazimo-money-facts memory) and asked for a full check that
+every ledger number is right, plus confirmation that no organizer/event has
+ever had a special commission/VAT deal (answer: no, confirmed — every
+Event/Ticket in production has `commissionRate`/`coversOrganizerVat` as
+`null`, meaning every figure relies on the code's 3%/15%/0% defaults; both
+the old formula and the ledger apply that fallback identically via safe
+`$ifNull`/`??` handling, so this is not a source of disagreement, just an
+unused admin feature — `PATCH /api/admin/commission/events/:eventId`).
+
+**Ran the reconciler directly against production** (read-only,
+`reconcileLedger.js` is explicitly safe for this per its own header): 49
+disagreements, every single one a "tickets" stream row reading exactly
+**0.00 ETB** in the ledger against real balances up to 107,211.81 ETB —
+confirmed the "event tickets never live-mirrored" gap from earlier in this
+session is real and currently live in production, not just theoretical.
+
+**Then synced a local mirror** (`mongodb://localhost:27017/pazimo_mirror` —
+already existed as a snapshot from the original 2026-08-20 ledger work,
+27 days stale) with production's `events`/`tickets`/`payments`/
+`withdrawals`/`users`/`loans`/`organizercapitalprofiles`/
+`organizerregistrations` collections (upsert by `_id`, read-only from prod,
+writes only to the local mirror), then ran the actual remediation
+(`backfillLedger.js --write`) there — never against production, which this
+environment only has read access to.
+
+That surfaced **two further, genuinely new bugs** (distinct from the "never
+mirrored at all" gap already fixed in `ticketController.js`/
+`withdrawalController.js`), both now fixed in `backfillLedger.js` and
+pushed (commit `0063166`):
+
+1. **Stale ticket_sale entries never retracted.** A ticket can pass the
+   revenue filter when first backfilled and later flip to `expired` (a
+   `paymentHold.js` sweep discovering it was never actually paid for) —
+   the ledger, being append-only and correctly idempotent for rows that
+   *stay* valid, had no mechanism to reverse one that stops being valid.
+   Affected 3 organizers, 19 stale ticket rows, ~7,300 ETB.
+2. **`loan_repayment` froze on the first backfill.** Keyed by
+   organizer+currency alone, so a re-run found the key already claimed and
+   silently skipped — even as the real repayment total kept growing from
+   later ticket sales. One organizer's ledger balance was overstated by
+   **103,120 ETB** from this alone.
+
+**Also made and fixed a mistake worth recording**: the first version of the
+ticket-invalidation correction summed *every* ledger entry sharing a
+`source.ticket` reference without filtering by owner — but `recordSale`
+writes to two owners per sale (the seller, and a platform-only mirrored
+commission entry). This double-counted the platform's commission into the
+seller's reversal, overshooting by exactly the commission amount. Caught by
+re-running the reconciler (it disagreed again, in the opposite direction,
+by a much smaller amount) rather than assuming success. Fixed by grouping
+reversals by owner. A related cleanup mistake (passing a JSON-round-tripped
+owner with a string `id` to `rebuildBalance`, which matched nothing in the
+raw aggregation `$match` — no schema casting there, unlike `.find()` — and
+silently zeroed 3 organizers' balance projections) was caught the same way
+and fixed by rebuilding with real `ObjectId` instances.
+
+**Final state, verified**: reconciler on the fully-synced, fully-corrected
+mirror: **"AGREED — safe to keep dual-writing"**, 0 disagreements, 136 exact
+matches, 12 within the documented per-transaction rounding tolerance.
+
+**What production still needs** (this environment cannot do any of this —
+read-only there):
+- [ ] Deploy this branch (adds the live ticket-sale/withdrawal dual-write,
+      and the corrected `backfillLedger.js`).
+- [ ] Run `node src/scripts/backfillLedger.js --write` on the VPS with the
+      now-fixed script — this both catches up the historical gap AND
+      applies the stale-ticket-reversal/loan-repayment-delta corrections in
+      one pass.
+- [ ] Run `node src/scripts/reconcileLedger.js` on the VPS afterward and
+      confirm it says "AGREED" on the real numbers, the same way it now
+      does on the mirror.
+- [ ] Noticed but out of scope for this pass: `backend/.env`'s
+      `MONGODB_URI` was hand-edited to `mongodb://localhost:27017/
+      pazmimo_mirror` (transposed letters — the real local mirror db is
+      spelled `pazimo_mirror`). Didn't fix it myself since it's a file the
+      user was actively editing; flagging in case it was a typo rather than
+      deliberate.
+
 ### 📋 Still to do
 
 - [ ] **Ticket-purchase dialog fallback when `ACTIVATE_PASSWORDLESS_ROUTE` is
