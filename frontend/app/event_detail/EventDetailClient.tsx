@@ -566,9 +566,15 @@ export default function EventDetailClient() {
       const ticketId = crypto.randomUUID?.() ||
         `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+      // The /web variant lets a buyer without an account check out by just
+      // filling in name/email/phone here — it logs them into a matching
+      // account or creates one, no password or OTP step. Signed-in buyers
+      // (token set below) go through the same route unaffected. The plain
+      // /ticket/initiate(/chapa) endpoints still exist and require sign-in
+      // first — those are what the mobile app uses.
       const endpoint = effectiveProvider === "CHAPA"
-        ? "/api/tickets/ticket/initiate/chapa"
-        : "/api/tickets/ticket/initiate";
+        ? "/api/tickets/ticket/initiate/chapa/web"
+        : "/api/tickets/ticket/initiate/web";
 
       const requestBody = {
         amount,

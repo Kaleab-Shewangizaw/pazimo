@@ -730,9 +730,15 @@ function SignInContent() {
                 </Button>
               </form>
 
-              <div className="text-center">
+              <div className="text-center space-y-1">
                 <p className="text-sm text-muted-foreground">
                   Don&apos;t have an account?{" "}
+                  <Link href="/create-account" className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium">
+                    Create account
+                  </Link>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Want to sell tickets?{" "}
                   <Link href="/organizer-registration" target="_blank" className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium">
                     Contact sales
                   </Link>

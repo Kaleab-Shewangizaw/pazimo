@@ -18,12 +18,6 @@ interface PendingOtp {
   maskedDestination: string | null;
 }
 
-interface PendingOtp {
-  email: string;
-  channel: "sms" | "email";
-  maskedDestination: string | null;
-}
-
 interface AuthState {
   user: User | null;
   token: string | null;
@@ -31,17 +25,25 @@ interface AuthState {
   isBanned: boolean;
   banReason: string | null;
   // Set by login() when the account requires a second factor (organizers,
-  // added 2026-09-04) instead of getting a token immediately. The caller
-  // should check this after awaiting login() — if set, show a code-entry
-  // step and complete sign-in via POST /api/auth/organizer/verify-otp using
-  // pendingOtp.email (never the raw form input, which may not match the
-  // account's real email exactly) and the code the user enters, then call
-  // setAuth() with the result.
+  // added 2026-09-04, or any customer with 2FA turned on in Settings)
+  // instead of getting a token immediately. The caller should check this
+  // after awaiting login() — if set, show a code-entry step and complete
+  // sign-in via POST /api/auth/organizer/verify-otp using pendingOtp.email
+  // (never the raw form input, which may not match the account's real email
+  // exactly) and the code the user enters, then call setAuth() with the
+  // result.
   pendingOtp: PendingOtp | null;
+  // Set by signup() when REGISTER_PHONE_OTP_ENABLED is on (added
+  // 2026-09-16) instead of getting a token immediately — the account exists
+  // but isPhoneVerified is still false. Kept separate from pendingOtp: this
+  // completes via POST /api/auth/verify-register-otp /
+  // /api/auth/resend-register-otp, a different pair of endpoints than the
+  // organizer login second factor above.
+  pendingRegisterOtp: PendingOtp | null;
   setBanned: (reason: string | null) => void;
   checkAccountStatus: () => Promise<void>;
   signup: (userData: {
-    email: string;
+    email?: string;
     password: string;
     firstName: string;
     lastName?: string;
@@ -71,6 +73,7 @@ export const useAuthStore = create<AuthState>()(
       isBanned: false,
       banReason: null,
       pendingOtp: null,
+      pendingRegisterOtp: null,
       setBanned: (reason) => set({ isBanned: true, banReason: reason }),
       checkAccountStatus: async () => {
         const { token } = useAuthStore.getState();
@@ -105,7 +108,32 @@ export const useAuthStore = create<AuthState>()(
           const data = await response.json();
 
           if (!response.ok) {
-            throw new Error(data.message || "Registration failed");
+            // EMAIL_TAKEN/PHONE_TAKEN (see authController.js register()) lets
+            // the caller offer "log in instead" rather than just showing
+            // this message — attached onto the Error since fetch failures
+            // here only ever carry a plain Error, not authStore's own type.
+            const err = new Error(data.message || "Registration failed") as Error & {
+              code?: string;
+            };
+            err.code = data.code;
+            throw err;
+          }
+
+          // Password verified server-side, but the phone still needs to be
+          // confirmed (REGISTER_PHONE_OTP_ENABLED, added 2026-09-16) before a
+          // token is issued. Not an error — the caller should check
+          // pendingRegisterOtp after awaiting signup() and show a code-entry
+          // step, then complete via /api/auth/verify-register-otp.
+          if (data.requiresOtp) {
+            set({
+              pendingRegisterOtp: {
+                email: data.data?.email,
+                channel: data.data?.channel || "sms",
+                maskedDestination: data.data?.maskedDestination ?? null,
+              },
+              error: null,
+            });
+            return;
           }
 
           set({
@@ -113,6 +141,7 @@ export const useAuthStore = create<AuthState>()(
             token: data.data.token,
             isAuthenticated: true,
             error: null,
+            pendingRegisterOtp: null,
           });
         } catch (error) {
           set({
@@ -223,6 +252,7 @@ export const useAuthStore = create<AuthState>()(
           isBanned: false,
           banReason: null,
           pendingOtp: null,
+          pendingRegisterOtp: null,
         });
         // Clear localStorage
         localStorage.removeItem("auth-storage");
@@ -239,6 +269,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           error: null,
           pendingOtp: null,
+          pendingRegisterOtp: null,
         });
         // Store in localStorage for persistence
         localStorage.setItem(
