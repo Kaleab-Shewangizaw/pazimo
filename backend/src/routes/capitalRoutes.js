@@ -36,6 +36,12 @@ router.patch(
 );
 
 router.get(
+  "/admin/revenue",
+  authenticateUser,
+  restrictTo("admin"),
+  capitalController.getCapitalRevenueSummary
+);
+router.get(
   "/admin/loans",
   authenticateUser,
   restrictTo("admin"),

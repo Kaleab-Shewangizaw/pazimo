@@ -46,6 +46,7 @@ import {
   ShieldOff,
   SlidersHorizontal,
   RotateCcw,
+  TrendingUp,
 } from "lucide-react";
 
 type Currency = "ETB" | "USD";
@@ -103,6 +104,39 @@ interface Loan {
   disbursedAt?: string;
   disbursementReference?: string;
   createdAt: string;
+}
+
+interface CapitalRevenueLoan {
+  _id: string;
+  referenceNumber?: string;
+  organizer: { _id: string; firstName: string; lastName: string; email: string };
+  status: LoanStatus;
+  approvedAmount: number;
+  feeRate: number;
+  feeAmount: number;
+  totalRepayable: number;
+  repaid: number;
+  outstanding: number;
+  feeRecovered: number;
+  recoveryPercent: number;
+  disbursedAt?: string;
+}
+
+interface CapitalRevenue {
+  currency: Currency;
+  principalDisbursed: number;
+  feeExpected: number;
+  feeRecovered: number;
+  feeOutstanding: number;
+  principalRecovered: number;
+  principalOutstanding: number;
+  totalOutstanding: number;
+  recoveryRatePercent: number;
+  loanCount: number;
+  activeLoanCount: number;
+  repaidLoanCount: number;
+  pendingRequests: { count: number; amount: number };
+  loans: CapitalRevenueLoan[];
 }
 
 const STATUS_STYLES: Record<LoanStatus, string> = {
@@ -169,6 +203,10 @@ export default function CapitalPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Revenue tab state
+  const [revenue, setRevenue] = useState<CapitalRevenue | null>(null);
+  const [revenueLoading, setRevenueLoading] = useState(true);
+
   const fetchOrganizers = useCallback(async () => {
     try {
       setOrgLoading(true);
@@ -220,6 +258,23 @@ export default function CapitalPage() {
     }
   }, [loanPage, loanStatusFilter, loanSearch, token]);
 
+  const fetchRevenue = useCallback(async () => {
+    try {
+      setRevenueLoading(true);
+      const res = await fetch(`${API_URL}/api/capital/admin/revenue?currency=${currency}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || "Failed to load capital revenue");
+      setRevenue(data.data);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to load capital revenue");
+    } finally {
+      setRevenueLoading(false);
+    }
+  }, [currency, token]);
+
   useEffect(() => {
     if (!token) return;
     if (tab === "organizers" || tab === "eligible") fetchOrganizers();
@@ -229,6 +284,11 @@ export default function CapitalPage() {
     if (!token) return;
     if (tab === "loans") fetchLoans();
   }, [token, tab, fetchLoans]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (tab === "revenue") fetchRevenue();
+  }, [token, tab, fetchRevenue]);
 
   const openEligibilityDialog = (organizer: OrganizerCapitalRow) => {
     setEligibilityTarget(organizer);
@@ -440,6 +500,9 @@ export default function CapitalPage() {
               {loanStats.pending?.count ? (
                 <Badge className="ml-1.5 bg-yellow-500 text-white">{loanStats.pending.count}</Badge>
               ) : null}
+            </TabsTrigger>
+            <TabsTrigger value="revenue">
+              <TrendingUp className="h-4 w-4 mr-1.5" /> Revenue
             </TabsTrigger>
           </TabsList>
 
@@ -756,6 +819,149 @@ export default function CapitalPage() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ---------------- Revenue tab ----------------
+              What Capital itself has earned (fee/interest) and disbursed,
+              isolated from ticket commission — separate from the
+              organizer/loan-management tabs above by design, not just
+              layout: those manage loans, this reports on lending as its
+              own line of business. */}
+          <TabsContent value="revenue">
+            {revenueLoading && !revenue ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
+                      <div className="h-6 w-28 bg-gray-200 dark:bg-gray-700 rounded" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : revenue ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card className="border-l-4 border-l-emerald-600">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Interest earned so far</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {formatCompactMoney(revenue.feeRecovered, revenue.currency)}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        of {formatCompactMoney(revenue.feeExpected, revenue.currency)} contracted
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-amber-600">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Interest still outstanding</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {formatCompactMoney(revenue.feeOutstanding, revenue.currency)}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-blue-600">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Principal disbursed</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {formatCompactMoney(revenue.principalDisbursed, revenue.currency)}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        {formatCompactMoney(revenue.principalRecovered, revenue.currency)} recovered
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-rose-600">
+                    <CardContent className="p-4">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Total still owed (principal + interest)</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                        {formatCompactMoney(revenue.totalOutstanding, revenue.currency)}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Recovery rate — principal + interest combined
+                      </p>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {revenue.recoveryRatePercent.toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="h-2 w-full rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-600"
+                        style={{ width: `${Math.min(100, revenue.recoveryRatePercent)}%` }}
+                      />
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                      <span>{revenue.loanCount} loans disbursed</span>
+                      <span>{revenue.activeLoanCount} still repaying</span>
+                      <span>{revenue.repaidLoanCount} fully repaid</span>
+                      {revenue.pendingRequests.count > 0 && (
+                        <span>
+                          {revenue.pendingRequests.count} pending request
+                          {revenue.pendingRequests.count === 1 ? "" : "s"} worth{" "}
+                          {formatCompactMoney(revenue.pendingRequests.amount, revenue.currency)}
+                        </span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Organizer</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Principal</TableHead>
+                            <TableHead>Fee rate</TableHead>
+                            <TableHead>Interest earned</TableHead>
+                            <TableHead>Outstanding</TableHead>
+                            <TableHead>Recovered</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {revenue.loans.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                                No loans have been disbursed yet.
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            revenue.loans.map((loan) => (
+                              <TableRow key={loan._id}>
+                                <TableCell>
+                                  <div className="font-medium">
+                                    {loan.organizer.firstName} {loan.organizer.lastName}
+                                  </div>
+                                  <div className="text-xs text-gray-500">{loan.organizer.email}</div>
+                                </TableCell>
+                                <TableCell>
+                                  <StatusBadge status={loan.status} />
+                                </TableCell>
+                                <TableCell>{formatCompactMoney(loan.approvedAmount, revenue.currency)}</TableCell>
+                                <TableCell>{(loan.feeRate * 100).toFixed(0)}%</TableCell>
+                                <TableCell>{formatCompactMoney(loan.feeRecovered, revenue.currency)}</TableCell>
+                                <TableCell>{formatCompactMoney(loan.outstanding, revenue.currency)}</TableCell>
+                                <TableCell>{loan.recoveryPercent.toFixed(0)}%</TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : null}
           </TabsContent>
         </Tabs>
 
