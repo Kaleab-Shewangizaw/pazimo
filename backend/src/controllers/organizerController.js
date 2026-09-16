@@ -14,6 +14,7 @@ const {
 } = require("../utils/ticketRevenueQuery");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
+const { getOrganizerLoanFinance } = require("../services/loanRepaymentService");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -909,7 +910,22 @@ exports.getOrganizerDashboard = async (req, res) => {
       pendingWithdrawals: 0,
     };
 
-    const availableBalance = organizerRevenue - withdrawalStats.totalWithdrawn - withdrawalStats.pendingWithdrawals;
+    // Ticket revenue and any borrowed Pazimo Capital principal are one pool
+    // (see financeService.calculateOrganizerBalance, the withdrawal gate's
+    // own formula) — an advance really does raise what's withdrawable, and
+    // the automatic 60%-of-ticket-sales repayment really does lower it. This
+    // endpoint was missing both terms entirely, so an organizer with a loan
+    // saw a higher balance on their own dashboard than they could actually
+    // withdraw (the withdrawal gate itself was never wrong — only this
+    // display was). Found 2026-09-17 while confirming which organizer-facing
+    // numbers this session's fixes actually touch.
+    const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
+    const availableBalance =
+      organizerRevenue +
+      loanFinance.principalCredited -
+      loanFinance.totalRepaidFromTickets -
+      withdrawalStats.totalWithdrawn -
+      withdrawalStats.pendingWithdrawals;
 
     res.status(200).json({
       success: true,
@@ -923,6 +939,8 @@ exports.getOrganizerDashboard = async (req, res) => {
           pazimoCommission,
           totalWithdrawn: withdrawalStats.totalWithdrawn,
           pendingWithdrawals: withdrawalStats.pendingWithdrawals,
+          capitalPrincipalCredited: loanFinance.principalCredited,
+          capitalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
           availableBalance,
         },
         stats: {
@@ -1168,7 +1186,22 @@ exports.getOrganizerDashboard = async (req, res) => {
       pendingWithdrawals: 0,
     };
 
-    const availableBalance = organizerRevenue - withdrawalStats.totalWithdrawn - withdrawalStats.pendingWithdrawals;
+    // Ticket revenue and any borrowed Pazimo Capital principal are one pool
+    // (see financeService.calculateOrganizerBalance, the withdrawal gate's
+    // own formula) — an advance really does raise what's withdrawable, and
+    // the automatic 60%-of-ticket-sales repayment really does lower it. This
+    // endpoint was missing both terms entirely, so an organizer with a loan
+    // saw a higher balance on their own dashboard than they could actually
+    // withdraw (the withdrawal gate itself was never wrong — only this
+    // display was). Found 2026-09-17 while confirming which organizer-facing
+    // numbers this session's fixes actually touch.
+    const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
+    const availableBalance =
+      organizerRevenue +
+      loanFinance.principalCredited -
+      loanFinance.totalRepaidFromTickets -
+      withdrawalStats.totalWithdrawn -
+      withdrawalStats.pendingWithdrawals;
 
     res.status(200).json({
       success: true,
@@ -1182,6 +1215,8 @@ exports.getOrganizerDashboard = async (req, res) => {
           pazimoCommission,
           totalWithdrawn: withdrawalStats.totalWithdrawn,
           pendingWithdrawals: withdrawalStats.pendingWithdrawals,
+          capitalPrincipalCredited: loanFinance.principalCredited,
+          capitalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
           availableBalance,
         },
         stats: {
