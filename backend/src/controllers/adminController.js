@@ -3,7 +3,7 @@ const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const { StatusCodes } = require("http-status-codes");
-const { revenueAccumulators } = require("../utils/ticketRevenueQuery");
+const { revenueAccumulators, validTicketMatch } = require("../utils/ticketRevenueQuery");
 const ledgerRead = require("../services/ledgerReadService");
 
 // Get admin dashboard statistics (OPTIMIZED)
@@ -28,6 +28,19 @@ const getDashboardStats = async (req, res) => {
     const ticketWithdrawalMatch = {
       $and: [withdrawalCurrencyMatch, ticketStreamMatch],
     };
+    // A ticket whose event has since been deleted is not attributable to any
+    // organizer — the ledger correctly has no owner to mirror it onto and
+    // drops it (see backfillLedger.js's "skipped" count), but this
+    // aggregation had no equivalent check and counted its price anyway,
+    // inflating this platform-wide total above what any per-organizer view
+    // (or the ledger) would ever show. Found 2026-09-17 as the last piece of
+    // a gap between this endpoint and the ledger partitions once the ledger
+    // itself was already fully reconciled. 146 tickets / ~4,300 ETB on the
+    // database this was found against — small, but the fix is the same
+    // event-existence scope the ledger backfill already uses, so run it
+    // first rather than adding a $lookup to every revenue aggregation below.
+    const existingEventIds = await Event.distinct("_id");
+
     // Run all count queries in parallel for better performance
     const [
       totalUsers,
@@ -45,19 +58,15 @@ const getDashboardStats = async (req, res) => {
       Ticket.aggregate([
         {
           $facet: {
-            // Calculate gross revenue (only tickets with price > 0)
+            // Calculate gross revenue (only tickets with price > 0), scoped
+            // to validTicketMatch (status/paymentStatus/currency) the same
+            // way every other revenue reader is, plus the existing-event
+            // check above.
             revenue: [
               {
                 $match: {
-                  ...(currency === "ETB"
-                    ? {
-                        $or: [
-                          { currency: "ETB" },
-                          { currency: { $exists: false } },
-                        ],
-                      }
-                    : { currency }),
-                  price: { $gt: 0 },
+                  ...validTicketMatch(currency),
+                  event: { $in: existingEventIds },
                 },
               },
               {

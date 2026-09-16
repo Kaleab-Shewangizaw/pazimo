@@ -35,7 +35,14 @@ const getCommissionSummary = async (req, res) => {
   try {
     const currency = req.query.currency === "USD" ? "USD" : "ETB";
 
-    const match = { ...validTicketMatch(currency) };
+    // A ticket whose event has since been deleted is not attributable to any
+    // organizer — the ledger correctly drops it (no owner to mirror it onto),
+    // but this aggregation had no equivalent check and counted its price
+    // anyway. Same fix as adminController.getDashboardStats, found
+    // 2026-09-17 the same way: a gap against the ledger partitions on an
+    // otherwise fully reconciled ledger.
+    const existingEventIds = await Event.distinct("_id");
+    const match = { ...validTicketMatch(currency), event: { $in: existingEventIds } };
     if (req.query.from || req.query.to) {
       match.createdAt = {};
       if (req.query.from) match.createdAt.$gte = new Date(req.query.from);

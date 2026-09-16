@@ -28,7 +28,18 @@ const asMajor = (doc) => ({
   pazimoCommission: toMajor(doc.commissionMinor),
   vatOnCommission: toMajor(doc.vatMinor),
   ownerVat: toMajor(doc.ownerVatMinor),
-  ownerRevenue: toMajor(doc.netMinor),
+  // gross - commission - vat - ownerVat, NOT netMinor. netMinor also carries
+  // Pazimo Capital's loan_principal/loan_repayment movements (both fold into
+  // it — see applyToProjection's default branch — because availableBalance
+  // correctly needs them: a credited advance really does raise what an
+  // organizer can withdraw, and a repayment really does lower it). But
+  // "revenue" is a different question than "current position," and this
+  // field answers the wrong one when it's netMinor — found 2026-09-17 as a
+  // ~23,000 ETB gap between this and the dashboard's ticket-only
+  // organizerRevenue on an otherwise fully reconciled ledger.
+  ownerRevenue: toMajor(
+    doc.grossMinor - doc.commissionMinor - doc.vatMinor - doc.ownerVatMinor
+  ),
   withdrawn: toMajor(doc.withdrawnMinor),
   pendingWithdrawals: toMajor(doc.pendingMinor),
   availableBalance: toMajor(doc.availableMinor),
@@ -293,7 +304,10 @@ const getPlatformPartitions = async (currency = "ETB", { withCoverage = true } =
       ...partition,
       currency,
       grossRevenue: toMajor(row.grossMinor),
-      ownerRevenue: toMajor(row.netMinor),
+      // Not netMinor — see asMajor's comment above; same fix, same reason.
+      ownerRevenue: toMajor(
+        row.grossMinor - row.commissionMinor - row.vatMinor - row.ownerVatMinor
+      ),
       pazimoCommission: toMajor(row.commissionMinor),
       vatOnCommission: toMajor(row.vatMinor),
       ownerVat: toMajor(row.ownerVatMinor),
@@ -354,7 +368,10 @@ const getPlatformPartitions = async (currency = "ETB", { withCoverage = true } =
 
   const totals = {
     grossRevenue: toMajor(totalsMinor.grossMinor),
-    ownerRevenue: toMajor(totalsMinor.netMinor),
+    // Not netMinor — see asMajor's comment above; same fix, same reason.
+    ownerRevenue: toMajor(
+      totalsMinor.grossMinor - totalsMinor.commissionMinor - totalsMinor.vatMinor - totalsMinor.ownerVatMinor
+    ),
     pazimoCommission: toMajor(totalsMinor.commissionMinor),
     vatOnCommission: toMajor(totalsMinor.vatMinor),
     ownerVat: toMajor(totalsMinor.ownerVatMinor),

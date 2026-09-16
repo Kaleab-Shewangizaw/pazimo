@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import PaginationControls from "@/components/invitations/PaginationControls";
 import { formatCompactMoney } from "@/lib/utils";
 import {
   Wallet,
@@ -111,6 +112,9 @@ export default function CommissionPanel({ token }: { token: string | null }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draftPercent, setDraftPercent] = useState("");
   const [saving, setSaving] = useState(false);
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<{ total: number; pages: number } | null>(null);
 
   const headers = {
     Accept: "application/json",
@@ -122,7 +126,11 @@ export default function CommissionPanel({ token }: { token: string | null }) {
     if (!token) return;
     try {
       setLoading(true);
-      const params = new URLSearchParams({ currency, limit: "20" });
+      const params = new URLSearchParams({
+        currency,
+        limit: String(PAGE_SIZE),
+        page: String(page),
+      });
       if (search) params.set("search", search);
 
       const [summaryRes, eventsRes] = await Promise.all([
@@ -135,13 +143,22 @@ export default function CommissionPanel({ token }: { token: string | null }) {
         const payload = await eventsRes.json();
         setEvents(payload.data || []);
         setDefaults(payload.defaults || null);
+        setPagination(payload.pagination || null);
       }
     } catch {
       toast.error("Could not load commission data");
     } finally {
       setLoading(false);
     }
-  }, [token, currency, search]);
+  }, [token, currency, search, page]);
+
+  // A currency switch or a new search term invalidates whatever page we were
+  // on — going back to page 1 avoids landing past the end of a now-shorter
+  // result set (or, on this component's own state, silently re-requesting a
+  // stale page number the debounced effect below would otherwise send).
+  useEffect(() => {
+    setPage(1);
+  }, [currency, search]);
 
   useEffect(() => {
     const timer = setTimeout(load, search ? 350 : 0); // debounce typing
@@ -269,11 +286,10 @@ export default function CommissionPanel({ token }: { token: string | null }) {
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
             Ticket sales only — bar, invitation and campaign money is counted on
-            its own screen. Each event has its own rate, and the government
-            charges {((defaults?.vatRate ?? 0.15) * 100).toFixed(0)}% VAT on
-            that commission, so an event at 4% costs the organizer 4.6% — and{" "}
-            {(((defaults?.organizerVatRate ?? 0.15) + 0.046) * 100).toFixed(1)}%
-            if Pazimo also covers the organizer&apos;s own VAT.
+            its own screen. Each event has its own rate
+            {defaults && defaults.vatRate > 0
+              ? `, and the government charges ${(defaults.vatRate * 100).toFixed(0)}% VAT on that commission, so an event at 4% costs the organizer ${(4 * (1 + defaults.vatRate)).toFixed(2)}%.`
+              : "."}
           </p>
         </div>
         <Select value={currency} onValueChange={(v: Currency) => setCurrency(v)}>
@@ -518,6 +534,16 @@ export default function CommissionPanel({ token }: { token: string | null }) {
               </TableBody>
             </Table>
           </div>
+          {pagination && (
+            <PaginationControls
+              currentPage={page}
+              totalPages={pagination.pages}
+              onPageChange={setPage}
+              totalItems={pagination.total}
+              itemName="events"
+              itemsPerPage={PAGE_SIZE}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

@@ -12,8 +12,21 @@ const DEFAULT_COMMISSION_RATE = 0.03;
 const MIN_COMMISSION_RATE = 0;
 const MAX_COMMISSION_RATE = 0.25;
 
-// Government VAT, charged on the commission and passed through to the organizer.
-const VAT_RATE = 0.15;
+// Government VAT, charged on the commission and passed through to the
+// organizer — 0 for now.
+//
+// Held back 2026-09-16 by explicit decision, not an oversight: this was
+// written 2026-08-11/13 (see commit fbaeb25 and 3d0d65f) but production has
+// never deployed it — every organizer today still sees the old flat 97%
+// split, confirmed against a live production dashboard pull. Flipping this
+// to 0.15 would be the first time it actually takes real money from every
+// organizer, silently, as a side effect of an unrelated deploy — asked, and
+// the answer was to hold it back until it can be shipped and communicated on
+// its own. Every organizer's split reduces to flat commissionRate (97% at
+// the 3% default) while this is 0 — vat/vatOnCommission entries and figures
+// stay in every formula and the ledger, they just compute to zero, so
+// flipping this back to 0.15 later needs no other code change.
+const VAT_RATE = 0;
 
 // VAT on the ORGANIZER's own sales — a different tax from the one above.
 //
