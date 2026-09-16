@@ -1,6 +1,7 @@
 const { StatusCodes } = require("http-status-codes");
 const { BadRequestError } = require("../errors");
 const ticketShareService = require("../services/ticketShareService");
+const pushService = require("../services/pushService");
 
 const requireUserId = (req) => {
   if (!req.user || !req.user.userId) {
@@ -24,6 +25,10 @@ const notifyUser = (req, userId, event, payload) => {
     console.error(`Failed to emit ${event} to user ${userId}:`, error.message);
   }
 };
+
+const nameOf = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
+  (user?.username ? `@${user.username}` : "Someone");
 
 const searchRecipients = async (req, res) => {
   const currentUserId = requireUserId(req);
@@ -52,10 +57,18 @@ const createShare = async (req, res) => {
     idempotencyKey,
   });
 
-  notifyUser(req, share.toUser?._id || share.toUser, "ticket:transfer", {
+  const recipientId = share.toUser?._id || share.toUser;
+  notifyUser(req, recipientId, "ticket:transfer", {
     shareId: share._id,
     status: "pending",
     fromUser: share.fromUser,
+  });
+  pushService.sendPushToUser({
+    userId: recipientId,
+    preferenceKey: "ticketUpdates",
+    title: nameOf(share.fromUser),
+    body: "🎟️ Sent you a ticket",
+    data: { type: "ticket-share", shareId: share._id, counterpartyId: share.fromUser?._id || share.fromUser },
   });
 
   res.status(StatusCodes.CREATED).json({ success: true, data: share });
@@ -92,13 +105,21 @@ const acceptShare = async (req, res) => {
   });
 
   const fromUserId = share.fromUser?._id || share.fromUser;
-  notifyUser(req, share.toUser?._id || share.toUser, "ticket:received", {
+  const toUserId = share.toUser?._id || share.toUser;
+  notifyUser(req, toUserId, "ticket:received", {
     shareId: share._id,
     items: share.items,
   });
   notifyUser(req, fromUserId, "ticket:transfer", {
     shareId: share._id,
     status: "accepted",
+  });
+  pushService.sendPushToUser({
+    userId: fromUserId,
+    preferenceKey: "ticketUpdates",
+    title: nameOf(share.toUser),
+    body: "🎟️ Accepted your ticket",
+    data: { type: "ticket-share", shareId: share._id, counterpartyId: toUserId },
   });
 
   res.status(StatusCodes.OK).json({ success: true, data: share });
@@ -112,9 +133,17 @@ const declineShare = async (req, res) => {
     accept: false,
   });
 
-  notifyUser(req, share.fromUser?._id || share.fromUser, "ticket:transfer", {
+  const fromUserId = share.fromUser?._id || share.fromUser;
+  notifyUser(req, fromUserId, "ticket:transfer", {
     shareId: share._id,
     status: "declined",
+  });
+  pushService.sendPushToUser({
+    userId: fromUserId,
+    preferenceKey: "ticketUpdates",
+    title: nameOf(share.toUser),
+    body: "Declined your ticket",
+    data: { type: "ticket-share", shareId: share._id, counterpartyId: share.toUser?._id || share.toUser },
   });
 
   res.status(StatusCodes.OK).json({ success: true, data: share });

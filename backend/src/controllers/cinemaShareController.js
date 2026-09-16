@@ -1,6 +1,7 @@
 const { StatusCodes } = require("http-status-codes");
 const { BadRequestError } = require("../errors");
 const cinemaShareService = require("../services/cinemaShareService");
+const pushService = require("../services/pushService");
 
 // Bare `async (req, res)` handlers, unguarded by a local try/catch — safe
 // here because middlewares/asyncErrors.js (required once, at the top of
@@ -30,6 +31,10 @@ const notifyUser = (req, userId, event, payload) => {
   }
 };
 
+const nameOf = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
+  (user?.username ? `@${user.username}` : "Someone");
+
 const searchRecipients = async (req, res) => {
   const currentUserId = requireUserId(req);
   const results = await cinemaShareService.searchRecipients({
@@ -58,10 +63,18 @@ const createShare = async (req, res) => {
     idempotencyKey,
   });
 
-  notifyUser(req, share.toUser?._id || share.toUser, "cinema:transfer", {
+  const recipientId = share.toUser?._id || share.toUser;
+  notifyUser(req, recipientId, "cinema:transfer", {
     shareId: share._id,
     status: "pending",
     fromUser: share.fromUser,
+  });
+  pushService.sendPushToUser({
+    userId: recipientId,
+    preferenceKey: "ticketUpdates",
+    title: nameOf(share.fromUser),
+    body: share.itemType === "CINEMA_CONCESSION" ? "🍿 Sent you a snack" : "🎬 Sent you a cinema ticket",
+    data: { type: "cinema-share", shareId: share._id, counterpartyId: share.fromUser?._id || share.fromUser },
   });
 
   res.status(StatusCodes.CREATED).json({ success: true, data: share });
@@ -94,13 +107,21 @@ const acceptShare = async (req, res) => {
   });
 
   const fromUserId = share.fromUser?._id || share.fromUser;
-  notifyUser(req, share.toUser?._id || share.toUser, "cinema:received", {
+  const toUserId = share.toUser?._id || share.toUser;
+  notifyUser(req, toUserId, "cinema:received", {
     shareId: share._id,
     items: share.items,
   });
   notifyUser(req, fromUserId, "cinema:transfer", {
     shareId: share._id,
     status: "accepted",
+  });
+  pushService.sendPushToUser({
+    userId: fromUserId,
+    preferenceKey: "ticketUpdates",
+    title: nameOf(share.toUser),
+    body: share.itemType === "CINEMA_CONCESSION" ? "🍿 Accepted your snack" : "🎬 Accepted your cinema ticket",
+    data: { type: "cinema-share", shareId: share._id, counterpartyId: toUserId },
   });
 
   res.status(StatusCodes.OK).json({ success: true, data: share });
@@ -114,9 +135,17 @@ const declineShare = async (req, res) => {
     accept: false,
   });
 
-  notifyUser(req, share.fromUser?._id || share.fromUser, "cinema:transfer", {
+  const fromUserId = share.fromUser?._id || share.fromUser;
+  notifyUser(req, fromUserId, "cinema:transfer", {
     shareId: share._id,
     status: "declined",
+  });
+  pushService.sendPushToUser({
+    userId: fromUserId,
+    preferenceKey: "ticketUpdates",
+    title: nameOf(share.toUser),
+    body: share.itemType === "CINEMA_CONCESSION" ? "Declined your snack" : "Declined your cinema ticket",
+    data: { type: "cinema-share", shareId: share._id, counterpartyId: share.toUser?._id || share.toUser },
   });
 
   res.status(StatusCodes.OK).json({ success: true, data: share });

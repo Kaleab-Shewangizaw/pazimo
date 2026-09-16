@@ -46,6 +46,10 @@ router.put('/update-password', protect, updatePasswordLimiter, authController.up
 router.get('/notification-preferences', protect, authController.getNotificationPreferences);
 router.put('/notification-preferences', protect, authController.updateNotificationPreferences);
 
+// Push token registration — see pushService.js for what actually reads these.
+router.post('/push-token', protect, authController.registerPushToken);
+router.delete('/push-token', protect, authController.unregisterPushToken);
+
 
 // OTP routes
 router.post('/send-otp', otpLimiter, authController.sendOtp);

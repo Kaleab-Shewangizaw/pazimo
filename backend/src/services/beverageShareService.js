@@ -344,6 +344,13 @@ const createShare = async ({
       at: created[0].createdAt,
     }).catch((error) => console.error("Failed to touch conversation for beverage share:", error.message));
 
+    // Populated here (unlike the bare `created[0]`) so the controller's push
+    // notification can put a real name in the title instead of "Someone" —
+    // the same shape `listShares`/`getShareForUser` already populate.
+    await created[0].populate([
+      { path: "fromUser", select: "firstName lastName username" },
+      { path: "toUser", select: "firstName lastName username" },
+    ]);
     const [populated] = await attachSaleDetails(created[0]);
     return populated;
   });
@@ -521,6 +528,12 @@ const respondToShare = async ({ shareId, userId, accept }) => {
     share.respondedAt = new Date();
     await share.save(opts);
 
+    // Populated for the same reason createShare's return is — the push
+    // notification on accept/decline needs a real name for its title.
+    await share.populate([
+      { path: "fromUser", select: "firstName lastName username" },
+      { path: "toUser", select: "firstName lastName username" },
+    ]);
     const [populated] = await attachSaleDetails(share);
     return populated;
   });

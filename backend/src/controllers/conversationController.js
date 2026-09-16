@@ -3,6 +3,7 @@ const { BadRequestError } = require("../errors");
 const conversationService = require("../services/conversationService");
 const contactService = require("../services/contactService");
 const blockService = require("../services/blockService");
+const pushService = require("../services/pushService");
 
 const requireUserId = (req) => {
   if (!req.user || !req.user.userId) {
@@ -23,6 +24,10 @@ const notifyUser = (req, userId, event, payload) => {
     console.error(`Failed to emit ${event} to user ${userId}:`, error.message);
   }
 };
+
+const nameOf = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
+  (user?.username ? `@${user.username}` : "Someone");
 
 const listConversations = async (req, res) => {
   const userId = requireUserId(req);
@@ -56,7 +61,15 @@ const sendMessage = async (req, res) => {
     text,
   });
 
-  notifyUser(req, message.recipient._id || message.recipient, "message:new", message);
+  const recipientId = message.recipient._id || message.recipient;
+  notifyUser(req, recipientId, "message:new", message);
+  pushService.sendPushToUser({
+    userId: recipientId,
+    preferenceKey: "chatMessages",
+    title: nameOf(message.sender),
+    body: message.text,
+    data: { type: "message", counterpartyId: senderId },
+  });
 
   res.status(StatusCodes.CREATED).json({ success: true, data: message });
 };

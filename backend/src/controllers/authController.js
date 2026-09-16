@@ -8,6 +8,7 @@ const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const pushService = require("../services/pushService");
 
 const signToken = (id, role) => {
   if (!process.env.JWT_SECRET) {
@@ -410,6 +411,66 @@ const updateNotificationPreferences = async (req, res) => {
       status: "success",
       data: user.notificationPreferences,
     });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Registers this device's Expo push token against the signed-in account —
+// called on every app launch/relaunch, not just first install, since a
+// token can rotate. Idempotent (see pushService.registerPushToken), so a
+// duplicate call from a re-mounted screen is harmless.
+const registerPushToken = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const token = typeof req.body.token === "string" ? req.body.token.trim() : "";
+    if (!token) {
+      return res.status(400).json({
+        status: "error",
+        message: "A push token is required",
+      });
+    }
+
+    await pushService.registerPushToken({ userId: req.user._id, token });
+    res.status(200).json({ status: "success" });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Called best-effort on sign-out — this device stops receiving this
+// account's pushes without needing to wait for Expo to report it dead.
+const unregisterPushToken = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const token = typeof req.body.token === "string" ? req.body.token.trim() : "";
+    if (!token) {
+      return res.status(400).json({
+        status: "error",
+        message: "A push token is required",
+      });
+    }
+
+    await pushService.unregisterPushToken({ userId: req.user._id, token });
+    res.status(200).json({ status: "success" });
   } catch (error) {
     res.status(400).json({
       status: "error",
@@ -1469,4 +1530,6 @@ module.exports = {
   deleteAccount,
   getNotificationPreferences,
   updateNotificationPreferences,
+  registerPushToken,
+  unregisterPushToken,
 };

@@ -138,14 +138,23 @@ const userSchema = new mongoose.Schema(
         ref: "Event",
       },
     ],
-    // Stored preferences only, for now — there's no push-token/device
-    // registration anywhere in this backend yet, so these don't gate any
-    // actual delivery. They exist so the account settings screen has real
-    // flags to read and write while that infra gets built.
+    // Gates actual push delivery — see `pushService.js`. Kept separate from
+    // `notificationPreferences` below on purpose: those are what the user
+    // wants, this is where to physically send it.
     notificationPreferences: {
       ticketUpdates: { type: Boolean, default: true },
       chatMessages: { type: Boolean, default: true },
       promotions: { type: Boolean, default: true },
+    },
+    // Expo push tokens for every device this account is signed into — an
+    // array, not a single field, since the same person can have the app on a
+    // phone and a tablet at once. Deduplicated on registration; an
+    // "InvalidCredentials"/"DeviceNotRegistered" receipt from Expo's push
+    // service (see `pushService.js`) is what prunes a stale one, since there
+    // is no sign-out call to do it eagerly.
+    pushTokens: {
+      type: [String],
+      default: [],
     },
     // OTP-based login (organizers only, added 2026-09-03). The code itself
     // never sits in the database in plain form — only its hash does.
