@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Store, Clock } from "lucide-react";
-import { fetchMyVenue, type VenueProfile } from "@/lib/venue-api";
+import { fetchMyVenue, fetchVenueIdentityForCashier, type VenueProfile } from "@/lib/venue-api";
 
 /**
  * Resolves the signed-in account's venue and gates the surface behind approval.
@@ -14,23 +14,67 @@ import { fetchMyVenue, type VenueProfile } from "@/lib/venue-api";
  * requests from, a loading state, and something to show a venue that has not
  * been approved yet — so they live here once rather than in each page.
  *
- * The venue is always fetched from /api/venues/me: the id is never taken from
- * the URL or from local state, which is what keeps a venue's requests pointed
- * at its own venue and nothing else.
+ * The venue owner fetches its full profile from /api/venues/me: the id is
+ * never taken from the URL or from local state, which is what keeps a venue's
+ * requests pointed at its own venue and nothing else. A cashier can't reach
+ * that owner-only route, so it takes the venue id straight off its own login
+ * (`user.venue`, set by the server, never chosen by the client) and resolves
+ * just enough identity to render a header from a staff-accessible endpoint.
+ * Either way, every actual request a page makes is still re-authorized
+ * server-side against the account that's signed in.
  */
 export function VenueGate({
   children,
 }: {
   children: (venue: VenueProfile, token: string) => ReactNode;
 }) {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const [venue, setVenue] = useState<VenueProfile | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
 
+  const isCashier = user?.role === "cashier";
+  const cashierVenueId = user?.venue || null;
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+
+    if (isCashier) {
+      if (!cashierVenueId) {
+        setMessage("This cashier account isn't linked to a venue.");
+        setState("error");
+        return;
+      }
+      fetchVenueIdentityForCashier(cashierVenueId, token)
+        .then((identity) => {
+          if (cancelled) return;
+          setVenue({
+            _id: identity._id,
+            name: identity.name,
+            venueType: identity.venueType,
+            isActive: identity.isActive,
+            // Forced "eligible" so this gate's approval screen never shows to
+            // a cashier: the counter routes it actually reaches (redeem,
+            // sales, catalog) don't gate on eligibility either, and the one
+            // that does (recording a new sale) is re-checked server-side with
+            // its own clear error.
+            eligibility: "eligible",
+            beverageCommissionRate: 0,
+            coversVenueVat: false,
+          });
+          setState("ready");
+        })
+        .catch((error: Error) => {
+          if (cancelled) return;
+          setMessage(error.message);
+          setState("error");
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     fetchMyVenue(token)
       .then((data) => {
         if (cancelled) return;
@@ -45,7 +89,7 @@ export function VenueGate({
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, isCashier, cashierVenueId]);
 
   if (state === "loading") {
     return (

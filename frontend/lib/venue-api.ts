@@ -115,3 +115,112 @@ export const venueRequest = async <T,>(
 
 export const fetchMyVenue = (token: string) =>
   venueRequest<{ data: VenueProfile }>("/api/venues/me", token).then((r) => r.data);
+
+// A venue's own counter staff. Created and managed by the owning venue or an
+// admin — never by a cashier itself, which is why there's no delete/create
+// helper gated any differently than list/update here: the backend enforces
+// that split (see backend/src/routes/venueRoutes.js), the frontend just
+// calls the one set of endpoints.
+export interface VenueCashier {
+  _id: string;
+  firstName: string;
+  lastName?: string;
+  email: string;
+  phoneNumber: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface VenueCashierInput {
+  firstName: string;
+  lastName?: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
+}
+
+export const listVenueCashiers = (venueId: string, token: string) =>
+  venueRequest<{ data: VenueCashier[] }>(`/api/venues/${venueId}/cashiers`, token).then(
+    (r) => r.data
+  );
+
+export const createVenueCashier = (
+  venueId: string,
+  token: string,
+  input: VenueCashierInput
+) =>
+  venueRequest<{ data: VenueCashier }>(`/api/venues/${venueId}/cashiers`, token, {
+    method: "POST",
+    body: JSON.stringify(input),
+  }).then((r) => r.data);
+
+export const updateVenueCashier = (
+  venueId: string,
+  cashierId: string,
+  token: string,
+  input: Partial<Pick<VenueCashierInput, "firstName" | "lastName" | "phoneNumber">> & {
+    isActive?: boolean;
+  }
+) =>
+  venueRequest<{ data: VenueCashier }>(
+    `/api/venues/${venueId}/cashiers/${cashierId}`,
+    token,
+    { method: "PATCH", body: JSON.stringify(input) }
+  ).then((r) => r.data);
+
+export const deleteVenueCashier = (venueId: string, cashierId: string, token: string) =>
+  venueRequest<{ message?: string }>(`/api/venues/${venueId}/cashiers/${cashierId}`, token, {
+    method: "DELETE",
+  });
+
+// A cashier can't reach GET /api/venues/me — that's the owner's own profile,
+// including its commission rate and VAT setting, which is exactly the
+// "finance" surface a cashier must never see (see the User model's role
+// comment). listVenueBeverages is already open to staff and happens to
+// return the venue's basic identity alongside the line-up, so a cashier's own
+// client resolves "which venue am I" from there instead.
+export const fetchVenueIdentityForCashier = (venueId: string, token: string) =>
+  venueRequest<{
+    venue: { _id: string; name: string; venueType: string; isActive: boolean };
+  }>(`/api/venues/${venueId}/beverages`, token).then((r) => r.venue);
+
+// --- Counter selling ------------------------------------------------------
+//
+// What a venue (or its cashier — see adminOrVenueStaff in venueRoutes.js)
+// may pick from at the counter, and the sale it records.
+
+export interface VenueBeverageLineupRow {
+  _id: string;
+  beverage: { _id: string; name: string; image?: string | null; color?: string | null; isActive: boolean } | null;
+  price: number;
+  currency?: string;
+  remaining: number;
+  unlimitedStock?: boolean;
+  unavailableReason: "removed" | "inactive" | "blocked" | null;
+}
+
+export const fetchVenueBeverages = (venueId: string, token: string) =>
+  venueRequest<{ data: VenueBeverageLineupRow[] }>(`/api/venues/${venueId}/beverages`, token).then(
+    (r) => r.data
+  );
+
+export const createVenueSale = (
+  venueId: string,
+  token: string,
+  body: { venueBeverageId: string; quantity: number; customerName?: string; customerPhone?: string }
+) =>
+  venueRequest<{ data: VenueSale }>(`/api/venues/${venueId}/sales`, token, {
+    method: "POST",
+    body: JSON.stringify(body),
+  }).then((r) => r.data);
+
+export const fetchOutstandingVenueOrder = (venueId: string, paymentReference: string, token: string) =>
+  venueRequest<{ data: VenueOutstandingItem[] }>(
+    `/api/venues/${venueId}/sales/outstanding/${encodeURIComponent(paymentReference)}`,
+    token
+  ).then((r) => r.data);
+
+export const redeemVenueSale = (venueId: string, saleId: string, token: string) =>
+  venueRequest<{ data: VenueSale }>(`/api/venues/${venueId}/sales/${saleId}/redeem`, token, {
+    method: "POST",
+  });

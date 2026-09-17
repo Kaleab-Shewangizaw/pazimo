@@ -7,19 +7,30 @@ import Link from "next/link";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Beer, LayoutDashboard, Receipt, Wallet, LogOut, Store } from "lucide-react";
+import { Beer, LayoutDashboard, Receipt, ScanLine, Users, Wallet, LogOut, Store } from "lucide-react";
 
 type PersistApi = {
   hasHydrated?: () => boolean;
   onFinishHydration?: (callback: () => void) => (() => void) | void;
 };
 
-const NAV = [
+const OWNER_NAV = [
   { href: "/venue", label: "Overview", icon: LayoutDashboard },
   { href: "/venue/beverages", label: "Beverages", icon: Beer },
   { href: "/venue/sales", label: "Sales", icon: Receipt },
+  { href: "/venue/cashiers", label: "Cashiers", icon: Users },
   { href: "/venue/withdrawals", label: "Money", icon: Wallet },
 ];
+
+// A cashier reaches counter operations + read-only sales history only — no
+// line-up/happy-hour management, no withdrawals, no managing other cashiers,
+// and no Overview (that page also loads /finance, which is owner/admin-only
+// and would 403). Mirrors the backend's adminOrVenueStaff route split.
+const CASHIER_NAV = [
+  { href: "/venue/scanner", label: "Scanner", icon: ScanLine },
+  { href: "/venue/sales", label: "Sales", icon: Receipt },
+];
+const CASHIER_DEFAULT_PATH = "/venue/scanner";
 
 export default function VenueClientLayout({
   children,
@@ -46,16 +57,36 @@ export default function VenueClientLayout({
   }, []);
 
   // Admins are allowed through so they can view a venue's surface, matching how
-  // the organizer area admits them.
+  // the organizer area admits them. Cashiers get the same surface too, just
+  // narrowed to counter operations by NAV below and by the backend's own
+  // per-route gates — a cashier hitting a page it can't use gets that page's
+  // own 403 handling, not a bounce out of the area entirely.
   const userRole = user?.role as string | undefined;
+  const isCashier = userRole === "cashier";
   const canAccess = Boolean(
-    isAuthenticated && user && (userRole === "venue" || userRole === "admin")
+    isAuthenticated && user && (userRole === "venue" || userRole === "admin" || isCashier)
   );
+  const NAV = isCashier ? CASHIER_NAV : OWNER_NAV;
+
+  // A cashier straying onto an owner-only page (typed URL, stale bookmark, a
+  // link meant for the owner) is bounced to its default landing page rather
+  // than shown a page that will just 403 on every request it makes.
+  const cashierOnDisallowedPath =
+    isCashier &&
+    !CASHIER_NAV.some(
+      ({ href }) => pathname === href || pathname.startsWith(`${href}/`)
+    );
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!canAccess) router.replace("/sign-in");
-  }, [hydrated, canAccess, router]);
+    if (!canAccess) {
+      router.replace("/sign-in");
+      return;
+    }
+    if (cashierOnDisallowedPath) {
+      router.replace(CASHIER_DEFAULT_PATH);
+    }
+  }, [hydrated, canAccess, cashierOnDisallowedPath, router]);
 
   if (!hydrated) {
     return (
@@ -66,7 +97,7 @@ export default function VenueClientLayout({
     );
   }
 
-  if (!canAccess) return null;
+  if (!canAccess || cashierOnDisallowedPath) return null;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
