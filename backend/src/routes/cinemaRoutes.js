@@ -9,6 +9,7 @@ const checkoutController = require("../controllers/cinemaCheckoutController");
 const beverageController = require("../controllers/cinemaBeverageController");
 const concessionProductController = require("../controllers/concessionProductController");
 const financeController = require("../controllers/cinemaFinanceController");
+const cashierController = require("../controllers/cinemaCashierController");
 const upload = require("../middlewares/upload");
 const {
   authenticateUser,
@@ -47,6 +48,17 @@ const movieUploads = upload.fields([
 const cinemaSelf = [
   authenticateUser,
   restrictTo("cinema"),
+  requireCinemaAccount,
+];
+// Counter staff: the owning cinema account itself, or one of its cashiers.
+// requireCinemaAccount resolves a cashier's cinema from its own User doc (see
+// middlewares/auth.js), so a cashier lands on req.cinema exactly like the
+// owner does. Used ONLY on the counter-operations + read-only-history routes
+// listed below — every mutating/administrative route stays on cinemaSelf so a
+// cashier can never reach it.
+const cinemaStaff = [
+  authenticateUser,
+  restrictTo("cinema", "cashier"),
   requireCinemaAccount,
 ];
 const adminOnly = [authenticateUser, restrictTo("admin")];
@@ -175,17 +187,17 @@ router.patch("/me/movies/:movieId", ...cinemaSelf, movieUploads, programmeContro
 router.delete("/me/movies/:movieId", ...cinemaSelf, programmeController.deleteMovie);
 
 // Showtimes
-router.get("/me/showtimes", ...cinemaSelf, programmeController.listShowtimes);
+router.get("/me/showtimes", ...cinemaStaff, programmeController.listShowtimes);
 // The day-by-hall calendar view.
-router.get("/me/schedule", ...cinemaSelf, programmeController.getSchedule);
+router.get("/me/schedule", ...cinemaStaff, programmeController.getSchedule);
 router.post("/me/showtimes", ...cinemaSelf, programmeController.createShowtime);
 router.patch("/me/showtimes/:showtimeId", ...cinemaSelf, programmeController.updateShowtime);
 router.delete("/me/showtimes/:showtimeId", ...cinemaSelf, programmeController.deleteShowtime);
 
 // Tickets
-router.get("/me/ticket-sales", ...cinemaSelf, ticketController.listTickets);
-router.get("/me/ticket-sales/summary", ...cinemaSelf, ticketController.getTicketSummary);
-router.post("/me/ticket-sales", ...cinemaSelf, ticketController.sellAtBoxOffice);
+router.get("/me/ticket-sales", ...cinemaStaff, ticketController.listTickets);
+router.get("/me/ticket-sales/summary", ...cinemaStaff, ticketController.getTicketSummary);
+router.post("/me/ticket-sales", ...cinemaStaff, ticketController.sellAtBoxOffice);
 // Admission. The cinema is resolved from the account, so a cinema can only ever
 // validate its own screenings' tickets — and never an event ticket, which lives
 // in a collection this route does not read.
@@ -193,48 +205,55 @@ router.post("/me/ticket-sales", ...cinemaSelf, ticketController.sellAtBoxOffice)
 // Read-only lookups first, so the scanner can show what it found and let staff
 // confirm with a "Mark as used" tap rather than admitting the instant a camera
 // decodes a frame.
-router.get("/me/tickets/:ticketId", ...cinemaSelf, ticketController.getStaffTicket);
-router.post("/me/check-in/:ticketId", ...cinemaSelf, ticketController.checkIn);
+router.get("/me/tickets/:ticketId", ...cinemaStaff, ticketController.getStaffTicket);
+router.post("/me/check-in/:ticketId", ...cinemaStaff, ticketController.checkIn);
 // The Seats tab's audit view: one screening's seat-by-seat status.
 router.get(
   "/me/showtimes/:showtimeId/seats",
-  ...cinemaSelf,
+  ...cinemaStaff,
   ticketController.getShowtimeSeatsForStaff
 );
 
 // Concessions
-router.get("/me/concessions/catalog", ...cinemaSelf, beverageController.listSellableCatalog);
-router.get("/me/concessions", ...cinemaSelf, beverageController.listLineup);
+router.get("/me/concessions/catalog", ...cinemaStaff, beverageController.listSellableCatalog);
+router.get("/me/concessions", ...cinemaStaff, beverageController.listLineup);
 router.post("/me/concessions", ...cinemaSelf, beverageController.addLineupItem);
 router.patch("/me/concessions/:itemId", ...cinemaSelf, beverageController.updateLineupItem);
 router.delete("/me/concessions/:itemId", ...cinemaSelf, beverageController.removeLineupItem);
-router.get("/me/concession-sales", ...cinemaSelf, beverageController.listSales);
-router.get("/me/concession-sales/summary", ...cinemaSelf, beverageController.getSalesSummary);
-router.post("/me/concession-sales", ...cinemaSelf, beverageController.recordSale);
+router.get("/me/concession-sales", ...cinemaStaff, beverageController.listSales);
+router.get("/me/concession-sales/summary", ...cinemaStaff, beverageController.getSalesSummary);
+router.post("/me/concession-sales", ...cinemaStaff, beverageController.recordSale);
 // Collection at the counter. A pre-bought item is a promise until someone hands
 // it over, and without a record of that the same popcorn can be claimed twice.
 router.get(
   "/me/orders/:reference/concessions",
-  ...cinemaSelf,
+  ...cinemaStaff,
   beverageController.listOutstandingForOrder
 );
 // The whole order, for the scanner to review before admitting it, and the
 // single action that admits every eligible seat on it at once.
-router.get("/me/orders/:reference", ...cinemaSelf, ticketController.getStaffOrder);
+router.get("/me/orders/:reference", ...cinemaStaff, ticketController.getStaffOrder);
 router.post(
   "/me/orders/:reference/check-in",
-  ...cinemaSelf,
+  ...cinemaStaff,
   ticketController.checkInOrder
 );
 router.post(
   "/me/concession-sales/:saleId/redeem",
-  ...cinemaSelf,
+  ...cinemaStaff,
   beverageController.redeemSale
 );
 
 // Money
 router.get("/me/finance", ...cinemaSelf, financeController.getCinemaBalance);
 router.get("/me/finance/withdrawals", ...cinemaSelf, financeController.listCinemaWithdrawals);
+
+// Cashiers — owner only, deliberately on cinemaSelf rather than cinemaStaff:
+// a cashier must never be able to create or manage other cashiers.
+router.get("/me/cashiers", ...cinemaSelf, cashierController.listCashiers);
+router.post("/me/cashiers", ...cinemaSelf, cashierController.createCashier);
+router.patch("/me/cashiers/:cashierId", ...cinemaSelf, cashierController.updateCashier);
+router.delete("/me/cashiers/:cashierId", ...cinemaSelf, cashierController.deleteCashier);
 
 // ---------------------------------------------------------------------------
 // Admin
@@ -339,5 +358,20 @@ router.get("/admin/:cinemaId/concession-sales/summary", ...adminOnly, beverageCo
 // Money, per cinema
 router.get("/admin/:cinemaId/finance", ...adminOnly, financeController.getCinemaBalance);
 router.get("/admin/:cinemaId/finance/withdrawals", ...adminOnly, financeController.listCinemaWithdrawals);
+
+// Cashiers, per cinema — same controller functions as /me/cashiers above,
+// resolved via resolveCinema so an admin can manage any cinema's cashiers.
+router.get("/admin/:cinemaId/cashiers", ...adminOnly, cashierController.listCashiers);
+router.post("/admin/:cinemaId/cashiers", ...adminOnly, cashierController.createCashier);
+router.patch(
+  "/admin/:cinemaId/cashiers/:cashierId",
+  ...adminOnly,
+  cashierController.updateCashier
+);
+router.delete(
+  "/admin/:cinemaId/cashiers/:cashierId",
+  ...adminOnly,
+  cashierController.deleteCashier
+);
 
 module.exports = router;
