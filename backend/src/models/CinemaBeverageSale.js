@@ -4,6 +4,7 @@ const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
   organizerVatRateFor,
+  VAT_RATE,
 } = require("../config/rates");
 
 // The ledger of cinema concession sales — one row per purchase of one product at
@@ -119,6 +120,14 @@ const CinemaBeverageSaleSchema = new mongoose.Schema(
     // (Cinema.coversCinemaVat). 0 or absent means the cinema settles its own.
     // A liability Pazimo remits on their behalf, never Pazimo revenue.
     cinemaVatRate: {
+      type: Number,
+      min: 0,
+    },
+
+    // The government VAT-on-commission rate this sale was actually made
+    // under, snapshotted for the identical reason as commissionRate — see
+    // Ticket.vatRate. Absent on every sale before this field existed.
+    vatRate: {
       type: Number,
       min: 0,
     },
@@ -252,6 +261,7 @@ CinemaBeverageSaleSchema.pre(
     if (!this.isNew) return next();
     const hasCommission = typeof this.commissionRate === "number";
     const hasCinemaVat = typeof this.cinemaVatRate === "number";
+    if (typeof this.vatRate !== "number") this.vatRate = VAT_RATE;
     if (hasCommission && hasCinemaVat) return next();
     if (!this.cinema) return next();
 

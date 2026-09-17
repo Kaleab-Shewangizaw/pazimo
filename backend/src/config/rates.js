@@ -13,20 +13,25 @@ const MIN_COMMISSION_RATE = 0;
 const MAX_COMMISSION_RATE = 0.25;
 
 // Government VAT, charged on the commission and passed through to the
-// organizer — 0 for now.
+// organizer.
 //
-// Held back 2026-09-16 by explicit decision, not an oversight: this was
-// written 2026-08-11/13 (see commit fbaeb25 and 3d0d65f) but production has
-// never deployed it — every organizer today still sees the old flat 97%
-// split, confirmed against a live production dashboard pull. Flipping this
-// to 0.15 would be the first time it actually takes real money from every
-// organizer, silently, as a side effect of an unrelated deploy — asked, and
-// the answer was to hold it back until it can be shipped and communicated on
-// its own. Every organizer's split reduces to flat commissionRate (97% at
-// the 3% default) while this is 0 — vat/vatOnCommission entries and figures
-// stay in every formula and the ledger, they just compute to zero, so
-// flipping this back to 0.15 later needs no other code change.
-const VAT_RATE = 0;
+// Turned ON 2026-09-17, by explicit decision, effective from here forward
+// ONLY — not retroactive. This was written 2026-08-11/13 (commits fbaeb25,
+// 3d0d65f) but held at 0 from 2026-09-16 because production had never
+// deployed it and flipping it live would have restated every organizer's
+// existing balance downward with no warning. That risk is now closed a
+// different way: every sale (Ticket and its four siblings — BeverageSale,
+// VenueBeverageSale, CinemaTicket, CinemaBeverageSale) snapshots its OWN
+// vatRate onto itself at creation, exactly like it already snapshots
+// commissionRate. Every revenue reader (ticketRevenueQuery.js,
+// beverageRevenueQuery.js, cinemaTicketRevenueQuery.js, the ledger via
+// recordSale/mirrorSale, backfillLedger.js) reads THAT stored value, falling
+// back to 0 — never to this constant — for a row that predates the field.
+// So changing VAT_RATE here only ever affects sales made AFTER the change:
+// every ticket sold while this was 0 keeps computing at 0, forever, no
+// matter what this constant is set to later. That is the whole point of the
+// snapshot, and it is what makes this safe to flip without a "mix-up."
+const VAT_RATE = 0.15;
 
 // VAT on the ORGANIZER's own sales — a different tax from the one above.
 //

@@ -4,6 +4,7 @@ const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
   organizerVatRateFor,
+  VAT_RATE,
 } = require("../config/rates");
 
 // The ledger of venue beverage sales — one row per purchase of one drink at one
@@ -116,6 +117,14 @@ const VenueBeverageSaleSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // The government VAT-on-commission rate this sale was actually made
+    // under, snapshotted for the identical reason as commissionRate — see
+    // Ticket.vatRate. Absent on every sale before this field existed.
+    vatRate: {
+      type: Number,
+      min: 0,
+    },
+
     // Who bought it. Optional: a walk-in at a bar has no account, which is the
     // normal case for this channel rather than the exception it is for events.
     customer: {
@@ -222,6 +231,7 @@ VenueBeverageSaleSchema.pre("validate", async function snapshotCommissionRate(ne
   if (!this.isNew) return next();
   const hasCommission = typeof this.commissionRate === "number";
   const hasVenueVat = typeof this.venueVatRate === "number";
+  if (typeof this.vatRate !== "number") this.vatRate = VAT_RATE;
   if (hasCommission && hasVenueVat) return next();
   if (!this.venue) return next();
 

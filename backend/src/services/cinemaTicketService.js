@@ -326,6 +326,7 @@ const issueTicket = async ({
         stream: "tickets",
         grossAmount: ticket.totalAmount,
         commissionRate: ticket.commissionRate,
+        vatRate: ticket.vatRate,
         ownerVatRate: ticket.cinemaVatRate,
         source: { cinemaTicket: ticket._id },
         reference: `cinema_ticket:${ticket._id}`,

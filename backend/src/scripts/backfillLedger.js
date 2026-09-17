@@ -12,7 +12,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../../.env") });
 
 const { toMinor, toMajor, formatMinor, splitSale } = require("../utils/money");
-const { VAT_RATE, DEFAULT_COMMISSION_RATE } = require("../config/rates");
+const { DEFAULT_COMMISSION_RATE } = require("../config/rates");
 
 // Rebuild the ledger from the history that already exists.
 //
@@ -90,10 +90,13 @@ const SOURCES = [
     resolveOwner: async (row, ctx) => ctx.organizerByEvent.get(String(row.event)),
     grossOf: (row) => row.price,
     commissionRateOf: (row) => row.commissionRate ?? DEFAULT_COMMISSION_RATE,
+    // Not VAT_RATE — the row's OWN snapshot, or 0 for a row sold before the
+    // field existed. Same reasoning as ticketRevenueQuery.js's revenueExprs.
+    vatRateOf: (row) => row.vatRate ?? 0,
     ownerVatRateOf: (row) => row.organizerVatRate ?? 0,
     sourceRef: (row) => ({ ticket: row._id }),
     reference: (row) => `ticket:${row._id}`,
-    select: "event price commissionRate organizerVatRate purchaseDate createdAt",
+    select: "event price commissionRate vatRate organizerVatRate purchaseDate createdAt",
     occurredAt: (row) => row.purchaseDate || row.createdAt,
   },
   {
@@ -104,10 +107,11 @@ const SOURCES = [
     resolveOwner: async (row) => row.organizer,
     grossOf: (row) => row.totalAmount,
     commissionRateOf: (row) => row.commissionRate ?? DEFAULT_COMMISSION_RATE,
+    vatRateOf: (row) => row.vatRate ?? 0,
     ownerVatRateOf: (row) => row.organizerVatRate ?? 0,
     sourceRef: (row) => ({ beverageSale: row._id }),
     reference: (row) => `beverage_sale:${row._id}`,
-    select: "organizer totalAmount commissionRate organizerVatRate soldAt createdAt",
+    select: "organizer totalAmount commissionRate vatRate organizerVatRate soldAt createdAt",
     occurredAt: (row) => row.soldAt || row.createdAt,
   },
   {
@@ -118,10 +122,11 @@ const SOURCES = [
     resolveOwner: async (row) => row.venue,
     grossOf: (row) => row.totalAmount,
     commissionRateOf: (row) => row.commissionRate ?? DEFAULT_COMMISSION_RATE,
+    vatRateOf: (row) => row.vatRate ?? 0,
     ownerVatRateOf: (row) => row.venueVatRate ?? 0,
     sourceRef: (row) => ({ venueBeverageSale: row._id }),
     reference: (row) => `venue_beverage_sale:${row._id}`,
-    select: "venue totalAmount commissionRate venueVatRate soldAt createdAt",
+    select: "venue totalAmount commissionRate vatRate venueVatRate soldAt createdAt",
     occurredAt: (row) => row.soldAt || row.createdAt,
   },
   {
@@ -132,10 +137,11 @@ const SOURCES = [
     resolveOwner: async (row) => row.cinema,
     grossOf: (row) => row.totalAmount,
     commissionRateOf: (row) => row.commissionRate ?? DEFAULT_COMMISSION_RATE,
+    vatRateOf: (row) => row.vatRate ?? 0,
     ownerVatRateOf: (row) => row.cinemaVatRate ?? 0,
     sourceRef: (row) => ({ cinemaTicket: row._id }),
     reference: (row) => `cinema_ticket:${row._id}`,
-    select: "cinema totalAmount commissionRate cinemaVatRate purchaseDate createdAt",
+    select: "cinema totalAmount commissionRate vatRate cinemaVatRate purchaseDate createdAt",
     occurredAt: (row) => row.purchaseDate || row.createdAt,
   },
   {
@@ -146,10 +152,11 @@ const SOURCES = [
     resolveOwner: async (row) => row.cinema,
     grossOf: (row) => row.totalAmount,
     commissionRateOf: (row) => row.commissionRate ?? DEFAULT_COMMISSION_RATE,
+    vatRateOf: (row) => row.vatRate ?? 0,
     ownerVatRateOf: (row) => row.cinemaVatRate ?? 0,
     sourceRef: (row) => ({ cinemaBeverageSale: row._id }),
     reference: (row) => `cinema_beverage_sale:${row._id}`,
-    select: "cinema totalAmount commissionRate cinemaVatRate soldAt createdAt",
+    select: "cinema totalAmount commissionRate vatRate cinemaVatRate soldAt createdAt",
     occurredAt: (row) => row.soldAt || row.createdAt,
   },
 ];
@@ -240,7 +247,7 @@ const run = async () => {
       const split = splitSale({
         grossMinor,
         commissionRate: src.commissionRateOf(row),
-        vatRate: VAT_RATE,
+        vatRate: src.vatRateOf(row),
         ownerVatRate: src.ownerVatRateOf(row),
       });
 
@@ -258,6 +265,7 @@ const run = async () => {
           stream: src.stream,
           grossAmount: src.grossOf(row),
           commissionRate: src.commissionRateOf(row),
+          vatRate: src.vatRateOf(row),
           ownerVatRate: src.ownerVatRateOf(row),
           source: { ...src.sourceRef(row), note: "backfill" },
           reference: src.reference(row),

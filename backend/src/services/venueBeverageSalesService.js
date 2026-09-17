@@ -118,6 +118,7 @@ const recordSale = async ({
       stream: "beverages",
       grossAmount: sale.totalAmount,
       commissionRate: sale.commissionRate,
+      vatRate: sale.vatRate,
       ownerVatRate: sale.venueVatRate,
       source: { venueBeverageSale: sale._id },
       reference: `venue_beverage_sale:${sale._id}`,

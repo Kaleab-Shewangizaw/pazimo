@@ -36,12 +36,22 @@ const guard = async (label, fn) => {
   }
 };
 
-/** Mirror a completed sale into the ledger. */
+/**
+ * Mirror a completed sale into the ledger.
+ *
+ * vatRate is the caller's per-sale snapshot (Ticket.vatRate and its four
+ * siblings), not the live config/rates.js VAT_RATE — pass the sale's own
+ * stored rate, never the constant, or a later change to VAT_RATE would
+ * restate revenue already mirrored. Defaults to 0 (recordSale's own
+ * default) for a caller that has no snapshot to pass, e.g. from before the
+ * field existed.
+ */
 const mirrorSale = ({
   owner,
   stream,
   grossAmount,
   commissionRate,
+  vatRate,
   ownerVatRate,
   source,
   reference,
@@ -55,6 +65,7 @@ const mirrorSale = ({
       stream,
       grossAmount,
       commissionRate,
+      vatRate,
       ownerVatRate,
       source,
       reference,

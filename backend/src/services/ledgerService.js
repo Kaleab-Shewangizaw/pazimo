@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const LedgerEntry = require("../models/LedgerEntry");
 const LedgerBalance = require("../models/LedgerBalance");
 const { toMinor, splitSale } = require("../utils/money");
-const { VAT_RATE, DEFAULT_COMMISSION_RATE } = require("../config/rates");
+const { DEFAULT_COMMISSION_RATE } = require("../config/rates");
 
 // The one place money is written.
 //
@@ -259,6 +259,14 @@ const recordSale = async ({
   stream,
   grossAmount,
   commissionRate = DEFAULT_COMMISSION_RATE,
+  // The government VAT-on-commission rate this specific sale was made
+  // under. Defaults to 0, NOT the live VAT_RATE constant — a caller with a
+  // per-sale snapshot (Ticket.vatRate and its four siblings) must pass it
+  // explicitly; a caller with none is a sale from before the snapshot field
+  // existed, and 0 is what was actually true then. Using the live constant
+  // here would restate old sales the moment VAT_RATE next changes — the
+  // exact mix-up this parameter exists to prevent.
+  vatRate = 0,
   ownerVatRate = 0,
   source = {},
   reference,
@@ -270,7 +278,7 @@ const recordSale = async ({
   const split = splitSale({
     grossMinor: toMinor(grossAmount),
     commissionRate,
-    vatRate: VAT_RATE,
+    vatRate,
     ownerVatRate,
   });
 

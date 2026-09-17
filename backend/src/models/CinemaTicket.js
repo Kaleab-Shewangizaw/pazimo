@@ -3,6 +3,7 @@ const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
   organizerVatRateFor,
+  VAT_RATE,
 } = require("../config/rates");
 
 // The ledger of cinema ticket sales — one row per seat sold for one screening.
@@ -200,6 +201,14 @@ const CinemaTicketSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // The government VAT-on-commission rate this ticket was actually sold
+    // under, snapshotted for the identical reason as commissionRate — see
+    // Ticket.vatRate. Absent on every ticket sold before this field existed.
+    vatRate: {
+      type: Number,
+      min: 0,
+    },
+
     // Who bought it. Optional: a walk-in at the box office has no account.
     customer: {
       type: mongoose.Schema.Types.ObjectId,
@@ -313,6 +322,7 @@ CinemaTicketSchema.pre("validate", async function snapshotCommissionRate(next) {
   if (!this.isNew) return next();
   const hasCommission = typeof this.commissionRate === "number";
   const hasCinemaVat = typeof this.cinemaVatRate === "number";
+  if (typeof this.vatRate !== "number") this.vatRate = VAT_RATE;
   if (hasCommission && hasCinemaVat) return next();
   if (!this.cinema) return next();
 

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { DEFAULT_COMMISSION_RATE, VAT_RATE } = require("../config/rates");
+const { DEFAULT_COMMISSION_RATE } = require("../config/rates");
 
 // The beverage twin of ticketRevenueQuery.js.
 //
@@ -37,9 +37,17 @@ const COMMISSION_RATE_EXPR = {
 
 const COMMISSION_EXPR = { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR] };
 
+// The government VAT-on-commission rate this sale was actually made under,
+// snapshotted per row exactly like COMMISSION_RATE_EXPR — not the live
+// config/rates.js VAT_RATE. See ticketRevenueQuery.js's revenueExprs for the
+// full reasoning: falls back to 0 (the rate actually in force before this
+// policy existed, or before VAT_RATE last changed), never to "whatever
+// VAT_RATE is right now."
+const VAT_RATE_EXPR = { $ifNull: ["$vatRate", 0] };
+
 // VAT is 15% OF the commission, not of the sale price — a 3% cut costs the
 // seller 3.45%.
-const VAT_EXPR = { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, VAT_RATE] };
+const VAT_EXPR = { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, VAT_RATE_EXPR] };
 
 /**
  * The money expressions for one channel, differing only in which field holds
@@ -64,7 +72,7 @@ const buildBeverageRevenueExpressions = (vatRateField = "organizerVatRate") => {
       "$totalAmount",
       {
         $add: [
-          { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, 1 + VAT_RATE] },
+          { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, { $add: [1, VAT_RATE_EXPR] }] },
           ownerVatExpr,
         ],
       },
@@ -139,6 +147,7 @@ module.exports = {
   COMMISSION_RATE_EXPR,
   COMMISSION_EXPR,
   VAT_EXPR,
+  VAT_RATE_EXPR,
   ORGANIZER_VAT_RATE_EXPR,
   ORGANIZER_VAT_EXPR,
   ORGANIZER_SHARE_EXPR,

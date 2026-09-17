@@ -8,6 +8,7 @@ const {
   DEFAULT_COMMISSION_RATE,
   normalizeCommissionRate,
   organizerVatRateFor,
+  VAT_RATE,
 } = require("../config/rates");
 function generateShortId() {
   const chars =
@@ -114,6 +115,18 @@ const TicketSchema = new mongoose.Schema(
     // Snapshotted for the same reason as commissionRate: switching coverage on
     // must not retroactively withhold 15% from revenue already paid out.
     organizerVatRate: {
+      type: Number,
+      min: 0,
+    },
+
+    // The government VAT-on-commission rate this ticket was actually sold
+    // under (config/rates.js's VAT_RATE at the moment of sale), snapshotted
+    // for the identical reason as commissionRate: turning VAT_RATE on, off,
+    // or to a different figure must never restate revenue already counted
+    // and paid out on tickets sold under the old rate. Absent on every
+    // ticket sold before this field existed — readers treat missing as 0,
+    // never as the current VAT_RATE (see utils/ticketRevenueQuery.js).
+    vatRate: {
       type: Number,
       min: 0,
     },
@@ -277,6 +290,10 @@ TicketSchema.pre("validate", async function snapshotCommissionRate(next) {
   if (!this.isNew) return next();
   const hasCommission = typeof this.commissionRate === "number";
   const hasOrganizerVat = typeof this.organizerVatRate === "number";
+  // Not per-event like the two above — VAT_RATE is one government rate for
+  // everyone — so it needs no Event lookup and is set unconditionally, ahead
+  // of the event-dependent early return below.
+  if (typeof this.vatRate !== "number") this.vatRate = VAT_RATE;
   if (hasCommission && hasOrganizerVat) return next();
   if (!this.event) return next();
 

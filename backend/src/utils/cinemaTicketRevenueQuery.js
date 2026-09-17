@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { DEFAULT_COMMISSION_RATE, VAT_RATE } = require("../config/rates");
+const { DEFAULT_COMMISSION_RATE } = require("../config/rates");
 
 // The cinema channel's TICKET revenue reader — the cinema twin of
 // ticketRevenueQuery.js.
@@ -46,12 +46,18 @@ const COMMISSION_RATE_EXPR = {
 // before coverage existed are untouched.
 const CINEMA_VAT_RATE_EXPR = { $ifNull: ["$cinemaVatRate", 0] };
 
+// The government VAT-on-commission rate this ticket was actually sold under,
+// snapshotted per row exactly like COMMISSION_RATE_EXPR — not the live
+// config/rates.js VAT_RATE. See ticketRevenueQuery.js's revenueExprs for the
+// full reasoning: falls back to 0, never to "whatever VAT_RATE is right now."
+const VAT_RATE_EXPR = { $ifNull: ["$vatRate", 0] };
+
 const COMMISSION_EXPR = { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR] };
 
 // VAT is 15% OF the commission, not of the ticket price — a 3% cut costs the
 // cinema 3.45%.
 const VAT_EXPR = {
-  $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, VAT_RATE],
+  $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, VAT_RATE_EXPR],
 };
 
 // The cinema's own VAT, charged on the ticket price. A liability Pazimo remits
@@ -65,7 +71,7 @@ const CINEMA_SHARE_EXPR = {
     "$totalAmount",
     {
       $add: [
-        { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, 1 + VAT_RATE] },
+        { $multiply: ["$totalAmount", COMMISSION_RATE_EXPR, { $add: [1, VAT_RATE_EXPR] }] },
         CINEMA_VAT_EXPR,
       ],
     },
@@ -155,6 +161,7 @@ module.exports = {
   COMMISSION_RATE_EXPR,
   COMMISSION_EXPR,
   VAT_EXPR,
+  VAT_RATE_EXPR,
   CINEMA_VAT_RATE_EXPR,
   CINEMA_VAT_EXPR,
   CINEMA_SHARE_EXPR,

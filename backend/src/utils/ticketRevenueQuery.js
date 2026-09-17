@@ -1,5 +1,5 @@
 const Event = require("../models/Event");
-const { DEFAULT_COMMISSION_RATE, VAT_RATE } = require("../config/rates");
+const { DEFAULT_COMMISSION_RATE } = require("../config/rates");
 
 // One definition of "what counts as real ticket revenue", and one correct way to
 // scope it to an organizer. financeService, loanRepaymentService and
@@ -105,11 +105,19 @@ const revenueExprs = (f) => {
   const price = f("price");
   const commissionRate = { $ifNull: [f("commissionRate"), DEFAULT_COMMISSION_RATE] };
   const organizerVatRate = { $ifNull: [f("organizerVatRate"), 0] };
+  // The government VAT-ON-COMMISSION rate this ticket was actually sold
+  // under, snapshotted per row exactly like commissionRate — NOT the live
+  // config/rates.js VAT_RATE. Turning that constant on/off (or changing it)
+  // must never restate revenue already counted and paid out, which is
+  // exactly the mix-up this snapshot exists to prevent: fall back to 0, the
+  // rate actually in force before this policy existed or on any row sold
+  // before the constant changed, never to "whatever VAT_RATE is right now."
+  const vatRate = { $ifNull: [f("vatRate"), 0] };
 
   // Pazimo's fee, and the government VAT on that fee — 15% OF the commission,
   // not of the ticket price.
   const commission = { $multiply: [price, commissionRate] };
-  const vat = { $multiply: [price, commissionRate, VAT_RATE] };
+  const vat = { $multiply: [price, commissionRate, vatRate] };
 
   // The organizer's own VAT that Pazimo withheld and owes the government.
   // Charged on the ticket price, unlike the VAT above. A liability, never
@@ -120,6 +128,7 @@ const revenueExprs = (f) => {
     price,
     commissionRate,
     organizerVatRate,
+    vatRate,
     commission,
     vat,
     organizerVat,
@@ -129,7 +138,7 @@ const revenueExprs = (f) => {
         price,
         {
           $add: [
-            { $multiply: [price, commissionRate, 1 + VAT_RATE] },
+            { $multiply: [price, commissionRate, { $add: [1, vatRate] }] },
             organizerVat,
           ],
         },
@@ -142,6 +151,7 @@ const ROOT = revenueExprs((k) => `$${k}`);
 
 const COMMISSION_RATE_EXPR = ROOT.commissionRate;
 const ORGANIZER_VAT_RATE_EXPR = ROOT.organizerVatRate;
+const VAT_RATE_EXPR = ROOT.vatRate;
 const COMMISSION_EXPR = ROOT.commission;
 const VAT_EXPR = ROOT.vat;
 const ORGANIZER_VAT_EXPR = ROOT.organizerVat;
@@ -190,6 +200,7 @@ module.exports = {
   COMMISSION_RATE_EXPR,
   COMMISSION_EXPR,
   VAT_EXPR,
+  VAT_RATE_EXPR,
   ORGANIZER_VAT_RATE_EXPR,
   ORGANIZER_VAT_EXPR,
   ORGANIZER_SHARE_EXPR,

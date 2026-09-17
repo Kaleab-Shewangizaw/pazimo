@@ -282,15 +282,16 @@ const processSuccessfulPayment = async (payment) => {
   // Mirror into the ledger, after the ticket exists. mirrorSale swallows its
   // own errors — a ledger failure must never fail a paid sale while the
   // ledger is still a shadow copy — so awaiting it here cannot block ticket
-  // delivery below. commissionRate/organizerVatRate come off the saved
-  // ticket (snapshotted by Ticket's own pre-save hook), not recomputed here,
-  // so the ledger records exactly what was charged — same pattern
-  // cinemaTicketService.js uses for cinema seat sales.
+  // delivery below. commissionRate/vatRate/organizerVatRate come off the
+  // saved ticket (snapshotted by Ticket's own pre-save hook), not
+  // recomputed here, so the ledger records exactly what was charged — same
+  // pattern cinemaTicketService.js uses for cinema seat sales.
   await mirrorSale({
     owner: { kind: "organizer", id: event.organizer },
     stream: "tickets",
     grossAmount: ticket.price,
     commissionRate: ticket.commissionRate,
+    vatRate: ticket.vatRate,
     ownerVatRate: ticket.organizerVatRate,
     source: { ticket: ticket._id },
     reference: `ticket:${ticket._id}`,
