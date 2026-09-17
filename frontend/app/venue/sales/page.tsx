@@ -137,10 +137,12 @@ function VenueSalesContent({ venue, token }: { venue: { _id: string; name: strin
       try {
         setLoading(true);
         const params = new URLSearchParams({ page: String(page), limit: "12", status });
-        const res = await venueRequest<{ data: SalesResponse }>(`/api/venues/${venue._id}/sales?${params}`, token);
+        // listVenueSales returns a flat { data, pagination } body (see
+        // venueSalesController.js) — not data nested a second level down.
+        const res = await venueRequest<SalesResponse>(`/api/venues/${venue._id}/sales?${params}`, token);
         if (cancelled) return;
-        setSales(res.data.data);
-        setPagination(res.data.pagination);
+        setSales(res.data);
+        setPagination(res.pagination);
       } finally {
         if (!cancelled) setLoading(false);
       }
