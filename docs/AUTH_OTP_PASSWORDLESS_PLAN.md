@@ -376,6 +376,39 @@ Verified directly against the mirror: 3 repaid loans, 23,000.75 ETB total
 interest, 100% recovered, matching the earlier finding exactly. Pushed as
 `bdce91e`.
 
+### ✅ Also done this session (VAT-on-commission turned ON, forward-only)
+
+Requested explicitly: activate the 0.45% VAT-on-commission deduction (the
+policy held back earlier this session), but only for sales from this update
+forward — never restating what organizers already earned, to avoid
+reproducing the exact confusion this whole session was spent untangling.
+
+Implemented the same snapshot pattern `commissionRate` already used
+(prevents an admin's rate change from retroactively revaluing past sales),
+extended to `vatRate`: added the field to all five sale models (`Ticket` and
+its siblings `BeverageSale`, `VenueBeverageSale`, `CinemaTicket`,
+`CinemaBeverageSale`), snapshotted at creation in each model's existing
+pre-validate hook. Updated every revenue reader (`ticketRevenueQuery.js`,
+`beverageRevenueQuery.js`, `cinemaTicketRevenueQuery.js`, `ledgerService.
+recordSale` via `ledgerDualWrite.mirrorSale`, `backfillLedger.js`'s own
+report/write loop — which had the identical "global constant, not the
+snapshot" bug) to read the per-row value, falling back to **0** for any row
+that predates the field — never to the live `VAT_RATE` constant, which is
+exactly what would have restated old sales. `config/rates.js`'s `VAT_RATE`
+is now `0.15`.
+
+**Verified exhaustively, not just written:**
+- Rebuilt the mirror's entire ledger from scratch with `VAT_RATE=0.15`
+  active — every existing sale (100% of them predate `vatRate`) still
+  computed at 0% VAT. Reconciler: 148/148 exact, unchanged.
+- Saved one real new ticket through the actual model: correctly snapshotted
+  `vatRate=0.15`; gross 1000 → commission 30 → VAT-on-commission 4.5 →
+  organizer keeps 965.5 (96.55%) — and the ledger mirror for that same sale
+  landed on the identical figures. Cleaned up afterward, reconciler
+  reconfirmed 148/148 exact, 0 disagreements.
+
+Pushed as `d9a443e`.
+
 ### 📋 Still to do
 
 - [ ] **Ticket-purchase dialog fallback when `ACTIVATE_PASSWORDLESS_ROUTE` is
