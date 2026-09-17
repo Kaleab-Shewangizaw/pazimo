@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const venueController = require("../controllers/venueController");
 const venueSalesController = require("../controllers/venueSalesController");
+const venueCashierController = require("../controllers/venueCashierController");
 const beverageCheckoutController = require("../controllers/beverageCheckoutController");
 const upload = require("../middlewares/upload");
 const {
@@ -46,6 +47,37 @@ const adminOrVenueAccount = (req, res, next) => {
 const adminOrEligibleVenue = (req, res, next) => {
   if (req.user.role === "admin") return next();
   if (req.user.role === "venue") return requireVenueEligible(req, res, next);
+  return res.status(403).json({
+    status: "error",
+    message: "You do not have permission to perform this action",
+  });
+};
+
+// Counter staff: admin, the owning venue, or one of its cashiers.
+// requireVenueAccount resolves a cashier's venue from its own User doc (see
+// middlewares/auth.js), so a cashier lands on req.venue exactly like the
+// owner does. Used ONLY on the counter-operations + read-only-history routes
+// below (catalog, beverages read, sales read, outstanding, redeem,
+// dashboard) — profile, beverage/happy-hour management and finance stay on
+// adminOrVenueAccount/adminOrEligibleVenue, which a cashier does not satisfy.
+const adminOrVenueStaff = (req, res, next) => {
+  if (req.user.role === "admin") return next();
+  if (req.user.role === "venue" || req.user.role === "cashier") {
+    return requireVenueAccount(req, res, next);
+  }
+  return res.status(403).json({
+    status: "error",
+    message: "You do not have permission to perform this action",
+  });
+};
+
+// The same, extended to cashiers, for the one counter route that also
+// requires the venue to be approved to sell (creating a sale).
+const adminOrEligibleVenueStaff = (req, res, next) => {
+  if (req.user.role === "admin") return next();
+  if (req.user.role === "venue" || req.user.role === "cashier") {
+    return requireVenueEligible(req, res, next);
+  }
   return res.status(403).json({
     status: "error",
     message: "You do not have permission to perform this action",
@@ -141,6 +173,37 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// Cashiers — reached by the owning venue and admins, never by a cashier
+// itself. adminOrVenueAccount already admits only "admin"/"venue", excluding
+// "cashier", so it doubles as the write gate here with no new middleware
+// needed for that half.
+// ---------------------------------------------------------------------------
+router.get(
+  "/:venueId/cashiers",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueCashierController.listCashiers
+);
+router.post(
+  "/:venueId/cashiers",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueCashierController.createCashier
+);
+router.patch(
+  "/:venueId/cashiers/:cashierId",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueCashierController.updateCashier
+);
+router.delete(
+  "/:venueId/cashiers/:cashierId",
+  authenticateUser,
+  adminOrVenueAccount,
+  venueCashierController.deleteCashier
+);
+
+// ---------------------------------------------------------------------------
 // Customer refill routes — browsing only, no purchase/payment endpoint yet.
 // Any signed-in user; unlike events, buying from a venue isn't gated behind
 // holding a ticket to anything. Declared before /:venueId/... below, per this
@@ -181,14 +244,14 @@ router.get(
 router.get(
   "/:venueId/catalog",
   authenticateUser,
-  adminOrVenueAccount,
+  adminOrVenueStaff,
   venueController.listVenueSellableCatalog
 );
 
 router.get(
   "/:venueId/beverages",
   authenticateUser,
-  adminOrVenueAccount,
+  adminOrVenueStaff,
   venueController.listVenueBeverages
 );
 router.post(
@@ -240,18 +303,18 @@ router.delete(
   venueController.cancelVenueHappyHour
 );
 
-// Recording a sale by hand. Restricted to admins and the owning venue — see the
-// controller for why this is not open to customers.
+// Recording a sale by hand. Restricted to admins, the owning venue and its
+// cashiers — see the controller for why this is not open to customers.
 router.post(
   "/:venueId/sales",
   authenticateUser,
-  adminOrEligibleVenue,
+  adminOrEligibleVenueStaff,
   venueSalesController.createVenueSale
 );
 router.get(
   "/:venueId/sales",
   authenticateUser,
-  adminOrVenueAccount,
+  adminOrVenueStaff,
   venueSalesController.listVenueSales
 );
 // Collecting a pre-bought drink at the counter. Same staff who can already
@@ -259,19 +322,19 @@ router.get(
 router.get(
   "/:venueId/sales/outstanding/:paymentReference",
   authenticateUser,
-  adminOrVenueAccount,
+  adminOrVenueStaff,
   venueSalesController.getOutstandingVenueOrder
 );
 router.post(
   "/:venueId/sales/:id/redeem",
   authenticateUser,
-  adminOrVenueAccount,
+  adminOrVenueStaff,
   venueSalesController.redeemVenueSale
 );
 router.get(
   "/:venueId/dashboard",
   authenticateUser,
-  adminOrVenueAccount,
+  adminOrVenueStaff,
   venueSalesController.getVenueDashboard
 );
 router.get(
