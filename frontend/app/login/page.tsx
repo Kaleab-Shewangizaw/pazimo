@@ -41,8 +41,8 @@ export default function LoginPage() {
       // One map for every role — see lib/account-home. A customer lands on the
       // public home page rather than /my-account here, which is this page's own
       // long-standing behaviour and deliberately kept.
-      const role = data.data.user?.role
-      router.push(hasOwnDashboard(role) ? accountHomeFor(role) : '/')
+      const loggedInUser = data.data.user
+      router.push(hasOwnDashboard(loggedInUser) ? accountHomeFor(loggedInUser) : '/')
     } catch (error) {
       console.error('Login error:', error)
       toast.error(error instanceof Error ? error.message : 'Login failed')

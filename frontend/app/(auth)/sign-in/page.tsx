@@ -107,8 +107,8 @@ function SignInContent() {
     // A seller goes to their own dashboard and `next` is ignored: a cinema or
     // venue owner signing in belongs on their dashboard, not on whichever
     // public page they happened to click first. Only customers follow `next`.
-    if (hasOwnDashboard(currentUser?.role)) {
-      router.push(accountHomeFor(currentUser?.role));
+    if (hasOwnDashboard(currentUser)) {
+      router.push(accountHomeFor(currentUser));
     } else if (nextUrl) {
       try {
         const url = new URL(nextUrl, window.location.origin);

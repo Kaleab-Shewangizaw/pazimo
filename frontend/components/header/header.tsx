@@ -159,7 +159,7 @@ const Header = () => {
     // Every role, from one map. This used to name organizer alone, so a cinema
     // or venue owner clicking their own account button was dropped into the
     // customer area instead of their dashboard.
-    router.push(accountHomeFor(user?.role));
+    router.push(accountHomeFor(user));
   };
 
   const handleSearch = (e: React.FormEvent) => {

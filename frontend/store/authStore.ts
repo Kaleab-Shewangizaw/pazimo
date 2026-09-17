@@ -9,7 +9,14 @@ interface User {
   firstName: string;
   lastName?: string;
   phoneNumber: string;
-  role: "customer" | "organizer" | "venue" | "admin" | "cinema";
+  // "cashier" is a cinema's or venue's own counter staff — scoped to a
+  // single business, added alongside the cashier-management feature.
+  role: "customer" | "organizer" | "venue" | "admin" | "cinema" | "cashier";
+  // Only ever set when role is "cashier" — which single cinema/venue this
+  // login is scoped to. A cashier reads this instead of GET /me (owner-only)
+  // to know which business's endpoints to call.
+  cinema?: string | null;
+  venue?: string | null;
 }
 
 interface PendingOtp {

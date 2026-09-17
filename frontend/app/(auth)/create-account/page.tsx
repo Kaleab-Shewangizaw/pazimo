@@ -56,8 +56,8 @@ function CreateAccountContent() {
 
     const nextUrl = searchParams.get("next");
 
-    if (hasOwnDashboard(currentUser?.role)) {
-      router.push(accountHomeFor(currentUser?.role));
+    if (hasOwnDashboard(currentUser)) {
+      router.push(accountHomeFor(currentUser));
       return;
     }
     if (nextUrl) {
