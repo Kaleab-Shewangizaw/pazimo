@@ -20,6 +20,7 @@ import AdminConcessionCatalogue from "@/components/cinema/admin-concession-catal
 import AdminCinemaFinancePanel from "@/components/cinema/admin-cinema-finance-panel";
 import AdminCinemaTicketsPanel from "@/components/cinema/admin-cinema-tickets-panel";
 import AdminCinemaHalls from "@/components/cinema/admin-cinema-halls";
+import { CinemaCashierManager } from "@/components/cinema/cinema-cashier-manager";
 import {
   AlertTriangle,
   Clapperboard,
@@ -36,6 +37,7 @@ import {
   Wallet,
   Ticket,
   DoorOpen,
+  Users,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -135,6 +137,7 @@ export default function AdminCinemaPanel() {
   const [granting, setGranting] = useState<CinemaRow | null>(null);
   // The cinema whose halls are being managed, or null.
   const [managingHalls, setManagingHalls] = useState<CinemaRow | null>(null);
+  const [managingCashiers, setManagingCashiers] = useState<CinemaRow | null>(null);
 
   const fetchCinemas = useCallback(async () => {
     if (!token) return;

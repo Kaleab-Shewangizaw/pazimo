@@ -40,12 +40,29 @@ export default function CinemaClientLayout({
   const isCinemaRoute = pathname.startsWith("/cinema");
 
   // Admins are allowed through so they can view a cinema's surface, matching how
-  // the organizer and venue areas admit them.
+  // the organizer and venue areas admit them. A cashier is admitted too, but
+  // only to the counter-operations pages listed in CASHIER_ALLOWED_PATHS below
+  // — everything else (halls/movies/showtimes, money, account, cashier
+  // management) stays owner(+admin)-only, matching the backend's cinemaSelf
+  // vs cinemaStaff route split.
   const hasAdminAccess = Boolean(admin && adminToken && admin.role === "admin");
   const hasCinemaAccess = Boolean(
-    isAuthenticated && user && (user.role === "cinema" || user.role === "admin")
+    isAuthenticated &&
+      user &&
+      (user.role === "cinema" || user.role === "admin" || user.role === "cashier")
   );
   const canAccess = hasCinemaAccess || hasAdminAccess;
+  const isCashier = user?.role === "cashier";
+
+  // Counter operations + read-only sales history — the same surface the
+  // backend's cinemaStaff route group opens to a cashier. Everything else
+  // under /cinema redirects to the default landing page below.
+  const CASHIER_ALLOWED_PATHS = [
+    "/cinema/tickets",
+    "/cinema/scanner",
+    "/cinema/concessions",
+  ];
+  const CASHIER_DEFAULT_PATH = "/cinema/scanner";
 
   useEffect(() => {
     const persist = (
@@ -78,11 +95,29 @@ export default function CinemaClientLayout({
     if (!canAccess) {
       toast.error("Please login to access cinema features");
       router.replace("/sign-in");
+      return;
     }
-  }, [canAccess, router, isCinemaRoute, hasHydrated]);
+    // A cashier straying onto an owner-only page (typed URL, stale bookmark,
+    // a link meant for the owner) is bounced to its default landing page
+    // rather than shown a page that will just 403 on every request it makes.
+    if (
+      isCashier &&
+      !CASHIER_ALLOWED_PATHS.some(
+        (path) => pathname === path || pathname.startsWith(`${path}/`)
+      )
+    ) {
+      router.replace(CASHIER_DEFAULT_PATH);
+    }
+  }, [canAccess, router, isCinemaRoute, hasHydrated, isCashier, pathname]);
+
+  const cashierOnDisallowedPath =
+    isCashier &&
+    !CASHIER_ALLOWED_PATHS.some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`)
+    );
 
   if (!isCinemaRoute) return <>{children}</>;
-  if (!hasHydrated || !canAccess) return null;
+  if (!hasHydrated || !canAccess || cashierOnDisallowedPath) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-black">

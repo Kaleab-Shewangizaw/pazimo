@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Film } from "lucide-react";
-import { fetchMyCinema, type CinemaProfile } from "@/lib/cinema-api";
+import { fetchMyCinema, fetchCashierCinemaContext, type CinemaProfile } from "@/lib/cinema-api";
 
 /**
  * Resolves the signed-in account's cinema and hands it to the page.
@@ -28,7 +28,7 @@ export function CinemaGate({
 }: {
   children: (cinema: CinemaProfile, token: string) => ReactNode;
 }) {
-  const { token } = useAuthStore();
+  const { token, user } = useAuthStore();
   const [cinema, setCinema] = useState<CinemaProfile | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [message, setMessage] = useState("");
@@ -36,6 +36,36 @@ export function CinemaGate({
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+
+    // A cashier cannot reach GET /me — it carries commercial terms
+    // (commission rates, VAT settings) that are owner-only, so cinemaSelf
+    // gates it rather than cinemaStaff (see middlewares/auth.js). Resolve the
+    // same identity from two counter-safe endpoints instead, and fill the
+    // commercial fields no cashier-visible page reads with an inert
+    // placeholder — see fetchCashierCinemaContext's own comment.
+    if (user?.role === "cashier") {
+      fetchCashierCinemaContext(token)
+        .then((ctx) => {
+          if (cancelled) return;
+          setCinema({
+            ...ctx,
+            isActive: true,
+            ticketCommissionRate: 0,
+            beverageCommissionRate: 0,
+            coversCinemaVat: false,
+          });
+          setState("ready");
+        })
+        .catch((error: Error) => {
+          if (cancelled) return;
+          setMessage(error.message);
+          setState("error");
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     fetchMyCinema(token)
       .then((data) => {
         if (cancelled) return;
@@ -50,7 +80,7 @@ export function CinemaGate({
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, user?.role]);
 
   if (state === "loading") {
     return (

@@ -16,8 +16,10 @@ import {
   LogOut,
   X,
   Film,
+  Users,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { fetchCashierCinemaContext } from "@/lib/cinema-api";
 import { Button } from "../ui/button";
 
 interface SidebarProps {
@@ -38,6 +40,10 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, token, logout } = useAuthStore();
+  // A cashier only ever reaches counter operations + read-only sales history
+  // — see clientLayout.tsx's CASHIER_ALLOWED_PATHS, which this mirrors so the
+  // sidebar never offers a link the layout would immediately bounce it off.
+  const isCashier = user?.role === "cashier";
 
   // Concessions are hidden until an admin approves the cinema, mirroring how
   // the organizer sidebar hides beverages and Pazimo Capital.
@@ -48,15 +54,26 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
   const [beverageEligible, setBeverageEligible] = useState(false);
 
   useEffect(() => {
-    if (!token || user?.role !== "cinema") return;
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cinemas/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) =>
-        setBeverageEligible(data?.data?.beverageEligibility === "eligible")
-      )
-      .catch(() => setBeverageEligible(false));
+    if (!token) return;
+    if (user?.role === "cinema") {
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cinemas/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) =>
+          setBeverageEligible(data?.data?.beverageEligibility === "eligible")
+        )
+        .catch(() => setBeverageEligible(false));
+      return;
+    }
+    // A cashier cannot reach GET /me (owner-only, see middlewares/auth.js's
+    // cinemaSelf vs cinemaStaff split) — resolve the same eligibility flag
+    // from a counter-safe endpoint instead.
+    if (user?.role === "cashier") {
+      fetchCashierCinemaContext(token)
+        .then((ctx) => setBeverageEligible(ctx.beverageEligibility === "eligible"))
+        .catch(() => setBeverageEligible(false));
+    }
   }, [token, user?.role]);
 
   const isActive = (path: string) => pathname === path;
@@ -139,17 +156,26 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-1">
-            <NavLink href="/cinema" icon={Home} label="Dashboard" />
-            <NavLink
-              href="/cinema/programme"
-              icon={CalendarDays}
-              label="Program"
-            />
-            <NavLink
-              href="/cinema/schedule"
-              icon={CalendarRange}
-              label="Schedule"
-            />
+            {/* A cashier only ever reaches counter operations + read-only
+                sales history (see clientLayout.tsx's CASHIER_ALLOWED_PATHS) —
+                the owner-only links below (Dashboard, Program, Schedule,
+                Money, Account, and Cashiers management) are hidden rather
+                than offered and then bounced. */}
+            {!isCashier && <NavLink href="/cinema" icon={Home} label="Dashboard" />}
+            {!isCashier && (
+              <NavLink
+                href="/cinema/programme"
+                icon={CalendarDays}
+                label="Program"
+              />
+            )}
+            {!isCashier && (
+              <NavLink
+                href="/cinema/schedule"
+                icon={CalendarRange}
+                label="Schedule"
+              />
+            )}
             <NavLink href="/cinema/tickets" icon={Ticket} label="Tickets" />
             <NavLink
               href="/cinema/scanner"
@@ -164,8 +190,15 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
                 badge="New"
               />
             )}
-            <NavLink href="/cinema/money" icon={Wallet} label="Money" />
-            <NavLink href="/cinema/account" icon={User} label="Account" />
+            {!isCashier && (
+              <NavLink href="/cinema/money" icon={Wallet} label="Money" />
+            )}
+            {!isCashier && (
+              <NavLink href="/cinema/cashiers" icon={Users} label="Cashiers" />
+            )}
+            {!isCashier && (
+              <NavLink href="/cinema/account" icon={User} label="Account" />
+            )}
 
             <div className="pt-4 mt-4 border-t border-gray-200 dark:border-gray-800">
               <div className="text-xs sm:text-sm font-semibold mb-3 text-gray-500 dark:text-gray-400 uppercase tracking-wider px-3">

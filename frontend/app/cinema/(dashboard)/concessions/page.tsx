@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { CinemaGate } from "@/components/cinema/cinema-gate";
+import { useAuthStore } from "@/store/authStore";
 import {
   cinemaRequest,
   fetchConcessionCatalog,
@@ -187,6 +188,11 @@ function ConcessionsContent({
   const selectClass =
     "h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900";
   const available = catalog.filter((c) => !c.inLineup);
+  // A cashier can sell from the line-up and see sales history, but the
+  // backend now rejects it from adding/removing/repricing a line-up product
+  // (POST/PATCH/DELETE /me/concessions...) — those controls are hidden here
+  // too rather than left to fail with a 403 after a tap.
+  const canManageLineup = useAuthStore((s) => s.user?.role) !== "cashier";
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -201,6 +207,7 @@ function ConcessionsContent({
         </TabsList>
 
         <TabsContent value="lineup" className="space-y-6">
+          {canManageLineup && (
           <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
             <CardContent className="space-y-4 p-5">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -277,6 +284,7 @@ function ConcessionsContent({
               </Button>
             </CardContent>
           </Card>
+          )}
 
           <Card className="border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/50">
             <CardContent className="space-y-4 p-5">
@@ -351,6 +359,7 @@ function ConcessionsContent({
                       {!l.isAvailable && " · off sale"}
                     </p>
                   </div>
+                  {canManageLineup && (
                   <div className="flex shrink-0 items-center gap-1">
                     {!l.isAvailable && (
                       <Button
@@ -371,6 +380,7 @@ function ConcessionsContent({
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

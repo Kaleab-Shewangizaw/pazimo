@@ -849,6 +849,38 @@ export const fetchWeekSchedule = (token: string, from: string, to: string) =>
 export const staffGet = <T,>(endpointBase: string, path: string, token: string) =>
   unwrap(cinemaRequest<{ data: T }>(`${endpointBase}${path}`, token));
 
+/**
+ * Minimal cinema identity a CASHIER may read.
+ *
+ * GET /api/cinemas/me is owner-only (cinemaSelf, not cinemaStaff — see
+ * middlewares/auth.js) because it carries commercial terms
+ * (ticketCommissionRate, beverageCommissionRate, coversCinemaVat) a cashier
+ * has no business seeing. CinemaGate's cashier branch calls this instead,
+ * built from two counter-safe endpoints a cashier CAN reach: /me/schedule
+ * for {_id, name} and /me/concessions for beverageEligibility (both already
+ * fetch this for their own reasons, so nothing extra is exposed).
+ */
+export const fetchCashierCinemaContext = async (
+  token: string
+): Promise<
+  Pick<CinemaProfile, "_id" | "name" | "beverageEligibility" | "turnaroundMinutes">
+> => {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const [schedule, concessions] = await Promise.all([
+    fetchSchedule(token, todayKey),
+    cinemaRequest<{ data: CinemaConcession[]; eligibility: CinemaEligibility }>(
+      "/api/cinemas/me/concessions",
+      token
+    ),
+  ]);
+  return {
+    _id: schedule.cinema._id,
+    name: schedule.cinema.name,
+    beverageEligibility: concessions.eligibility,
+    turnaroundMinutes: schedule.defaultTurnaroundMinutes,
+  };
+};
+
 export const fetchCinemaBalance = (token: string) =>
   unwrap(cinemaRequest<{ data: CinemaBalance }>("/api/cinemas/me/finance", token));
 
@@ -879,6 +911,61 @@ export const requestCinemaWithdrawal = (
   cinemaRequest<{ data: CinemaWithdrawal }>("/api/withdrawals", token, {
     method: "POST",
     body: JSON.stringify({ ...body, currency: "ETB" }),
+  });
+
+// --- Cashiers ---------------------------------------------------------
+//
+// Owner(+admin)-only management of this cinema's counter-staff logins. Never
+// called by a cashier itself — the backend routes these under cinemaSelf/
+// adminOnly, not cinemaStaff.
+//
+// Parameterized by `endpointBase` rather than hardcoded to /me, same as
+// `staffGet` above: the owner's self-service page and the admin panel's
+// per-cinema dialog both render the exact same CinemaCashierManager
+// component against "/api/cinemas/me" or "/api/cinemas/admin/:cinemaId"
+// respectively, so one implementation serves both.
+
+export interface CinemaCashier {
+  _id: string;
+  firstName: string;
+  lastName?: string;
+  email: string;
+  phoneNumber: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export const fetchCashiers = (endpointBase: string, token: string) =>
+  unwrap(cinemaRequest<{ data: CinemaCashier[] }>(`${endpointBase}/cashiers`, token));
+
+export const createCashier = (
+  endpointBase: string,
+  token: string,
+  body: { firstName: string; lastName?: string; email: string; phoneNumber: string; password: string }
+) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaCashier }>(`${endpointBase}/cashiers`, token, {
+      method: "POST",
+      body: JSON.stringify(body),
+    })
+  );
+
+export const updateCashier = (
+  endpointBase: string,
+  cashierId: string,
+  token: string,
+  body: Partial<{ firstName: string; lastName: string; phoneNumber: string; isActive: boolean }>
+) =>
+  unwrap(
+    cinemaRequest<{ data: CinemaCashier }>(`${endpointBase}/cashiers/${cashierId}`, token, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    })
+  );
+
+export const deleteCashier = (endpointBase: string, cashierId: string, token: string) =>
+  cinemaRequest<{ message?: string }>(`${endpointBase}/cashiers/${cashierId}`, token, {
+    method: "DELETE",
   });
 
 export const money = (n: number, currency = "ETB") =>
