@@ -82,9 +82,18 @@ const userSchema = new mongoose.Schema(
     // a UsherEventAccess grant. Ticket check-in/validate-qr check that grant
     // for this role; every other route stays exactly as closed to it as to a
     // customer unless explicitly opened up.
+    //
+    // "cashier" is a cinema's or venue's own counter staff — the usher
+    // equivalent for these two channels, but scoped permanently to ONE
+    // business (via the `cinema`/`venue` field below) rather than redeeming a
+    // per-event code. It can sell/scan/redeem at the counter and read that
+    // business's own sales history, but never touch finance, catalogue/hall/
+    // showtime/happy-hour management, the business's own profile/security, or
+    // create more cashiers — every route that admits it does so explicitly,
+    // same discipline as "venue"/"cinema" above.
     role: {
       type: String,
-      enum: ["customer", "organizer", "venue", "cinema", "usher"],
+      enum: ["customer", "organizer", "venue", "cinema", "usher", "cashier"],
       required: true,
     },
     firstName: {
@@ -207,6 +216,22 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Which business a "cashier" account is scoped to. Exactly one of these
+    // two is set when role is "cashier" (enforced below) and both stay null
+    // for every other role — a cashier is never its own business the way
+    // "venue"/"cinema" accounts are, it is staff borrowing one business's
+    // counter, so the FK points at the business rather than the business
+    // pointing at an "account" the way Cinema/Venue do for their owners.
+    cinema: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Cinema",
+      default: null,
+    },
+    venue: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Venue",
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -231,6 +256,30 @@ userSchema.index(
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// A cashier must be scoped to exactly one business, and no other role may
+// carry that scoping at all — otherwise resolveCinema/resolveVenueContext
+// (which trust these fields to say which business a cashier may act as)
+// could be pointed at two businesses at once, or a stray cinema/venue id
+// could silently survive a role change and outlive its meaning.
+userSchema.pre("validate", function (next) {
+  if (this.role === "cashier") {
+    const hasCinema = !!this.cinema;
+    const hasVenue = !!this.venue;
+    if (hasCinema === hasVenue) {
+      return next(
+        new Error(
+          "A cashier account must be linked to exactly one cinema or venue, not both or neither."
+        )
+      );
+    }
+  } else if (this.cinema || this.venue) {
+    return next(
+      new Error('Only a "cashier" account may be linked to a cinema or venue.')
+    );
+  }
   next();
 });
 

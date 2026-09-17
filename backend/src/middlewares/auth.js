@@ -356,7 +356,28 @@ const requireBeverageEligible = async (req, res, next) => {
 const requireVenueAccount = async (req, res, next) => {
   try {
     const Venue = require("../models/Venue");
-    const venue = await Venue.findOne({ account: req.user.userId });
+    let venue;
+
+    // A cashier owns no venue itself — it is scoped to one via the `venue`
+    // field on its own User doc. Load that doc fresh (never trust the JWT)
+    // so suspending the CASHIER specifically locks it out immediately, even
+    // while the venue it works for stays perfectly healthy — a distinct
+    // failure mode from the venue.isActive check below, which is why both
+    // run rather than one standing in for the other.
+    if (req.user.role === "cashier") {
+      const cashier = await User.findById(req.user.userId).select(
+        "venue isActive"
+      );
+      if (!cashier || !cashier.venue || cashier.isActive === false) {
+        return res.status(403).json({
+          status: "error",
+          message: "This account is not linked to an active venue.",
+        });
+      }
+      venue = await Venue.findById(cashier.venue);
+    } else {
+      venue = await Venue.findOne({ account: req.user.userId });
+    }
 
     if (!venue) {
       return res.status(403).json({
@@ -408,7 +429,28 @@ const requireVenueEligible = async (req, res, next) => {
 const requireCinemaAccount = async (req, res, next) => {
   try {
     const Cinema = require("../models/Cinema");
-    const cinema = await Cinema.findOne({ account: req.user.userId });
+    let cinema;
+
+    // A cashier owns no cinema itself — it is scoped to one via the `cinema`
+    // field on its own User doc. Load that doc fresh (never trust the JWT)
+    // so suspending the CASHIER specifically locks it out immediately, even
+    // while the cinema it works for stays perfectly healthy — a distinct
+    // failure mode from the cinema.isActive check below, which is why both
+    // run rather than one standing in for the other.
+    if (req.user.role === "cashier") {
+      const cashier = await User.findById(req.user.userId).select(
+        "cinema isActive"
+      );
+      if (!cashier || !cashier.cinema || cashier.isActive === false) {
+        return res.status(403).json({
+          status: "error",
+          message: "This account is not linked to an active cinema.",
+        });
+      }
+      cinema = await Cinema.findById(cashier.cinema);
+    } else {
+      cinema = await Cinema.findOne({ account: req.user.userId });
+    }
 
     if (!cinema) {
       return res.status(403).json({

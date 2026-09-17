@@ -258,6 +258,14 @@ const login = async (req, res) => {
           isActive: user.isActive,
           isPhoneVerified: user.isPhoneVerified,
           otpEnabled: user.otpEnabled,
+          // Only ever set for role "cashier" — which single business this
+          // login is scoped to. The frontend cashier surfaces (cinema/venue
+          // scanner + sales-history pages) read this to know which
+          // /api/cinemas/me/* or /api/venues/:venueId/* to call, since a
+          // cashier cannot reach the owner-only profile endpoints
+          // (GET /me) that would otherwise answer that question.
+          cinema: user.cinema || null,
+          venue: user.venue || null,
         },
         token,
       },

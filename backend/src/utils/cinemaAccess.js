@@ -45,6 +45,17 @@ const resolveCinema = async (req, paramCinemaId) => {
     return cinema;
   }
 
+  // A cashier is scoped to exactly one cinema via its own User doc, never
+  // by anything in the URL. requireCinemaAccount (the route-level middleware
+  // that always runs before a controller reaches resolveCinema) has already
+  // loaded and verified that cinema onto req.cinema — mirroring the "cinema"
+  // branch above, so a cashier can no more be pointed at another cinema than
+  // the owner account can.
+  if (req.user?.role === "cashier") {
+    if (req.cinema) return req.cinema;
+    throw new ForbiddenError("This account is not linked to a cinema.");
+  }
+
   // Any other role has no cinema surface at all. Reported as "not found" rather
   // than "forbidden" so probing does not confirm which cinemas exist.
   throw new NotFoundError("Cinema not found");
