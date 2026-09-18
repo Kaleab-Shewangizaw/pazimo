@@ -2,7 +2,16 @@ const express = require('express');
 const router = express.Router();
 const { authenticateUser, restrictTo } = require('../middlewares/auth');
 const {
+  getOrganizerOverview,
+} = require('../controllers/organizerOverviewController');
+const {
+  getCommissionSummary,
+  listEventCommissions,
+  updateEventCommission,
+} = require('../controllers/commissionController');
+const {
 	getDashboardStats,
+  getFinancePartitions,
 	getRevenueChartData,
 	getEventRegistrationsChartData,
 	getTicketSalesChartData,
@@ -41,6 +50,19 @@ const {
 
 // Admin dashboard stats
 router.get('/dashboard/stats', authenticateUser, restrictTo('admin'), getDashboardStats);
+// The money split by pool — event tickets, event beverages, venue beverages,
+// cinema tickets, cinema concessions. One ledger aggregation, not five scans.
+router.get('/finance/partitions', authenticateUser, restrictTo('admin'), getFinancePartitions);
+
+// Organizer list with event counts and revenue already joined. Replaces the
+// browser assembling this from hundreds of per-organizer / per-event requests.
+router.get('/organizers/overview', authenticateUser, restrictTo('admin'), getOrganizerOverview);
+
+// Commission management. Rates are per event; VAT is fixed and charged on top
+// of whatever the event's rate is.
+router.get('/commission/summary', authenticateUser, restrictTo('admin'), getCommissionSummary);
+router.get('/commission/events', authenticateUser, restrictTo('admin'), listEventCommissions);
+router.patch('/commission/events/:eventId', authenticateUser, restrictTo('admin'), updateEventCommission);
 
 // Admin dashboard chart data
 router.get('/dashboard/charts/revenue', authenticateUser, restrictTo('admin'), getRevenueChartData);

@@ -18,6 +18,8 @@ import {
   X,
   ClipboardList,
   Banknote,
+  Beer,
+  Film,
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 
@@ -174,6 +176,17 @@ export default function AdminSidebar({
                       }`}
                     >
                       Ushers
+                    </Link>
+                    <Link
+                      href="/admin/users/cashiers"
+                      onClick={onClose}
+                      className={`block p-2.5 rounded-xl text-sm transition-colors ${
+                        pathname.startsWith("/admin/users/cashiers")
+                          ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400"
+                          : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
+                      }`}
+                    >
+                      Event Cashiers
                     </Link>
                   </div>
                 )}
@@ -383,7 +396,18 @@ export default function AdminSidebar({
                           : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
                       }`}
                     >
-                      Withdrawal Requests
+                      Ticket Withdrawal 
+                    </Link>
+                    <Link
+                      href="/admin/withdrawals/beverages"
+                      onClick={onClose}
+                      className={`block p-2.5 rounded-xl text-sm transition-colors ${
+                        isActive("/admin/withdrawals/beverages")
+                          ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400"
+                          : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
+                      }`}
+                    >
+                      Beverage Withdrawal
                     </Link>
                   </div>
                 )}
@@ -403,6 +427,37 @@ export default function AdminSidebar({
               >
                 <Banknote className="h-5 w-5 flex-shrink-0" />
                 <span className="font-medium text-sm sm:text-base">Pazimo Capital</span>
+              </Link>
+            )}
+
+            {/* Beverages Section */}
+            {!isPartner && (
+              <Link
+                href="/admin/beverages"
+                onClick={onClose}
+                className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-xl transition-all duration-200 group ${
+                  pathname.startsWith("/admin/beverages")
+                    ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-900/50"
+                    : "text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-900 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <Beer className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">Beverages</span>
+              </Link>
+            )}
+
+            {!isPartner && (
+              <Link
+                href="/admin/cinema"
+                onClick={onClose}
+                className={`flex items-center gap-3 p-3 sm:p-3.5 rounded-xl transition-all duration-200 group ${
+                  pathname.startsWith("/admin/cinema")
+                    ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-900/50"
+                    : "text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-900 hover:text-gray-900 dark:hover:text-white"
+                }`}
+              >
+                <Film className="h-5 w-5 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">Cinemas</span>
               </Link>
             )}
 

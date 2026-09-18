@@ -6,6 +6,7 @@ import { useEventStore } from "@/store/eventStore";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { UsherAccessDialog } from "@/components/events/usher-access-dialog";
+import { CashierAccessDialog } from "@/components/events/cashier-access-dialog";
 import {
   Card,
   CardContent,
@@ -55,9 +56,11 @@ import {
   Loader2,
   Ban,
   CheckCircle2,
+  Beer,
 } from "lucide-react";
 import Image from "next/image";
-import QRCode from "qrcode";
+import { generateDottedQrDataUrl } from "@/lib/qrStyle";
+import { downloadHighQualityQR } from "@/lib/downloadQR";
 
 export default function EventsPage() {
   const router = useRouter();
@@ -83,6 +86,29 @@ export default function EventsPage() {
   const [selectedEventDetails, setSelectedEventDetails] = useState<any>(null);
   const [shareQrDataUrl, setShareQrDataUrl] = useState<string>("");
   const [qrEvent, setQrEvent] = useState<any>(null);
+  // Organizers who were never granted beverage selling should not see the
+  // button at all. This is presentation only — every line-up endpoint is
+  // gated by requireBeverageEligible on the server.
+  const [beverageEligible, setBeverageEligible] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("auth-storage");
+    if (!stored) return;
+    let token = "";
+    try {
+      token = JSON.parse(stored)?.state?.token || "";
+    } catch {
+      return;
+    }
+    if (!token) return;
+
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/beverages/organizer/eligibility`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setBeverageEligible(data?.data?.eligibility === "eligible"))
+      .catch(() => setBeverageEligible(false));
+  }, []);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -274,14 +300,7 @@ export default function EventsPage() {
       const baseUrl =
         process.env.NEXT_PUBLIC_FRONTEND_URL || window.location.origin;
       const shareQrUrl = `${baseUrl}${buildEventUrl(event)}`;
-      const qrDataUrl = await QRCode.toDataURL(shareQrUrl, {
-        width: 300,
-        margin: 2,
-        color: {
-          dark: "#0D47A1",
-          light: "#FFFFFF",
-        },
-      });
+      const qrDataUrl = await generateDottedQrDataUrl(shareQrUrl);
       setShareQrDataUrl(qrDataUrl);
       setQrEvent(event);
     } catch (error) {
@@ -292,12 +311,7 @@ export default function EventsPage() {
 
   const downloadQRCode = () => {
     if (!shareQrDataUrl || !qrEvent) return;
-    const link = document.createElement("a");
-    link.href = shareQrDataUrl;
-    link.download = `buy-${qrEvent._id}-ticket.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadHighQualityQR(shareQrDataUrl, `buy-${qrEvent._id}-ticket.png`);
   };
 
   const copyBuyLink = () => {
@@ -553,6 +567,27 @@ export default function EventsPage() {
                           triggerVariant="outline"
                           triggerClassName="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 dark:border-gray-700"
                         />
+                        <CashierAccessDialog
+                          eventId={event._id}
+                          eventTitle={event.title}
+                          token={organizerToken || ""}
+                          triggerVariant="outline"
+                          triggerClassName="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 dark:border-gray-700"
+                        />
+                        {beverageEligible && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/organizer/events/${event._id}/beverages`);
+                            }}
+                            className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 dark:border-gray-700"
+                            title="Beverage sales"
+                          >
+                            <Beer className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"

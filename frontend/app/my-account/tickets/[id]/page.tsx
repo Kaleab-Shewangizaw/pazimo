@@ -1,4 +1,5 @@
 "use client";
+import { ticketQrUrl } from "@/lib/ticketQr";
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -7,7 +8,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
-import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { downloadTicketQr } from "@/lib/ticketQr";
 
 type Ticket = {
   _id: string;
@@ -60,13 +61,9 @@ export default function TicketSuccessPage() {
       const maxAttempts = 5; // Retry more if it's a redirect
 
       // Force a status check first to ensure ticket creation if it's pending
-      try {
-        await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?ticketId=${id}`
-        );
-      } catch (e) {
-        console.error("Failed to trigger status check", e);
-      }
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/payments/status?ticketId=${id}`
+      ).catch(() => {});
 
       while (attempts < maxAttempts) {
         try {
@@ -94,8 +91,8 @@ export default function TicketSuccessPage() {
 
           // If not found or empty, wait and retry
           await new Promise((resolve) => setTimeout(resolve, 2000));
-        } catch (error) {
-          console.error("Error fetching ticket details:", error);
+        } catch {
+          // Retried below regardless — a network blip here just costs a beat.
         }
         attempts++;
       }
@@ -123,32 +120,36 @@ export default function TicketSuccessPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user, token, searchParams]);
 
-  const downloadQRCode = (qrCodeUrl: string, ticketId: string) => {
-    downloadHighQualityQR(qrCodeUrl, `ticket-${ticketId}.png`);
+  const downloadQRCode = (ticketId: string) => {
+    downloadTicketQr(ticketId, `ticket-${ticketId}.png`).catch(() =>
+      toast.error("Could not download the QR code")
+    );
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-[#0D47A1] mb-4" />
-        <p className="text-gray-600">
-          Verifying payment and generating tickets...
+      <div className="flex min-h-screen flex-col items-center justify-center dark:bg-background">
+        <Loader2 className="mb-4 h-8 w-8 animate-spin text-[#0D47A1] dark:text-blue-400" />
+        <p className="text-gray-600 dark:text-muted-foreground">
+          Getting your ticket ready…
         </p>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-2xl font-bold mb-6 text-center">Your Tickets</h1>
+    <div className="container mx-auto max-w-4xl px-4 py-8 dark:bg-background">
+      <h1 className="mb-6 text-center text-2xl font-bold text-gray-900 dark:text-foreground">
+        Your tickets
+      </h1>
 
       {tickets.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-600 mb-4">
-            No tickets found for this transaction.
+        <div className="rounded-lg bg-gray-50 py-12 text-center dark:bg-card">
+          <p className="mb-4 text-gray-600 dark:text-muted-foreground">
+            No tickets found for this order.
           </p>
           <Button onClick={() => router.push("/my-account/tickets")}>
-            View All Tickets
+            View all tickets
           </Button>
         </div>
       ) : (
@@ -156,31 +157,32 @@ export default function TicketSuccessPage() {
           {tickets.map((ticket) => (
             <div
               key={ticket._id}
-              className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+              className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md dark:border-border dark:bg-card"
             >
               <div className="p-6 text-center">
-                <h3 className="font-bold text-lg mb-1">{ticket.event.title}</h3>
-                <p className="text-sm text-gray-500 mb-4">
+                <h3 className="mb-1 font-bold text-lg text-gray-900 dark:text-foreground">
+                  {ticket.event.title}
+                </h3>
+                <p className="mb-4 text-sm text-gray-500 dark:text-muted-foreground">
                   {new Date(ticket.event.startDate).toLocaleDateString()}
                 </p>
 
-                <div className="bg-white p-4 rounded-lg border inline-block mb-4">
+                <div className="mb-4 inline-block rounded-lg border border-gray-200 bg-white p-4 dark:border-border">
                   <Image
-                    src={ticket.qrCode || "/events/sampleqr.png"}
+                    src={ticket.ticketId ? ticketQrUrl(ticket.ticketId) : "/events/sampleqr.png"}
+                    unoptimized
                     alt={`Ticket ${ticket.ticketId}`}
                     width={150}
                     height={150}
                   />
                 </div>
 
-                <div className="space-y-2 mb-4">
-                  <p className="text-sm font-medium text-gray-900">
-                    {ticket.ticketType} Ticket
+                <div className="mb-4 space-y-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-foreground">
+                    {ticket.ticketType}
                   </p>
-                  <p className="text-xs text-gray-500">ID: {ticket.ticketId}</p>
-                  <p className="text-sm font-bold text-[#0D47A1]">
-                    Admit: {ticket.ticketCount} Person
-                    {ticket.ticketCount > 1 ? "s" : ""}
+                  <p className="text-sm font-bold text-[#0D47A1] dark:text-blue-400">
+                    Admits {ticket.ticketCount}
                   </p>
                 </div>
 
@@ -188,9 +190,9 @@ export default function TicketSuccessPage() {
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  onClick={() => downloadQRCode(ticket.qrCode, ticket.ticketId)}
+                  onClick={() => downloadQRCode(ticket.ticketId)}
                 >
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="mr-2 h-4 w-4" />
                   Download QR
                 </Button>
               </div>
@@ -204,7 +206,7 @@ export default function TicketSuccessPage() {
           variant="link"
           onClick={() => router.push("/my-account/tickets")}
         >
-          Back to My Tickets
+          Back to my tickets
         </Button>
       </div>
     </div>

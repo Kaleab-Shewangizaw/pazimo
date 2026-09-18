@@ -15,6 +15,8 @@ const {
   passwordResetSendLimiter,
   passwordResetVerifyLimiter,
   unifiedAuthLimiter,
+  updatePasswordLimiter,
+  deleteAccountLimiter,
 } = require('../middlewares/rateLimiters');
 
 // Registration route
@@ -26,15 +28,43 @@ router.post('/login', loginLimiter, authController.login);
 // Get current user
 router.get('/me', protect, authController.getMe);
 
-// Password reset — OTP-based, same code+channel mechanism as the organizer
-// sign-in OTP below. Covers every role on the User model; the single Admin
-// account has no self-service reset. Three steps: send a code to the
-// email/phone the user types, verify it (the frontend only advances to its
-// change-password screen once this succeeds), then submit the new password.
+// Password reset — OTP-based (added 2026-09-03), same code+channel
+// mechanism as the organizer sign-in OTP below. Covers every role on the
+// User model (customer, organizer, venue, cinema); the single Admin account
+// has no self-service reset. Three steps: send a code to the email/phone the
+// user types, verify it (the frontend only advances to its change-password
+// screen once this succeeds), then submit the new password.
 router.post('/forgot-password', passwordResetSendLimiter, authController.forgotPassword);
 router.post('/verify-reset-code', passwordResetVerifyLimiter, authController.verifyPasswordResetCode);
 router.post('/reset-password', passwordResetVerifyLimiter, authController.resetPassword);
+
+// Registration phone verification (added 2026-09-16) — register() now sends
+// a code instead of a token; these two complete that journey. See
+// verifyRegisterOtp's comment in authController.js.
+router.post('/verify-register-otp', organizerOtpVerifyLimiter, authController.verifyRegisterOtp);
+router.post('/resend-register-otp', otpLimiter, authController.resendRegisterOtp);
+
+// Settings-screen phone verification, for any account that predates this
+// feature and still shows isPhoneVerified:false — required before
+// otp-preference below will accept enabled:true.
+router.post('/send-phone-verify-otp', protect, otpLimiter, authController.sendPhoneVerifyOtp);
+router.post('/verify-phone-otp', protect, organizerOtpVerifyLimiter, authController.verifyPhoneNumber);
+
+// Self-serve login-code (2FA) toggle.
+router.put('/otp-preference', protect, authController.updateOtpPreference);
+
 router.put('/update-profile', protect, authController.updateProfile);
+router.put('/update-username', protect, authController.updateUsername);
+router.put('/update-password', protect, updatePasswordLimiter, authController.updatePassword);
+
+// Stored preferences only for now — see authController's comment on
+// getNotificationPreferences for why these don't gate delivery yet.
+router.get('/notification-preferences', protect, authController.getNotificationPreferences);
+router.put('/notification-preferences', protect, authController.updateNotificationPreferences);
+
+// Push token registration — see pushService.js for what actually reads these.
+router.post('/push-token', protect, authController.registerPushToken);
+router.delete('/push-token', protect, authController.unregisterPushToken);
 
 
 // OTP routes
@@ -48,9 +78,9 @@ router.post('/organizer/send-otp', organizerOtpSendLimiter, authController.sendO
 router.post('/organizer/verify-otp', organizerOtpVerifyLimiter, authController.verifyOrganizerOtp);
 
 // Organizer-scoped password reset — same OTP mechanism as /forgot-password
-// above, but confirms the identifier belongs to an organizer account first
-// (see sendOrganizerOtp's comment on why "account not found" isn't fully
-// hidden there — same trade-off applies here for the masked-destination UX).
+// above, but confirms the email belongs to an organizer account first (see
+// sendOrganizerOtp's comment on why "account not found" isn't fully hidden
+// there — same trade-off applies here for the masked-destination UX).
 router.post('/organizer/forgot-password', passwordResetSendLimiter, authController.organizerForgotPassword);
 router.post('/organizer/verify-reset-code', passwordResetVerifyLimiter, authController.organizerVerifyResetCode);
 router.post('/organizer/reset-password', passwordResetVerifyLimiter, authController.organizerResetPassword);
@@ -59,7 +89,7 @@ router.post('/organizer/reset-password', passwordResetVerifyLimiter, authControl
 router.post('/unified-auth', unifiedAuthLimiter, authController.unifiedAuth);
 
 // Delete account route
-router.delete('/delete-account', protect, authController.deleteAccount);
+router.delete('/delete-account', protect, deleteAccountLimiter, authController.deleteAccount);
 
 // Admin routes
 router.post('/admin/login', adminLoginLimiter, authController.adminLogin);

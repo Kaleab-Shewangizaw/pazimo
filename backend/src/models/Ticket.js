@@ -4,6 +4,12 @@ const User = require("./User");
 const fs = require("fs");
 const path = require("path");
 
+const {
+  DEFAULT_COMMISSION_RATE,
+  normalizeCommissionRate,
+  organizerVatRateFor,
+  VAT_RATE,
+} = require("../config/rates");
 function generateShortId() {
   const chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -88,6 +94,43 @@ const TicketSchema = new mongoose.Schema(
       min: 0,
     },
 
+    // The commission rate this ticket was actually sold under, copied from the
+    // event at creation time and never updated afterwards.
+    //
+    // Snapshotted for the same reason BeverageSale snapshots prices: an admin
+    // renegotiating an event's rate must not retroactively revalue sales that
+    // have already been counted, reported, and in many cases paid out. Absent
+    // on tickets sold before per-event rates existed; readers fall back to the
+    // 3% default (see utils/ticketRevenueQuery.COMMISSION_RATE_EXPR).
+    commissionRate: {
+      type: Number,
+      min: 0,
+    },
+
+    // The organizer's own VAT withheld on this ticket, when Pazimo covers the
+    // event (Event.coversOrganizerVat). 0 or absent means the organizer is
+    // licensed and settles their own VAT — which is every ticket sold before
+    // coverage existed, so readers treat missing as 0.
+    //
+    // Snapshotted for the same reason as commissionRate: switching coverage on
+    // must not retroactively withhold 15% from revenue already paid out.
+    organizerVatRate: {
+      type: Number,
+      min: 0,
+    },
+
+    // The government VAT-on-commission rate this ticket was actually sold
+    // under (config/rates.js's VAT_RATE at the moment of sale), snapshotted
+    // for the identical reason as commissionRate: turning VAT_RATE on, off,
+    // or to a different figure must never restate revenue already counted
+    // and paid out on tickets sold under the old rate. Absent on every
+    // ticket sold before this field existed — readers treat missing as 0,
+    // never as the current VAT_RATE (see utils/ticketRevenueQuery.js).
+    vatRate: {
+      type: Number,
+      min: 0,
+    },
+
     currency: {
       type: String,
       enum: ["ETB", "USD"],
@@ -160,6 +203,56 @@ const TicketSchema = new mongoose.Schema(
     qrCode: {
       type: String,
     },
+
+    // Set while a TicketShare on this ticket is outstanding ("pending"), and
+    // cleared back to null the moment that share is accepted, declined,
+    // cancelled or expires. Existing tickets simply don't have this field,
+    // which Mongo treats as equivalent to null for querying purposes — so
+    // every legacy ticket is correctly "not locked" with no backfill needed.
+    //
+    // Acts as a lock: a ticket can only be in one outstanding share at a
+    // time, and check-in/cancel must refuse to act on a locked ticket since
+    // its ownership is mid-transfer (see ticketShareService and the guards in
+    // checkInTicket/cancelTicket below).
+    pendingShare: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TicketShare",
+      default: null,
+      index: true,
+    },
+
+    // Lineage for a ticket created by splitting admissions off another one
+    // (see ticketShareService.respondToShare — a PARTIAL share transfers some
+    // but not all of a ticket's remaining ticketCount, so the recipient gets a
+    // brand-new Ticket document rather than the sender's). Absent/null on
+    // every ticket bought directly and on any ticket transferred whole, which
+    // Mongo treats as "no parent" without needing a backfill.
+    parentTicketId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ticket",
+      default: null,
+      index: true,
+    },
+    // The very first ticket in this one's split lineage — itself for a
+    // once-split ticket, and carried forward unchanged through further splits
+    // of its children, so an admin can find every fragment of one original
+    // purchase with a single `rootTicketId` query regardless of how many
+    // times it's been split.
+    rootTicketId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ticket",
+      default: null,
+      index: true,
+    },
+    // Who this ticket's admissions belonged to before the first transfer in
+    // its lineage — set once, on creation, and never overwritten by later
+    // transfers (see respondToShare). Absent on a ticket that has never been
+    // transferred; its current `user` is the original owner in that case.
+    originalOwnerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -188,7 +281,69 @@ TicketSchema.index({ checkedIn: 1 }); // Fast filtering for check-in status
 TicketSchema.index({ paymentReference: 1 }); // Payment lookup (already exists above)
 TicketSchema.index({ status: 1, createdAt: 1 }); // Stock-hold expiry sweep (no event filter)
 
+// Snapshot the rates this ticket is being sold under.
+//
+// Done here rather than at each of the nine places that create tickets, so a
+// new creation path cannot forget it. Runs once, on insert only: an existing
+// ticket's rates are never rewritten, which is the whole point of the snapshot.
+TicketSchema.pre("validate", async function snapshotCommissionRate(next) {
+  if (!this.isNew) return next();
+  const hasCommission = typeof this.commissionRate === "number";
+  const hasOrganizerVat = typeof this.organizerVatRate === "number";
+  // Not per-event like the two above — VAT_RATE is one government rate for
+  // everyone — so it needs no Event lookup and is set unconditionally, ahead
+  // of the event-dependent early return below.
+  if (typeof this.vatRate !== "number") this.vatRate = VAT_RATE;
+  if (hasCommission && hasOrganizerVat) return next();
+  if (!this.event) return next();
+
+  try {
+    // Required lazily to avoid a require cycle through the model registry.
+    const EventModel = require("./Event");
+    const event = await EventModel.findById(this.event)
+      .select("commissionRate coversOrganizerVat")
+      .lean();
+    if (!hasCommission) {
+      this.commissionRate = normalizeCommissionRate(
+        event?.commissionRate ?? DEFAULT_COMMISSION_RATE
+      );
+    }
+    if (!hasOrganizerVat) {
+      this.organizerVatRate = organizerVatRateFor(event?.coversOrganizerVat);
+    }
+    next();
+  } catch (error) {
+    // A pricing lookup must never block a paid ticket from being issued. Fall
+    // back to the defaults — the same figures the reader would have used.
+    console.error("Commission rate snapshot failed, using default:", error.message);
+    if (!hasCommission) this.commissionRate = DEFAULT_COMMISSION_RATE;
+    // Not covering is the safe fallback: it leaves the money with the
+    // organizer rather than withholding tax Pazimo may not owe.
+    if (!hasOrganizerVat) this.organizerVatRate = 0;
+    next();
+  }
+});
+
+// QR images are no longer generated or stored here.
+//
+// This hook used to build a branded SVG and persist it as a base64 data URI on
+// every ticket. It averaged 54 KB — 99% of the document — because the 26 KB
+// Pazimo logo was base64'd into the SVG and the whole SVG base64'd again, once
+// per ticket. At a million tickets that is ~50 GB of the same logo in the
+// hottest collection, on a server with 11 GB of RAM.
+//
+// The payload is fully derived from fields already on this document, so the
+// image is rendered on demand instead: see utils/qrRenderer.js, served by
+// GET /api/tickets/:ticketId/qr.svg. Verified against every existing ticket —
+// the re-rendered code carries the same ticketId, which is the only field the
+// scanner reads (see validateQRCode).
+//
+// The old implementation is preserved below, disabled, until the backfill that
+// strips stored qrCode values has run everywhere.
+const LEGACY_QR_ON_SAVE = false;
+
 TicketSchema.pre("save", async function (next) {
+  if (!LEGACY_QR_ON_SAVE) return next();
   if (this.qrCode) return next();
 
   try {

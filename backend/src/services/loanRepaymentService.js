@@ -3,6 +3,10 @@ const Ticket = require("../models/Ticket");
 const Loan = require("../models/Loan");
 const Notification = require("../models/Notification");
 const OrganizerCapitalProfile = require("../models/OrganizerCapitalProfile");
+const {
+  getOrganizerEventIds,
+  organizerTicketMatch,
+} = require("../utils/ticketRevenueQuery");
 
 // Share of each gross ticket sale routed to loan repayment while an organizer
 // carries an outstanding Pazimo Capital debt. The remaining 40% stays with the
@@ -18,42 +22,23 @@ const MILESTONE_TICKETS = 10;
 const EPSILON = 0.01;
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-// Same "what counts as real revenue" filter used by financeService /
-// capitalService, so the repayment math never drifts from the balance figures
-// shown elsewhere.
-const validTicketMatch = (currency) => ({
-  ...(currency === "USD"
-    ? { currency: "USD" }
-    : { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }),
-  price: { $gt: 0 },
-  status: { $nin: ["cancelled", "failed", "expired"] },
-  $or: [
-    { paymentStatus: { $exists: false } },
-    { paymentStatus: { $nin: ["cancelled", "failed"] } },
-  ],
-});
-
 // Gross ticket revenue (sum of price) and sale count for an organizer's events,
 // counting only tickets created at/after `since`. Loans credit the organizer at
 // approval time, so `since` is the loan's disbursement/approval timestamp — only
 // sales made after the money landed contribute to repaying it.
+//
+// Resolves the organizer's event ids first and matches on them, rather than
+// $lookup-ing every ticket into events and filtering after the join. The old
+// shape could not use an index and walked the whole tickets collection on every
+// call; this one uses Event { organizer: 1 } then the ticket `event` indexes.
 const getGrossRevenueSince = async (organizerId, since, currency) => {
-  const match = {
-    "eventData.organizer": new mongoose.Types.ObjectId(organizerId),
-    ...validTicketMatch(currency),
-  };
+  const eventIds = await getOrganizerEventIds(organizerId);
+  if (eventIds.length === 0) return { revenue: 0, count: 0 };
+
+  const match = organizerTicketMatch(eventIds, currency);
   if (since) match.createdAt = { $gte: new Date(since) };
 
   const rows = await Ticket.aggregate([
-    {
-      $lookup: {
-        from: "events",
-        localField: "event",
-        foreignField: "_id",
-        as: "eventData",
-      },
-    },
-    { $unwind: "$eventData" },
     { $match: match },
     { $group: { _id: null, revenue: { $sum: "$price" }, count: { $sum: 1 } } },
   ]);

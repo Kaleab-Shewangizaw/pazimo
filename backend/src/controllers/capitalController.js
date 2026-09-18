@@ -15,7 +15,11 @@ const {
   calculateOrganizerCapitalMetrics,
   getBlockingLoan,
 } = require("../services/capitalService");
-const { syncOrganizerLoans } = require("../services/loanRepaymentService");
+const {
+  syncOrganizerLoans,
+  computeLoanProgress,
+} = require("../services/loanRepaymentService");
+const { round2 } = require("../config/rates");
 
 const EPSILON = 0.01;
 
@@ -213,6 +217,134 @@ const setBorrowingLimitOverride = async (req, res) => {
     console.error("Error setting borrowing limit override:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * What Pazimo Capital itself has earned and disbursed, platform-wide — a
+ * revenue view, separate from the organizer/loan management tabs above and
+ * from ticket commission.
+ *
+ * Built because loan_principal/loan_repayment move through the exact same
+ * ticket pool as commission (see config/rates.js's "Ticket revenue and any
+ * borrowed Pazimo Capital principal are now a single pool" and
+ * ledgerService's netMinor) — that mixing is what made the ticket-revenue
+ * dashboards confusing (found 2026-09-17: a ~23,000 ETB gap in the ledger
+ * card's "Seller earned" traced to loan cash flow bleeding into a revenue
+ * figure). This is the one place that isolates lending on its own instead.
+ *
+ * The fee (15% flat, set on Loan.feeRate at approval) is Pazimo's interest —
+ * the actual money made from lending. Repayment collects a single amount
+ * against principal+fee combined (computeLoanProgress), not principal first
+ * then fee, so "how much of the fee has been recovered so far" is the same
+ * proportion of that combined repayment as the fee is of the total —
+ * feeRecovered = repaid × (feeAmount / totalRepayable). Once a loan reaches
+ * "repaid" that proportion recovers exactly feeAmount, by construction.
+ */
+const getCapitalRevenueSummary = async (req, res) => {
+  try {
+    const currency = req.query.currency === "USD" ? "USD" : "ETB";
+
+    // Sync every active loan to current ticket sales first — an admin
+    // checking this page wants today's numbers, not whatever the last
+    // incidental read happened to leave persisted.
+    const activeOrganizerIds = await Loan.find({
+      currency,
+      status: "active",
+    }).distinct("organizer");
+    for (const orgId of activeOrganizerIds) {
+      await syncOrganizerLoans(orgId, req);
+    }
+
+    // Only loans that were actually disbursed carry real principal/fee —
+    // pending/rejected/cancelled never moved money and have nothing to
+    // report here (they're covered by pendingRequests below instead).
+    const loans = await Loan.find({
+      currency,
+      status: { $in: ["active", "repaid"] },
+    })
+      .populate("organizer", "firstName lastName email")
+      .sort("-disbursedAt")
+      .lean();
+
+    let principalDisbursed = 0;
+    let feeExpected = 0;
+    let principalRecovered = 0;
+    let feeRecovered = 0;
+    let outstanding = 0;
+    const rows = [];
+
+    for (const loan of loans) {
+      const progress = await computeLoanProgress(loan);
+      const totalRepayable = progress.totalRepayable || 0;
+      const principalShare = totalRepayable > 0 ? (loan.approvedAmount || 0) / totalRepayable : 0;
+      const feeShare = totalRepayable > 0 ? (loan.feeAmount || 0) / totalRepayable : 0;
+
+      const loanPrincipalRecovered = round2(progress.repaid * principalShare);
+      const loanFeeRecovered = round2(progress.repaid * feeShare);
+
+      principalDisbursed += loan.approvedAmount || 0;
+      feeExpected += loan.feeAmount || 0;
+      principalRecovered += loanPrincipalRecovered;
+      feeRecovered += loanFeeRecovered;
+      outstanding += progress.outstanding;
+
+      rows.push({
+        _id: loan._id,
+        referenceNumber: loan.referenceNumber,
+        organizer: loan.organizer,
+        status: loan.status,
+        approvedAmount: loan.approvedAmount,
+        feeRate: loan.feeRate,
+        feeAmount: loan.feeAmount,
+        totalRepayable: loan.totalRepayable,
+        repaid: progress.repaid,
+        outstanding: progress.outstanding,
+        feeRecovered: loanFeeRecovered,
+        recoveryPercent:
+          totalRepayable > 0 ? round2((progress.repaid / totalRepayable) * 100) : 0,
+        disbursedAt: loan.disbursedAt,
+      });
+    }
+
+    const [pendingAgg] = await Loan.aggregate([
+      { $match: { currency, status: "pending" } },
+      { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: "$requestedAmount" } } },
+    ]);
+    const pending = pendingAgg || { count: 0, amount: 0 };
+
+    const totalRepayableSum = principalDisbursed + feeExpected;
+    const totalRecovered = principalRecovered + feeRecovered;
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        currency,
+        principalDisbursed: round2(principalDisbursed),
+        // "Expected" = contracted at approval time, the eventual total once
+        // every active loan finishes repaying. "Recovered" = actually earned
+        // so far, proportional to repayment progress.
+        feeExpected: round2(feeExpected),
+        feeRecovered: round2(feeRecovered),
+        feeOutstanding: round2(feeExpected - feeRecovered),
+        principalRecovered: round2(principalRecovered),
+        principalOutstanding: round2(principalDisbursed - principalRecovered),
+        totalOutstanding: round2(outstanding),
+        recoveryRatePercent:
+          totalRepayableSum > 0 ? round2((totalRecovered / totalRepayableSum) * 100) : 0,
+        loanCount: loans.length,
+        activeLoanCount: loans.filter((l) => l.status === "active").length,
+        repaidLoanCount: loans.filter((l) => l.status === "repaid").length,
+        pendingRequests: { count: pending.count, amount: round2(pending.amount || 0) },
+        loans: rows,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting capital revenue summary:", error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: "Failed to load capital revenue",
+    });
   }
 };
 
@@ -627,6 +759,7 @@ module.exports = {
   getOrganizerCapitalDetail,
   setEligibility,
   setBorrowingLimitOverride,
+  getCapitalRevenueSummary,
   listLoans,
   getLoan,
   approveLoan,

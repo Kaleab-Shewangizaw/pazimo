@@ -17,7 +17,17 @@ export type FeaturedEvent = {
   endTime: string; // 👈 add this
   location: string;
   venue: string;
+  /** The wide artwork behind the hero. */
   image: string;
+  /**
+   * The upright artwork for the card that sits over the background.
+   *
+   * A film has two crops for a reason — a 2:3 poster and a landscape banner —
+   * and they are not interchangeable: a poster stretched across the hero is
+   * letterboxed, and a landscape still cropped into the portrait card cuts the
+   * title off. Events have one image, so this is optional and falls back to it.
+   */
+  posterImage?: string;
   price: string;
   rating: number;
   attendees: number;
@@ -726,7 +736,11 @@ export default function LargeEventCarousel({
               //  style={{ boxShadow: mode === "dark" ? `0 40px 80px -30px hsla(0,0%,0%,0.9), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.5)` : `0 40px 80px -30px hsla(0,0%,0%,0.2), 0 15px 40px -5px hsla(${dominantColor.h}, ${dominantColor.s}%, ${dominantColor.l}%, 0.35)` }}
               >
                 <Image
-                  src={currentEvent.image || "/placeholder.svg?height=650&width=1200&text=Featured+Event"}
+                  src={
+                    currentEvent.posterImage ||
+                    currentEvent.image ||
+                    "/placeholder.svg?height=650&width=1200&text=Featured+Event"
+                  }
                   alt={currentEvent.title}
                   width={420}
                   height={560}
@@ -846,7 +860,7 @@ export default function LargeEventCarousel({
           <div className="hidden md:block md:w-2/5 justify-center md:justify-end">
             <div className="relative w-[220px] lg:w-[320px] h-[300px] lg:h-[450px] rounded-2xl overflow-hidden shadow-2xl transform md:-rotate-2 hover:rotate-0 transition-transform duration-500 border border-white/10">
               <Image
-                src={currentEvent.image}
+                src={currentEvent.posterImage || currentEvent.image}
                 alt={currentEvent.title}
                 fill
                 className="object-cover"

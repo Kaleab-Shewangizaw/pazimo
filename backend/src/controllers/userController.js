@@ -3,6 +3,7 @@ const Event = require('../models/Event');
 const Ticket = require('../models/Ticket');
 const Withdrawal = require('../models/Withdrawal');
 const mongoose = require('mongoose');
+const { revenueFieldsOverArray } = require('../utils/ticketRevenueQuery');
 
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -117,26 +118,27 @@ exports.getOrganizersWithStats = async (req, res) => {
           as: 'events'
         }
       },
-      // Lookup tickets for revenue calculation
+      // Lookup tickets for revenue calculation.
+      //
+      // This used to nest a second $lookup inside: for every user on the page it
+      // joined the ENTIRE tickets collection to events, $unwind-ed it, and only
+      // then filtered on eventData.organizer — a full collection scan plus one
+      // event lookup per ticket, repeated per user. Ten users per page meant ten
+      // full scans.
+      //
+      // The organizer's events were already fetched by the $lookup above, so we
+      // join on their ids directly. localField/foreignField uses the `event`
+      // index on tickets, and (MongoDB 5.0+) can be combined with `pipeline` so
+      // the filtering and projection still happen inside the join — the
+      // projection matters, since it keeps the 50 KB qrCode blobs out of memory.
       {
         $lookup: {
           from: 'tickets',
-          let: { organizerId: '$_id' },
+          localField: 'events._id',
+          foreignField: 'event',
           pipeline: [
             {
-              $lookup: {
-                from: 'events',
-                localField: 'event',
-                foreignField: '_id',
-                as: 'eventData'
-              }
-            },
-            {
-              $unwind: '$eventData'
-            },
-            {
               $match: {
-                $expr: { $eq: ['$eventData.organizer', '$$organizerId'] },
                 price: { $gt: 0 },
                 status: { $nin: ['cancelled', 'failed', 'expired'] }
               }
@@ -176,10 +178,11 @@ exports.getOrganizersWithStats = async (req, res) => {
               }
             }
           },
-          // Calculate revenues
+          // Split per ticket at the rates it was sold under. A flat 0.97/0.03
+          // stopped being true once commission became per event, and is far
+          // out for an event whose VAT Pazimo covers.
           totalRevenue: { $sum: '$tickets.price' },
-          organizerRevenue: { $multiply: [{ $sum: '$tickets.price' }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: '$tickets.price' }, 0.03] },
+          ...revenueFieldsOverArray('$tickets'),
           // Calculate total tickets sold (with quantities)
           totalTicketsSold: {
             $sum: {

@@ -3,6 +3,8 @@ import CategoryIcons, { Category } from "@/components/category-icons";
 import FeaturedEventsSection, {
   FeaturedCardEvent,
 } from "@/components/home/featured-events-section";
+import { movieToTrendingCard } from "@/components/cinemas/cinema-format";
+import type { FeaturedMovie } from "@/components/cinemas/public-cinema-types";
 import TrendingEventsSection, {
   TrendingCardEvent,
 } from "@/components/home/trending-events-section";
@@ -266,6 +268,30 @@ const sanitizeEventForCard = (event: any): CardEvent => ({
   isSoldOut: event.isSoldOut || false,
 });
 
+/**
+ * The films an admin has promoted to trending, for the home page's trending
+ * strip. Banner and featured films no longer reach the home page — a cinema's
+ * bannered films show on that cinema's own page instead.
+ *
+ * Never throws: cinema is one section of a page that is mostly events, so a
+ * cinema API that is down or not yet deployed must degrade to "no films in
+ * the trending row" rather than taking the whole home page with it.
+ */
+async function getTrendingMovies(): Promise<FeaturedMovie[]> {
+  try {
+    const response = await fetch(
+      withBase("/api/cinemas/public/trending-movies?limit=12"),
+      { cache: "no-store" }
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data?.data || [];
+  } catch (error) {
+    console.error("Error fetching trending movies:", error);
+    return [];
+  }
+}
+
 async function getCategories(): Promise<Category[]> {
   try {
     const response = await fetch(withBase("/api/categories"), {
@@ -339,14 +365,24 @@ async function getPublishedRsvpForms(): Promise<PublicRsvpForm[]> {
 }
 
 export default async function Page() {
-  const [categories, featuredRes, trendingRes, otherRes, bannerEvents, publishedRsvpForms] =
-    await Promise.all([
+  const [
+    categories,
+    featuredRes,
+    trendingRes,
+    otherRes,
+    bannerEvents,
+    publishedRsvpForms,
+    trendingMovies,
+  ] = await Promise.all([
     getCategories(),
     getPublicEvents({ isFeatured: true, limit: 8, sort: "-startDate" }),
     getPublicEvents({ isTrending: true, limit: 6, sort: "-startDate" }),
     getPublicEvents({ limit: 12, skip: 0, sort: "-startDate" }),
       getBannerEvents(),
       getPublishedRsvpForms(),
+      // Alongside the rest rather than after: it is an independent read, and
+      // sequencing it would add a round trip to every home page load.
+      getTrendingMovies(),
     ]);
 
   const featuredEvents = (featuredRes.events || [])
@@ -424,7 +460,15 @@ export default async function Page() {
   const bannerRsvps = (publishedRsvpForms || []).filter((f) => f.bannerStatus).map(rsvpToBannerCarouselEvent);
 
   const featuredEventsCombined = featuredEvents.concat(featuredRsvps);
-  const trendingEventsCombined = trendingEvents.concat(trendingRsvps);
+  // Curated films join the trending row the same way events do, so an admin's
+  // toggle reaches the home page exactly the way an event's does. The cards
+  // are the same components, so the row stays visually uniform. The hero
+  // banner is events-only now — a cinema's bannered films show on that
+  // cinema's own page instead (see app/cinemas/[cinemaId]/page.tsx), not
+  // mixed into the platform-wide carousel.
+  const trendingEventsCombined = trendingEvents
+    .concat(trendingRsvps)
+    .concat(trendingMovies.map(movieToTrendingCard));
   const bannerEventsCombined = (bannerEvents || []).concat(bannerRsvps);
 
   const initialOtherEvents = (otherRes.events || []).map(sanitizeEventForCard);

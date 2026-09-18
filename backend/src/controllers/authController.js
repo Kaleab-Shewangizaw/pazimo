@@ -8,6 +8,7 @@ const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
+const pushService = require("../services/pushService");
 
 const signToken = (id, role) => {
   if (!process.env.JWT_SECRET) {
@@ -18,197 +19,33 @@ const signToken = (id, role) => {
   });
 };
 
-// Configure nodemailer
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-};
-
-// Forgot Password
-// const forgotPassword = async (req, res) => {
-//   try {
-//     const { email } = req.body;
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(StatusCodes.NOT_FOUND).json({
-//         status: 'error',
-//         message: 'No user found with that email address'
-//       });
-//     }
-
-//     // Generate reset token
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-//     const passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-
-//     user.passwordResetToken = passwordResetToken;
-//     user.passwordResetExpires = passwordResetExpires;
-//     await user.save({ validateBeforeSave: false });
-
-//     // Send email
-//     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-//     const transporter = createTransporter();
-//     const mailOptions = {
-//       from: process.env.EMAIL_USER,
-//       to: user.email,
-//       subject: 'Password Reset Request',
-//       html: `
-//         <h2>Password Reset Request</h2>
-//         <p>You requested a password reset. Click the link below to reset your password:</p>
-//         <a href="${resetURL}" style="background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
-//         <p>This link will expire in 10 minutes.</p>
-//         <p>If you didn't request this, please ignore this email.</p>
-//       `
-//     };
-
-//     await transporter.sendMail(mailOptions);
-
-//     res.status(StatusCodes.OK).json({
-//       status: 'success',
-//       message: 'Password reset email sent successfully'
-//     });
-//   } catch (error) {
-//     res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// Forgot Password - NO EMAIL VERSION
-// const forgotPassword = async (req, res) => {
-//   try {
-//     const { email } = req.body;
-
-//     console.log('Forgot password request for:', email);
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(404).json({
-//         status: 'error',
-//         message: 'No user found with that email address'
-//       });
-//     }
-
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-//     const passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-//     user.passwordResetToken = passwordResetToken;
-//     user.passwordResetExpires = passwordResetExpires;
-//     await user.save({ validateBeforeSave: false });
-
-//     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-//     // Just log the URL - NO EMAIL SENDING
-//     console.log('=================================');
-//     console.log('PASSWORD RESET URL:', resetURL);
-//     console.log('=================================');
-
-//     res.status(200).json({
-//       status: 'success',
-//       message: 'Password reset link generated (check console)',
-//       resetURL: resetURL // For testing only
-//     });
-//   } catch (error) {
-//     console.error('Forgot password error:', error);
-//     res.status(500).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
-// Forgot Password - WITH EMAIL SENDING
-// const forgotPassword = async (req, res) => {
-//   try {
-//     const { email } = req.body;
-
-//     console.log('Forgot password request for:', email);
-
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(404).json({
-//         status: 'error',
-//         message: 'No user found with that email address'
-//       });
-//     }
-
-//     const resetToken = crypto.randomBytes(32).toString('hex');
-//     const passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-//     const passwordResetExpires = Date.now() + 10 * 60 * 1000;
-
-//     user.passwordResetToken = passwordResetToken;
-//     user.passwordResetExpires = passwordResetExpires;
-//     await user.save({ validateBeforeSave: false });
-
-//     const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-//     // Send email using Ethereal
-//     const testAccount = await nodemailer.createTestAccount();
-//     const transporter = nodemailer.createTransport({
-//       host: 'smtp.ethereal.email',
-//       port: 587,
-//       secure: false,
-//       auth: {
-//         user: testAccount.user,
-//         pass: testAccount.pass,
-//       },
-//     });
-
-//     const mailOptions = {
-//       from: 'noreply@yourapp.com',
-//       to: user.email,
-//       subject: 'Password Reset Request',
-//       html: `
-//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-//           <h2 style="color: #333;">Password Reset Request</h2>
-//           <p>Hello ${user.firstName},</p>
-//           <p>You requested a password reset. Click the button below to reset your password:</p>
-//           <div style="text-align: center; margin: 30px 0;">
-//             <a href="${resetURL}" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a>
-//           </div>
-//           <p>Or copy and paste this link in your browser:</p>
-//           <p style="word-break: break-all; color: #007bff;">${resetURL}</p>
-//           <p><strong>This link will expire in 10 minutes.</strong></p>
-//           <p>If you didn't request this, please ignore this email.</p>
-//         </div>
-//       `
-//     };
-
-//     const info = await transporter.sendMail(mailOptions);
-
-//     // Log preview URL for testing
-//     console.log('=================================');
-//     console.log('EMAIL PREVIEW URL:', nodemailer.getTestMessageUrl(info));
-//     console.log('=================================');
-
-//     res.status(200).json({
-//       status: 'success',
-//       message: 'Password reset email sent successfully',
-//       previewURL: nodemailer.getTestMessageUrl(info) // For testing only
-//     });
-//   } catch (error) {
-//     console.error('Forgot password error:', error);
-//     res.status(500).json({
-//       status: 'error',
-//       message: error.message
-//     });
-//   }
-// };
-
 // Register user
 const register = async (req, res) => {
   try {
     // Whitelist allowed fields — never trust role from the client
     const { email, password, firstName, lastName, phoneNumber } = req.body;
+
+    // Same injection guard as login/unifiedAuth — these fields feed straight
+    // into a User.create() whose values are echoed into indexed fields, so a
+    // query-operator object must never reach it unvalidated.
+    if (
+      isQueryOperatorInjection(email) ||
+      isQueryOperatorInjection(phoneNumber) ||
+      isQueryOperatorInjection(firstName) ||
+      isQueryOperatorInjection(lastName)
+    ) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "Invalid request",
+      });
+    }
+
+    if (!firstName || !phoneNumber || !password) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        status: "error",
+        message: "First name, phone number and password are required",
+      });
+    }
 
     // Block ban evasion: a banned user can't dodge their ban by signing up
     // again with a new email but the same real phone number (differently
@@ -221,16 +58,52 @@ const register = async (req, res) => {
       });
     }
 
+    // Email is optional from the client; a placeholder keeps the schema's
+    // required+unique constraint satisfied the same way unifiedAuth's guest
+    // path already does, so a no-email signup is still a normal, fully
+    // phone-loggable-in customer account.
+    const trimmedEmail = typeof email === "string" ? email.trim() : "";
+    const resolvedEmail =
+      trimmedEmail ||
+      "customerpazimo" +
+        String(Math.floor(Math.random() * 1000000)).padStart(6, "0") +
+        "@gmail.com";
+
     const user = await User.create({
-      email,
+      email: resolvedEmail,
       password,
       firstName: stripAngleBrackets(firstName),
       lastName: stripAngleBrackets(lastName),
       phoneNumber,
       role: 'customer',
     });
-    const token = signToken(user._id, user.role);
 
+    // Gated the same way as ORGANIZER_LOGIN_OTP_ENABLED below, and for the
+    // identical reason: any pazimo-mobile install from before this shipped
+    // (added 2026-09-16) has no idea what to do with a `requiresOtp` reply
+    // from /register — it expects an immediate token. Flip
+    // REGISTER_PHONE_OTP_ENABLED=true once that build has actually reached
+    // users; until then this endpoint behaves exactly as it always has.
+    if (process.env.REGISTER_PHONE_OTP_ENABLED === "true") {
+      // The account exists but is unverified — no token yet. The client
+      // completes sign-up with POST /api/auth/verify-register-otp using the
+      // email below and the code just sent, which issues the token. Same
+      // requiresOtp/maskedDestination response shape as the login second
+      // factor below, so the mobile client's existing OTP-entry step covers
+      // both.
+      const maskedDestination = await generateAndSendOtp(user, "sms", "register");
+      return res.status(StatusCodes.CREATED).json({
+        status: "success",
+        requiresOtp: true,
+        data: {
+          email: user.email,
+          channel: "sms",
+          maskedDestination,
+        },
+      });
+    }
+
+    const token = signToken(user._id, user.role);
     res.status(StatusCodes.CREATED).json({
       status: "success",
       data: {
@@ -242,11 +115,33 @@ const register = async (req, res) => {
           email: user.email,
           phoneNumber: user.phoneNumber,
           role: user.role,
+          isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
         },
         token,
       },
     });
   } catch (error) {
+    // Duplicate email/phone: hand back a clean, branchable error instead of
+    // the raw E11000 text, so the client can offer "log in instead" rather
+    // than just showing a Mongo error message. Mirrors unifiedAuth's same
+    // keyPattern check below.
+    if (error.code === 11000) {
+      if (error.keyPattern && error.keyPattern.email) {
+        return res.status(StatusCodes.CONFLICT).json({
+          status: "error",
+          code: "EMAIL_TAKEN",
+          message: "That email is already registered — log in instead.",
+        });
+      }
+      if (error.keyPattern && error.keyPattern.phoneNumber) {
+        return res.status(StatusCodes.CONFLICT).json({
+          status: "error",
+          code: "PHONE_TAKEN",
+          message: "That phone number is already registered — log in instead.",
+        });
+      }
+    }
     res.status(StatusCodes.BAD_REQUEST).json({
       status: "error",
       message: error.message,
@@ -257,17 +152,26 @@ const register = async (req, res) => {
 // Login user
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // `identifier` accepts either an email or a phone number; `email` is
+    // kept as a fallback for backward compatibility with any caller still
+    // sending the old field name.
+    const { email, password, identifier: rawIdentifier } = req.body;
+    const identifier = String(rawIdentifier ?? email ?? "").trim();
 
-    // See rejectQueryOperators.js: email/password must be plain strings
+    // See rejectQueryOperators.js: identifier/password must be plain strings
     // before either reaches a query or bcrypt, or a query-operator object
     // (e.g. `{"$ne": null}`) turns the lookup into "match any account".
-    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(password)) {
+    if (isQueryOperatorInjection(identifier) || isQueryOperatorInjection(password)) {
+      throw new UnauthorizedError("Invalid credentials");
+    }
+    if (!identifier || !password) {
       throw new UnauthorizedError("Invalid credentials");
     }
 
-    // Find user
-    const user = await User.findOne({ email }).select("+password");
+    // findUserByIdentifier (below) already knows how to tell an email from
+    // a phone number and match a phone across stored formats — the same
+    // lookup the forgot-password flow uses.
+    const user = await findUserByIdentifier(identifier, null, "+password");
     if (!user) {
       throw new UnauthorizedError("Invalid credentials");
     }
@@ -315,7 +219,16 @@ const login = async (req, res) => {
     // fix, data-exposure fixes) stays on; only this one flag is off.
     // Set ORGANIZER_LOGIN_OTP_ENABLED=true (and restart) once the mobile
     // app ships OTP support — no code change needed to re-enable.
-    if (user.role === "organizer" && process.env.ORGANIZER_LOGIN_OTP_ENABLED === "true") {
+    //
+    // `user.otpEnabled` (added 2026-09-16) is the unrelated, per-account
+    // path: any customer who has turned on login codes in account settings
+    // gets the same second factor regardless of this env flag. Settings
+    // only lets otpEnabled be set true once isPhoneVerified is true (see
+    // updateOtpPreference), so this never sends a code to an unconfirmed
+    // number.
+    const organizerForcedOtp =
+      user.role === "organizer" && process.env.ORGANIZER_LOGIN_OTP_ENABLED === "true";
+    if (organizerForcedOtp || user.otpEnabled) {
       const maskedDestination = await generateAndSendOtp(user, "sms");
       return res.status(StatusCodes.OK).json({
         status: "success",
@@ -343,6 +256,16 @@ const login = async (req, res) => {
           phoneNumber: user.phoneNumber,
           role: user.role,
           isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
+          otpEnabled: user.otpEnabled,
+          // Only ever set for role "cashier" — which single business this
+          // login is scoped to. The frontend cashier surfaces (cinema/venue
+          // scanner + sales-history pages) read this to know which
+          // /api/cinemas/me/* or /api/venues/:venueId/* to call, since a
+          // cashier cannot reach the owner-only profile endpoints
+          // (GET /me) that would otherwise answer that question.
+          cinema: user.cinema || null,
+          venue: user.venue || null,
         },
         token,
       },
@@ -443,17 +366,22 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    // Check if email is already taken by another user
-    const existingUser = await User.findOne({
-      email,
-      _id: { $ne: req.user._id },
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        status: "error",
-        message: "Email is already taken",
+    // Check if email is already taken by another user — only when an email
+    // was actually submitted. An undefined `email` here would otherwise match
+    // Mongoose's own "field doesn't exist" semantics and can find an unrelated
+    // user, wrongly blocking a name-only edit.
+    if (email) {
+      const existingUser = await User.findOne({
+        email,
+        _id: { $ne: req.user._id },
       });
+
+      if (existingUser) {
+        return res.status(400).json({
+          status: "error",
+          message: "Email is already taken",
+        });
+      }
     }
 
     const user = await User.findByIdAndUpdate(
@@ -467,6 +395,187 @@ const updateProfile = async (req, res) => {
       data: user,
     });
   } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Notification preferences — stored only for now. There's no push-token/device
+// registration in this backend yet, so these flags don't gate any delivery yet;
+// they exist so the mobile settings screen has something real to read and
+// write while that infrastructure gets built.
+const getNotificationPreferences = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("notificationPreferences");
+    res.status(200).json({
+      status: "success",
+      data: user.notificationPreferences,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const updateNotificationPreferences = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    // Whitelist exactly these three keys — never trust the body wholesale
+    // into a $set on the account document.
+    const update = {};
+    for (const key of ["ticketUpdates", "chatMessages", "promotions"]) {
+      if (typeof req.body[key] === "boolean") {
+        update[`notificationPreferences.${key}`] = req.body[key];
+      }
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: update },
+      { new: true, runValidators: true },
+    ).select("notificationPreferences");
+
+    res.status(200).json({
+      status: "success",
+      data: user.notificationPreferences,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Registers this device's Expo push token against the signed-in account —
+// called on every app launch/relaunch, not just first install, since a
+// token can rotate. Idempotent (see pushService.registerPushToken), so a
+// duplicate call from a re-mounted screen is harmless.
+const registerPushToken = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const token = typeof req.body.token === "string" ? req.body.token.trim() : "";
+    if (!token) {
+      return res.status(400).json({
+        status: "error",
+        message: "A push token is required",
+      });
+    }
+
+    await pushService.registerPushToken({ userId: req.user._id, token });
+    res.status(200).json({ status: "success" });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Called best-effort on sign-out — this device stops receiving this
+// account's pushes without needing to wait for Expo to report it dead.
+const unregisterPushToken = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const token = typeof req.body.token === "string" ? req.body.token.trim() : "";
+    if (!token) {
+      return res.status(400).json({
+        status: "error",
+        message: "A push token is required",
+      });
+    }
+
+    await pushService.unregisterPushToken({ userId: req.user._id, token });
+    res.status(200).json({ status: "success" });
+  } catch (error) {
+    res.status(400).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+// Claims/changes the caller's Telegram-style @username, used for exact-match
+// recipient search when sharing a ticket (see ticketShareService). Format is
+// enforced again here even though the schema already validates it, so a bad
+// value is rejected with a clear message instead of the generic Mongoose
+// ValidationError text.
+const updateUsername = async (req, res) => {
+  try {
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({
+        status: "error",
+        message: "User not authenticated",
+      });
+    }
+
+    const username = String(req.body.username || "").trim().toLowerCase();
+
+    if (!/^[a-z0-9_]{4,20}$/.test(username)) {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Username must be 4-20 characters and contain only lowercase letters, numbers and underscores",
+      });
+    }
+
+    const taken = await User.findOne({
+      username,
+      _id: { $ne: req.user._id },
+    }).select("_id");
+    if (taken) {
+      return res.status(409).json({
+        status: "error",
+        message: "That username is already taken",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { username },
+      { new: true, runValidators: true },
+    ).select("-password");
+
+    res.status(200).json({
+      status: "success",
+      data: user,
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        status: "error",
+        message: "That username is already taken",
+      });
+    }
     res.status(400).json({
       status: "error",
       message: error.message,
@@ -521,43 +630,111 @@ const updatePhoneNumber = async (req, res) => {
   }
 };
 
-// Add new method to verify phone number
+// Sends a phone-verification code to the signed-in user's own number —
+// the settings-screen counterpart to the code registration now sends
+// automatically. Needed for any account created before this feature (every
+// existing customer shows isPhoneVerified:false) that wants to turn on login
+// codes. Shares the register-purpose OTP fields with verify-register-otp:
+// "prove you own this phone" is the same claim either way, just reached from
+// a different entry point (unauthenticated right after sign-up vs.
+// authenticated from account settings).
+const sendPhoneVerifyOtp = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ status: "error", message: "User not authenticated" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: "error", message: "User not found" });
+    }
+
+    if (user.isPhoneVerified) {
+      return res.status(200).json({
+        status: "success",
+        alreadyVerified: true,
+        message: "Your phone number is already verified.",
+      });
+    }
+
+    const maskedDestination = await generateAndSendOtp(user, "sms", "register");
+    res.status(200).json({
+      status: "success",
+      channel: "sms",
+      maskedDestination,
+      message: `We sent a verification code to ${maskedDestination}.`,
+    });
+  } catch (error) {
+    console.error("Send phone verify OTP error:", error);
+    res.status(500).json({ status: "error", message: "Failed to send verification code" });
+  }
+};
+
+// Verifies the code sendPhoneVerifyOtp just sent. Real check against the
+// hashed, expiring, attempt-capped code on the user's own document — this
+// used to be a stub that accepted any code unconditionally, but nothing
+// ever called it (verify-phone-otp was never routed), so there is no prior
+// behavior to preserve.
 const verifyPhoneNumber = async (req, res) => {
   try {
-    const { verificationCode } = req.body;
+    const { code } = req.body;
 
     if (!req.user || !req.user.id) {
-      return res.status(401).json({
+      return res.status(401).json({ status: "error", message: "User not authenticated" });
+    }
+    if (isQueryOperatorInjection(code) || !code) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user || !user.registerOtpCodeHash || !user.registerOtpExpires) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpExpires < Date.now()) {
+      user.registerOtpCodeHash = undefined;
+      user.registerOtpExpires = undefined;
+      user.registerOtpAttempts = 0;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
         status: "error",
-        message: "User not authenticated",
+        message: "Too many incorrect attempts. Request a new code.",
       });
     }
 
-    const userId = req.user.id;
-
-    // Here you would typically verify the code against what was sent to the user
-    // This is a placeholder for the actual verification logic
-    const isValidCode = true; // Replace with actual verification logic
-
-    if (!isValidCode) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid verification code",
-      });
+    const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+    if (submittedHash !== user.registerOtpCodeHash) {
+      user.registerOtpAttempts += 1;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
     }
 
-    // Update user's phone verification status
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { isPhoneVerified: true },
-      { new: true },
-    );
-
-    user.password = undefined;
+    user.registerOtpCodeHash = undefined;
+    user.registerOtpExpires = undefined;
+    user.registerOtpAttempts = 0;
+    user.isPhoneVerified = true;
+    await user.save({ validateBeforeSave: false });
 
     res.status(200).json({
       status: "success",
-      data: { user },
+      data: {
+        user: {
+          _id: user._id,
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
+          otpEnabled: user.otpEnabled,
+        },
+      },
     });
   } catch (error) {
     res.status(400).json({
@@ -708,9 +885,9 @@ const sendOtp = async (req, res) => {
 // (e.g. the SMS doesn't arrive). Deliberately self-managed — generated,
 // hashed and checked here — rather than relying on the SMS gateway's own
 // OTP+verify pair: nothing in this codebase ever called a matching verify
-// endpoint for the existing sendOtp() above, and there's no way to confirm
-// that flow actually works end to end without spending real SMS credits
-// against an undocumented contract.
+// endpoint for sendOtp() above, and there's no way to confirm that flow
+// actually works end to end without spending real SMS credits against an
+// undocumented contract.
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 
@@ -749,23 +926,28 @@ const maskEmailForDisplay = (email) => {
 
 // Which User fields a code is written to, keyed by what the code is proving.
 // "login" (organizer sign-in, both the standalone code path and the
-// password path's mandatory second factor) and "reset" (forgot-password)
-// are kept in entirely separate fields so a code issued for one purpose can
-// never be replayed against the other's verify endpoint — a leaked/guessed
-// reset code can't be used to sign in, and a sign-in code can't be used to
-// change the password.
+// password path's mandatory second factor) and "reset" (forgot-password,
+// added 2026-09-03) are kept in entirely separate fields so a code issued
+// for one purpose can never be replayed against the other's verify
+// endpoint — a leaked/guessed reset code can't be used to sign in, and a
+// sign-in code can't be used to change the password.
 const OTP_FIELDS_BY_PURPOSE = {
   login: { hash: "otpCodeHash", expires: "otpExpires", attempts: "otpAttempts" },
   reset: { hash: "resetOtpCodeHash", expires: "resetOtpExpires", attempts: "resetOtpAttempts" },
+  register: {
+    hash: "registerOtpCodeHash",
+    expires: "registerOtpExpires",
+    attempts: "registerOtpAttempts",
+  },
 };
 
 // Shared by sendOrganizerOtp (the standalone "sign in with a code" path),
-// login (the password path's mandatory second factor for organizers), and
-// the forgot-password flow below. Generates the code, hashes+stores it on
-// the exact user document passed in — never re-looked-up from client input
-// at send time — so the destination is always the one actually on that
-// account, never something a caller could redirect by supplying a different
-// email/phone in the request body.
+// login (the password path's mandatory second factor for organizers, added
+// 2026-09-04), and the forgot-password flow below. Generates the code,
+// hashes+stores it on the exact user document passed in — never re-looked-up
+// from client input at send time — so the destination is always the one
+// actually on that account, never something a caller could redirect by
+// supplying a different email/phone in the request body.
 const generateAndSendOtp = async (user, channel, purpose = "login") => {
   const fields = OTP_FIELDS_BY_PURPOSE[purpose];
   const code = crypto.randomInt(100000, 1000000).toString();
@@ -794,11 +976,17 @@ const generateAndSendOtp = async (user, channel, purpose = "login") => {
           emailHtml: `<p>Your Pazimo password reset code is <strong>${code}</strong>. It expires in 10 minutes. If you didn't request this, you can ignore this message — your password won't change unless this code is used.</p>`,
           sms: `PAZIMO OTP: ${code}\nUse this code to reset your Pazimo account password. Do not share it with anyone.`,
         }
-      : {
-          emailSubject: "Your Pazimo verification code",
-          emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
-          sms: `PAZIMO OTP: ${code}\nUse this code to sign in to your organizer account. Do not share it with anyone.`,
-        };
+      : purpose === "register"
+        ? {
+            emailSubject: "Your Pazimo verification code",
+            emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+            sms: `PAZIMO OTP: ${code}\nUse this code to verify your phone number on Pazimo. Do not share it with anyone.`,
+          }
+        : {
+            emailSubject: "Your Pazimo verification code",
+            emailHtml: `<p>Your Pazimo verification code is <strong>${code}</strong>. It expires in 10 minutes. Never share this code with anyone.</p>`,
+            sms: `PAZIMO OTP: ${code}\nUse this code to sign in to your Pazimo account. Do not share it with anyone.`,
+          };
 
   // Fire-and-forget — the caller's response doesn't wait on the SMTP round
   // trip. Zoho (smtp.zoho.com), same transporter shape as
@@ -879,6 +1067,12 @@ const sendOrganizerOtp = async (req, res) => {
   }
 };
 
+// Despite the /organizer/ path, this also verifies the login code sent to
+// any customer who has turned on otpEnabled (see login()'s comment above) —
+// pazimo-mobile's AuthSheet calls this same endpoint for both. Widened
+// 2026-09-16 from `{email, role:"organizer"}` to a plain email lookup for
+// that reason; every message below was already role-generic, so this is not
+// a behavior change for organizers.
 const verifyOrganizerOtp = async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -892,7 +1086,7 @@ const verifyOrganizerOtp = async (req, res) => {
       return res.status(400).json({ status: "error", message: "Invalid or expired code" });
     }
 
-    const organizer = await User.findOne({ email, role: "organizer" });
+    const organizer = await User.findOne({ email });
     if (!organizer || !organizer.otpCodeHash || !organizer.otpExpires) {
       return res.status(400).json({ status: "error", message: "Invalid or expired code" });
     }
@@ -957,6 +1151,8 @@ const verifyOrganizerOtp = async (req, res) => {
           phoneNumber: organizer.phoneNumber,
           role: organizer.role,
           isActive: organizer.isActive,
+          isPhoneVerified: organizer.isPhoneVerified,
+          otpEnabled: organizer.otpEnabled,
         },
         token,
       },
@@ -970,6 +1166,145 @@ const verifyOrganizerOtp = async (req, res) => {
   }
 };
 
+// Completes registration: the account already exists (register() created it
+// with isPhoneVerified:false), this checks the register-purpose code that
+// sent and, on success, is the first point a token is ever issued for it —
+// so an account whose owner never proves the number isn't reachable can
+// never actually sign in.
+const verifyRegisterOtp = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (isQueryOperatorInjection(email) || isQueryOperatorInjection(code) || !email || !code) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user || !user.registerOtpCodeHash || !user.registerOtpExpires) {
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpExpires < Date.now()) {
+      user.registerOtpCodeHash = undefined;
+      user.registerOtpExpires = undefined;
+      user.registerOtpAttempts = 0;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    if (user.registerOtpAttempts >= OTP_MAX_ATTEMPTS) {
+      return res.status(429).json({
+        status: "error",
+        message: "Too many incorrect attempts. Request a new code.",
+      });
+    }
+
+    const submittedHash = crypto.createHash("sha256").update(String(code)).digest("hex");
+    if (submittedHash !== user.registerOtpCodeHash) {
+      user.registerOtpAttempts += 1;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ status: "error", message: "Invalid or expired code" });
+    }
+
+    user.registerOtpCodeHash = undefined;
+    user.registerOtpExpires = undefined;
+    user.registerOtpAttempts = 0;
+    user.isPhoneVerified = true;
+    await user.save({ validateBeforeSave: false });
+
+    const token = signToken(user._id, user.role);
+    res.status(StatusCodes.OK).json({
+      status: "success",
+      data: {
+        user: {
+          _id: user._id,
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          role: user.role,
+          isActive: user.isActive,
+          isPhoneVerified: user.isPhoneVerified,
+          otpEnabled: user.otpEnabled,
+        },
+        token,
+      },
+    });
+  } catch (error) {
+    console.error("Verify register OTP error:", error);
+    res.status(500).json({ status: "error", message: "Failed to verify code" });
+  }
+};
+
+// Re-sends the registration code — the phone-pad equivalent of "resend" on
+// the forgot-password/organizer-OTP screens. Scoped to accounts that are
+// still unverified so this can't be used to spam a code at an account whose
+// owner already proved the number and moved on.
+const resendRegisterOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (isQueryOperatorInjection(email) || !email) {
+      return res.status(400).json({ status: "error", message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email, isPhoneVerified: false });
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "No pending verification found for that account.",
+      });
+    }
+
+    const maskedDestination = await generateAndSendOtp(user, "sms", "register");
+    res.status(200).json({
+      status: "success",
+      channel: "sms",
+      maskedDestination,
+      message: `We sent a new verification code to ${maskedDestination}.`,
+    });
+  } catch (error) {
+    console.error("Resend register OTP error:", error);
+    res.status(500).json({ status: "error", message: "Failed to resend verification code" });
+  }
+};
+
+// Self-serve login-code toggle (see User.js's otpEnabled comment). Gated on
+// isPhoneVerified so the account can only ever ask for a code somewhere it's
+// actually confirmed to be reachable.
+const updateOtpPreference = async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ status: "error", message: "User not authenticated" });
+    }
+
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ status: "error", message: "enabled must be a boolean" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ status: "error", message: "User not found" });
+    }
+
+    if (enabled && !user.isPhoneVerified) {
+      return res.status(400).json({
+        status: "error",
+        message: "Verify your phone number before turning on login codes.",
+      });
+    }
+
+    user.otpEnabled = enabled;
+    await user.save({ validateBeforeSave: false });
+
+    res.status(200).json({ status: "success", data: { otpEnabled: user.otpEnabled } });
+  } catch (error) {
+    res.status(400).json({ status: "error", message: error.message });
+  }
+};
+
 // Looks a user up by email or phone for the forgot-password flow below.
 // Phone matching goes through fraudGuard's normalizePhone/phoneVariants
 // (already relied on elsewhere for exactly this "match any stored format"
@@ -977,7 +1312,7 @@ const verifyOrganizerOtp = async (req, res) => {
 // field, so this works against every existing account with no backfill
 // required. Query-operator injection on `identifier` must be rejected by
 // the caller before this runs — this function trusts its input.
-const findUserByIdentifier = async (identifier, roleFilter) => {
+const findUserByIdentifier = async (identifier, roleFilter, selectFields) => {
   const value = String(identifier || "").trim();
   if (!value) return null;
 
@@ -989,16 +1324,17 @@ const findUserByIdentifier = async (identifier, roleFilter) => {
     if (!normalized) return null;
     query.phoneNumber = { $in: phoneVariants(normalized) };
   }
-  return User.findOne(query);
+  const lookup = User.findOne(query);
+  return selectFields ? lookup.select(selectFields) : lookup;
 };
 
-// Forgot password — same code+channel OTP mechanism as the organizer
-// sign-in OTP above, spent on a password change instead of a login. Shared
-// by forgotPassword (any role on the User model) and organizerForgotPassword
-// (role: "organizer" only); roleFilter is the only difference between the
-// two. Like sendOrganizerOtp, "account not found" isn't fully hidden here —
-// see that function's comment for why the masked-destination UX makes that
-// trade-off worthwhile.
+// Forgot password (added 2026-09-03) — same code+channel OTP mechanism as
+// the organizer sign-in OTP above, spent on a password change instead of a
+// login. Shared by forgotPassword (any role on the User model) and
+// organizerForgotPassword (role: "organizer" only); roleFilter is the only
+// difference between the two. Like sendOrganizerOtp, "account not found"
+// isn't fully hidden here — see that function's comment for why the
+// masked-destination UX makes that trade-off worthwhile.
 const sendPasswordResetCode = async (req, res, roleFilter) => {
   const { identifier, channel } = req.body;
   const deliveryChannel = channel === "email" ? "email" : "sms";
@@ -1120,14 +1456,14 @@ const checkResetCode = async (req, res, roleFilter) => {
   return { ok: true, user };
 };
 
-// Standalone verify step: the frontend calls this right after the user
-// types the code, so it only advances to the change-password screen once
-// the code is actually confirmed correct — "once they got it right" —
-// instead of finding out at the final submit. Deliberately does NOT clear
-// resetOtpCodeHash on success: the code stays valid so the change-password
-// screen's later call to resetPasswordWithCode can check it again without
-// asking the user to retype it. It does reset the attempt counter, so a
-// mistyped code corrected here doesn't carry a stale count forward.
+// Standalone verify step (added 2026-09-05): the frontend calls this right
+// after the user types the code, so it only advances to the change-password
+// screen once the code is actually confirmed correct — "once they got it
+// right" — instead of finding out at the final submit. Deliberately does
+// NOT clear resetOtpCodeHash on success: the code stays valid so the change-
+// password screen's later call to resetPasswordWithCode can check it again
+// without asking the user to retype it. It does reset the attempt counter,
+// so a mistyped code corrected here doesn't carry a stale count forward.
 const verifyResetCode = async (req, res, roleFilter) => {
   const result = await checkResetCode(req, res, roleFilter);
   if (!result.ok) return;
@@ -1381,13 +1717,30 @@ const deleteAccount = async (req, res) => {
     }
 
     const userId = req.user._id;
+    const { currentPassword } = req.body;
 
-    // Find and delete the user
-    const user = await User.findById(userId);
+    if (!currentPassword) {
+      return res.status(400).json({
+        status: "error",
+        message: "Your current password is required to delete your account",
+      });
+    }
+
+    // `protect` strips `password` (select: false) — re-fetch it to confirm
+    // the caller actually is who they say before doing anything irreversible.
+    const user = await User.findById(userId).select("+password");
     if (!user) {
       return res.status(404).json({
         status: "error",
         message: "User not found",
+      });
+    }
+
+    const isPasswordCorrect = await user.comparePassword(currentPassword);
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        status: "error",
+        message: "Current password is incorrect",
       });
     }
 
@@ -1398,6 +1751,16 @@ const deleteAccount = async (req, res) => {
     // Delete user's wishlist items
     const Wishlist = require("../models/Wishlist");
     await Wishlist.deleteMany({ userId });
+
+    // Drop any Contact/Block edges naming this account on either side, so
+    // deleting an account never leaves a dangling reference in someone
+    // else's contacts or blocked list.
+    const Contact = require("../models/Contact");
+    const Block = require("../models/Block");
+    await Promise.all([
+      Contact.deleteMany({ $or: [{ owner: userId }, { contact: userId }] }),
+      Block.deleteMany({ $or: [{ blocker: userId }, { blocked: userId }] }),
+    ]);
 
     // Delete the user account
     await User.findByIdAndDelete(userId);
@@ -1421,6 +1784,7 @@ module.exports = {
   getMe,
   updatePassword,
   updateProfile,
+  updateUsername,
   updatePhoneNumber,
   verifyPhoneNumber,
   adminLogin,
@@ -1433,6 +1797,14 @@ module.exports = {
   sendOtp,
   sendOrganizerOtp,
   verifyOrganizerOtp,
+  verifyRegisterOtp,
+  resendRegisterOtp,
+  sendPhoneVerifyOtp,
+  updateOtpPreference,
   unifiedAuth,
   deleteAccount,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+  registerPushToken,
+  unregisterPushToken,
 };

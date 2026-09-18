@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuthStore } from "@/store/authStore"
 import { toast } from "sonner"
+import { accountHomeFor, hasOwnDashboard } from "@/lib/account-home";
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login } = useAuthStore()
+  const { setAuth } = useAuthStore()
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -35,9 +36,13 @@ export default function LoginPage() {
       }
 
       // Store user and token
-      login(data.data.user, data.data.token)
+      setAuth({ user: data.data.user, token: data.data.token })
       toast.success('Login successful')
-      router.push('/')
+      // One map for every role — see lib/account-home. A customer lands on the
+      // public home page rather than /my-account here, which is this page's own
+      // long-standing behaviour and deliberately kept.
+      const loggedInUser = data.data.user
+      router.push(hasOwnDashboard(loggedInUser) ? accountHomeFor(loggedInUser) : '/')
     } catch (error) {
       console.error('Login error:', error)
       toast.error(error instanceof Error ? error.message : 'Login failed')

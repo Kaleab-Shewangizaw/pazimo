@@ -1,4 +1,5 @@
 "use client";
+import { ticketQrUrl } from "@/lib/ticketQr";
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -35,6 +36,7 @@ import {
 } from "lucide-react";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { UsherAccessDialog } from "@/components/events/usher-access-dialog";
+import { CashierAccessDialog } from "@/components/events/cashier-access-dialog";
 import {
   Table,
   TableBody,
@@ -706,6 +708,13 @@ export default function EventsPage() {
                             triggerVariant="ghost"
                             triggerClassName="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300"
                           />
+                          <CashierAccessDialog
+                            eventId={event._id}
+                            eventTitle={event.title}
+                            token={token || ""}
+                            triggerVariant="ghost"
+                            triggerClassName="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300"
+                          />
                           <Button
                             variant="ghost"
                             size="sm"
@@ -1187,10 +1196,10 @@ export default function EventsPage() {
                 </p>
               </div>
 
-              {generatedTicket.qrCode && (
+              {generatedTicket.ticketId && (
                 <div className="border p-4 rounded-lg bg-white dark:bg-gray-900 dark:border-gray-700">
                   <img
-                    src={generatedTicket.qrCode}
+                    src={ticketQrUrl(generatedTicket.ticketId)}
                     alt="Ticket QR Code"
                     className="w-48 h-48 object-contain"
                   />

@@ -51,7 +51,7 @@ import { Input } from "@/components/ui/input";
 import { useAuthStore } from "@/store/authStore";
 import { useWishlist } from "@/hooks/useWishlist";
 import PaymentMethodSelector from "@/components/payment/PaymentMethodSelector";
-import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { ticketQrUrl, downloadTicketQr } from "@/lib/ticketQr";
 import {
   buildCanonicalEventUrl,
   extractShortIdFromEventSlug,
@@ -168,7 +168,7 @@ export default function EventDetailClient() {
   );
 
   // Get user from store directly
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
 
   // Core state - reduced from 19+ to 9 state variables
   const [event, setEvent] = useState<Event | null>(null);
@@ -566,9 +566,15 @@ export default function EventDetailClient() {
       const ticketId = crypto.randomUUID?.() ||
         `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+      // The /web variant lets a buyer without an account check out by just
+      // filling in name/email/phone here — it logs them into a matching
+      // account or creates one, no password or OTP step. Signed-in buyers
+      // (token set below) go through the same route unaffected. The plain
+      // /ticket/initiate(/chapa) endpoints still exist and require sign-in
+      // first — those are what the mobile app uses.
       const endpoint = effectiveProvider === "CHAPA"
-        ? "/api/tickets/ticket/initiate/chapa"
-        : "/api/tickets/ticket/initiate";
+        ? "/api/tickets/ticket/initiate/chapa/web"
+        : "/api/tickets/ticket/initiate/web";
 
       const requestBody = {
         amount,
@@ -600,7 +606,10 @@ export default function EventDetailClient() {
 
       const response = await fetch(process.env.NEXT_PUBLIC_API_URL + endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(requestBody),
       });
 
@@ -918,8 +927,8 @@ export default function EventDetailClient() {
       // A user cancelling the share sheet also lands here — don't treat that as a failure.
       if (err instanceof Error && err.name === "AbortError") return;
       // If DOM capture fails (e.g. an image blocks it), still give them the QR.
-      downloadHighQualityQR(
-        ticket.qrCode,
+      await downloadTicketQr(
+        ticket.ticketId,
         `ticket-${ticket.ticketId}-${ticket.ticketType}.png`
       );
       toast.success("Ticket QR downloaded!");
@@ -930,12 +939,13 @@ export default function EventDetailClient() {
 
   // Utility functions - memoized with useCallback
   const downloadQRCode = useCallback((
-    qrCodeDataUrl: string,
+    _unused: string,
     ticketId: string,
     ticketType: string,
   ) => {
-    downloadHighQualityQR(qrCodeDataUrl, `ticket-${ticketId}-${ticketType}.png`);
-    toast.success(`QR code for ${ticketType} downloaded!`);
+    downloadTicketQr(ticketId, `ticket-${ticketId}-${ticketType}.png`)
+      .then(() => toast.success(`QR code for ${ticketType} downloaded!`))
+      .catch(() => toast.error("Could not download the QR code"));
   }, []);
 
   const handleShare = useCallback(() => {
@@ -1752,7 +1762,8 @@ export default function EventDetailClient() {
                           <div className="relative flex flex-col items-center gap-3 px-7 pb-7 pt-5">
                             <div className="rounded-2xl bg-white p-2.5 shadow-xl ring-1 ring-white/40">
                               <Image
-                                src={ticket.qrCode ?? "/events/sampleqr.png"}
+                                src={ticket.ticketId ? ticketQrUrl(ticket.ticketId) : "/events/sampleqr.png"}
+                                unoptimized
                                 alt="Ticket QR Code"
                                 width={256}
                                 height={256}

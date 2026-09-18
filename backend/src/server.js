@@ -5,6 +5,7 @@ const { startPlatformFeeScheduler } = require("./utils/platformFeeScheduler");
 const { startStockHoldExpirySweep } = require("./utils/stockHoldExpiry");
 const http = require("http");
 const socketio = require("socket.io");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 const server = http.createServer(app);
@@ -26,6 +27,31 @@ io.on("connection", (socket) => {
     const roomName = `organizer_${organizerId}`;
     socket.join(roomName);
     // console.log(`Socket ${socket.id} joined room ${roomName}`);
+  });
+
+  // Live happy-hour updates for whoever is browsing one event's or venue's
+  // drink catalog (see beverageController/venueController's
+  // notify*BeverageRoom). No auth needed to join — a happy hour price and
+  // countdown are public information the refill catalog already returns to
+  // anyone who can browse it; the room only saves that browser from polling.
+  socket.on("subscribeBeverages", ({ eventId, venueId } = {}) => {
+    if (eventId) socket.join(`event_${eventId}_beverages`);
+    if (venueId) socket.join(`venue_${venueId}_beverages`);
+  });
+
+  // Joins a per-user room so events like a ticket transfer (see
+  // ticketShareController) can be pushed to exactly the account they concern
+  // — never broadcast, and never joinable by a client just guessing another
+  // user's id, since the room name is derived from a verified JWT rather
+  // than anything the client supplies directly.
+  socket.on("authenticate", (token) => {
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET);
+      socket.join(`user_${payload.id}`);
+      socket.emit("authenticated", { ok: true });
+    } catch (err) {
+      socket.emit("authenticated", { ok: false, message: "Invalid or expired token" });
+    }
   });
 
   socket.on("disconnect", () => {

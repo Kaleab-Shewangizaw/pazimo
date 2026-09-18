@@ -19,6 +19,7 @@ import { EventFormSection } from "@/app/organizer/events/create/_components/even
 import { EventImagesSection } from "@/app/organizer/events/create/_components/event-images-section";
 import { TicketTypesSection } from "@/app/organizer/events/create/_components/ticket-types-section";
 import { WaveTicketDialog } from "@/app/organizer/events/create/_components/wave-ticket-dialog";
+import { BeverageLineupManager } from "@/components/beverages/beverage-lineup-manager";
 import type {
   Category,
   EventFormData,
@@ -996,6 +997,24 @@ export default function AdminEditEventPage() {
               onRemoveImage={removeImage}
               required={existingCoverImages.length === 0 && formData.coverImages.length === 0}
             />
+
+            {/* Beverage sales save immediately through their own endpoints —
+                they are not part of this form's submit. */}
+            <EventFormSection id="beverage-sales">
+              <div>
+                <h2 className="text-base font-semibold text-slate-950 dark:text-slate-50">
+                  Beverage sales
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Drinks sold at this event and their prices. Changes here save straight away,
+                  separately from the rest of the form.
+                </p>
+              </div>
+              <BeverageLineupManager
+                token={token || ""}
+                context={{ kind: "event", eventId, scope: "admin" }}
+              />
+            </EventFormSection>
           </div>
         </CreateEventPageShell>
       </form>

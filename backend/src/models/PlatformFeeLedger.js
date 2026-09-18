@@ -25,6 +25,16 @@ const PlatformFeeLedgerSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // The part of totalSales that landed in a gift card. sendFee() draws the
+    // payout from a gift card, so this — not totalSales — is what the sweep can
+    // actually source. Recorded separately so a day whose fee is owed but not
+    // sourceable is visible as a number rather than as a failed payout.
+    // Added 2026-08-20 with the computeDailyTotal fix; rows written before that
+    // do not have it, which is why it is not required.
+    giftCardSales: {
+      type: Number,
+      default: 0,
+    },
     feePercentage: {
       type: Number,
       required: true,

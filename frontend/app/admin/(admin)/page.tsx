@@ -61,6 +61,7 @@ import {
   ChartTooltipContent,
   ChartTooltip,
 } from "@/components/ui/chart";
+import MoneyPartitions from "@/components/admin/money-partitions";
 
 interface Event {
   _id: string;
@@ -164,6 +165,9 @@ export default function AdminDashboardPage() {
   const [selectedCurrency, setSelectedCurrency] = useState<"ETB" | "USD">(
     "ETB"
   );
+  // Bumped by "Refresh Data" so the money cards refetch with everything else
+  // rather than being the one panel that silently goes stale.
+  const [partitionsRefreshKey, setPartitionsRefreshKey] = useState(0);
 
   useEffect(() => {
     // Suppress browser extension errors
@@ -420,22 +424,11 @@ export default function AdminDashboardPage() {
       iconColor: "text-red-600",
       borderColor: "border-l-red-600",
     },
-    {
-      title: "Total Withdrawn",
-      value: formatCompactMoney(stats.totalWithdrawn || 0, selectedCurrency),
-      icon: ArrowUpRight,
-      iconBg: "bg-yellow-100",
-      iconColor: "text-yellow-600",
-      borderColor: "border-l-yellow-600",
-    },
-    {
-      title: "Available Balance",
-      value: formatCompactMoney(stats.availableBalance || 0, selectedCurrency),
-      icon: Building2,
-      iconBg: "bg-emerald-100",
-      iconColor: "text-emerald-600",
-      borderColor: "border-l-emerald-600",
-    },
+    // "Total Withdrawn" and "Available Balance" used to sit here as single
+    // platform-wide figures. They are now five per-pool cards below, because
+    // one number across pools that settle separately cannot be right: the old
+    // Available Balance subtracted every stream's payouts from ticket revenue
+    // alone and showed a negative number.
     {
       title: "Active Events",
       value: stats.activeEvents,
@@ -480,7 +473,10 @@ export default function AdminDashboardPage() {
               </SelectContent>
             </Select>
             <Button
-              onClick={fetchDashboardData}
+              onClick={() => {
+                setPartitionsRefreshKey((k) => k + 1);
+                fetchDashboardData();
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -488,6 +484,12 @@ export default function AdminDashboardPage() {
             </Button>
           </div>
         </div>
+
+        <MoneyPartitions
+          currency={selectedCurrency}
+          token={token}
+          refreshKey={partitionsRefreshKey}
+        />
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           {statsCards.map((stat, index) => (

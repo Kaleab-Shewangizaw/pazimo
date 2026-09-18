@@ -162,6 +162,21 @@
   opacity: 0;
 }
 
+/* ── Cinema seat-picker screen: a slow breathing glow, like light off a
+   running projector never sitting quite still ── */
+@keyframes cinemaScreenPulse {
+  0%, 100% { stop-opacity: 0.55; }
+  50%      { stop-opacity: 0.85; }
+}
+.cinema-screen-pulse {
+  animation: cinemaScreenPulse 4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cinema-screen-pulse {
+    animation: none;
+  }
+}
+
 .react-datepicker.event-date-picker,
 .react-datepicker {
   border: 1px solid oklch(0.922 0 0);

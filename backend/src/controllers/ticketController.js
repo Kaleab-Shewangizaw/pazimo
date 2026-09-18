@@ -8,7 +8,6 @@ const {
   BadRequestError,
   NotFoundError,
   UnauthorizedError,
-  ForbiddenError,
 } = require("../errors");
 const mongoose = require("mongoose");
 const {
@@ -16,6 +15,10 @@ const {
   createEmailTemplate,
 } = require("./invitationEmailController");
 const { sendSMS } = require("../utils/sms");
+const {
+  renderTicketQrSvg,
+  renderTicketQrPng,
+} = require("../utils/qrRenderer");
 const {
   sendTicketConfirmationEmail,
   isPlaceholderEmail,
@@ -28,7 +31,9 @@ const QRCode = require("qrcode");
 const { applyTicketAvailabilityRules } = require("../utils/ticketAvailability");
 const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
 const { markPaymentTerminal } = require("../utils/paymentHold");
-const { isPhoneBanned } = require("../utils/fraudGuard");
+const beverageSalesService = require("../services/beverageSalesService");
+const EventBeverage = require("../models/EventBeverage");
+const { mirrorSale } = require("../services/ledgerDualWrite");
 
 // Returns true if the phone number is an Ethiopian number (+251 / 09x / 07x)
 const isEthiopianNumber = (phone) => {
@@ -55,6 +60,32 @@ const validateSignature = (signature, payload) => {
 
 // Helper to process successful payment and create ticket
 const processSuccessfulPayment = async (payment) => {
+  // Cinema orders settle completely differently — CinemaTickets against a
+  // showtime, plus concession sales — so they are dispatched before any of the
+  // event-shaped work below runs.
+  //
+  // Done HERE rather than at each call site because there are four of them
+  // (webhook, poller, payment controller, manual retry) and a fifth added later
+  // would silently settle a cinema order as an event. One funnel, one branch.
+  //
+  // Absent salesContext means EVENT, so every payment written before the field
+  // existed keeps its behaviour exactly.
+  if (payment.salesContext === "CINEMA") {
+    return require("./cinemaCheckoutController").settleCinemaPayment(payment);
+  }
+
+  // Beverage "refill" orders (event and venue channels) settle into
+  // BeverageSale/VenueBeverageSale rows, not a Ticket — dispatched here for
+  // the same reason the CINEMA branch above is: this function has four call
+  // sites (webhook, poller, payment controller, manual retry), and a fifth
+  // added later must not be able to settle one of these as an event ticket.
+  if (payment.salesContext === "EVENT_BEVERAGE") {
+    return require("./beverageCheckoutController").settleEventRefillPayment(payment);
+  }
+  if (payment.salesContext === "VENUE_BEVERAGE") {
+    return require("./beverageCheckoutController").settleVenueRefillPayment(payment);
+  }
+
   const startTime = Date.now();
   console.log(`\n[TICKET-CREATE] ============================================`);
   console.log(`[TICKET-CREATE] Starting ticket creation for txn: ${payment.transactionId}`);
@@ -214,112 +245,17 @@ const processSuccessfulPayment = async (payment) => {
       (payment.ticketDetails && payment.ticketDetails.message),
   };
 
-  // Handle User vs Guest
+  // Guest checkout no longer exists — ticket purchase requires an
+  // authenticated account (POST /tickets/ticket/initiate* now rejects an
+  // unauthenticated caller), so payment.userId is always set going forward.
+  // If it's ever still missing (e.g. a stale in-flight payment from before
+  // this deployed), this correctly falls through to the isInvitation:true
+  // guest-ticket branch below rather than silently minting a new
+  // password-bearing account the way the old guest-checkout block used to.
   let finalUserId = payment.userId || userId;
-  let user = null; // ⚡ Declare user variable in outer scope
-  
-  console.log(`[TICKET-CREATE] ============================================`);
-  console.log(`[TICKET-CREATE] Initial finalUserId: ${finalUserId}`);
-  console.log(`[TICKET-CREATE] payment.userId: ${payment.userId}`);
-  console.log(`[TICKET-CREATE] payment.ticketDetails.userId: ${userId}`);
-  console.log(`[TICKET-CREATE] payment.contact: ${payment.contact}`);
-  console.log(`[TICKET-CREATE] payment.ticketDetails.email: ${payment.ticketDetails?.email}`);
-  console.log(`[TICKET-CREATE] ============================================`);
+  let user = null;
 
-  if (!finalUserId) {
-    // ⚡ GUEST CHECKOUT ONLY: Try to find existing user by phone or email
-    // For logged-in users, finalUserId is already set, so this block is skipped
-    const rawEmail = payment.ticketDetails?.email;
-    const rawPhone = payment.contact;
-
-    const email = rawEmail ? rawEmail.toLowerCase().trim() : null;
-    const phone = rawPhone ? rawPhone.replace(/\s+/g, "") : null;
-
-    // Guest checkout is the one path that can silently create a brand-new
-    // User account (see the `else if (email && phone)` branch below) or link
-    // to a pre-existing one purely by phone/email match, with no ban check
-    // upstream of it. Refuse to fulfill (create a ticket or account) for a
-    // phone that's on the fraud blacklist, even though the payment already
-    // succeeded — this stops ban evasion via a second email on the same phone.
-    if (phone && (await isPhoneBanned(phone))) {
-      console.error(`[TICKET-CREATE] ❌ BLOCKED: phone ${phone} is fraud-blacklisted — refusing to create ticket/account for txn ${payment.transactionId}`);
-      throw new ForbiddenError("This phone number is not permitted to make purchases.");
-    }
-
-    console.log(`[TICKET-CREATE] GUEST CHECKOUT - Searching for user by phone: ${phone} or email: ${email}`);
-
-    // Check by PHONE first (Priority 1 - most reliable)
-    if (phone) {
-      user = await User.findOne({ phoneNumber: phone });
-      console.log(`[TICKET-CREATE] Searched by phone "${phone}": ${user ? `FOUND user ${user._id}` : 'NOT FOUND'}`);
-    }
-
-    // If not found by phone, check by EMAIL (Priority 2)
-    if (!user && email) {
-      user = await User.findOne({ email: email });
-      console.log(`[TICKET-CREATE] Searched by email "${email}": ${user ? `FOUND user ${user._id}` : 'NOT FOUND'}`);
-    }
-
-    if (user) {
-      console.log(`[TICKET-CREATE] ✅ Found EXISTING user: ${user._id}`);
-      finalUserId = user._id;
-      
-      // ⚡ IMPORTANT: Mark for auto-login even if user exists
-      // This allows guest buyers to auto-login to their existing account
-      if (!payment.userId) {
-        // Only set credentials if payment wasn't initiated by authenticated user
-        payment.newUserCreated = true; // Reuse flag to mean "send credentials"
-        payment.newUserEmail = user.email;
-        payment.newUserPassword = phone; // Phone is always the password
-        await payment.save();
-        console.log(`[TICKET-CREATE] ✅ Set auto-login credentials for existing user ${user._id}`);
-      }
-    } else if (email && phone) {
-      // Create new user ONLY if we have both email and phone
-      try {
-        const splitName = (payment.guestName || "Guest User").split(" ");
-        const firstName = splitName[0];
-        const lastName = splitName.slice(1).join(" ") || "User";
-        const password = phone;
-
-        user = await User.create({
-          firstName,
-          lastName,
-          email,
-          phoneNumber: phone,
-          password: password,
-          role: "customer",
-          isPhoneVerified: true,
-          isActive: true,
-        });
-        finalUserId = user._id;
-        console.log(`[TICKET-CREATE] ✅ AUTO-CREATED NEW USER ${user._id} for ticket`);
-        
-        // ⚡ Mark payment with newUserCreated flag for auto-login
-        payment.newUserCreated = true;
-        payment.newUserEmail = email;
-        payment.newUserPassword = password;
-        payment.userId = user._id; // ⚡ CRITICAL: Update payment.userId
-        await payment.save();
-        console.log(`[TICKET-CREATE] ✅ Updated payment.userId to ${user._id}`);
-        
-      } catch (err) {
-        console.error(`[TICKET-CREATE] ❌ Failed to auto-create user:`, err.message);
-        // If creation fails due to duplicate, try finding the user
-        if (err.code === 11000) {
-          user = await User.findOne({ $or: [{ email: email }, { phoneNumber: phone }] });
-          if (user) {
-            finalUserId = user._id;
-            console.log(`[TICKET-CREATE] Found existing user after duplicate error: ${user._id}`);
-          }
-        }
-      }
-    }
-  }
-
-  console.log(`[TICKET-CREATE] Final resolved userId: ${finalUserId}`);
-
-  // ⚡ Fetch user object if we have finalUserId but no user object (logged-in users)
+  // Fetch the user object for the ticket/SMS below.
   if (finalUserId && !user) {
     user = await User.findById(finalUserId).select('firstName lastName phoneNumber email');
     console.log(`[TICKET-CREATE] Fetched user for SMS: ${user ? `${user.firstName} (${user.phoneNumber})` : 'NOT FOUND'}`);
@@ -342,6 +278,26 @@ const processSuccessfulPayment = async (payment) => {
   // Create the ticket
   const ticket = await Ticket.create(ticketData);
   console.log(`[TICKET-CREATE] ✅ Ticket created: ${ticket._id} for ${finalUserId ? 'user' : 'guest'}`);
+
+  // Mirror into the ledger, after the ticket exists. mirrorSale swallows its
+  // own errors — a ledger failure must never fail a paid sale while the
+  // ledger is still a shadow copy — so awaiting it here cannot block ticket
+  // delivery below. commissionRate/vatRate/organizerVatRate come off the
+  // saved ticket (snapshotted by Ticket's own pre-save hook), not
+  // recomputed here, so the ledger records exactly what was charged — same
+  // pattern cinemaTicketService.js uses for cinema seat sales.
+  await mirrorSale({
+    owner: { kind: "organizer", id: event.organizer },
+    stream: "tickets",
+    grossAmount: ticket.price,
+    commissionRate: ticket.commissionRate,
+    vatRate: ticket.vatRate,
+    ownerVatRate: ticket.organizerVatRate,
+    source: { ticket: ticket._id },
+    reference: `ticket:${ticket._id}`,
+    occurredAt: ticket.purchaseDate,
+    currency: paymentCurrency,
+  });
 
   // ⚡ Event stock was already atomically claimed above; only the user's
   // ticket history still needs updating here.
@@ -374,15 +330,7 @@ const processSuccessfulPayment = async (payment) => {
       process.env.FRONTEND_URL || "https://pazimo.com"
     }/ticket/${ticket.ticketId}`;
 
-    // ⚡ OPTIMIZED: Combine ticket confirmation and credentials into ONE SMS to avoid duplicates
-    let message = `Hi ${userName} 👋\nYour ticket for ${eventTitle} is confirmed 🎟️\nAdmits: ${admitCount} person${admitCount > 1 ? 's' : ''}\n\nAccess your ticket here:\n${ticketLink}`;
-    
-    // If new user created, add credentials to the same message
-    if (user && payment.newUserCreated) {
-      message += `\n\n🔐 Your Account:\nEmail: ${payment.newUserEmail}\nPassword: ${payment.newUserPassword}\n\nLogin at: https://pazimo.com/login`;
-    }
-    
-    message += `\n\n⚠️ Keep this link safe it gives direct access to your ticket.\nPazimo`;
+    const message = `Hi ${userName} 👋\nYour ticket for ${eventTitle} is confirmed 🎟️\nAdmits: ${admitCount} person${admitCount > 1 ? 's' : ''}\n\nAccess your ticket here:\n${ticketLink}\n\n⚠️ Keep this link safe it gives direct access to your ticket.\nPazimo`;
 
     // ⚡ Send SMS in background - don't wait for it!
     sendSMS(smsPhone, message)
@@ -1218,6 +1166,50 @@ const createInvitationTicket = async (req, res) => {
 };
 
 // Get user's tickets
+// Tickets (or remaining admissions on a ticket) the authenticated user is
+// actually allowed to hand to someone else via ticketShareService.createShare
+// — feeds the mobile app's attachment/paperclip picker. `transferableCapacity`
+// is the ticket's remaining, not-yet-checked-in capacity (ticketCount), which
+// is exactly what createShare's per-item quantity is validated against.
+const getTransferableTickets = async (req, res) => {
+  if (!req.user || !req.user.userId) {
+    return res.status(StatusCodes.UNAUTHORIZED).json({
+      success: false,
+      message: "User not authenticated",
+    });
+  }
+
+  const tickets = await Ticket.find({
+    user: req.user.userId,
+    status: "active",
+    paymentStatus: "completed",
+    isInvitation: false,
+    isOnDoor: false,
+    pendingShare: null,
+    ticketCount: { $gt: 0 },
+  })
+    .select("ticketId ticketType price currency ticketCount event")
+    .populate({ path: "event", select: "title startDate location" })
+    .sort("-createdAt")
+    .lean();
+
+  const data = tickets.map((t) => ({
+    ticketId: t._id,
+    publicTicketId: t.ticketId,
+    eventId: t.event?._id,
+    eventName: t.event?.title,
+    eventDate: t.event?.startDate,
+    eventLocation: t.event?.location,
+    ticketType: t.ticketType,
+    currency: t.currency,
+    price: t.price,
+    capacity: t.ticketCount,
+    transferableCapacity: t.ticketCount,
+  }));
+
+  res.status(StatusCodes.OK).json({ success: true, data });
+};
+
 const getUserTickets = async (req, res) => {
   try {
     if (!req.user || !req.user.userId) {
@@ -1677,17 +1669,27 @@ const checkInTicket = async (req, res) => {
     // ⚡ OPTIMIZED: Use select() to only fetch needed fields
     let ticket = await Ticket.findOne({ ticketId })
       // Include invitation/door flags so validation rules stay accurate when saving
-      .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor");
-      
+      .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor pendingShare");
+
     if (!ticket && mongoose.Types.ObjectId.isValid(ticketId)) {
       ticket = await Ticket.findById(ticketId)
-        .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor");
+        .select("ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor pendingShare");
     }
 
     if (!ticket) {
       return res.status(StatusCodes.NOT_FOUND).json({
         success: false,
         message: "Ticket not found",
+      });
+    }
+
+    // Ownership is mid-transfer until the recipient accepts or the share
+    // lapses — checking it in now would admit whoever scans it while it's
+    // ambiguous who actually holds it.
+    if (ticket.pendingShare) {
+      return res.status(StatusCodes.CONFLICT).json({
+        success: false,
+        message: "This ticket has a pending share and can't be checked in until it's resolved",
       });
     }
 
@@ -1817,6 +1819,12 @@ const cancelTicket = async (req, res) => {
 
     if (ticket.status !== "active") {
       throw new BadRequestError("Ticket cannot be cancelled");
+    }
+
+    if (ticket.pendingShare) {
+      throw new BadRequestError(
+        "This ticket has a pending share — cancel or wait for that to resolve first"
+      );
     }
 
     ticket.status = "cancelled";
@@ -1961,15 +1969,29 @@ const validateQRCode = async (req, res) => {
     console.log(`[QR-VALIDATE] ⚡ Validating QR code...`);
     const startTime = Date.now();
 
-    // Parse the QR code data
-    let ticketData;
+    // The QR is just the bare ticketId now (2026-09-07) — the JSON envelope
+    // {tid,...} it used to carry was pure overhead nothing here ever read
+    // beyond `tid` itself, and dropping it shrinks the printed pattern by a
+    // whole QR "version". A code that IS valid JSON is still accepted, so a
+    // ticket issued (and printed/emailed) before this change keeps scanning.
+    //
+    // The typeof guard matters: an 8-character ticketId that happens to be
+    // all digits (rare, but the alphabet allows it) is itself valid JSON — a
+    // NUMBER, not an object — so a bare successful JSON.parse is only trusted
+    // when it actually produced an object to pull tid/ticketId off of.
+    let ticketId = null;
     try {
-      ticketData = JSON.parse(qrData);
+      const ticketData = JSON.parse(qrData);
+      if (ticketData && typeof ticketData === "object") {
+        ticketId = ticketData.tid || ticketData.ticketId || null;
+      }
     } catch (error) {
-      throw new BadRequestError("Invalid QR code format");
+      // Not JSON at all — the expected shape for every ticket issued now.
+    }
+    if (!ticketId) {
+      ticketId = String(qrData).trim();
     }
 
-    const ticketId = ticketData.tid || ticketData.ticketId;
     if (!ticketId) {
       throw new BadRequestError("Invalid QR code: missing ticket ID");
     }
@@ -2045,6 +2067,24 @@ const validateQRCode = async (req, res) => {
     
     const userEmail = ticket.user?.email || ticket.guestEmail || "";
 
+    // Drinks this ticket-holder has bought online (mobile app "refill"
+    // checkout) and not yet collected, so staff can hand them over at the
+    // same moment they're already looking at the ticket. Best-effort and
+    // never allowed to block admission — a lookup failure here must not turn
+    // into a customer being refused entry over something unrelated to their
+    // ticket. Guest tickets have no `user`, so nothing to look up.
+    let outstandingBeverages = [];
+    if (ticket.user?._id) {
+      try {
+        outstandingBeverages = await beverageSalesService.listOutstandingForCustomer({
+          eventId: ticket.event?._id,
+          customerId: ticket.user._id,
+        });
+      } catch (error) {
+        console.error("Error listing outstanding beverages for scan:", error.message);
+      }
+    }
+
     // Check if ticket is already checked in
     if (ticket.checkedIn) {
       return res.status(StatusCodes.OK).json({
@@ -2067,6 +2107,7 @@ const validateQRCode = async (req, res) => {
           ticketCount: ticket.ticketCount,
           isInvitation: ticket.isInvitation,
         },
+        outstandingBeverages,
       });
     }
 
@@ -2088,6 +2129,7 @@ const validateQRCode = async (req, res) => {
         ticketCount: ticket.ticketCount,
         isInvitation: ticket.isInvitation,
       },
+      outstandingBeverages,
     });
   } catch (error) {
     console.error("QR code validation error:", error);
@@ -2128,6 +2170,30 @@ const getPublicTicketDetails = async (req, res) => {
       .populate("user", "firstName lastName email")
       .lean(); // Use lean() for faster queries since we don't need Mongoose documents
 
+    // Which of these tickets' events currently have a drink actually available
+    // to buy — same availability rule beverageController.js's refill routes
+    // use (isAvailable, an active catalogue beverage, remaining stock > 0).
+    // Drives the "get the Pazimo app to order drinks" prompt shown right
+    // after a ticket purchase; computed here rather than requiring the
+    // frontend to call the refill-browsing endpoint itself, which additionally
+    // requires proving ticket ownership this page doesn't otherwise need.
+    const eventIds = [...new Set(tickets.map((t) => String(t.event?._id || "")).filter(Boolean))];
+    let eventsWithBeverages = new Set();
+    if (eventIds.length) {
+      const beverageRows = await EventBeverage.find({
+        event: { $in: eventIds },
+        isAvailable: { $ne: false },
+      })
+        .select("event stockTotal sold")
+        .populate("beverage", "isActive")
+        .lean();
+      for (const row of beverageRows) {
+        if (!row.beverage || row.beverage.isActive === false) continue;
+        if ((row.stockTotal || 0) - (row.sold || 0) <= 0) continue;
+        eventsWithBeverages.add(String(row.event));
+      }
+    }
+
     // Attach remaining ticket count for this ticket's type (quantity left, not quantity purchased)
     tickets.forEach((ticket) => {
       const matchedType = ticket.event?.ticketTypes?.find(
@@ -2135,6 +2201,7 @@ const getPublicTicketDetails = async (req, res) => {
       );
       ticket.ticketsRemaining =
         typeof matchedType?.quantity === "number" ? matchedType.quantity : null;
+      ticket.hasBeverages = eventsWithBeverages.has(String(ticket.event?._id || ""));
       // Don't leak the full ticketTypes array (pricing/config for other tiers) to the public endpoint
       if (ticket.event) delete ticket.event.ticketTypes;
     });
@@ -2521,10 +2588,71 @@ const createOnDoorTicket = async (req, res) => {
   }
 };
 
+// Serve a ticket's QR image, rendered fresh from the ticket's own fields.
+//
+// These used to live on the document as a base64 data URI averaging 54 KB —
+// 99% of the ticket, almost all of it the same logo repeated per row. Rendering
+// costs a few milliseconds and stores nothing.
+//
+// The payload is unchanged from what the old pre-save hook produced, so images
+// re-rendered for existing tickets scan exactly as before. (The one field that
+// can drift is the holder's display name if they renamed themselves since
+// purchase; the scanner reads only `tid` and re-fetches the ticket, so that is
+// cosmetic.)
+const getTicketQr = async (req, res) => {
+  try {
+    const { ticketId, ext } = req.params;
+
+    const ticket = await Ticket.findOne({ ticketId }).select(
+      "ticketId ticketType purchaseQuantity isInvitation guestName user"
+    );
+    if (!ticket) {
+      throw new NotFoundError("Ticket not found");
+    }
+
+    // A ticket's QR never changes, so let the browser and any proxy in front of
+    // us keep it. `private` because the URL is a capability — we don't want it
+    // sitting in a shared cache.
+    res.set("Cache-Control", "private, max-age=86400, immutable");
+
+    if (ext === "png") {
+      // Clamped: the width drives a bitmap allocation, so an unbounded value
+      // from the query string is a trivial way to burn memory and CPU.
+      const requested = parseInt(req.query.w, 10);
+      const width = Number.isFinite(requested)
+        ? Math.min(2048, Math.max(200, requested))
+        : 400;
+
+      const png = await renderTicketQrPng(ticket, width);
+      res.type("image/png");
+      res.set(
+        "Content-Disposition",
+        `inline; filename="ticket-${ticketId}.png"`
+      );
+      return res.send(png);
+    }
+
+    const svg = await renderTicketQrSvg(ticket);
+    res.type("image/svg+xml");
+    return res.send(svg);
+  } catch (error) {
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    if (status === StatusCodes.INTERNAL_SERVER_ERROR) {
+      console.error("Error rendering ticket QR:", error);
+    }
+    res.status(status).json({
+      success: false,
+      message: error.message || "Failed to render QR code",
+    });
+  }
+};
+
 module.exports = {
   createTicket,
+  getTicketQr,
   createInvitationTicket,
   getUserTickets,
+  getTransferableTickets,
   getEventTickets,
   getOrganizerTickets,
   checkInTicket,

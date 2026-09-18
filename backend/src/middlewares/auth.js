@@ -178,19 +178,25 @@ const protect = async (req, res, next) => {
 };
 
 // ============================================================================
-// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, RESTORED 2026-09-04
+// TEMP-BYPASS-2026-07-10 — SECURITY DOWNGRADE, NOW FLAG-CONTROLLED (2026-09-16)
 // ----------------------------------------------------------------------------
 // First added 2026-07-10 for the same reason, removed 2026-08-20 once it
-// looked safe to. It wasn't: the organizer app already published to the
-// App Store / Play Store — a completely separate codebase this repo has no
-// access to, distinct from the in-development pazimo-organizer-mobile — has
-// never sent an auth token on this call, and that app can't be updated (a
-// store review cycle) until pazimo-organizer-mobile replaces it. Removing
-// the bypass on 2026-08-20 broke every organizer on the live app the moment
-// production actually picked up that change today; restoring it is what
-// "align it with what we have here" means in practice. Same shape as
-// ORGANIZER_LOGIN_OTP_ENABLED in authController.js — a compatibility shim
-// for the old app, not a rollback of anything else from 2026-09-04.
+// looked safe to, then restored 2026-09-04 the moment production actually
+// picked up the removal and broke every organizer on the already-published
+// app — a completely separate codebase this repo has no access to, distinct
+// from the in-development pazimo-organizer-mobile — which has never sent an
+// auth token on this call and can't be updated (a store review cycle) until
+// pazimo-organizer-mobile replaces it. Add/remove/restore by hand, three
+// times over six weeks, is how "meant to last two days" turned into six
+// weeks in the first place — this is now ORGANIZER_LEGACY_APP_BYPASS_ENABLED
+// instead, so turning it off (once the old app is actually retired) is one
+// env change, not a careful code edit someone has to remember to make and
+// might get wrong under time pressure.
+//
+// Defaults to enabled (bypass active) when the var is unset, so deploying
+// this refactor does not itself change production behavior — the old app
+// still gets through exactly as before until someone deliberately sets
+// ORGANIZER_LEGACY_APP_BYPASS_ENABLED=false.
 //
 // GET /api/users/:id falls back to trusting the :id in the URL with NO
 // token at all, IF that account's role is admin/organizer. This is a real
@@ -199,12 +205,8 @@ const protect = async (req, res, next) => {
 // NOT exposed by this — only admin/organizer, and only on this one route
 // (PUT/DELETE/list are untouched). Every use of the fallback path is logged
 // below so usage can be audited, and a request that does carry a token is
-// still held to the normal protect()+restrictTo() check.
-//
-// TO REMOVE (once pazimo-organizer-mobile has replaced the old app): delete
-// this whole block and the `protectStrictOrTrustParamId` export, then in
-// userRoutes.js change the GET /:id route back to:
-//   router.get('/:id', protect, restrictTo('admin', 'organizer'), userController.getUser);
+// still held to the normal protect()+restrictTo() check regardless of the
+// flag.
 // ============================================================================
 const protectStrictOrTrustParamId = async (req, res, next) => {
   const token = extractToken(req);
@@ -222,6 +224,12 @@ const protectStrictOrTrustParamId = async (req, res, next) => {
       }
       next();
     });
+  }
+
+  // No token, and the old app's compatibility window has been closed —
+  // reject like the normal (no-bypass) route would.
+  if (process.env.ORGANIZER_LEGACY_APP_BYPASS_ENABLED === "false") {
+    return next(new UnauthorizedError("Not authorized to access this route"));
   }
 
   // No token at all - fallback for the old app. Trust req.params.id directly.
@@ -310,6 +318,178 @@ const requireCapitalEligible = async (req, res, next) => {
   }
 };
 
+// Gates the beverage-selling organizer surface. Same contract (and same
+// reasoning) as requireCapitalEligible above: eligibility is mutable
+// admin-granted state, so it is read from the database on every request and
+// never taken from the JWT.
+const requireBeverageEligible = async (req, res, next) => {
+  try {
+    const OrganizerBeverageProfile = require("../models/OrganizerBeverageProfile");
+    const profile = await OrganizerBeverageProfile.findOne({
+      organizer: req.user.userId,
+    });
+
+    if (!profile || profile.eligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "You are not eligible to sell beverages at your events.",
+      });
+    }
+
+    req.beverageProfile = profile;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
+// Resolves the venue owned by the calling account and attaches it as req.venue.
+//
+// Same contract and same reasoning as requireBeverageEligible above: the venue
+// and its approval are mutable admin-granted state, so both are read from the
+// database on every request and never taken from the JWT. A token issued while
+// a venue was approved must stop working the moment approval is withdrawn.
+//
+// Deliberately does NOT read a venue id from the request. The venue a caller
+// may act as is derived from their account and nothing else, so no route behind
+// this middleware can be pointed at another venue by changing a parameter.
+const requireVenueAccount = async (req, res, next) => {
+  try {
+    const Venue = require("../models/Venue");
+    let venue;
+
+    // A cashier owns no venue itself — it is scoped to one via the `venue`
+    // field on its own User doc. Load that doc fresh (never trust the JWT)
+    // so suspending the CASHIER specifically locks it out immediately, even
+    // while the venue it works for stays perfectly healthy — a distinct
+    // failure mode from the venue.isActive check below, which is why both
+    // run rather than one standing in for the other.
+    if (req.user.role === "cashier") {
+      const cashier = await User.findById(req.user.userId).select(
+        "venue isActive"
+      );
+      if (!cashier || !cashier.venue || cashier.isActive === false) {
+        return res.status(403).json({
+          status: "error",
+          message: "This account is not linked to an active venue.",
+        });
+      }
+      venue = await Venue.findById(cashier.venue);
+    } else {
+      venue = await Venue.findOne({ account: req.user.userId });
+    }
+
+    if (!venue) {
+      return res.status(403).json({
+        status: "error",
+        message: "This account is not linked to a venue.",
+      });
+    }
+    if (venue.isActive === false) {
+      return res.status(403).json({
+        status: "error",
+        message: "This venue has been suspended.",
+      });
+    }
+
+    req.venue = venue;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
+// Adds the approval check on top. Split from requireVenueAccount because a
+// venue must still be able to read its own profile — and be told it is awaiting
+// approval — while it is not yet eligible to sell anything.
+const requireVenueEligible = async (req, res, next) => {
+  requireVenueAccount(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.venue || req.venue.eligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "This venue is not approved to sell beverages yet.",
+      });
+    }
+    next();
+  });
+};
+
+// Resolves the cinema owned by the calling account and attaches it as
+// req.cinema. The cinema twin of requireVenueAccount, with the same contract and
+// the same reasoning: the cinema and its approval are mutable admin-granted
+// state, so both are read from the database on every request and never taken
+// from the JWT. A token issued while a cinema was active must stop working the
+// moment it is suspended.
+//
+// Deliberately does NOT read a cinema id from the request. The cinema a caller
+// may act as is derived from their account and nothing else, so no route behind
+// this middleware can be pointed at another cinema by changing a parameter —
+// which is what stops Cinema A editing Cinema B.
+const requireCinemaAccount = async (req, res, next) => {
+  try {
+    const Cinema = require("../models/Cinema");
+    let cinema;
+
+    // A cashier owns no cinema itself — it is scoped to one via the `cinema`
+    // field on its own User doc. Load that doc fresh (never trust the JWT)
+    // so suspending the CASHIER specifically locks it out immediately, even
+    // while the cinema it works for stays perfectly healthy — a distinct
+    // failure mode from the cinema.isActive check below, which is why both
+    // run rather than one standing in for the other.
+    if (req.user.role === "cashier") {
+      const cashier = await User.findById(req.user.userId).select(
+        "cinema isActive"
+      );
+      if (!cashier || !cashier.cinema || cashier.isActive === false) {
+        return res.status(403).json({
+          status: "error",
+          message: "This account is not linked to an active cinema.",
+        });
+      }
+      cinema = await Cinema.findById(cashier.cinema);
+    } else {
+      cinema = await Cinema.findOne({ account: req.user.userId });
+    }
+
+    if (!cinema) {
+      return res.status(403).json({
+        status: "error",
+        message: "This account is not linked to a cinema.",
+      });
+    }
+    if (cinema.isActive === false) {
+      return res.status(403).json({
+        status: "error",
+        message: "This cinema has been suspended.",
+      });
+    }
+
+    req.cinema = cinema;
+    next();
+  } catch (error) {
+    next(new UnauthorizedError("Not authorized to access this route"));
+  }
+};
+
+// Adds the concession-approval check on top. Split from requireCinemaAccount for
+// the reason requireVenueEligible is split: a cinema must still be able to read
+// its own profile, sell seats, and be told it is awaiting approval, while it is
+// not yet eligible to sell drinks and snacks. Selling seats is what a cinema is
+// for — only the concession surface is gated.
+const requireCinemaBeverageEligible = async (req, res, next) => {
+  requireCinemaAccount(req, res, (err) => {
+    if (err) return next(err);
+    if (!req.cinema || req.cinema.beverageEligibility !== "eligible") {
+      return res.status(403).json({
+        status: "error",
+        message: "This cinema is not approved to sell concessions yet.",
+      });
+    }
+    next();
+  });
+};
+
 module.exports = {
   protect,
   authenticateUser,
@@ -317,5 +497,10 @@ module.exports = {
   restrictTo,
   isAdmin,
   requireCapitalEligible,
+  requireBeverageEligible,
+  requireVenueAccount,
+  requireVenueEligible,
+  requireCinemaAccount,
+  requireCinemaBeverageEligible,
   protectStrictOrTrustParamId, // TEMP-BYPASS-2026-07-10 - remove with the block above
 };

@@ -37,29 +37,108 @@ const getOrCreateConfig = async () => {
   return config;
 };
 
-// Sum of gift-card ticket sales that actually completed within the given
-// EAT calendar day — keyed off paidAt, not createdAt, so a payment that
-// settles just after midnight lands in the right bucket.
+/**
+ * "This payment settled inside this window", for rows that record when they
+ * settled and rows that do not.
+ *
+ * Exported so the reporting script and the daily computation cannot drift: a
+ * classification table that counted a different set from the figures beneath it
+ * would be worse than no table.
+ */
+const settledInRange = (start, end) => ({
+  $or: [
+    { paidAt: { $gte: start, $lt: end } },
+    { paidAt: { $exists: false }, createdAt: { $gte: start, $lt: end } },
+    { paidAt: null, createdAt: { $gte: start, $lt: end } },
+  ],
+});
+
+// What counts as a ticket sale for platform-fee purposes.
+//
+// The Payment collection is shared by four different things: ticket purchases,
+// invitation email/SMS fees, campaign payments, and cash taken at the door.
+// Only the first is ticket revenue Pazimo takes a commission on — the
+// invitation and campaign fees are ALREADY 100% platform income, so sweeping a
+// further 3% off them would be charging ourselves a fee on our own money.
+//
+// The purposes are separated by what each writer puts in `ticketDetails`:
+// ticket purchases record `ticketCount`, invitation payments record
+// `qrCodeCount`, campaign payments record `campaignId`. `invitationType` alone
+// cannot do it, because a plain ticket sale sets nothing and so inherits the
+// schema default of "guest" — the same value an invitation payment uses.
+//
+// On-door sales are excluded deliberately. They are cash handed over at the
+// gate; no money moved through a provider, so there is nothing for a sweep to
+// move. The commission on them is still real and is still recorded by the
+// ledger — it is only this settlement mechanism that cannot act on it.
+const ticketSaleMatch = (currency, start, end) => ({
+  status: "PAID",
+  currency,
+  // WHEN a payment settled, for rows that record it AND rows that do not.
+  //
+  // `paidAt` is the right field and is preferred wherever it exists: it is set
+  // the moment status flips to PAID, so a payment confirmed just after midnight
+  // lands in the day it actually completed rather than the day it started.
+  //
+  // But it was added long after Payment was in use, and a range query on it
+  // silently excludes every row written before that. Measured on a production
+  // mirror: 8,685 of 9,744 PAID payments have no `paidAt`, hiding 8,090 ticket
+  // sales worth 19,992,281 ETB and 599,768.43 ETB of commission — against a
+  // sweep that reported 45,989.34 owed and looked plausible.
+  //
+  // So older rows fall back to `createdAt`, which for those rows is the only
+  // signal there is. It can misfile a payment that was initiated just before
+  // midnight and confirmed just after — a rounding error at the day boundary,
+  // and immeasurably better than the row being invisible.
+  //
+  // Written as indexable branches rather than an $expr over $ifNull: an $expr
+  // comparison cannot use the paidAt index, and this query runs per day across
+  // the whole history.
+  ...settledInRange(start, end),
+  "ticketDetails.ticketCount": { $exists: true, $ne: null },
+  "ticketDetails.qrCodeCount": { $exists: false },
+  "ticketDetails.campaignId": { $exists: false },
+  invitationType: { $nin: ["campaign", "on-door", "bulk_invitation_fee"] },
+});
+
+// Sum of ticket sales that actually completed within the given EAT calendar day
+// — keyed off paidAt, not createdAt, so a payment that settles just after
+// midnight lands in the right bucket.
+//
+// FIXED 2026-08-20. This used to also filter `provider: "chapa_giftcard"`.
+// Production holds zero payments with that provider — 18,186 chapa, 160 santim,
+// 1,257 with none recorded — because a payment is only marked chapa_giftcard
+// when gift-card routing is configured, and it never was. So this returned 0
+// every single day, every one of the 74 ledger rows was zero, and nothing was
+// ever swept, against 701,493.24 ETB of commission earned.
+//
+// `giftCardSales` keeps the old figure as a separate number rather than a
+// filter, because it is still the one that matters at payout time: sendFee()
+// draws from a gift card, so it can only actually source the part of the day
+// that landed in one. Recording both makes the gap visible instead of silently
+// reporting a fee as owed that no configured card can pay.
 const computeDailyTotal = async (dateKey, currency) => {
   const { start, end } = eatDayBounds(dateKey);
   const [row] = await Payment.aggregate([
-    {
-      $match: {
-        provider: "chapa_giftcard",
-        status: "PAID",
-        currency,
-        paidAt: { $gte: start, $lt: end },
-      },
-    },
+    { $match: ticketSaleMatch(currency, start, end) },
     {
       $group: {
         _id: null,
         totalSales: { $sum: "$price" },
         paymentCount: { $sum: 1 },
+        giftCardSales: {
+          $sum: {
+            $cond: [{ $eq: ["$provider", "chapa_giftcard"] }, "$price", 0],
+          },
+        },
       },
     },
   ]);
-  return { totalSales: row?.totalSales || 0, paymentCount: row?.paymentCount || 0 };
+  return {
+    totalSales: round2(row?.totalSales || 0),
+    paymentCount: row?.paymentCount || 0,
+    giftCardSales: round2(row?.giftCardSales || 0),
+  };
 };
 
 // Fetch (or create) the ledger row for a day. SENT rows are frozen —
@@ -71,7 +150,10 @@ const ensureLedger = async (dateKey, currency) => {
   if (ledger && ledger.status === "SENT") return ledger;
 
   const config = await getOrCreateConfig();
-  const { totalSales, paymentCount } = await computeDailyTotal(dateKey, currency);
+  const { totalSales, paymentCount, giftCardSales } = await computeDailyTotal(
+    dateKey,
+    currency
+  );
   const feeAmount = round2(totalSales * (config.feePercentage / 100));
 
   if (!ledger) {
@@ -80,6 +162,7 @@ const ensureLedger = async (dateKey, currency) => {
       currency,
       totalSales,
       paymentCount,
+      giftCardSales,
       feePercentage: config.feePercentage,
       feeAmount,
       status: "PENDING",
@@ -87,6 +170,7 @@ const ensureLedger = async (dateKey, currency) => {
   } else {
     ledger.totalSales = totalSales;
     ledger.paymentCount = paymentCount;
+    ledger.giftCardSales = giftCardSales;
     ledger.feePercentage = config.feePercentage;
     ledger.feeAmount = feeAmount;
     await ledger.save();
@@ -199,6 +283,8 @@ const runAutoSendForYesterday = async () => {
 };
 
 module.exports = {
+  settledInRange,
+  ticketSaleMatch,
   eatDateKey,
   eatDayBounds,
   shiftDateKey,

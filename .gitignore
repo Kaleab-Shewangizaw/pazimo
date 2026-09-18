@@ -15,6 +15,9 @@ node_modules/
 # Build outputs
 **/build/
 **/dist/
+# Packed deploy bundles — 60MB+ of compiled output that has no business in git
+next-build.tar.gz
+**/next-build.tar.gz
 
 # Cache directories
 **/.cache/

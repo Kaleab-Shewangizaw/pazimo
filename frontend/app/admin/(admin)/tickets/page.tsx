@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
+import CommissionPanel from "@/components/admin/CommissionPanel";
 import {
   Search,
   Calendar,
@@ -515,6 +516,9 @@ export default function TicketsPage() {
             </div>
           </div>
         </div>
+
+        {/* Money split across the platform, and per-event commission rates. */}
+        <CommissionPanel token={token} />
 
         <Card>
           <CardHeader>

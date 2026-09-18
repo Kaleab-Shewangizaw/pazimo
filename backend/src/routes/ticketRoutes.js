@@ -6,6 +6,7 @@ const { authenticateUser, protect, restrictTo } = require("../middlewares/auth")
 const {
   createTicket,
   getUserTickets,
+  getTransferableTickets,
   getEventTickets,
   checkInTicket,
   cancelTicket,
@@ -24,6 +25,7 @@ const {
   createOnDoorTicket,
   getOrganizerTickets,
   deleteTicket,
+  getTicketQr,
 } = require("../controllers/ticketController");
 
 const SantimPayService = require("../services/santimPayService");
@@ -36,6 +38,7 @@ const PaymentConfig = require("../models/PaymentConfig");
 const { resolveTicketPrice, amountsMatch } = require("../utils/pricing");
 const { isPhoneBanned, flagTamperAttempt } = require("../utils/fraudGuard");
 const { claimTicketStock, releaseTicketStock } = require("../utils/ticketStock");
+const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 
 const resolveWebhookBaseUrl = (req) => {
   const explicitPublicUrl =
@@ -78,9 +81,117 @@ const findEventForTicketPurchase = async (eventId) => {
   return Event.findOne({ shortId: normalizedEventId.toLowerCase() });
 };
 
-// Public route - NO authentication middleware
+// Restores the pre-2026-09-15 "log in or create an account inline while
+// paying" flow (dropped in d3ba065, "require sign-in for ticket purchase,
+// drop guest checkout") for the web checkout only — see the /web route
+// variants below. /ticket/initiate and /ticket/initiate/chapa stay behind
+// plain authenticateUser (no change): pazimo-mobile already calls those and
+// already has its own OTP-backed sign-up/sign-in flow built for them.
+//
+// A Bearer token, if present, is verified exactly like authenticateUser —
+// a signed-in web user goes through this unchanged. Only an anonymous
+// request falls into guest checkout, and only when ACTIVATE_PASSWORDLESS_ROUTE
+// is "true" — a single env flip kills it instantly if it's abused the way
+// unifiedAuth was on 2026-09-03 (same isQueryOperatorInjection guard as that
+// incident is applied here too, since this does the same
+// find-by-phone/email-from-request-body query).
+const webCheckoutAuth = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    return authenticateUser(req, res, next);
+  }
 
-router.post("/ticket/initiate", async (req, res) => {
+  if (process.env.ACTIVATE_PASSWORDLESS_ROUTE !== "true") {
+    return res.status(401).json({
+      success: false,
+      error: "Please sign in to buy tickets.",
+    });
+  }
+
+  const { ticketDetails = {}, phoneNumber } = req.body || {};
+  const { fullName, email } = ticketDetails || {};
+
+  if (
+    isQueryOperatorInjection(fullName) ||
+    isQueryOperatorInjection(email) ||
+    isQueryOperatorInjection(phoneNumber)
+  ) {
+    return res.status(400).json({ success: false, error: "Invalid request" });
+  }
+
+  if (!email) {
+    return res
+      .status(400)
+      .json({ success: false, error: "Email is required for ticket purchase" });
+  }
+  if (!phoneNumber) {
+    return res
+      .status(400)
+      .json({ success: false, error: "Phone number is required for ticket purchase" });
+  }
+
+  try {
+    let user = await User.findOne({ phoneNumber });
+    if (!user) {
+      user = await User.findOne({ email: email.toLowerCase() });
+    }
+
+    if (!user) {
+      const nameParts = (fullName || "Guest User").trim().split(/\s+/).filter(Boolean);
+      const firstName = nameParts[0] || "Guest";
+      const lastName = nameParts.slice(1).join(" ") || "User";
+
+      try {
+        user = await User.create({
+          firstName,
+          lastName,
+          email: email.toLowerCase(),
+          phoneNumber,
+          password: phoneNumber, // Same convention unifiedAuth uses for guest checkout.
+          role: "customer",
+          isPhoneVerified: true,
+          isActive: true,
+        });
+      } catch (err) {
+        if (err.code === 11000) {
+          user = await User.findOne({
+            $or: [{ email: email.toLowerCase() }, { phoneNumber }],
+          });
+        }
+        if (!user) throw err;
+      }
+    }
+
+    if (user.isBanned || !user.isActive) {
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_BANNED",
+        error: user.banReason || "This account is not permitted to make purchases.",
+      });
+    }
+
+    req.user = { userId: user._id.toString(), role: user.role };
+    req.guestCheckoutAuth = {
+      token: user.createJWT(),
+      user: {
+        id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+      },
+    };
+    next();
+  } catch (error) {
+    console.error("[WEB-CHECKOUT-AUTH] Guest checkout failed:", error);
+    res.status(500).json({ success: false, error: "Could not start checkout" });
+  }
+};
+
+// Requires a signed-in account — ticket purchase no longer creates a
+// password-bearing account behind the scenes (see authenticateUser).
+const initiateSantimPayTicket = async (req, res) => {
   try {
     const {
       ticketDetails,
@@ -122,7 +233,7 @@ router.post("/ticket/initiate", async (req, res) => {
       if (phoneNumber) {
         await flagTamperAttempt({
           phone: phoneNumber,
-          userId: ticketDetails.userId,
+          userId: req.user.userId,
           reason: "Amount mismatch on POST /tickets/ticket/initiate (SantimPay)",
           meta: {
             eventId: ticketDetails.eventId,
@@ -138,97 +249,20 @@ router.post("/ticket/initiate", async (req, res) => {
 
     const verifiedAmount = pricing.amount;
 
-    // Require email for guest checkout
-    if (!ticketDetails.userId && !ticketDetails.email) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Email is required for ticket purchase",
-        });
+    // The caller is authenticated (authenticateUser above) — no more
+    // guest-checkout account lookup/creation. Ticket purchase requires a
+    // real, already-signed-up account.
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
     }
-
-    // --- User Creation / Lookup Logic ---
-    let userId = ticketDetails.userId;
-    let token = null;
-    let user = null;
-
-    console.log(`[PAYMENT-INIT] Received userId from frontend: ${userId}`);
-
-    // ⚡ CRITICAL: If userId is provided (logged-in user), fetch the user object
-    if (userId) {
-      user = await User.findById(userId);
-      if (user) {
-        console.log(`[PAYMENT-INIT] ✅ Fetched logged-in user: ${user._id}, phone: ${user.phoneNumber}`);
-      } else {
-        console.error(`[PAYMENT-INIT] ❌ User ${userId} not found in database!`);
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-    }
-    // If no userId provided (guest checkout), try to find or create user
-    else {
-      const email = ticketDetails.email;
-      const phone = phoneNumber; // Use the payment phone number
-
-      // 1. Check by PHONE first (Priority 1 - most reliable)
-      if (phone) {
-        user = await User.findOne({ phoneNumber: phone });
-        console.log(`[PAYMENT-INIT] Searched by phone "${phone}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 2. If not found by phone, check by EMAIL (Priority 2)
-      if (!user && email) {
-        user = await User.findOne({ email: email.toLowerCase() });
-        console.log(`[PAYMENT-INIT] Searched by email "${email.toLowerCase()}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 3. If still not found, create new user (only if BOTH email and phone provided)
-      if (!user && email && phone) {
-        try {
-          const splitName = (ticketDetails.fullName || "Guest User").split(" ");
-          const firstName = splitName[0];
-          const lastName = splitName.slice(1).join(" ") || "User";
-          // Use phone number as password as requested
-          const password = phone;
-
-          user = await User.create({
-            firstName,
-            lastName,
-            email: email.toLowerCase(),
-            phoneNumber: phone,
-            password: password,
-            role: "customer",
-            isPhoneVerified: true,
-            isActive: true,
-          });
-          console.log(`[PAYMENT-INIT] ✅ AUTO-CREATED NEW USER ${user._id} with email: ${email.toLowerCase()}, phone: ${phone}`);
-        } catch (err) {
-          console.error("[PAYMENT-INIT] ❌ Failed to auto-create user:", err.message);
-          // If creation fails (e.g. duplicate), try to find the user again
-          if (err.code === 11000) {
-            user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phoneNumber: phone }] });
-            console.log(`[PAYMENT-INIT] Found existing user after duplicate error: ${user?._id}`);
-          }
-        }
-      }
-
-      if (user) {
-        userId = user._id;
-        // Generate token for auto-login (for BOTH new and existing users)
-        token = user.createJWT();
-        console.log(`[PAYMENT-INIT] ✅ Will use user ${userId} for ticket purchase`);
-      } else {
-        console.log(`[PAYMENT-INIT] ⚠️ No user found/created - proceeding as guest`);
-      }
-    }
-    // ------------------------------------
 
     // The `phoneNumber` check above only covers the number typed into this
     // specific checkout form. A banned user can dodge it by paying with a
     // fresh, non-blacklisted number while still checking out on their own
-    // (banned) account — so also refuse to initiate payment if the resolved
-    // account itself (logged-in via userId, or matched/created by phone or
-    // email during guest checkout above) is banned.
+    // (banned) account — so also refuse to initiate payment if the signed-in
+    // account itself is banned.
     if (user && (user.isBanned || !user.isActive)) {
       return res.status(403).json({
         success: false,
@@ -339,26 +373,27 @@ router.post("/ticket/initiate", async (req, res) => {
       success: true,
       transactionId: transactionId,
       message: "Payment initiated. Please check your phone.",
-      token: token, // Return token to frontend
-      user: user
-        ? {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phoneNumber: user.phoneNumber,
-            role: user.role,
-          }
-        : null,
+      // Present only when webCheckoutAuth just logged the buyer in or
+      // created their account — lets the web frontend auto-login them
+      // without a separate step (mirrors the pre-d3ba065 response shape).
+      ...(req.guestCheckoutAuth
+        ? { token: req.guestCheckoutAuth.token, user: req.guestCheckoutAuth.user }
+        : {}),
     });
   } catch (err) {
     console.error("Error initiating payment:", err);
     res.status(500).json({ success: false, error: "Could not start payment" });
   }
-});
+};
+
+// Safe route: mobile app and any already-signed-in caller. Sign-in required.
+router.post("/ticket/initiate", authenticateUser, initiateSantimPayTicket);
+// Web-only route: lets an anonymous ticket buyer log in or create an account
+// inline, gated by ACTIVATE_PASSWORDLESS_ROUTE (see webCheckoutAuth above).
+router.post("/ticket/initiate/web", webCheckoutAuth, initiateSantimPayTicket);
 
 // Chapa Payment Initiation Route
-router.post("/ticket/initiate/chapa", async (req, res) => {
+const initiateChapaTicket = async (req, res) => {
   try {
     const {
       ticketDetails,
@@ -401,7 +436,7 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       if (phoneNumber) {
         await flagTamperAttempt({
           phone: phoneNumber,
-          userId: ticketDetails.userId,
+          userId: req.user.userId,
           reason: "Amount mismatch on POST /tickets/ticket/initiate/chapa",
           meta: {
             eventId: ticketDetails.eventId,
@@ -417,95 +452,20 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
 
     const verifiedAmount = pricing.amount;
 
-    // Require email for guest checkout
-    if (!ticketDetails.userId && !ticketDetails.email) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Email is required for ticket purchase",
-        });
-    }
-
-    // --- User Creation / Lookup Logic (Same as SantimPay) ---
-    let userId = ticketDetails.userId;
-    let token = null;
-    let user = null;
-    
-    console.log(`[CHAPA-INIT] Received userId from frontend: ${userId}`);
-
-    // ⚡ CRITICAL: If userId is provided (logged-in user), fetch the user object
-    if (userId) {
-      user = await User.findById(userId);
-      if (user) {
-        console.log(`[CHAPA-INIT] ✅ Fetched logged-in user: ${user._id}, phone: ${user.phoneNumber}`);
-      } else {
-        console.error(`[CHAPA-INIT] ❌ User ${userId} not found in database!`);
-        return res.status(404).json({ success: false, error: "User not found" });
-      }
-    }
-    // If no userId provided (guest checkout), try to find or create user
-    else if (!userId) {
-      const email = ticketDetails.email;
-      const phone = phoneNumber;
-
-      // 1. Check by PHONE first (Priority 1 - most reliable)
-      if (phone) {
-        user = await User.findOne({ phoneNumber: phone });
-        console.log(`[CHAPA-INIT] Searched by phone "${phone}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 2. If not found by phone, check by EMAIL (Priority 2)
-      if (!user && email) {
-        user = await User.findOne({ email: email.toLowerCase() });
-        console.log(`[CHAPA-INIT] Searched by email "${email.toLowerCase()}": ${user ? `FOUND existing user ${user._id}` : 'NOT FOUND'}`);
-      }
-
-      // 3. If still not found, create new user (only if BOTH email and phone provided)
-      if (!user && email && phone) {
-        try {
-          const splitName = (ticketDetails.fullName || "Guest User").split(" ");
-          const firstName = splitName[0];
-          const lastName = splitName.slice(1).join(" ") || "User";
-          const password = phone;
-
-          user = await User.create({
-            firstName,
-            lastName,
-            email: email.toLowerCase(),
-            phoneNumber: phone,
-            password: password,
-            role: "customer",
-            isPhoneVerified: true,
-            isActive: true,
-          });
-          console.log(`[CHAPA-INIT] ✅ AUTO-CREATED NEW USER ${user._id} with email: ${email.toLowerCase()}, phone: ${phone}`);
-        } catch (err) {
-          console.error("[CHAPA-INIT] ❌ Failed to auto-create user:", err.message);
-          // If creation fails due to duplicate, try to find the user
-          if (err.code === 11000) {
-            user = await User.findOne({ $or: [{ email: email.toLowerCase() }, { phoneNumber: phone }] });
-            console.log(`[CHAPA-INIT] Found existing user after duplicate error: ${user?._id}`);
-          }
-        }
-      }
-
-      if (user) {
-        userId = user._id;
-        // Generate token for auto-login (for BOTH new and existing users)
-        token = user.createJWT();
-        console.log(`[CHAPA-INIT] ✅ Will use user ${userId} for ticket purchase`);
-      } else {
-        console.log(`[CHAPA-INIT] ⚠️ No user found/created - proceeding as guest`);
-      }
+    // The caller is authenticated (authenticateUser above) — no more
+    // guest-checkout account lookup/creation. Ticket purchase requires a
+    // real, already-signed-up account.
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, error: "User not found" });
     }
 
     // The `phoneNumber` check above only covers the number typed into this
     // specific checkout form. A banned user can dodge it by paying with a
     // fresh, non-blacklisted number while still checking out on their own
-    // (banned) account — so also refuse to initiate payment if the resolved
-    // account itself (logged-in via userId, or matched/created by phone or
-    // email during guest checkout above) is banned.
+    // (banned) account — so also refuse to initiate payment if the signed-in
+    // account itself is banned.
     if (user && (user.isBanned || !user.isActive)) {
       return res.status(403).json({
         success: false,
@@ -862,23 +822,21 @@ router.post("/ticket/initiate/chapa", async (req, res) => {
       transactionId: transactionId,
       checkoutUrl: checkoutUrl,
       message: "Redirecting to payment...",
-      token: token,
-      user: user
-        ? {
-            id: user._id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phoneNumber: user.phoneNumber,
-            role: user.role,
-          }
-        : null,
+      ...(req.guestCheckoutAuth
+        ? { token: req.guestCheckoutAuth.token, user: req.guestCheckoutAuth.user }
+        : {}),
     });
   } catch (err) {
     console.error("Error initiating Chapa payment:", err);
     res.status(500).json({ success: false, error: "Could not start payment" });
   }
-});
+};
+
+// Safe route: mobile app and any already-signed-in caller. Sign-in required.
+router.post("/ticket/initiate/chapa", authenticateUser, initiateChapaTicket);
+// Web-only route: lets an anonymous ticket buyer log in or create an account
+// inline, gated by ACTIVATE_PASSWORDLESS_ROUTE (see webCheckoutAuth above).
+router.post("/ticket/initiate/chapa/web", webCheckoutAuth, initiateChapaTicket);
 
 router.get(
   "/event/:eventId",
@@ -890,6 +848,15 @@ router.get("/invitation/:ticketId", getInvitationTicket);
 router.patch("/invitation/:ticketId/status", updateInvitationTicketStatus);
 router.post("/rsvp/:ticketId/confirm", confirmRSVP);
 router.get("/public/details/:id", getPublicTicketDetails);
+
+// Ticket QR image, rendered on demand rather than stored on the document.
+//
+// Public on purpose: it sits alongside /public/details/:id and the public
+// /ticket/[ticketId] page, and follows the same capability-URL model — the
+// ticketId is an unguessable UUID and is the only thing protecting it. The
+// image carries no more than that page already shows.
+router.get("/:ticketId/qr.:ext(svg|png)", getTicketQr);
+
 router.post("/payment/cancel", cancelPaymentIntent);
 router.patch(
   "/:ticketId/check-in",
@@ -941,6 +908,7 @@ router.post("/invite", createInvitationTicket);
 router.post("/guest-ticket", createGuestTicket);
 router.post("/guest-ticket/send", sendGuestInvitation);
 router.get("/my-tickets", getUserTickets);
+router.get("/transferable", getTransferableTickets);
 router.get("/organizer/all", getOrganizerTickets);
 router.get("/details/:id", getTicketDetails);
 router.get("/:ticketId", getTicket);

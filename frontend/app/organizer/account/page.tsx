@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, User as UserIcon } from "lucide-react"
 
 type ProfileData = {
   firstName: string
@@ -14,6 +14,9 @@ type ProfileData = {
   email: string
   phoneNumber: string
 }
+
+const buildImageUrl = (path?: string | null) =>
+  path ? `${process.env.NEXT_PUBLIC_API_URL}${path}` : null
 
 type PasswordData = {
   currentPassword: string
@@ -41,6 +44,11 @@ export default function AccountPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
+  const [profilePicture, setProfilePicture] = useState<string | null>(null)
+  const [pictureFile, setPictureFile] = useState<File | null>(null)
+  const [picturePreview, setPicturePreview] = useState<string | null>(null)
+  const [isPictureLoading, setIsPictureLoading] = useState(false)
+
   useEffect(() => {
     fetchProfileData()
   }, [])
@@ -60,9 +68,44 @@ export default function AccountPage() {
           email: data.data.email || "",
           phoneNumber: data.data.phoneNumber || "",
         })
+        setProfilePicture(data.data.profilePicture || null)
       }
     } catch (error) {
       toast.error("Failed to fetch profile data")
+    }
+  }
+
+  const handlePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setPictureFile(file)
+    setPicturePreview(file ? URL.createObjectURL(file) : buildImageUrl(profilePicture))
+  }
+
+  const handlePictureUpload = async () => {
+    if (!pictureFile) return
+    try {
+      setIsPictureLoading(true)
+      const body = new FormData()
+      body.append("profilePicture", pictureFile)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/organizers/profile/picture`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body,
+      })
+      const data = await response.json()
+      if (data.success) {
+        setProfilePicture(data.data.profilePicture || null)
+        setPictureFile(null)
+        toast.success("Profile picture updated")
+      } else {
+        toast.error(data.message || "Failed to update profile picture")
+      }
+    } catch (error) {
+      toast.error("Failed to update profile picture")
+    } finally {
+      setIsPictureLoading(false)
     }
   }
 
@@ -140,6 +183,34 @@ export default function AccountPage() {
       </div>
 
       <div className="space-y-6">
+        {/* Profile Picture */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile picture</CardTitle>
+            <CardDescription>Shown next to your events and on your organizer page</CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-4">
+            {picturePreview || profilePicture ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={picturePreview || buildImageUrl(profilePicture) || ""}
+                alt="Profile"
+                className="h-20 w-20 rounded-full object-cover"
+              />
+            ) : (
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gray-100 text-gray-400">
+                <UserIcon className="h-8 w-8" />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Input type="file" accept="image/*" onChange={handlePictureChange} />
+              <Button onClick={handlePictureUpload} disabled={!pictureFile || isPictureLoading} size="sm">
+                {isPictureLoading ? "Uploading..." : "Upload photo"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Personal Information */}
         <Card>
           <CardHeader>

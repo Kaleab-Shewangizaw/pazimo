@@ -258,7 +258,6 @@ class PaymentController {
       // Frontend expects: "COMPLETED" for success, "CANCELLED" for cancelled
       let status = payment.status;
       let ticketId = null;
-      let newUserCredentials = null;
 
       if (status === "PAID" && payment.needsManualReview) {
         // Money was captured but no ticket could be secured (its stock hold
@@ -303,31 +302,9 @@ class PaymentController {
         } else {
           console.log(`[PAYMENT-STATUS] ⚠️ Payment PAID but ticket NOT found yet`);
         }
-        
-        // 🔐 AUTO-LOGIN: Always return credentials if ticket has user
-        // Frontend will decide whether to use them based on current auth state
-        console.log(`[PAYMENT-STATUS] ticket exists: ${!!ticket}`);
-        console.log(`[PAYMENT-STATUS] ticket.user: ${ticket?.user}`);
-        
-        if (ticket && ticket.user) {
-          const ticketUser = await User.findById(ticket.user).select('email phoneNumber');
-          if (ticketUser) {
-            newUserCredentials = {
-              email: ticketUser.email,
-              password: ticketUser.phoneNumber, // Phone is always password
-            };
-            console.log(`[PAYMENT-STATUS] ✅ Returning credentials for auto-login`);
-            console.log(`[PAYMENT-STATUS] Email: ${ticketUser.email}, Phone: ${ticketUser.phoneNumber}`);
-          } else {
-            console.log(`[PAYMENT-STATUS] ⚠️ Could not find user ${ticket.user}`);
-          }
-        } else {
-          console.log(`[PAYMENT-STATUS] ℹ️ No ticket or user found`);
-        }
       }
 
       console.log(`[PAYMENT-STATUS] Returning status: ${status}${ticketId ? `, ticketId: ${ticketId}` : ''}`);
-      console.log(`[PAYMENT-STATUS] newUserCredentials:`, newUserCredentials ? `email: ${newUserCredentials.email}, password: SET` : 'null');
       console.log(`[PAYMENT-STATUS] ============================================\n`);
 
       return res.status(StatusCodes.OK).json({
@@ -335,7 +312,6 @@ class PaymentController {
         status: status,
         transactionId: payment.transactionId,
         ticketId: ticketId,
-        newUserCredentials: newUserCredentials,
       });
     } catch (error) {
       console.error("[PAYMENT-STATUS] ❌ Error:", error);

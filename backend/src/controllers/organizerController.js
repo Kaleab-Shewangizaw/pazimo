@@ -1,13 +1,37 @@
 const User = require("../models/User");
 const OrganizerRegistration = require("../models/OrganizerRegistration");
 const Ticket = require("../models/Ticket");
-const Withdrawal = require("../models/Withdrawal");
 const mongoose = require("mongoose");
 const Event = require("../models/Event");
+const Withdrawal = require("../models/Withdrawal");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const fs = require("fs");
+const path = require("path");
+const {
+  getOrganizerEventIds,
+  revenueFieldsOverArray,
+} = require("../utils/ticketRevenueQuery");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
+const { getOrganizerLoanFinance } = require("../services/loanRepaymentService");
+
+const UPLOADS_DIR = path.join(__dirname, "../../uploads");
+
+// Best-effort cleanup of a replaced/deleted local upload, mirroring
+// beverageController's removeUploadedImage. Never throws: a leftover file is
+// untidy, a failed request because of one is worse.
+const removeUploadedFile = (filePath) => {
+  if (!filePath || typeof filePath !== "string") return;
+  const filename = path.basename(filePath);
+  if (!filename || filename === "." || filename === "..") return;
+
+  fs.unlink(path.join(UPLOADS_DIR, filename), (error) => {
+    if (error && error.code !== "ENOENT") {
+      console.error("Failed to remove profile picture:", error.message);
+    }
+  });
+};
 
 // Sign up organizer
 exports.signUp = async (req, res) => {
@@ -231,9 +255,16 @@ exports.getProfile = async (req, res) => {
       });
     }
 
+    // organization lives on OrganizerRegistration (the sign-up application),
+    // not on User — join it in here so the profile screen has a single flat
+    // shape to read from, same as updateProfile below.
+    const registration = await OrganizerRegistration.findOne({
+      userId: user._id,
+    }).select("organization");
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: { ...user.toObject(), organization: registration?.organization ?? null },
     });
   } catch (error) {
     res.status(500).json({
@@ -246,7 +277,14 @@ exports.getProfile = async (req, res) => {
 // Update organizer profile
 exports.updateProfile = async (req, res) => {
   try {
-    const { firstName, lastName, email, phoneNumber } = req.body;
+    const { firstName, lastName, email, phoneNumber, organization } = req.body;
+
+    if (organization !== undefined && !organization.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Organization name is required",
+      });
+    }
 
     if (!req.user || !req.user.userId) {
       return res.status(401).json({
@@ -257,8 +295,21 @@ exports.updateProfile = async (req, res) => {
 
     const userId = req.user.userId;
 
-    // Check if email is already used by another user
-    if (email) {
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Global uniqueness — one phone number belongs to exactly one account,
+    // full stop, same as email. No role-based carve-out: a phone number
+    // already used by any other account (any role) is rejected. Only
+    // checked when the value is actually changing, so saving your own
+    // unchanged email/phone never trips a false "already registered" —
+    // that was the real bug, not the uniqueness rule itself.
+    if (email && email !== currentUser.email) {
       const existingEmail = await User.findOne({
         email,
         _id: { $ne: userId },
@@ -271,8 +322,7 @@ exports.updateProfile = async (req, res) => {
       }
     }
 
-    // Check if phone number is already used by another user
-    if (phoneNumber) {
+    if (phoneNumber && phoneNumber !== currentUser.phoneNumber) {
       const existingPhone = await User.findOne({
         phoneNumber,
         _id: { $ne: userId },
@@ -304,14 +354,78 @@ exports.updateProfile = async (req, res) => {
       });
     }
 
+    // organization lives on the sign-up OrganizerRegistration, not User —
+    // update it there when present, otherwise just read back the current
+    // value so the response shape always matches getProfile's.
+    const registration = organization !== undefined
+      ? await OrganizerRegistration.findOneAndUpdate(
+          { userId },
+          { organization: organization.trim() },
+          { new: true },
+        ).select("organization")
+      : await OrganizerRegistration.findOne({ userId }).select("organization");
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: { ...user.toObject(), organization: registration?.organization ?? null },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+// Update organizer profile picture
+exports.updateProfilePicture = async (req, res) => {
+  try {
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({
+        success: false,
+        message: "User not authenticated",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No image uploaded",
+      });
+    }
+
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      removeUploadedFile(`/uploads/${req.file.filename}`);
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const previousImage = user.profilePicture;
+    user.profilePicture = `/uploads/${req.file.filename}`;
+    await user.save();
+
+    if (previousImage && previousImage !== user.profilePicture) {
+      removeUploadedFile(previousImage);
+    }
+
+    const sanitized = await User.findById(user._id).select("-password");
+    const registration = await OrganizerRegistration.findOne({
+      userId: user._id,
+    }).select("organization");
+    res.status(200).json({
+      success: true,
+      data: { ...sanitized.toObject(), organization: registration?.organization ?? null },
+    });
+  } catch (error) {
+    if (req.file) removeUploadedFile(`/uploads/${req.file.filename}`);
+    console.error("Error updating profile picture:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to update profile picture",
     });
   }
 };
@@ -500,21 +614,23 @@ exports.getTopCustomers = async (req, res) => {
       });
     }
 
+    // Resolve the organizer's events first so the ticket scan is bounded.
+    //
+    // This pipeline used to join every ticket in the collection to its event,
+    // $unwind it, and only then filter on eventDetails.organizer — an unindexed
+    // filter after a join, so it walked the whole collection every time the
+    // organizer dashboard loaded. Matching on `event: { $in: [...] }` uses the
+    // ticket indexes that lead with `event`.
+    const organizerEventIds = await getOrganizerEventIds(organizerId);
+    if (organizerEventIds.length === 0) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
     const topCustomers = await Ticket.aggregate([
-      // 1. Lookup events to filter by organizer
-      {
-        $lookup: {
-          from: "events",
-          localField: "event",
-          foreignField: "_id",
-          as: "eventDetails",
-        },
-      },
-      { $unwind: "$eventDetails" },
-      // 2. Filter tickets for this organizer's events and ensure they are active/used (excluding invitation tickets)
+      // 1. Only this organizer's tickets, active/used, excluding invitations
       {
         $match: {
-          "eventDetails.organizer": new mongoose.Types.ObjectId(organizerId),
+          event: { $in: organizerEventIds },
           status: { $in: ["active", "used", "confirmed"] },
           isInvitation: { $ne: true },
         },
@@ -700,8 +816,10 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $addFields: {
           revenue: { $sum: "$paidTickets.price" },
-          organizerRevenue: { $multiply: [{ $sum: "$paidTickets.price" }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: "$paidTickets.price" }, 0.03] },
+          // Split per ticket at the rates it was sold under; a flat 0.97/0.03
+          // is wrong for any event off the default and for any event whose VAT
+          // Pazimo covers.
+          ...revenueFieldsOverArray("$paidTickets"),
           category: {
             _id: "$categoryData._id",
             name: "$categoryData.name",
@@ -792,7 +910,22 @@ exports.getOrganizerDashboard = async (req, res) => {
       pendingWithdrawals: 0,
     };
 
-    const availableBalance = organizerRevenue - withdrawalStats.totalWithdrawn - withdrawalStats.pendingWithdrawals;
+    // Ticket revenue and any borrowed Pazimo Capital principal are one pool
+    // (see financeService.calculateOrganizerBalance, the withdrawal gate's
+    // own formula) — an advance really does raise what's withdrawable, and
+    // the automatic 60%-of-ticket-sales repayment really does lower it. This
+    // endpoint was missing both terms entirely, so an organizer with a loan
+    // saw a higher balance on their own dashboard than they could actually
+    // withdraw (the withdrawal gate itself was never wrong — only this
+    // display was). Found 2026-09-17 while confirming which organizer-facing
+    // numbers this session's fixes actually touch.
+    const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
+    const availableBalance =
+      organizerRevenue +
+      loanFinance.principalCredited -
+      loanFinance.totalRepaidFromTickets -
+      withdrawalStats.totalWithdrawn -
+      withdrawalStats.pendingWithdrawals;
 
     res.status(200).json({
       success: true,
@@ -806,6 +939,8 @@ exports.getOrganizerDashboard = async (req, res) => {
           pazimoCommission,
           totalWithdrawn: withdrawalStats.totalWithdrawn,
           pendingWithdrawals: withdrawalStats.pendingWithdrawals,
+          capitalPrincipalCredited: loanFinance.principalCredited,
+          capitalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
           availableBalance,
         },
         stats: {
@@ -957,8 +1092,10 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $addFields: {
           revenue: { $sum: "$paidTickets.price" },
-          organizerRevenue: { $multiply: [{ $sum: "$paidTickets.price" }, 0.97] },
-          pazimoCommission: { $multiply: [{ $sum: "$paidTickets.price" }, 0.03] },
+          // Split per ticket at the rates it was sold under; a flat 0.97/0.03
+          // is wrong for any event off the default and for any event whose VAT
+          // Pazimo covers.
+          ...revenueFieldsOverArray("$paidTickets"),
           category: {
             _id: "$categoryData._id",
             name: "$categoryData.name",
@@ -1049,7 +1186,22 @@ exports.getOrganizerDashboard = async (req, res) => {
       pendingWithdrawals: 0,
     };
 
-    const availableBalance = organizerRevenue - withdrawalStats.totalWithdrawn - withdrawalStats.pendingWithdrawals;
+    // Ticket revenue and any borrowed Pazimo Capital principal are one pool
+    // (see financeService.calculateOrganizerBalance, the withdrawal gate's
+    // own formula) — an advance really does raise what's withdrawable, and
+    // the automatic 60%-of-ticket-sales repayment really does lower it. This
+    // endpoint was missing both terms entirely, so an organizer with a loan
+    // saw a higher balance on their own dashboard than they could actually
+    // withdraw (the withdrawal gate itself was never wrong — only this
+    // display was). Found 2026-09-17 while confirming which organizer-facing
+    // numbers this session's fixes actually touch.
+    const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
+    const availableBalance =
+      organizerRevenue +
+      loanFinance.principalCredited -
+      loanFinance.totalRepaidFromTickets -
+      withdrawalStats.totalWithdrawn -
+      withdrawalStats.pendingWithdrawals;
 
     res.status(200).json({
       success: true,
@@ -1063,6 +1215,8 @@ exports.getOrganizerDashboard = async (req, res) => {
           pazimoCommission,
           totalWithdrawn: withdrawalStats.totalWithdrawn,
           pendingWithdrawals: withdrawalStats.pendingWithdrawals,
+          capitalPrincipalCredited: loanFinance.principalCredited,
+          capitalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
           availableBalance,
         },
         stats: {

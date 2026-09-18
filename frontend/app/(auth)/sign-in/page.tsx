@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import Image from "next/image";
+import { accountHomeFor, hasOwnDashboard } from "@/lib/account-home";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL + "/api";
 const RESEND_COOLDOWN_SECONDS = 60;
@@ -40,14 +41,14 @@ function SignInContent() {
   // tracking them separately.
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  // Forgot-password — a separate step, not the OTP second-factor above:
-  // these codes come from /auth/forgot-password, /auth/verify-reset-code
-  // and /auth/reset-password, and can never be used to sign in (see
-  // authController.js), only to set a new password. Three real steps: enter
-  // email/phone -> enter+verify the code -> choose a new password.
-  // forgotCode stays in state across the last two steps rather than being
-  // asked for twice — it's already confirmed correct by the time the
-  // change-password screen shows, so the final submit just rechecks the
+  // Forgot-password (added 2026-09-03) — a separate step, not the OTP
+  // second-factor above: these codes come from /auth/forgot-password,
+  // /auth/verify-reset-code and /auth/reset-password, and can never be used
+  // to sign in (see authController.js), only to set a new password. Three
+  // real steps: enter email/phone -> enter+verify the code -> choose a new
+  // password. forgotCode stays in state across the last two steps rather
+  // than being asked for twice — it's already confirmed correct by the time
+  // the change-password screen shows, so the final submit just rechecks the
   // same code silently.
   const [forgotStep, setForgotStep] = useState<null | "request" | "verify" | "reset">(null);
   const [forgotIdentifier, setForgotIdentifier] = useState("");
@@ -100,8 +101,14 @@ function SignInContent() {
 
     const nextUrl = searchParams.get("next");
 
-    if (currentUser?.role === "organizer") {
-      router.push("/organizer");
+    // No admin branch here on purpose: admins are turned away above and sent
+    // to the admin login, so a redirect for them would be unreachable.
+    //
+    // A seller goes to their own dashboard and `next` is ignored: a cinema or
+    // venue owner signing in belongs on their dashboard, not on whichever
+    // public page they happened to click first. Only customers follow `next`.
+    if (hasOwnDashboard(currentUser)) {
+      router.push(accountHomeFor(currentUser));
     } else if (nextUrl) {
       try {
         const url = new URL(nextUrl, window.location.origin);
@@ -130,12 +137,12 @@ function SignInContent() {
     try {
       await login({ email, password });
 
-      const pending = useAuthStore.getState().pendingOtp;
-      if (pending) {
+      const pendingOtp = useAuthStore.getState().pendingOtp;
+      if (pendingOtp) {
         setCode("");
         setOtpStep(true);
         setResendCooldown(RESEND_COOLDOWN_SECONDS);
-        toast.success(`We sent a verification code to ${pending.maskedDestination ?? "your device"}`);
+        toast.success(`We sent a verification code to ${pendingOtp.maskedDestination ?? "your device"}`);
         return;
       }
 
@@ -149,8 +156,8 @@ function SignInContent() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const pending = useAuthStore.getState().pendingOtp;
-    if (!pending) {
+    const pendingOtp = useAuthStore.getState().pendingOtp;
+    if (!pendingOtp) {
       // Shouldn't happen (the OTP form only renders while this is set), but
       // don't leave the user stuck on a form that can't succeed.
       setOtpStep(false);
@@ -162,10 +169,10 @@ function SignInContent() {
       const res = await fetch(`${API_URL}/auth/organizer/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // pending.email is the email the backend just confirmed the
+        // pendingOtp.email is the email the backend just confirmed the
         // password against — not the raw form input, which could differ in
         // case/whitespace from what's actually on the account.
-        body: JSON.stringify({ email: pending.email, code }),
+        body: JSON.stringify({ email: pendingOtp.email, code }),
       });
       const data = await res.json();
 
@@ -192,15 +199,15 @@ function SignInContent() {
   // mid-flow without re-entering the password — same account, same pending
   // login, just a different channel for this one code.
   const handleResendOtp = async (channelOverride?: "sms" | "email") => {
-    const pending = useAuthStore.getState().pendingOtp;
-    if (!pending) return;
-    const channel = channelOverride ?? pending.channel;
+    const pendingOtp = useAuthStore.getState().pendingOtp;
+    if (!pendingOtp) return;
+    const channel = channelOverride ?? pendingOtp.channel;
     setIsResending(true);
     try {
       const res = await fetch(`${API_URL}/auth/organizer/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: pending.email, channel }),
+        body: JSON.stringify({ email: pendingOtp.email, channel }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to resend code");
@@ -210,9 +217,9 @@ function SignInContent() {
       // the toast.
       useAuthStore.setState({
         pendingOtp: {
-          email: pending.email,
+          email: pendingOtp.email,
           channel,
-          maskedDestination: data.maskedDestination ?? pending.maskedDestination,
+          maskedDestination: data.maskedDestination ?? pendingOtp.maskedDestination,
         },
       });
       setCode("");
@@ -723,9 +730,15 @@ function SignInContent() {
                 </Button>
               </form>
 
-              <div className="text-center">
+              <div className="text-center space-y-1">
                 <p className="text-sm text-muted-foreground">
                   Don&apos;t have an account?{" "}
+                  <Link href="/create-account" className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium">
+                    Create account
+                  </Link>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Want to sell tickets?{" "}
                   <Link href="/organizer-registration" target="_blank" className="text-[#2563eb] dark:text-blue-400 hover:underline font-medium">
                     Contact sales
                   </Link>

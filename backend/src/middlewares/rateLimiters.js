@@ -163,7 +163,77 @@ const qrIssueLimiter = rateLimit({
   handler: jsonRateLimitHandler("Too many ticket generation requests. Please wait a few minutes and try again."),
 });
 
+// Guards the unauthenticated cinema checkout. Each call takes seat locks and
+// calls a payment provider, so the abuse this stops is not load but denial of
+// sale: a script starting checkouts it never pays for could hold every seat in
+// a sold-out screening. Tighter than a read limit for that reason, and generous
+// enough that a family retrying a failed payment is never caught.
+const cinemaCheckoutLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 12, // checkout attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler(
+    "Too many booking attempts from this network. Please wait a few minutes and try again."
+  ),
+});
+
+// Recipient search sits behind auth but still lets a caller page through the
+// user directory by phone/name/email, so it gets its own (generous) budget
+// rather than sharing one with the write endpoints below.
+const ticketShareSearchLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 120, // searches per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many searches. Please slow down and try again shortly."),
+});
+
+// Guards ticket-share create/accept/decline/cancel — authenticated, but a
+// stolen token or a scripted mistake should still only be able to spam a
+// bounded number of transfers per window.
+const ticketShareWriteLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 30, // share actions per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many share requests. Please wait a few minutes and try again."),
+});
+
+// Guards sending a chat message — a much higher-cadence action than a share
+// (real typing, not a deliberate multi-step transfer), so the window is
+// short and the ceiling generous rather than mirroring ticketShareWriteLimiter's.
+const messageWriteLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 40, // messages per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("You're sending messages too fast. Please slow down."),
+});
+
+// Guards a signed-in customer changing their own password against brute-force
+// guessing of the current password, same shape/reasoning as loginLimiter.
+const updatePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 8, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: jsonRateLimitHandler("Too many attempts. Please wait a few minutes and try again."),
+});
+
+// Account deletion is permanent and irreversible — tighter than a login
+// limiter, since a legitimate user has no reason to hit this often.
+const deleteAccountLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // attempts per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: jsonRateLimitHandler("Too many attempts. Please wait a while and try again."),
+});
+
 module.exports = {
+  cinemaCheckoutLimiter,
   adminWriteLimiter,
   qrIssueLimiter,
   rsvpSubmissionLimiter,
@@ -178,4 +248,9 @@ module.exports = {
   passwordResetVerifyLimiter,
   organizerSignUpLimiter,
   unifiedAuthLimiter,
+  ticketShareSearchLimiter,
+  ticketShareWriteLimiter,
+  messageWriteLimiter,
+  updatePasswordLimiter,
+  deleteAccountLimiter,
 };

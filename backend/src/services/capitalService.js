@@ -3,23 +3,13 @@ const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Loan = require("../models/Loan");
 const OrganizerCapitalProfile = require("../models/OrganizerCapitalProfile");
+const {
+  validTicketMatch,
+  getOrganizerEventIds,
+  organizerTicketMatch,
+} = require("../utils/ticketRevenueQuery");
 
 const BORROW_RATE = 0.3; // 30% of the trailing revenue basis
-
-// Same "what counts as real revenue" filter financeService.calculateOrganizerBalance
-// uses, so this number never quietly drifts from the balance/withdrawal figures
-// shown elsewhere in the admin console.
-const validTicketMatch = (currency) => ({
-  ...(currency === "USD"
-    ? { currency: "USD" }
-    : { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }),
-  price: { $gt: 0 },
-  status: { $nin: ["cancelled", "failed", "expired"] },
-  $or: [
-    { paymentStatus: { $exists: false } },
-    { paymentStatus: { $nin: ["cancelled", "failed"] } },
-  ],
-});
 
 // Events that have actually happened (not draft, not cancelled, end date in
 // the past) — Event.status never automatically transitions to "completed" in
@@ -108,24 +98,15 @@ const calculateOrganizerCapitalMetrics = async (
     ? profile.borrowingLimitOverride
     : calculatedBorrowingLimit;
 
-  const totalRevenueRows = await Ticket.aggregate([
-    {
-      $lookup: {
-        from: "events",
-        localField: "event",
-        foreignField: "_id",
-        as: "eventData",
-      },
-    },
-    { $unwind: "$eventData" },
-    {
-      $match: {
-        "eventData.organizer": new mongoose.Types.ObjectId(organizerId),
-        ...validTicketMatch(normalizedCurrency),
-      },
-    },
-    { $group: { _id: null, totalRevenue: { $sum: "$price" } } },
-  ]);
+  // Same fix as financeService: scope by event id rather than joining every
+  // ticket to its event and filtering afterwards.
+  const allEventIds = await getOrganizerEventIds(organizerId);
+  const totalRevenueRows = allEventIds.length
+    ? await Ticket.aggregate([
+        { $match: organizerTicketMatch(allEventIds, normalizedCurrency) },
+        { $group: { _id: null, totalRevenue: { $sum: "$price" } } },
+      ])
+    : [];
 
   return {
     currency: normalizedCurrency,

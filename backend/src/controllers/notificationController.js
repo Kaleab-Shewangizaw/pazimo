@@ -5,16 +5,16 @@ exports.getUserNotifications = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // `protect` only proves the caller is *someone*, not that they own this
-    // notification feed — without this check any logged-in account (even a
-    // freshly self-registered one) could read any other user's notifications
-    // by id. Found 2026-09-03 during the incident review; not part of the
-    // 2026-08-20 write-surface fix, which didn't cover this route.
-    if (req.user.role !== "admin" && req.user._id.toString() !== userId) {
-      return res.status(403).json({
-        success: false,
-        message: "You do not have permission to view these notifications",
-      });
+    // Had no ownership check — any authenticated user could read any other
+    // user's notification feed by guessing/observing their userId. Confirmed
+    // 2026-09-04 during final pre-PR review.
+    if (
+      !req.user ||
+      (String(req.user._id) !== String(userId) && req.user.role !== "admin")
+    ) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Not authorized" });
     }
 
     const notifications = await Notification.find({ userId }).sort({

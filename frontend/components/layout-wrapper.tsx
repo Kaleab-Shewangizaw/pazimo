@@ -22,12 +22,50 @@ export default function LayoutWrapper({
   const isAdminRoute = pathname?.startsWith("/admin");
   const isSignIn = pathname?.startsWith("/sign-in");
   const isOrganizerRoute = pathname?.startsWith("/organizer");
+  const isVenueRoute = pathname?.startsWith("/venue");
+  // The /cinema prefix is shared by two different audiences:
+  //   /cinema                    -> the cinema OWNER dashboard
+  //   /cinema/programme, ...     -> dashboard sections
+  //   /cinema/{slug}-{shortId}   -> a PUBLIC film page
+  //   /cinemas                   -> the public browse page
+  //
+  // So this cannot be a prefix test. The dashboard sections are enumerated, and
+  // anything else under /cinema/ is a film page that must keep the site header
+  // and footer. Keep this list in step with app/cinema/(dashboard)/.
+  const CINEMA_DASHBOARD_SECTIONS = [
+    "programme",
+    "schedule",
+    "tickets",
+    "concessions",
+    "money",
+    "account",
+    "help",
+    "scanner",
+    "cashiers",
+  ];
+  const cinemaSegment = pathname?.startsWith("/cinema/")
+    ? pathname.split("/")[2]
+    : undefined;
+  const isCinemaRoute =
+    pathname === "/cinema" ||
+    (cinemaSegment !== undefined &&
+      CINEMA_DASHBOARD_SECTIONS.includes(cinemaSegment));
+  // A PUBLIC film page: under /cinema/ but not one of the dashboard sections.
+  // It keeps the site header, and drops the footer for the same reason the
+  // event detail page does — it carries its own persistent booking button at
+  // the bottom of the screen, and the footer's floating pill lands directly on
+  // top of it on a phone.
+  const isPublicMoviePage =
+    cinemaSegment !== undefined &&
+    !CINEMA_DASHBOARD_SECTIONS.includes(cinemaSegment);
   const isEventDetail = pathname?.startsWith("/event_detail") || pathname?.startsWith("/events/");
   const isRsvpForm = pathname?.startsWith("/rsvp-form/");
   const isTicketPage = pathname?.startsWith("/ticket/");
 
-  // Hide Header and Footer for admin and organizer routes, as they have their own layouts/headers/footers
-  const hideGlobalHeaderFooter = isAdminRoute || isOrganizerRoute;
+  // Hide Header and Footer for admin, organizer, venue and cinema routes, as
+  // they have their own layouts/headers/footers
+  const hideGlobalHeaderFooter =
+    isAdminRoute || isOrganizerRoute || isVenueRoute || isCinemaRoute;
 
   // Show a minimal layout during SSR to prevent hydration issues
   if (!mounted) {
@@ -50,9 +88,11 @@ export default function LayoutWrapper({
     <>
       {!hideGlobalHeaderFooter && !isSignIn && <Header />}
       <main className="flex-1">{children}</main>
-      {!hideGlobalHeaderFooter && !isSignIn && !isEventDetail && !isRsvpForm && (
-        <Footer />
-      )}
+      {!hideGlobalHeaderFooter &&
+        !isSignIn &&
+        !isEventDetail &&
+        !isRsvpForm &&
+        !isPublicMoviePage && <Footer />}
     </>
   );
 }

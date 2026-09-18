@@ -1,0 +1,395 @@
+const mongoose = require("mongoose");
+const CinemaHall = require("../models/CinemaHall");
+const CinemaSeatHold = require("../models/CinemaSeatHold");
+const CinemaShowtime = require("../models/CinemaShowtime");
+const CinemaTicket = require("../models/CinemaTicket");
+const { BadRequestError, NotFoundError } = require("../errors");
+
+// Seat selection: who may sit where, and who got there first.
+//
+// THE ONE HARD PROBLEM
+//
+// Two people click K7 at the same instant, and a payment then takes minutes to
+// settle. Both facts have to hold at once: the seat must be locked the moment
+// it is chosen, and the lock must not last for ever if the buyer walks away.
+//
+// The lock is a unique index on (showtime, seatKey) in CinemaSeatHold, so a
+// claim is an INSERT and MongoDB's uniqueness guarantee is the mutual
+// exclusion. There is no read-then-write and therefore no window between them.
+// The release is a TTL index on expiresAt, so an abandoned checkout frees its
+// seats with no sweeper to run — or to forget to run.
+//
+// WHY NOT REUSE THE TIER COUNTER
+//
+// cinemaTicketService.claimSeats increments `ticketTypes.$.sold`, which is
+// correct for a hall that sells by capacity: it answers "is there a seat left"
+// without caring which. It cannot answer "is K7 left". Assigned seating needs
+// both — the counter still guards the tier's total, and the hold guards the
+// specific chair — so the checkout does the two in order and this file owns the
+// second.
+
+// How long a seat stays held while a customer pays.
+//
+// Long enough for a real payment: a Telebirr or Chapa redirect, a customer
+// finding their phone, a slow network. Short enough that an abandoned basket
+// does not sit on the best seats in the house through a whole screening.
+const HOLD_MINUTES = 10;
+
+/** The identity every layer agrees on. One definition, so none can drift. */
+const seatKeyOf = (row, number) => `${row}-${number}`;
+
+/**
+ * The hall's map plus what is currently taken, ready for a picker to render.
+ *
+ * Returns every seat including gaps and blocked ones: a picker has to draw the
+ * aisle to be readable, and a house seat has to appear as unavailable rather
+ * than as a hole in the row.
+ */
+const getSeatMapForShowtime = async (showtimeId) => {
+  if (!mongoose.Types.ObjectId.isValid(showtimeId)) {
+    throw new NotFoundError("Showtime not found");
+  }
+
+  const showtime = await CinemaShowtime.findById(showtimeId)
+    .populate("hall")
+    .lean({ virtuals: false });
+  if (!showtime) throw new NotFoundError("Showtime not found");
+
+  const hall = showtime.hall;
+  if (!hall?.hasAssignedSeating) {
+    // Not an error: this screening sells by capacity, and the caller needs to
+    // know that rather than receive an empty map it would render as a sold-out
+    // room.
+    return { assignedSeating: false, showtimeId: String(showtimeId) };
+  }
+
+  // Only rows that are still live matter. An expired hold may not have been
+  // reaped yet — the TTL monitor runs about once a minute — so expiry is
+  // checked here too rather than trusted to have already happened.
+  const now = new Date();
+  const taken = await CinemaSeatHold.find({
+    showtime: showtimeId,
+    $or: [{ status: "sold" }, { expiresAt: { $gt: now } }],
+  })
+    .select("seatKey status")
+    .lean();
+
+  const takenByKey = new Map(taken.map((t) => [t.seatKey, t.status]));
+
+  // Price per category, from the showtime's tiers. This is what makes the
+  // picker able to show "VIP · 400 ETB" on the seat itself.
+  const priceByCategory = new Map();
+  for (const tier of showtime.ticketTypes || []) {
+    if (tier.seatCategoryKey) {
+      priceByCategory.set(tier.seatCategoryKey, {
+        ticketTypeId: String(tier._id),
+        name: tier.name,
+        price: tier.price,
+        isAvailable: tier.isAvailable,
+      });
+    }
+  }
+
+  const categories = (hall.seatCategories || []).map((c) => ({
+    key: c.key,
+    label: c.label,
+    color: c.color,
+    ...(priceByCategory.get(c.key) || {}),
+  }));
+
+  const rows = (hall.seatMap?.rows || []).map((row) => ({
+    label: row.label,
+    curve: row.curve || 0,
+    offset: row.offset || 0,
+    seats: (row.seats || []).map((seat) => {
+      const seatKey = seatKeyOf(row.label, seat.number);
+      const takenStatus = takenByKey.get(seatKey);
+      return {
+        number: seat.number,
+        seatKey,
+        categoryKey: seat.categoryKey,
+        exists: seat.exists,
+        // One field the picker can act on, rather than three it has to combine
+        // and could combine differently from the server.
+        status: !seat.exists
+          ? "gap"
+          : seat.blocked
+            ? "blocked"
+            : takenStatus === "sold"
+              ? "sold"
+              : takenStatus === "held"
+                ? "held"
+                : "available",
+      };
+    }),
+  }));
+
+  return {
+    assignedSeating: true,
+    showtimeId: String(showtimeId),
+    currency: showtime.currency || "ETB",
+    holdMinutes: HOLD_MINUTES,
+    categories,
+    rows,
+    // True when the hall has a seat map but this screening's tiers do not price
+    // its categories — the state left behind by adding a seat map to a hall
+    // that already had screenings booked into it. The picker can then say so
+    // instead of rendering a room where every seat refuses to be added.
+    needsRepricing: priceByCategory.size === 0,
+  };
+};
+
+/**
+ * Take the named seats, or take none of them.
+ *
+ * All-or-nothing on purpose: a party of four told "you got three of the four
+ * you picked" is a worse outcome than being told to pick again, and leaves the
+ * caller to unwind a partial claim it did not ask for. Anything already
+ * inserted before a clash is rolled back here.
+ *
+ * `reference` ties the group together so payment success or failure can act on
+ * all of them at once.
+ */
+const holdSeats = async ({ showtimeId, seatKeys, reference, holdMinutes = HOLD_MINUTES }) => {
+  if (!Array.isArray(seatKeys) || seatKeys.length === 0) {
+    throw new BadRequestError("Pick at least one seat");
+  }
+
+  const unique = [...new Set(seatKeys.map((k) => String(k).trim()))];
+  if (unique.length !== seatKeys.length) {
+    throw new BadRequestError("The same seat was selected twice");
+  }
+
+  const showtime = await CinemaShowtime.findById(showtimeId).populate("hall");
+  if (!showtime) throw new NotFoundError("Showtime not found");
+  if (showtime.status !== "scheduled") {
+    throw new BadRequestError("That screening is not on sale");
+  }
+  const hall = showtime.hall;
+  if (!hall?.hasAssignedSeating) {
+    throw new BadRequestError("That screening does not use assigned seating");
+  }
+
+  // Resolved from the hall's own map, never from the request: the caller says
+  // WHICH seat, and the server says what that seat is and what category it is
+  // in — the same rule pricing follows.
+  const byKey = new Map(hall.sellableSeats().map((s) => [s.seatKey, s]));
+  const seats = unique.map((key) => {
+    const seat = byKey.get(key);
+    if (!seat) {
+      // Covers unknown, gap and blocked alike. Deliberately one message: a
+      // caller probing keys should not learn the room's shape from the errors.
+      throw new BadRequestError(`Seat ${key} cannot be booked`);
+    }
+    return seat;
+  });
+
+  const expiresAt = new Date(Date.now() + holdMinutes * 60_000);
+  const held = [];
+
+  try {
+    for (const seat of seats) {
+      // One insert per seat rather than insertMany: insertMany with ordered
+      // stops at the first failure and reports it, but the successful ones are
+      // already written and would need the same unwind — and unordered would
+      // scatter partial claims across the row. This way the failure point is
+      // unambiguous.
+      const doc = await CinemaSeatHold.create({
+        showtime: showtime._id,
+        cinema: showtime.cinema,
+        seatKey: seat.seatKey,
+        row: seat.row,
+        number: seat.number,
+        categoryKey: seat.categoryKey,
+        status: "held",
+        expiresAt,
+        reference,
+      });
+      held.push(doc);
+    }
+  } catch (error) {
+    // Give back anything this call managed to take before the clash.
+    await CinemaSeatHold.deleteMany({
+      _id: { $in: held.map((h) => h._id) },
+    }).catch(() => {});
+
+    if (error?.code === 11000) {
+      throw new BadRequestError(
+        "Someone just took one of those seats. Please pick again."
+      );
+    }
+    throw error;
+  }
+
+  return {
+    reference,
+    expiresAt,
+    seats: held.map((h) => ({
+      seatKey: h.seatKey,
+      row: h.row,
+      number: h.number,
+      categoryKey: h.categoryKey,
+    })),
+  };
+};
+
+/**
+ * Hand the seats back.
+ *
+ * Only ever deletes rows that are still `held`. A sold seat is not this
+ * function's to release — that is a refund, which has to return money as well
+ * as a chair, and deleting the row here would silently unbook a paid customer.
+ */
+const releaseHolds = async (reference) => {
+  const result = await CinemaSeatHold.deleteMany({ reference, status: "held" });
+  return result.deletedCount;
+};
+
+/**
+ * Turn a held seat into a sold one.
+ *
+ * Clearing expiresAt is what makes it permanent: the TTL index ignores null, so
+ * the row stops being a countdown and becomes the record that this seat is
+ * gone. Matching on status "held" makes it idempotent — a webhook that fires
+ * twice confirms once and the second call matches nothing.
+ */
+const confirmHold = async ({ reference, seatKey, ticketId }) => {
+  const confirmed = await CinemaSeatHold.findOneAndUpdate(
+    { reference, seatKey, status: "held" },
+    { $set: { status: "sold", expiresAt: null, ticket: ticketId } },
+    { new: true }
+  );
+  return confirmed;
+};
+
+/**
+ * Point a confirmed hold at the ticket it became.
+ *
+ * Separate from confirmHold because the ticket does not exist yet when the hold
+ * is confirmed — the seat has to be locked BEFORE the ticket is written, or a
+ * failure between the two would leave a ticket for a chair nothing holds.
+ */
+const attachTicketToHold = async ({ holdId, ticketId }) => {
+  await CinemaSeatHold.updateOne({ _id: holdId }, { $set: { ticket: ticketId } });
+};
+
+/** Release a sold seat on refund, so it can be sold again. */
+const releaseSoldSeat = async ({ showtimeId, seatKey }) => {
+  await CinemaSeatHold.deleteOne({
+    showtime: showtimeId,
+    seatKey,
+    status: "sold",
+  });
+};
+
+/**
+ * The seat map a staff member (cinema or admin) needs for an audit view: the
+ * same available/held/sold/gap/blocked picker map, overlaid with WHO holds a
+ * sold seat and whether they have been admitted — plus an ownership check the
+ * public picker doesn't need, since this is staff reading one specific
+ * cinema's data rather than a customer browsing.
+ *
+ * On a general-admission hall there is no seat-by-seat identity to show, so
+ * this returns a per-tier occupancy breakdown instead: how many of each
+ * ticket type are sold and how many of those have been admitted.
+ */
+const getStaffSeatMap = async (showtimeId, cinemaId) => {
+  if (!mongoose.Types.ObjectId.isValid(showtimeId)) {
+    throw new NotFoundError("Showtime not found");
+  }
+
+  const showtime = await CinemaShowtime.findById(showtimeId)
+    .populate("hall")
+    .lean({ virtuals: false });
+  if (!showtime) throw new NotFoundError("Showtime not found");
+  // Not "forbidden": a cinema (or an admin browsing a different cinema by
+  // mistake) probing another cinema's showtime id should learn nothing more
+  // than that it doesn't exist.
+  if (String(showtime.cinema) !== String(cinemaId)) {
+    throw new NotFoundError("Showtime not found");
+  }
+
+  const activeTickets = await CinemaTicket.find({
+    showtime: showtimeId,
+    status: { $nin: ["cancelled", "refunded"] },
+  })
+    .select("ticketId ticketTypeId ticketType quantity checkedIn customerName seats")
+    .lean();
+
+  const hall = showtime.hall;
+  if (!hall?.hasAssignedSeating) {
+    const byTier = new Map();
+    for (const tier of showtime.ticketTypes || []) {
+      byTier.set(String(tier._id), {
+        ticketTypeId: String(tier._id),
+        name: tier.name,
+        allocation: tier.allocation,
+        sold: 0,
+        admitted: 0,
+      });
+    }
+    for (const ticket of activeTickets) {
+      const key = String(ticket.ticketTypeId);
+      const bucket = byTier.get(key) || {
+        ticketTypeId: key,
+        name: ticket.ticketType,
+        allocation: 0,
+        sold: 0,
+        admitted: 0,
+      };
+      bucket.sold += ticket.quantity || 1;
+      if (ticket.checkedIn) bucket.admitted += ticket.quantity || 1;
+      byTier.set(key, bucket);
+    }
+    return {
+      assignedSeating: false,
+      showtimeId: String(showtimeId),
+      tiers: [...byTier.values()],
+    };
+  }
+
+  // Who holds each sold seat, and whether they've been admitted — keyed by
+  // seatKey so it drops straight onto the base map below.
+  const seatInfo = new Map();
+  for (const ticket of activeTickets) {
+    for (const seat of ticket.seats || []) {
+      seatInfo.set(seat.seatKey, {
+        ticketId: ticket.ticketId,
+        customerName: ticket.customerName,
+        admittedAt: seat.admittedAt || null,
+      });
+    }
+  }
+
+  const base = await getSeatMapForShowtime(showtimeId);
+  const rows = (base.rows || []).map((row) => ({
+    ...row,
+    seats: row.seats.map((seat) => {
+      const info = seatInfo.get(seat.seatKey);
+      if (!info) return seat;
+      return {
+        ...seat,
+        ticketId: info.ticketId,
+        customerName: info.customerName,
+        admittedAt: info.admittedAt,
+        // Admission is only meaningful on a seat the base map already
+        // considers sold — a held (unpaid) seat has no ticket yet to admit.
+        status: info.admittedAt && seat.status === "sold" ? "admitted" : seat.status,
+      };
+    }),
+  }));
+
+  return { ...base, rows };
+};
+
+module.exports = {
+  HOLD_MINUTES,
+  seatKeyOf,
+  getSeatMapForShowtime,
+  getStaffSeatMap,
+  holdSeats,
+  releaseHolds,
+  confirmHold,
+  attachTicketToHold,
+  releaseSoldSeat,
+};
