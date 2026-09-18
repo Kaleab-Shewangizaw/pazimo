@@ -41,6 +41,7 @@ export default function LayoutWrapper({
     "account",
     "help",
     "scanner",
+    "cashiers",
   ];
   const cinemaSegment = pathname?.startsWith("/cinema/")
     ? pathname.split("/")[2]
