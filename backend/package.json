@@ -28,6 +28,7 @@
     "migrate:cinema-allowed": "node src/scripts/migrateCinemaAllowedBeverages.js",
     "check:cinema-checkout": "node src/scripts/checkCinemaCheckout.js",
     "migrate:cinema-catalog": "node src/scripts/migrateCinemaConcessionCatalog.js",
+    "strip:ticket-qr": "node src/scripts/stripStoredTicketQr.js",
     "clone:prod": "node src/scripts/cloneProductionDb.js"
   },
   "keywords": [],
