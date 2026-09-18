@@ -18,6 +18,25 @@ const { mirrorSale } = require("./ledgerDualWrite");
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// A ticket becomes scannable this many minutes before its showtime actually
+// starts — enough to seat people through the trailers, but not so early that
+// a ticket bought for tonight's 9pm show can be walked in at lunchtime.
+// Exported so cinemaTicketController's read-only lookups (getStaffTicket/
+// getStaffOrder) can show the same "too early"/"expired" verdict the door
+// itself enforces below, from one definition rather than two.
+const EARLY_ADMISSION_MINUTES = 30;
+
+const isTooEarlyForShowtime = (showtime) => {
+  if (!showtime?.startsAt) return false;
+  const admitFrom = new Date(showtime.startsAt).getTime() - EARLY_ADMISSION_MINUTES * 60 * 1000;
+  return Date.now() < admitFrom;
+};
+
+const isShowtimeExpired = (showtime) => {
+  if (!showtime?.endsAt) return false;
+  return Date.now() > new Date(showtime.endsAt).getTime();
+};
+
 /**
  * Claim seats on one tier of one screening, atomically.
  *
@@ -433,7 +452,10 @@ const refundTicket = async (ticketId, { adminId, reason } = {}) => {
  * every seat has been admitted, so it stays scannable for whoever is left.
  */
 const checkInTicket = async ({ ticketId, cinemaId, checkedInBy, seatKeys }) => {
-  const ticket = await CinemaTicket.findOne({ ticketId, cinema: cinemaId });
+  const ticket = await CinemaTicket.findOne({ ticketId, cinema: cinemaId }).populate(
+    "showtime",
+    "startsAt endsAt"
+  );
   if (!ticket) throw new NotFoundError("Ticket not found for this cinema");
 
   if (ticket.status === "refunded" || ticket.status === "cancelled") {
@@ -446,6 +468,20 @@ const checkInTicket = async ({ ticketId, cinemaId, checkedInBy, seatKeys }) => {
     throw new BadRequestError(
       `Already admitted at ${ticket.checkedAt?.toISOString() || "an earlier time"}`
     );
+  }
+  // A ticket admits to a screening, not to the building — once the movie has
+  // actually finished playing there is nothing left to admit anyone to.
+  // Checked after "already admitted" so a ticket that WAS let in before the
+  // credits rolled still reports that, correctly, rather than "expired" on a
+  // later re-scan.
+  if (isShowtimeExpired(ticket.showtime)) {
+    throw new ConflictError("This screening has already ended — the ticket has expired.");
+  }
+  // The other end of the same window — a ticket for tonight's 9pm show can't
+  // be walked in at lunchtime. EARLY_ADMISSION_MINUTES is how far ahead of
+  // the actual start doors are considered open.
+  if (isTooEarlyForShowtime(ticket.showtime)) {
+    throw new ConflictError("This ticket is too early to be scanned — doors aren't open yet.");
   }
   // Ownership is mid-transfer until the recipient accepts or the share
   // lapses — admitting it now would let whoever is holding the phone in at
@@ -535,10 +571,33 @@ const checkInTicket = async ({ ticketId, cinemaId, checkedInBy, seatKeys }) => {
 const checkInOrder = async ({ reference, cinemaId, checkedInBy, seatKeys }) => {
   if (!reference) throw new BadRequestError("An order reference is required");
 
-  const all = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId });
+  const all = await CinemaTicket.find({ paymentReference: reference, cinema: cinemaId }).populate(
+    "showtime",
+    "startsAt endsAt"
+  );
   if (!all.length) throw new NotFoundError("Order not found for this cinema");
 
   const now = new Date();
+
+  // Same screening-timing gate as checkInTicket, checked once here for the
+  // whole order (every ticket on one order shares a showtime). Only fires
+  // when it would actually change anything: an order that is already fully
+  // admitted, or blocked for some other reason, still reports that instead —
+  // it falls through to the existing diagnostics below.
+  const showtime = all[0]?.showtime;
+  const hasAdmittable = all.some(
+    (t) =>
+      !t.checkedIn &&
+      t.paymentStatus === "completed" &&
+      !["cancelled", "refunded"].includes(t.status) &&
+      !t.pendingShare
+  );
+  if (hasAdmittable && isShowtimeExpired(showtime)) {
+    throw new ConflictError("This screening has already ended — the ticket has expired.");
+  }
+  if (hasAdmittable && isTooEarlyForShowtime(showtime)) {
+    throw new ConflictError("This ticket is too early to be scanned — doors aren't open yet.");
+  }
 
   if (!Array.isArray(seatKeys) || seatKeys.length === 0) {
     const result = await CinemaTicket.updateMany(
@@ -644,4 +703,6 @@ module.exports = {
   refundTicket,
   checkInTicket,
   checkInOrder,
+  isTooEarlyForShowtime,
+  isShowtimeExpired,
 };

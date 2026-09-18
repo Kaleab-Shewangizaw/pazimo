@@ -366,6 +366,7 @@ const getStaffTicket = async (req, res) => {
     })
       .populate("movie", "title poster")
       .populate("hall", "name")
+      .populate("showtime", "startsAt endsAt")
       .lean();
     if (!ticket) throw new NotFoundError("Ticket not found for this cinema");
 
@@ -382,7 +383,16 @@ const getStaffTicket = async (req, res) => {
       );
     }
 
-    res.status(StatusCodes.OK).json({ success: true, data: ticket, outstandingConcessions });
+    // Whether the screening has already finished, or hasn't opened its doors
+    // yet — the same two gates `checkIn` enforces, surfaced here too so the
+    // scanner can show "Expired"/"Too early" on the lookup card before staff
+    // even taps Mark as used.
+    const isExpired = cinemaTicketService.isShowtimeExpired(ticket.showtime);
+    const isTooEarly = cinemaTicketService.isTooEarlyForShowtime(ticket.showtime);
+
+    res
+      .status(StatusCodes.OK)
+      .json({ success: true, data: ticket, isExpired, isTooEarly, outstandingConcessions });
   } catch (error) {
     console.error("Error reading cinema ticket for staff:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
@@ -401,6 +411,7 @@ const getStaffOrder = async (req, res) => {
     })
       .populate("movie", "title poster")
       .populate("hall", "name")
+      .populate("showtime", "startsAt endsAt")
       .lean();
     if (!tickets.length) throw new NotFoundError("Order not found for this cinema");
 
@@ -417,7 +428,14 @@ const getStaffOrder = async (req, res) => {
       );
     }
 
-    res.status(StatusCodes.OK).json({ success: true, data: tickets, outstandingConcessions });
+    // Every ticket on one order shares a showtime, so one pair of flags
+    // covers all of them.
+    const isExpired = cinemaTicketService.isShowtimeExpired(tickets[0]?.showtime);
+    const isTooEarly = cinemaTicketService.isTooEarlyForShowtime(tickets[0]?.showtime);
+
+    res
+      .status(StatusCodes.OK)
+      .json({ success: true, data: tickets, isExpired, isTooEarly, outstandingConcessions });
   } catch (error) {
     console.error("Error reading cinema order for staff:", error);
     const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
