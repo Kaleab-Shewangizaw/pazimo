@@ -713,6 +713,13 @@ export const fetchPublicConcessions = (cinemaId: string) =>
   publicGet<CinemaConcession[]>(`/api/cinemas/public/${cinemaId}/concessions`);
 
 /**
+ * The one looping clip that plays on the auditorium screen behind the seat
+ * map — platform-wide, not per-cinema, set from the admin's Screen tab.
+ */
+export const fetchScreenVideo = () =>
+  publicGet<{ video: string | null }>("/api/cinemas/public/screen-video");
+
+/**
  * What a basket would cost. Reserves nothing, so it is safe to call on every
  * change to the selection.
  */

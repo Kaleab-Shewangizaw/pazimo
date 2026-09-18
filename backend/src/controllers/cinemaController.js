@@ -38,15 +38,26 @@ const parseBoolean = (value, fallback) => {
   return fallback;
 };
 
-const removeUploadedImage = (imagePath) => {
-  if (!imagePath || typeof imagePath !== "string") return;
-  const filename = path.basename(imagePath);
+// Shared by the image and the promo video — both are just a relative
+// /uploads path on the Cinema doc.
+const removeUploadedFile = (filePath) => {
+  if (!filePath || typeof filePath !== "string") return;
+  const filename = path.basename(filePath);
   if (!filename || filename === "." || filename === "..") return;
   fs.unlink(path.join(UPLOADS_DIR, filename), (error) => {
     if (error && error.code !== "ENOENT") {
-      console.error("Failed to remove cinema image:", error.message);
+      console.error("Failed to remove cinema upload:", error.message);
     }
   });
+};
+
+// `upload.single("image")` (still used on /me) puts its file on `req.file`;
+// `upload.fields([...])` (the admin routes, which also take promoVideo) puts
+// them on `req.files[field]` instead. This reads whichever shape the route
+// that called in used.
+const getUploadedFile = (req, field) => {
+  if (req.file && req.file.fieldname === field) return req.file;
+  return req.files?.[field]?.[0];
 };
 
 // Turnaround minutes. null clears the hall's override so it inherits the
@@ -329,6 +340,9 @@ const createCinema = async (req, res) => {
       throw new BadRequestError("An account with this email already exists");
     }
 
+    const imageFile = getUploadedFile(req, "image");
+    const promoVideoFile = getUploadedFile(req, "promoVideo");
+
     // The login. role "cinema" is what every restrictTo("cinema") route gates
     // on, and what keeps this account out of the organizer money routes.
     const account = await User.create({
@@ -350,7 +364,11 @@ const createCinema = async (req, res) => {
       address: normalizeText(req.body.address),
       phoneNumber,
       email,
-      image: req.file ? `/uploads/${req.file.filename}` : null,
+      image: imageFile ? `/uploads/${imageFile.filename}` : null,
+      promoVideo: promoVideoFile ? `/uploads/${promoVideoFile.filename}` : null,
+      ...(promoVideoFile
+        ? { promoVideoSetBy: req.user.userId, promoVideoSetAt: new Date() }
+        : {}),
       isActive: parseBoolean(req.body.isActive, true),
       beverageEligibility:
         req.body.beverageEligibility === "eligible" ? "eligible" : "not_eligible",
@@ -384,7 +402,10 @@ const createCinema = async (req, res) => {
         )
       );
     }
-    if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
+    const imageFile = getUploadedFile(req, "image");
+    const promoVideoFile = getUploadedFile(req, "promoVideo");
+    if (imageFile) removeUploadedFile(`/uploads/${imageFile.filename}`);
+    if (promoVideoFile) removeUploadedFile(`/uploads/${promoVideoFile.filename}`);
     const normalized = normalizeValidationError(duplicateNameError(error));
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
@@ -419,6 +440,31 @@ const getCinema = async (req, res) => {
 };
 
 /**
+ * GET /me/context — just enough identity for a cashier's own account screen
+ * to show which cinema it's working at. GET /me is owner(+admin)-only (see
+ * cinemaSelf vs cinemaStaff in cinemaRoutes.js) and returns the full profile
+ * including commission/VAT, which a cashier must never see — this is the
+ * narrow, cashier-safe read of just the name.
+ */
+const getCashierContext = async (req, res) => {
+  try {
+    const cinema = await resolveCinema(req, req.params.cinemaId);
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: {
+        _id: cinema._id,
+        name: cinema.name,
+        beverageEligibility: cinema.beverageEligibility,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting cinema context:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * Update a cinema.
  *
  * The commission rates, VAT coverage and eligibility are admin-only fields: a
@@ -431,6 +477,9 @@ const updateCinema = async (req, res) => {
     const cinema = await resolveCinema(req, req.params.cinemaId);
     const isAdmin = req.user.role === "admin";
     const previousImage = cinema.image;
+    const previousPromoVideo = cinema.promoVideo;
+    const imageFile = getUploadedFile(req, "image");
+    const promoVideoFile = getUploadedFile(req, "promoVideo");
 
     const name = normalizeText(req.body.name);
     if (req.body.name !== undefined && !name) {
@@ -470,7 +519,7 @@ const updateCinema = async (req, res) => {
       cinema.turnaroundMinutes = turnaround;
     }
 
-    if (req.file) cinema.image = `/uploads/${req.file.filename}`;
+    if (imageFile) cinema.image = `/uploads/${imageFile.filename}`;
 
     if (isAdmin) {
       cinema.isActive = parseBoolean(req.body.isActive, cinema.isActive);
@@ -502,19 +551,32 @@ const updateCinema = async (req, res) => {
         if (notes !== undefined) cinema.eligibilityNotes = notes;
       }
 
+      // Admin-only, like the commercial terms above — see the note on
+      // Cinema.promoVideo. A cinema account sending this field has it ignored
+      // rather than rejected, same as the other admin fields in this block.
+      if (promoVideoFile) {
+        cinema.promoVideo = `/uploads/${promoVideoFile.filename}`;
+        cinema.promoVideoSetBy = req.user.userId;
+        cinema.promoVideoSetAt = new Date();
+      }
+
       cinema.updatedBy = req.user.userId;
     }
 
     await cinema.save();
 
-    // Only once the save succeeded — a failed update must not delete the image
+    // Only once the save succeeded — a failed update must not delete a file
     // the cinema is still using.
-    if (req.file && previousImage) removeUploadedImage(previousImage);
+    if (imageFile && previousImage) removeUploadedFile(previousImage);
+    if (isAdmin && promoVideoFile && previousPromoVideo) {
+      removeUploadedFile(previousPromoVideo);
+    }
 
     res.status(StatusCodes.OK).json({ success: true, data: cinema });
   } catch (error) {
     console.error("Error updating cinema:", error);
-    if (req.file) removeUploadedImage(`/uploads/${req.file.filename}`);
+    if (imageFile) removeUploadedFile(`/uploads/${imageFile.filename}`);
+    if (promoVideoFile) removeUploadedFile(`/uploads/${promoVideoFile.filename}`);
     const normalized = normalizeValidationError(duplicateNameError(error));
     const status = normalized.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
     res.status(status).json({ success: false, message: normalized.message });
@@ -917,6 +979,7 @@ module.exports = {
   listCinemas,
   createCinema,
   getCinema,
+  getCashierContext,
   updateCinema,
   updateCinemaPassword,
   setCinemaStatus,

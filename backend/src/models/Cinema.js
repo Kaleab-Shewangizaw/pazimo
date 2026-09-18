@@ -81,6 +81,23 @@ const CinemaSchema = new mongoose.Schema(
       default: null,
     },
 
+    // A short branding/ambient video for this cinema's own page — distinct
+    // from CinemaMovie.trailerUrl, which is per-film rather than per-venue.
+    // Relative path under /uploads, same convention as `image`. Admin-only:
+    // the cinema account itself never sets this, only swaps it out on the
+    // admin's own schedule.
+    promoVideo: {
+      type: String,
+      default: null,
+    },
+    promoVideoSetBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+    },
+    promoVideoSetAt: {
+      type: Date,
+    },
+
     // Suspending a cinema stops it selling without deleting it, which has to
     // survive for the sales already recorded against it.
     isActive: {

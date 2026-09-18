@@ -20,6 +20,7 @@ import AdminConcessionCatalogue from "@/components/cinema/admin-concession-catal
 import AdminCinemaFinancePanel from "@/components/cinema/admin-cinema-finance-panel";
 import AdminCinemaTicketsPanel from "@/components/cinema/admin-cinema-tickets-panel";
 import AdminCinemaHalls from "@/components/cinema/admin-cinema-halls";
+import AdminScreenVideoSection from "@/components/cinema/admin-screen-video-section";
 import { CinemaCashierManager } from "@/components/cinema/cinema-cashier-manager";
 import {
   AlertTriangle,
@@ -38,6 +39,7 @@ import {
   Ticket,
   DoorOpen,
   Users,
+  MonitorPlay,
 } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -45,6 +47,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const buildImageUrl = (image?: string | null) => {
   if (!image) return null;
   return `${API_URL}${image}`;
+};
+
+// Same relative-path convention as the image, just under a different field —
+// see the note on Cinema.promoVideo in the backend model.
+const buildVideoUrl = (video?: string | null) => {
+  if (!video) return null;
+  return `${API_URL}${video}`;
 };
 
 const formatRate = (rate?: number | null) => `${(((rate || 0) * 100)).toFixed(1)}%`;
@@ -60,6 +69,7 @@ interface CinemaRow {
   phoneNumber?: string | null;
   email?: string | null;
   image?: string | null;
+  promoVideo?: string | null;
   isActive: boolean;
   beverageEligibility: CinemaEligibility;
   eligibilityNotes?: string | null;
@@ -128,6 +138,8 @@ export default function AdminCinemaPanel() {
   const [form, setForm] = useState<CinemaFormState>(EMPTY_FORM);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // A direct reset, not the create-time password — see resetPassword below.
   const [newPassword, setNewPassword] = useState("");
@@ -173,6 +185,8 @@ export default function AdminCinemaPanel() {
     setForm(EMPTY_FORM);
     setImageFile(null);
     setImagePreview(null);
+    setVideoFile(null);
+    setVideoPreview(null);
     setNewPassword("");
     setConfirmPassword("");
     setDialogOpen(true);
@@ -199,6 +213,8 @@ export default function AdminCinemaPanel() {
     });
     setImageFile(null);
     setImagePreview(buildImageUrl(cinema.image));
+    setVideoFile(null);
+    setVideoPreview(buildVideoUrl(cinema.promoVideo));
     setDialogOpen(true);
   };
 
@@ -229,6 +245,7 @@ export default function AdminCinemaPanel() {
       body.append("coversCinemaVat", String(form.coversCinemaVat));
       body.append("eligibilityNotes", form.notes.trim());
       if (imageFile) body.append("image", imageFile);
+      if (videoFile) body.append("promoVideo", videoFile);
       if (!editing) {
         body.append("email", form.email.trim());
         body.append("password", form.password);
@@ -382,7 +399,7 @@ export default function AdminCinemaPanel() {
   return (
     <div className="space-y-6 p-4 sm:p-6 lg:p-8">
       <Tabs defaultValue="cinemas" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[680px]">
+        <TabsList className="grid w-full grid-cols-6 bg-gray-100 p-1 dark:bg-gray-900/70 sm:w-[800px]">
           <TabsTrigger value="cinemas">
             <Store className="mr-1.5 h-4 w-4" /> Cinemas
           </TabsTrigger>
@@ -397,6 +414,9 @@ export default function AdminCinemaPanel() {
           </TabsTrigger>
           <TabsTrigger value="tickets">
             <Ticket className="mr-1.5 h-4 w-4" /> Tickets
+          </TabsTrigger>
+          <TabsTrigger value="screen">
+            <MonitorPlay className="mr-1.5 h-4 w-4" /> Screen
           </TabsTrigger>
         </TabsList>
 
@@ -729,6 +749,19 @@ export default function AdminCinemaPanel() {
           </div>
           <AdminCinemaTicketsPanel token={token} />
         </TabsContent>
+
+        <TabsContent value="screen" className="space-y-5">
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Seat-selection screen
+            </h2>
+            <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+              One ambient clip, shown on every cinema&apos;s auditorium screen while a
+              customer picks their seats — on the web and in the app.
+            </p>
+          </div>
+          <AdminScreenVideoSection />
+        </TabsContent>
       </Tabs>
 
       {granting && (
@@ -792,6 +825,36 @@ export default function AdminCinemaPanel() {
                     const file = e.target.files?.[0] || null;
                     setImageFile(file);
                     setImagePreview(file ? URL.createObjectURL(file) : buildImageUrl(editing?.image));
+                  }}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Promo video</Label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Plays on this cinema&apos;s own page. Optional — swap it out whenever you want something different playing.
+              </p>
+              <div className="flex items-center gap-4">
+                {videoPreview ? (
+                  <video
+                    key={videoPreview}
+                    src={videoPreview}
+                    controls
+                    muted
+                    className="h-20 w-32 rounded-xl bg-black object-cover ring-1 ring-gray-200 dark:ring-gray-800"
+                  />
+                ) : (
+                  <div className="flex h-20 w-32 items-center justify-center rounded-xl border border-dashed border-gray-300 text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                    No video
+                  </div>
+                )}
+                <Input
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setVideoFile(file);
+                    setVideoPreview(file ? URL.createObjectURL(file) : buildVideoUrl(editing?.promoVideo));
                   }}
                 />
               </div>

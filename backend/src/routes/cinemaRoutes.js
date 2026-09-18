@@ -10,6 +10,7 @@ const beverageController = require("../controllers/cinemaBeverageController");
 const concessionProductController = require("../controllers/concessionProductController");
 const financeController = require("../controllers/cinemaFinanceController");
 const cashierController = require("../controllers/cinemaCashierController");
+const screenConfigController = require("../controllers/cinemaScreenConfigController");
 const upload = require("../middlewares/upload");
 const {
   authenticateUser,
@@ -45,6 +46,14 @@ const movieUploads = upload.fields([
   { name: "coverImage", maxCount: 1 },
 ]);
 
+// The cinema's own image plus its admin-set promo video, in one multipart
+// request — see middlewares/upload.js for why this rides a separate multer
+// instance from the rest of the app's image-only uploads.
+const cinemaAdminUploads = upload.cinemaAdminUpload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "promoVideo", maxCount: 1 },
+]);
+
 const cinemaSelf = [
   authenticateUser,
   restrictTo("cinema"),
@@ -69,6 +78,10 @@ const adminOnly = [authenticateUser, restrictTo("admin")];
 // ---------------------------------------------------------------------------
 
 router.get("/public/cinemas", cinemaController.listPublicCinemas);
+// The looping clip that plays on the auditorium screen behind the seat map —
+// platform-wide, not tied to any one cinema, so it lives outside the
+// /:cinemaId patterns entirely rather than as a per-cinema field.
+router.get("/public/screen-video", screenConfigController.getScreenVideo);
 // The admin-curated promoted row. Declared before the /:cinemaId patterns so
 // "featured-movies" is never read as a cinema id.
 router.get("/public/featured-movies", programmeController.listFeaturedMovies);
@@ -167,6 +180,10 @@ router.get(
 // ---------------------------------------------------------------------------
 
 router.get("/me", ...cinemaSelf, cinemaController.getCinema);
+// A cashier can't reach the owner-only GET /me above (full profile,
+// commission/VAT included) — this is its narrow, cashier-safe read of just
+// the cinema's name, for its own account screen.
+router.get("/me/context", ...cinemaStaff, cinemaController.getCashierContext);
 router.patch("/me", ...cinemaSelf, upload.single("image"), cinemaController.updateCinema);
 router.put("/me/security", ...cinemaSelf, cinemaController.updateCinemaPassword);
 
@@ -264,6 +281,14 @@ router.delete("/me/cashiers/:cashierId", ...cinemaSelf, cashierController.delete
 // cinema id. Order is load-bearing here — do not move these below.
 router.get("/admin/finance", ...adminOnly, financeController.getAdminCinemaFinance);
 
+// Platform-wide, not per-cinema — see the /public/screen-video note above.
+router.patch(
+  "/admin/screen-video",
+  ...adminOnly,
+  upload.screenVideoUpload.single("video"),
+  screenConfigController.updateScreenVideo
+);
+
 // Cross-cinema movie curation. Literal second segments, so declared before the
 // /admin/:cinemaId patterns.
 router.get("/admin/movies", ...adminOnly, programmeController.listAllMoviesForAdmin);
@@ -305,10 +330,10 @@ router.patch(
 router.delete("/admin/products/:id", ...adminOnly, concessionProductController.deleteProduct);
 
 router.get("/admin", ...adminOnly, cinemaController.listCinemas);
-router.post("/admin", ...adminOnly, upload.single("image"), cinemaController.createCinema);
+router.post("/admin", ...adminOnly, cinemaAdminUploads, cinemaController.createCinema);
 
 router.get("/admin/:cinemaId", ...adminOnly, cinemaController.getCinema);
-router.patch("/admin/:cinemaId", ...adminOnly, upload.single("image"), cinemaController.updateCinema);
+router.patch("/admin/:cinemaId", ...adminOnly, cinemaAdminUploads, cinemaController.updateCinema);
 router.put("/admin/:cinemaId/security", ...adminOnly, cinemaController.updateCinemaPassword);
 router.patch("/admin/:cinemaId/status", ...adminOnly, cinemaController.setCinemaStatus);
 router.patch("/admin/:cinemaId/beverage-eligibility", ...adminOnly, cinemaController.setBeverageEligibility);

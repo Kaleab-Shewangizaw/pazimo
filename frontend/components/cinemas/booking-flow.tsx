@@ -19,6 +19,7 @@ import {
 import {
   fetchShowtimeSeats,
   fetchPublicConcessions,
+  fetchScreenVideo,
   quoteCinemaBasket,
   startCinemaCheckout,
   cancelCinemaCheckout,
@@ -26,6 +27,8 @@ import {
   type CinemaConcession,
   type ShowtimeSeatMap,
 } from "@/lib/cinema-api";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 import CinemaOrderResult from "@/components/cinemas/cinema-order-result";
 
 /**
@@ -73,6 +76,9 @@ export default function BookingFlow({
   const [step, setStep] = useState<Step>("seats");
   const [seatMap, setSeatMap] = useState<ShowtimeSeatMap | null>(null);
   const [concessions, setConcessions] = useState<CinemaConcession[]>([]);
+  // Platform-wide, not per-showtime — fetched once and reused for every
+  // booking sheet, same as the payment provider setting below.
+  const [screenVideo, setScreenVideo] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [snacks, setSnacks] = useState<Record<string, number>>({});
   const [basket, setBasket] = useState<CinemaBasket | null>(null);
@@ -118,6 +124,12 @@ export default function BookingFlow({
       cancelled = true;
     };
   }, [showtimeId, cinemaId]);
+
+  useEffect(() => {
+    fetchScreenVideo()
+      .then((data) => setScreenVideo(data.video))
+      .catch(() => {});
+  }, []);
 
   const priceByCategory = useMemo(() => {
     const map = new Map<string, { label: string; price: number; color?: string }>();
@@ -445,6 +457,7 @@ export default function BookingFlow({
               onToggle={toggleSeat}
               priceByCategory={priceByCategory}
               currency={currency}
+              screenVideo={screenVideo ? `${API_URL}${screenVideo}` : null}
             />
           </div>
         )}
@@ -761,12 +774,15 @@ function SeatPlan({
   onToggle,
   priceByCategory,
   currency,
+  screenVideo,
 }: {
   seatMap: ShowtimeSeatMap;
   selected: string[];
   onToggle: (seatKey: string, status: string) => void;
   priceByCategory: Map<string, { label: string; price: number; color?: string }>;
   currency: string;
+  /** The looping clip on the auditorium screen, or null to fall back to the plain glow. */
+  screenVideo?: string | null;
 }) {
   const viewport = useRef<HTMLDivElement | null>(null);
   const gridArea = useRef<HTMLDivElement | null>(null);
@@ -858,7 +874,7 @@ function SeatPlan({
 
   return (
     <div className="flex h-full min-h-0 flex-col rounded-[20px] border border-white/10 bg-[#08080A] p-3 sm:p-5">
-      <CinemaScreen />
+      <CinemaScreen videoSrc={screenVideo} />
 
       {/* Established up front, before anyone starts tapping — the seat dots
           alone don't explain themselves. */}
@@ -1053,8 +1069,19 @@ function SeatPlan({
  * `pointer-events-none`: purely decorative (`aria-hidden` already says so),
  * and the front row's seats curve up toward it — without this, this element
  * sits on top of that curve and swallows the taps meant for those seats.
+ *
+ * `videoSrc`, when set, plays the platform's seat-selection screen clip
+ * (admin-uploaded, see AdminScreenVideoSection) inside the exact same curved
+ * shape via an SVG `<clipPath>` — a `<foreignObject>` is the only way to put
+ * an HTML `<video>` inside an SVG shape, so the two SVGs below keep their
+ * `path`s as the clip geometry rather than switching to a CSS mask. The
+ * reflection re-renders the same clip in its own flipped `<video>` rather
+ * than sharing one element — two decodes of a short muted loop is a
+ * negligible cost next to a hero background video most sites already pay.
+ * With no video configured, both fall back to the original pure-gradient
+ * look untouched.
  */
-function CinemaScreen() {
+function CinemaScreen({ videoSrc }: { videoSrc?: string | null }) {
   return (
     <div
       aria-hidden
@@ -1073,8 +1100,26 @@ function CinemaScreen() {
             <stop offset="45%" stopColor="#FFFFFF" stopOpacity="0.17" />
             <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.05" />
           </radialGradient>
+          {videoSrc && (
+            <clipPath id="cinema-screen-clip" clipPathUnits="userSpaceOnUse">
+              <path d="M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z" />
+            </clipPath>
+          )}
         </defs>
-        <path d="M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z" fill="url(#cinema-screen-fill)" />
+        {videoSrc ? (
+          <foreignObject x="0" y="0" width="100" height="48" clipPath="url(#cinema-screen-clip)">
+            <video
+              src={videoSrc}
+              autoPlay
+              muted
+              loop
+              playsInline
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          </foreignObject>
+        ) : (
+          <path d="M 0,22 Q 50,0 100,22 L 95,44 Q 50,28 5,44 Z" fill="url(#cinema-screen-fill)" />
+        )}
       </svg>
 
       <div className="relative -mt-7 h-11 overflow-hidden sm:-mt-9 sm:h-14">
@@ -1086,8 +1131,32 @@ function CinemaScreen() {
               <stop offset="55%" stopColor="#FFFFFF" stopOpacity="0.06" />
               <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
             </linearGradient>
+            {videoSrc && (
+              <clipPath id="cinema-screen-reflection-clip" clipPathUnits="userSpaceOnUse">
+                <path d="M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z" />
+              </clipPath>
+            )}
           </defs>
-          <path d="M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z" fill="url(#cinema-screen-reflection)" />
+          {videoSrc ? (
+            <foreignObject
+              x="0"
+              y="44"
+              width="100"
+              height="22"
+              clipPath="url(#cinema-screen-reflection-clip)"
+            >
+              <video
+                src={videoSrc}
+                autoPlay
+                muted
+                loop
+                playsInline
+                style={{ width: "100%", height: "100%", objectFit: "cover", transform: "scaleY(-1)" }}
+              />
+            </foreignObject>
+          ) : (
+            <path d="M 5,44 Q 50,28 95,44 L 100,66 Q 50,58 0,66 Z" fill="url(#cinema-screen-reflection)" />
+          )}
         </svg>
         <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#08080A]" />
       </div>
