@@ -54,14 +54,13 @@ export default function CinemaClientLayout({
   const canAccess = hasCinemaAccess || hasAdminAccess;
   const isCashier = user?.role === "cashier";
 
-  // Counter operations + read-only sales history — the same surface the
-  // backend's cinemaStaff route group opens to a cashier. Everything else
-  // under /cinema redirects to the default landing page below.
-  const CASHIER_ALLOWED_PATHS = [
-    "/cinema/tickets",
-    "/cinema/scanner",
-    "/cinema/concessions",
-  ];
+  // A cashier gets counter operations only — never sales/revenue figures.
+  // The scanner already admits tickets AND redeems concessions in one
+  // no-money screen (see components/cinema/cinema-scanner.tsx), so it is the
+  // cashier's entire surface; /cinema/tickets (per-screening revenue, buyer
+  // amounts) and /cinema/concessions (a Sales tab with gross revenue and
+  // Pazimo's fee) are owner(+admin)-only, matching the backend split.
+  const CASHIER_ALLOWED_PATHS = ["/cinema/scanner"];
   const CASHIER_DEFAULT_PATH = "/cinema/scanner";
 
   useEffect(() => {

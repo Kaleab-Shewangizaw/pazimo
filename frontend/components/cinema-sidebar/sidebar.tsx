@@ -19,7 +19,6 @@ import {
   Users,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import { fetchCashierCinemaContext } from "@/lib/cinema-api";
 import { Button } from "../ui/button";
 
 interface SidebarProps {
@@ -51,29 +50,22 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
   // This is a UX nicety on top of the real gate, which is the backend's
   // requireCinemaBeverageEligible middleware on every concession endpoint —
   // hiding a link has never been an authorization control.
+  //
+  // Owner-only: the Concessions link itself is never offered to a cashier
+  // (see isCashier below), so there is nothing for a cashier to resolve
+  // eligibility for.
   const [beverageEligible, setBeverageEligible] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
-    if (user?.role === "cinema") {
-      fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cinemas/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) =>
-          setBeverageEligible(data?.data?.beverageEligibility === "eligible")
-        )
-        .catch(() => setBeverageEligible(false));
-      return;
-    }
-    // A cashier cannot reach GET /me (owner-only, see middlewares/auth.js's
-    // cinemaSelf vs cinemaStaff split) — resolve the same eligibility flag
-    // from a counter-safe endpoint instead.
-    if (user?.role === "cashier") {
-      fetchCashierCinemaContext(token)
-        .then((ctx) => setBeverageEligible(ctx.beverageEligibility === "eligible"))
-        .catch(() => setBeverageEligible(false));
-    }
+    if (!token || user?.role !== "cinema") return;
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/cinemas/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) =>
+        setBeverageEligible(data?.data?.beverageEligibility === "eligible")
+      )
+      .catch(() => setBeverageEligible(false));
   }, [token, user?.role]);
 
   const isActive = (path: string) => pathname === path;
@@ -156,11 +148,12 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 space-y-1">
-            {/* A cashier only ever reaches counter operations + read-only
-                sales history (see clientLayout.tsx's CASHIER_ALLOWED_PATHS) —
+            {/* A cashier only ever reaches counter operations — no sales
+                data at all (see clientLayout.tsx's CASHIER_ALLOWED_PATHS) —
                 the owner-only links below (Dashboard, Program, Schedule,
-                Money, Account, and Cashiers management) are hidden rather
-                than offered and then bounced. */}
+                Tickets, Concessions, Money, Account, and Cashiers
+                management) are hidden rather than offered and then
+                bounced. */}
             {!isCashier && <NavLink href="/cinema" icon={Home} label="Dashboard" />}
             {!isCashier && (
               <NavLink
@@ -176,13 +169,13 @@ export default function CinemaSidebar({ open, onClose }: SidebarProps) {
                 label="Schedule"
               />
             )}
-            <NavLink href="/cinema/tickets" icon={Ticket} label="Tickets" />
+            {!isCashier && <NavLink href="/cinema/tickets" icon={Ticket} label="Tickets" />}
             <NavLink
               href="/cinema/scanner"
               icon={ScanLine}
               label="Scan Ticket"
             />
-            {beverageEligible && (
+            {!isCashier && beverageEligible && (
               <NavLink
                 href="/cinema/concessions"
                 icon={Popcorn}

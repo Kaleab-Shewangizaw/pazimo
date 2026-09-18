@@ -22,14 +22,16 @@ const OWNER_NAV = [
   { href: "/venue/withdrawals", label: "Money", icon: Wallet },
 ];
 
-// A cashier reaches counter operations + read-only sales history only — no
-// line-up/happy-hour management, no withdrawals, no managing other cashiers,
-// and no Overview (that page also loads /finance, which is owner/admin-only
-// and would 403). Mirrors the backend's adminOrVenueStaff route split.
-const CASHIER_NAV = [
-  { href: "/venue/scanner", label: "Scanner", icon: ScanLine },
-  { href: "/venue/sales", label: "Sales", icon: Receipt },
-];
+// A cashier reaches counter operations only — never sales/revenue figures.
+// The scanner already covers looking a pre-paid order up (by QR/barcode or
+// typed reference) and handing its drinks over, plus ringing up a walk-up
+// cash sale (see components/venue/venue-scanner.tsx), so it is the
+// cashier's entire surface; /venue/sales (a revenue table with customer
+// names and amounts) is owner/admin-only, matching the backend's
+// adminOrVenueStaff vs adminOrVenueAccount split. No line-up/happy-hour
+// management, no withdrawals, no managing other cashiers, and no Overview
+// (that page also loads /finance, which is owner/admin-only and would 403).
+const CASHIER_NAV = [{ href: "/venue/scanner", label: "Scanner", icon: ScanLine }];
 const CASHIER_DEFAULT_PATH = "/venue/scanner";
 
 export default function VenueClientLayout({
