@@ -14,7 +14,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { clockLabel, dayLabel, posterUrl, runtimeLabel, youtubeVideoId } from "./cinema-format";
+import {
+  ageRatingLabel,
+  clockLabel,
+  dayLabel,
+  posterUrl,
+  runtimeLabel,
+  youtubeVideoId,
+} from "./cinema-format";
 import BookingFlow from "./booking-flow";
 import TrailerPlayer from "./trailer-player";
 import {
@@ -83,7 +90,7 @@ export default function MovieBooking({ detail }: { detail: PublicMovieDetail }) 
 
   const details = [
     { label: "Runtime", value: runtime },
-    { label: "Rating", value: movie.ageRating },
+    { label: "Age rating", value: ageRatingLabel(movie.ageRating) },
     { label: "Language", value: movie.language },
     { label: "Subtitles", value: movie.subtitles },
     { label: "Genre", value: movie.genre?.join(", ") },

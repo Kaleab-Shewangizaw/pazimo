@@ -22,8 +22,20 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Trash2, Film, DoorOpen, LayoutGrid, Pencil, Link2, Loader2, Plus, Images } from "lucide-react";
+import {
+  Trash2,
+  Film,
+  DoorOpen,
+  LayoutGrid,
+  Pencil,
+  Link2,
+  Loader2,
+  Plus,
+  Images,
+  ChevronsUpDown,
+} from "lucide-react";
 import SeatMapEditor from "@/components/cinema/seat-map-editor";
+import { ageRatingLabel } from "@/components/cinemas/cinema-format";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +43,45 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
+
+// Fixed lists, not free text, so a cinema can't list a film under "Amaharic"
+// or "Sci Fi" and have it silently fail to match anywhere else that filters
+// on these fields. Whatever isn't in the list yet, add here rather than
+// letting the form drift back to typed text.
+const CINEMA_LANGUAGES = [
+  "English",
+  "Amharic",
+  "Oromo",
+  "Tigrinya",
+  "Somali",
+  "Arabic",
+  "French",
+  "Hindi",
+];
+
+const CINEMA_GENRES = [
+  "Action",
+  "Adventure",
+  "Animation",
+  "Biography",
+  "Comedy",
+  "Crime",
+  "Documentary",
+  "Drama",
+  "Family",
+  "Fantasy",
+  "Horror",
+  "Musical",
+  "Mystery",
+  "Romance",
+  "Sci-Fi",
+  "Thriller",
+  "War",
+  "Western",
+];
 
 function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   const [halls, setHalls] = useState<CinemaHall[]>([]);
@@ -384,6 +435,33 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
   const selectClass =
     "h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900";
 
+  // A film already saved under a language outside the fixed list (typed
+  // before this dropdown existed, or pulled in from IMDb) keeps showing its
+  // real value instead of the dropdown silently swapping it for the first
+  // option.
+  const languageOptions =
+    movieForm.language && !CINEMA_LANGUAGES.includes(movieForm.language)
+      ? [movieForm.language, ...CINEMA_LANGUAGES]
+      : CINEMA_LANGUAGES;
+
+  // Subtitles are a language too — same list, same "keep whatever's already
+  // there" safety net.
+  const subtitleOptions =
+    movieForm.subtitles && !CINEMA_LANGUAGES.includes(movieForm.subtitles)
+      ? [movieForm.subtitles, ...CINEMA_LANGUAGES]
+      : CINEMA_LANGUAGES;
+
+  const selectedGenres = movieForm.genre
+    ? movieForm.genre.split(",").map((g) => g.trim()).filter(Boolean)
+    : [];
+  const genreOptions = Array.from(new Set([...CINEMA_GENRES, ...selectedGenres]));
+  const toggleGenre = (genre: string) => {
+    const next = selectedGenres.includes(genre)
+      ? selectedGenres.filter((g) => g !== genre)
+      : [...selectedGenres, genre];
+    setMovieForm({ ...movieForm, genre: next.join(", ") });
+  };
+
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -429,7 +507,7 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                         {[
                           m.status === "coming_soon" ? "Coming soon" : null,
                           m.durationMinutes ? `${m.durationMinutes} min` : null,
-                          m.ageRating,
+                          m.ageRating ? `Age rating: ${ageRatingLabel(m.ageRating)}` : null,
                           m.language,
                           `${m.showtimeCount ?? 0} screenings`,
                         ]
@@ -658,34 +736,96 @@ function ProgrammeContent({ token }: { cinema: CinemaProfile; token: string }) {
                   setMovieForm({ ...movieForm, durationMinutes: e.target.value })
                 }
               />
-              <Input
-                placeholder="Age rating"
-                value={movieForm.ageRating}
-                onChange={(e) =>
-                  setMovieForm({ ...movieForm, ageRating: e.target.value })
-                }
-              />
-              <Input
-                placeholder="Language"
-                value={movieForm.language}
-                onChange={(e) =>
-                  setMovieForm({ ...movieForm, language: e.target.value })
-                }
-              />
-              <Input
-                placeholder="Subtitles"
-                value={movieForm.subtitles}
-                onChange={(e) =>
-                  setMovieForm({ ...movieForm, subtitles: e.target.value })
-                }
-              />
-              <Input
-                placeholder="Genre (comma separated)"
-                value={movieForm.genre}
-                onChange={(e) =>
-                  setMovieForm({ ...movieForm, genre: e.target.value })
-                }
-              />
+              <div>
+                <Label className="text-xs">Age rating</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 13"
+                  value={movieForm.ageRating}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, ageRating: e.target.value })
+                  }
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Recommended for viewers this age and above
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs">Language</Label>
+                <select
+                  className={selectClass}
+                  value={movieForm.language}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, language: e.target.value })
+                  }
+                >
+                  <option value="">Select language</option>
+                  {languageOptions.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Subtitles</Label>
+                <select
+                  className={selectClass}
+                  value={movieForm.subtitles}
+                  onChange={(e) =>
+                    setMovieForm({ ...movieForm, subtitles: e.target.value })
+                  }
+                >
+                  <option value="">No subtitles</option>
+                  {subtitleOptions.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Genre</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      role="combobox"
+                      className="h-9 w-full justify-between font-normal"
+                    >
+                      <span className="truncate text-left">
+                        {selectedGenres.length
+                          ? selectedGenres.join(", ")
+                          : "Select genre(s)"}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-0" align="start">
+                    <Command>
+                      <CommandList>
+                        <CommandGroup>
+                          {genreOptions.map((genre) => (
+                            <CommandItem
+                              key={genre}
+                              value={genre}
+                              onSelect={() => toggleGenre(genre)}
+                            >
+                              <Checkbox
+                                checked={selectedGenres.includes(genre)}
+                                className="mr-2"
+                              />
+                              {genre}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Input
                 placeholder="Cast (comma separated)"
                 value={movieForm.cast}

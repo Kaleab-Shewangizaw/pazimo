@@ -86,6 +86,14 @@ export const runtimeLabel = (minutes?: number) => {
   return h ? `${h}h ${m ? `${m}m` : ""}`.trim() : `${m}m`;
 };
 
+/**
+ * A plain number ("13") reads as a minimum age, not a rating, without the
+ * "+" — legacy free-text certificates (e.g. "PG-13", "NR") pass through
+ * unchanged, since CinemaMovie.ageRating is still free text underneath.
+ */
+export const ageRatingLabel = (rating?: string | null) =>
+  rating ? (/^\d+$/.test(rating) ? `${rating}+` : rating) : null;
+
 
 /**
  * A movie, expressed as the platform's featured-event card data.
@@ -242,7 +250,7 @@ export const movieToTrendingCard = (movie: FeaturedMovie) => ({
     movie.upcomingCount > 0
       ? `${movie.upcomingCount} showing${movie.upcomingCount === 1 ? "" : "s"}`
       : "Coming soon",
-  priceLabel: movie.ageRating || "Cinema",
+  priceLabel: ageRatingLabel(movie.ageRating) || "Cinema",
   image: posterUrl(movie.poster) || "",
   soldOut: false,
   ctaLabel: "Book",

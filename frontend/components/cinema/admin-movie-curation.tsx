@@ -28,6 +28,7 @@ import {
   XCircle,
   EyeOff,
 } from "lucide-react";
+import { ageRatingLabel } from "@/components/cinemas/cinema-format";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -358,7 +359,7 @@ export default function AdminMovieCuration() {
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                     {[
                       movie.durationMinutes ? `${movie.durationMinutes} min` : null,
-                      movie.ageRating,
+                      movie.ageRating ? `Age rating: ${ageRatingLabel(movie.ageRating)}` : null,
                       movie.status === "coming_soon" ? "Coming soon" : null,
                     ]
                       .filter(Boolean)
