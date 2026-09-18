@@ -45,6 +45,8 @@ const createUsher = async (req, res) => {
     phoneNumber,
     password,
     role: "usher",
+    createdBy: req.user.userId,
+    createdByModel: req.user.role === "admin" ? "Admin" : "User",
   });
   user.password = undefined;
 

@@ -253,7 +253,11 @@ const userSchema = new mongoose.Schema(
     },
     createdByModel: {
       type: String,
-      enum: ["User", "Admin"],
+      // Mongoose's enum validator only exempts `undefined`, not `null` — and
+      // this stays null for every role except event cashiers/ushers, so null
+      // must be a listed enum value or every other User.create() (customer,
+      // organizer, venue, cinema, venue/cinema cashier) fails validation.
+      enum: ["User", "Admin", null],
       default: null,
     },
   },
