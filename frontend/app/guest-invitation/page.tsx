@@ -3,7 +3,7 @@ import { useState, useEffect, Suspense, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import { Download, Loader2 } from "lucide-react";
 import Image from "next/image";
-import { downloadHighQualityQR } from "@/lib/downloadQR";
+import { ticketQrUrl, downloadTicketQr } from "@/lib/ticketQr";
 
 interface EventData {
   title: string;
@@ -20,7 +20,6 @@ interface InvitationData {
   guestName: string;
   ticketCount: number;
   status: string;
-  qrCode?: string;
   event: EventData;
   ticketType?: string;
   message?: string;
@@ -136,8 +135,7 @@ function GuestInvitationContent() {
   if (!invitation) return null;
 
   const handleDownload = () => {
-    if (!invitation.qrCode) return;
-    downloadHighQualityQR(invitation.qrCode, `invitation-${invitation.ticketId}.png`);
+    downloadTicketQr(invitation.ticketId, `invitation-${invitation.ticketId}.png`);
   };
 
   const dateLine = formatDateLine(
@@ -286,32 +284,25 @@ function GuestInvitationContent() {
 
             {isConfirmed ? (
               <div className="flex flex-col items-center gap-3">
-                {invitation.qrCode ? (
-                  <>
-                    <Image
-                      width={256}
-                      height={256}
-                      priority
-                      src={invitation.qrCode}
-                      alt="Ticket QR Code"
-                      className="h-34 w-34"
-                    />
-                    <p className="text-[11px] font-bold tracking-[0.2em] text-gray-400 dark:text-gray-500">
-                      &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
-                    </p>
-                    <button
-                      onClick={handleDownload}
-                      className="mt-1 flex items-center gap-2 rounded-full bg-[#06283D] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0a3a57] dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-300"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download Ticket
-                    </button>
-                  </>
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Your ticket QR is being generated.
-                  </p>
-                )}
+                <Image
+                  width={256}
+                  height={256}
+                  priority
+                  unoptimized
+                  src={ticketQrUrl(invitation.ticketId)}
+                  alt="Ticket QR Code"
+                  className="h-34 w-34"
+                />
+                <p className="text-[11px] font-bold tracking-[0.2em] text-gray-400 dark:text-gray-500">
+                  &mdash;&mdash; SCAN FOR ENTRY &mdash;&mdash;
+                </p>
+                <button
+                  onClick={handleDownload}
+                  className="mt-1 flex items-center gap-2 rounded-full bg-[#06283D] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#0a3a57] dark:bg-yellow-400 dark:text-black dark:hover:bg-yellow-300"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Ticket
+                </button>
               </div>
             ) : isDeclined ? (
               <div className="flex flex-col items-center gap-2 py-2 text-center">
@@ -333,23 +324,22 @@ function GuestInvitationContent() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-4">
-                {invitation.qrCode && (
-                  <div className="relative">
-                    <Image
-                      width={256}
-                      height={256}
-                      src={invitation.qrCode}
-                      alt=""
-                      aria-hidden
-                      className="h-28 w-28 opacity-40 blur-sm grayscale"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="rounded bg-white/80 px-2 py-1 text-[10px] font-bold tracking-wider text-gray-500 dark:bg-black/60 dark:text-gray-400">
-                        LOCKED
-                      </span>
-                    </div>
+                <div className="relative">
+                  <Image
+                    width={256}
+                    height={256}
+                    unoptimized
+                    src={ticketQrUrl(invitation.ticketId)}
+                    alt=""
+                    aria-hidden
+                    className="h-28 w-28 opacity-40 blur-sm grayscale"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="rounded bg-white/80 px-2 py-1 text-[10px] font-bold tracking-wider text-gray-500 dark:bg-black/60 dark:text-gray-400">
+                      LOCKED
+                    </span>
                   </div>
-                )}
+                </div>
                 <p className="text-center text-xs text-gray-500 dark:text-gray-400">
                   Confirm to unlock your ticket QR code.
                 </p>
