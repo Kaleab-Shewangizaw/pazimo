@@ -6,6 +6,7 @@ import { useEventStore } from "@/store/eventStore";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/button";
 import { UsherAccessDialog } from "@/components/events/usher-access-dialog";
+import { CashierAccessDialog } from "@/components/events/cashier-access-dialog";
 import {
   Card,
   CardContent,
@@ -565,6 +566,13 @@ export default function EventsPage() {
                           token={organizerToken || ""}
                           triggerVariant="outline"
                           triggerClassName="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 dark:border-gray-700"
+                        />
+                        <CashierAccessDialog
+                          eventId={event._id}
+                          eventTitle={event.title}
+                          token={organizerToken || ""}
+                          triggerVariant="outline"
+                          triggerClassName="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 dark:border-gray-700"
                         />
                         {beverageEligible && (
                           <Button
