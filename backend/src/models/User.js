@@ -83,14 +83,21 @@ const userSchema = new mongoose.Schema(
     // for this role; every other route stays exactly as closed to it as to a
     // customer unless explicitly opened up.
     //
-    // "cashier" is a cinema's or venue's own counter staff — the usher
-    // equivalent for these two channels, but scoped permanently to ONE
-    // business (via the `cinema`/`venue` field below) rather than redeeming a
-    // per-event code. It can sell/scan/redeem at the counter and read that
-    // business's own sales history, but never touch finance, catalogue/hall/
-    // showtime/happy-hour management, the business's own profile/security, or
-    // create more cashiers — every route that admits it does so explicitly,
-    // same discipline as "venue"/"cinema" above.
+    // "cashier" is counter/door staff for three different channels, and which
+    // one a given account is comes down to how it's scoped:
+    //   - a cinema's or venue's own counter staff, scoped PERMANENTLY to that
+    //     one business via the `cinema`/`venue` field below;
+    //   - an EVENT'S beverage-redemption staff, scoped the same way "usher"
+    //     is — neither field set here, redeeming that event's
+    //     EventCashierCode instead, one event at a time (see
+    //     CashierEventAccess.js). An organizer redeeming its own event's
+    //     beverage sales directly was removed in favor of this: an organizer
+    //     runs the event, it doesn't work the bar.
+    // Either way it can sell/scan/redeem at the counter and read that scope's
+    // own sales history, but never touch finance, catalogue/hall/showtime/
+    // happy-hour management, the business's own profile/security, or create
+    // more cashiers of the cinema/venue kind — every route that admits it
+    // does so explicitly, same discipline as "venue"/"cinema" above.
     role: {
       type: String,
       enum: ["customer", "organizer", "venue", "cinema", "usher", "cashier"],
@@ -232,6 +239,23 @@ const userSchema = new mongoose.Schema(
       ref: "Venue",
       default: null,
     },
+    // Only ever set for an EVENT cashier (role "cashier", neither `cinema`
+    // nor `venue` set) — whichever admin or organizer account created its
+    // login, via POST /api/event-cashiers. Lets an organizer's own "my
+    // cashiers" view (unlike admin's, which sees every event cashier) filter
+    // to the ones it actually created, the same way it only ever manages its
+    // own events. refPath because an admin and an organizer live in separate
+    // collections.
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      refPath: "createdByModel",
+      default: null,
+    },
+    createdByModel: {
+      type: String,
+      enum: ["User", "Admin"],
+      default: null,
+    },
   },
   {
     timestamps: true,
@@ -259,19 +283,24 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// A cashier must be scoped to exactly one business, and no other role may
-// carry that scoping at all — otherwise resolveCinema/resolveVenueContext
-// (which trust these fields to say which business a cashier may act as)
-// could be pointed at two businesses at once, or a stray cinema/venue id
-// could silently survive a role change and outlive its meaning.
+// A cashier may be scoped to AT MOST one permanent business, and no other
+// role may carry that scoping at all — otherwise resolveCinema/
+// resolveVenueContext (which trust these fields to say which business a
+// cashier may act as) could be pointed at two businesses at once, or a stray
+// cinema/venue id could silently survive a role change and outlive its
+// meaning.
+//
+// Neither set is also valid (unlike the old "exactly one" rule this
+// replaces): that's an EVENT cashier, scoped not by a permanent FK here but
+// by a redeemed EventCashierCode, one event at a time — see
+// CashierEventAccess.js. Same arrangement as "usher", which carries no FK on
+// this doc at all and is scoped entirely by UsherEventAccess grants.
 userSchema.pre("validate", function (next) {
   if (this.role === "cashier") {
-    const hasCinema = !!this.cinema;
-    const hasVenue = !!this.venue;
-    if (hasCinema === hasVenue) {
+    if (this.cinema && this.venue) {
       return next(
         new Error(
-          "A cashier account must be linked to exactly one cinema or venue, not both or neither."
+          "A cashier account cannot be linked to both a cinema and a venue."
         )
       );
     }

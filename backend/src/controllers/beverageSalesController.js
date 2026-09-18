@@ -4,8 +4,16 @@ const Event = require("../models/Event");
 const EventBeverage = require("../models/EventBeverage");
 const BeverageSale = require("../models/BeverageSale");
 const UsherEventAccess = require("../models/UsherEventAccess");
+const CashierEventAccess = require("../models/CashierEventAccess");
 const { BadRequestError, NotFoundError, ForbiddenError } = require("../errors");
-const { recordSale, refundSale, redeemSale } = require("../services/beverageSalesService");
+const {
+  recordSale,
+  refundSale,
+  redeemSale,
+  listSalesByReference,
+  computeEventEndsAt,
+  REDEEM_GRACE_HOURS_AFTER_EVENT,
+} = require("../services/beverageSalesService");
 
 // Only confirmed sales count as revenue; refunds stay in the ledger but out of
 // every total.
@@ -412,11 +420,38 @@ const refund = async (req, res) => {
 // Collecting a pre-bought drink at the door.
 //
 // Same authorization shape as ticketController.js's validateQRCode/
-// checkInTicket: admins and partners pass straight through, an organizer must
-// own the event the sale belongs to, and an usher must hold a live
-// UsherEventAccess grant for it. Kept as its own check rather than importing
-// ticketController's (that file is route-handler code, not a reusable guard)
-// — a handful of lines, not worth coupling the two controllers over.
+// checkInTicket: admins and partners pass straight through, and an usher or
+// a cashier must hold a live event grant for it (UsherEventAccess /
+// CashierEventAccess respectively). An organizer no longer redeems its own
+// event's drinks directly — it runs the event, it doesn't work the bar; that
+// job now belongs to a "cashier" account scoped to the event via a redeemed
+// EventCashierCode (see eventCashierController.js), same as an usher scans
+// tickets rather than the organizer itself. Shared by both the read-only
+// lookup below and the actual redeem, so the two can never disagree about
+// who's allowed to act on a given event's drinks.
+const assertCanActOnEventDrinks = async (req, eventId) => {
+  const requesterId = req.user?.userId || req.user?._id;
+
+  if (req.user.role === "usher") {
+    const hasAccess = await UsherEventAccess.exists({
+      usher: requesterId,
+      event: eventId,
+      revokedAt: null,
+    });
+    if (!hasAccess) throw new ForbiddenError("You don't have access to this event");
+  } else if (req.user.role === "cashier") {
+    const hasAccess = await CashierEventAccess.exists({
+      cashier: requesterId,
+      event: eventId,
+      revokedAt: null,
+    });
+    if (!hasAccess) throw new ForbiddenError("You don't have access to this event");
+  }
+  // admin and partner pass straight through — see restrictTo on both routes.
+
+  return requesterId;
+};
+
 const redeemBeverageSale = async (req, res) => {
   try {
     const { saleId } = req.params;
@@ -427,23 +462,7 @@ const redeemBeverageSale = async (req, res) => {
     const sale = await BeverageSale.findById(saleId).select("event");
     if (!sale) throw new NotFoundError("That drink is not on this order");
 
-    const requesterId = req.user?.userId || req.user?._id;
-
-    if (req.user.role === "organizer") {
-      const event = await Event.findById(sale.event).select("organizer");
-      if (!event || String(event.organizer) !== String(requesterId)) {
-        throw new ForbiddenError("You can only collect drinks for your own events");
-      }
-    } else if (req.user.role === "usher") {
-      const hasAccess = await UsherEventAccess.exists({
-        usher: requesterId,
-        event: sale.event,
-        revokedAt: null,
-      });
-      if (!hasAccess) {
-        throw new ForbiddenError("You don't have access to this event");
-      }
-    }
+    const requesterId = await assertCanActOnEventDrinks(req, sale.event);
 
     const redeemed = await redeemSale({
       saleId,
@@ -459,6 +478,50 @@ const redeemBeverageSale = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/beverages/sales/outstanding/:reference — what a door scanner
+ * shows BEFORE handing anything over. `reference` is the human-facing
+ * pickup code printed as a barcode (BeverageSale.referenceNumber) — the
+ * event-side twin of cinemaBeverageController's listOutstandingForOrder and
+ * venueSalesController's getOutstandingVenueOrder.
+ *
+ * Read-only: never throws for an already-collected or refunded item, it
+ * returns what's still outstanding (possibly empty) so the scanner can show
+ * that instead of a bare error — same reasoning as the cinema/venue lookups.
+ */
+const getOutstandingByReference = async (req, res) => {
+  try {
+    const sales = await listSalesByReference({ referenceNumber: req.params.reference });
+    if (!sales.length) throw new NotFoundError("That order could not be found");
+
+    // Every sale under one reference is one order, hence one event.
+    await assertCanActOnEventDrinks(req, sales[0].event);
+
+    const event = await Event.findById(sales[0].event).select(
+      "startDate endDate startTime endTime"
+    );
+    const eventEndsAt = computeEventEndsAt(event);
+    const isExpired = !!(
+      eventEndsAt &&
+      new Date() > new Date(eventEndsAt.getTime() + REDEEM_GRACE_HOURS_AFTER_EVENT * 60 * 60 * 1000)
+    );
+
+    const outstanding = sales.filter(
+      (s) =>
+        s.channel === "online" &&
+        s.status === "confirmed" &&
+        !s.redeemedAt &&
+        !s.pendingShare
+    );
+
+    res.status(StatusCodes.OK).json({ success: true, data: outstanding, isExpired });
+  } catch (error) {
+    console.error("Error reading beverage order for staff:", error);
+    const status = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+    res.status(status).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAdminDashboard,
   getOrganizerDashboard,
@@ -467,4 +530,5 @@ module.exports = {
   listSales,
   refund,
   redeemBeverageSale,
+  getOutstandingByReference,
 };

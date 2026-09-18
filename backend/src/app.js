@@ -43,6 +43,7 @@ const beverageShareRoutes = require("./routes/beverageShareRoutes");
 const cinemaShareRoutes = require("./routes/cinemaShareRoutes");
 const conversationRoutes = require("./routes/conversationRoutes");
 const usherRoutes = require("./routes/usherRoutes");
+const eventCashierRoutes = require("./routes/eventCashierRoutes");
 const { sendInvitationEmail } = require("./controllers/invitationEmailController");
 const { sendSMS } = require("./utils/sms");
 
@@ -175,6 +176,7 @@ app.use("/api/beverage-shares", beverageShareRoutes);
 app.use("/api/cinema-shares", cinemaShareRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/ushers", usherRoutes);
+app.use("/api/event-cashiers", eventCashierRoutes);
 app.use("/api/qr-tickets", qrTicketRoutes);
 app.use("/", santimPayRoutes);
 

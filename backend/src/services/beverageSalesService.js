@@ -1,10 +1,28 @@
 const mongoose = require("mongoose");
 const EventBeverage = require("../models/EventBeverage");
 const BeverageSale = require("../models/BeverageSale");
+const Event = require("../models/Event");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { mirrorSale } = require("./ledgerDualWrite");
 const HappyHour = require("../models/HappyHour");
 const { resolveEffectivePrice } = require("../utils/happyHour");
+const { resolveEatInstant, endOfEatDay } = require("../utils/eatTime");
+
+// A pre-bought drink can't be collected more than this long after the event
+// itself is over — an event has no showtime-style `endsAt` the way a cinema
+// screening does, so this combines whichever end date/time the organizer
+// actually entered (falling back to the start date/time, then to end-of-day,
+// if no end was given) via the same EAT-anchoring `resolveEatInstant` already
+// uses for ticket wave windows.
+const REDEEM_GRACE_HOURS_AFTER_EVENT = 12;
+
+const computeEventEndsAt = (event) => {
+  if (!event) return null;
+  return (
+    resolveEatInstant(event.endDate || event.startDate, event.endTime) ||
+    (event.startDate ? endOfEatDay(event.startDate) : null)
+  );
+};
 
 // Sales are recorded here rather than in the controller so the eventual
 // customer checkout can call recordSale() directly from the payment webhook,
@@ -160,6 +178,29 @@ const listOutstandingForCustomer = async ({ eventId, customerId }) => {
 };
 
 /**
+ * What's still owed on ONE order — the shape a door scanner actually needs,
+ * since it only ever has the code it just scanned, not the buyer's account.
+ * `referenceNumber` is the human-facing pickup code (e.g. "EV-7K2QXM")
+ * rendered as a barcode for the customer — see BeverageSale.js's own field
+ * comment and utils/barcodeRenderer.js. Mirrors cinemaBeverageController's
+ * listOutstandingForOrder and venueSalesController's getOutstandingVenueOrder,
+ * the event-side beverage ledger's twin of both.
+ *
+ * Returns every sale under that reference regardless of status, not just the
+ * outstanding ones — the caller (getOutstandingByReference) needs the full
+ * set to know which EVENT this reference belongs to (for authorization) even
+ * when every item on it has already been collected.
+ */
+const listSalesByReference = async ({ referenceNumber }) => {
+  if (!referenceNumber) return [];
+  return BeverageSale.find({ referenceNumber })
+    .select(
+      "event referenceNumber beverageName quantity unitPrice totalAmount soldAt status channel redeemedAt pendingShare"
+    )
+    .lean();
+};
+
+/**
  * Hand a pre-bought drink over.
  *
  * The guard is a single findOneAndUpdate matching OUTSTANDING: the "has this
@@ -174,6 +215,23 @@ const listOutstandingForCustomer = async ({ eventId, customerId }) => {
 const redeemSale = async ({ saleId, eventId, redeemedBy }) => {
   if (!mongoose.Types.ObjectId.isValid(saleId)) {
     throw new NotFoundError("That drink is not on this order");
+  }
+
+  if (eventId) {
+    const event = await Event.findById(eventId).select(
+      "startDate endDate startTime endTime"
+    );
+    const eventEndsAt = computeEventEndsAt(event);
+    if (eventEndsAt) {
+      const cutoff = new Date(
+        eventEndsAt.getTime() + REDEEM_GRACE_HOURS_AFTER_EVENT * 60 * 60 * 1000
+      );
+      if (new Date() > cutoff) {
+        throw new BadRequestError(
+          "This event ended more than 12 hours ago — the drink can no longer be redeemed."
+        );
+      }
+    }
   }
 
   const redeemed = await BeverageSale.findOneAndUpdate(
@@ -216,5 +274,8 @@ module.exports = {
   recordSale,
   refundSale,
   listOutstandingForCustomer,
+  listSalesByReference,
   redeemSale,
+  computeEventEndsAt,
+  REDEEM_GRACE_HOURS_AFTER_EVENT,
 };

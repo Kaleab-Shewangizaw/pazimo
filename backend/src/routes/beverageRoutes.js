@@ -379,12 +379,24 @@ router.get(
 );
 
 // --- Collecting a pre-bought drink at the door -----------------------------
-// Same roles as ticket scanning (routes/ticketRoutes.js's validate-qr and
-// check-in) since this is the same door staff, looking at the same ticket.
+// "organizer" deliberately excluded — an organizer runs the event, it
+// doesn't work the bar. That job belongs to a "cashier" scoped to the event
+// via a redeemed EventCashierCode (see eventCashierController.js), same as
+// an usher rather than the organizer scans tickets.
+//
+// Read-only lookup first, so the scanner can show what's on an order (and
+// whether the event's 12-hour post-end grace period has passed) before
+// staff confirm with a "Hand over" tap.
+router.get(
+  "/sales/outstanding/:reference",
+  protect,
+  restrictTo("admin", "partner", "usher", "cashier"),
+  beverageSalesController.getOutstandingByReference
+);
 router.post(
   "/sales/:saleId/redeem",
   protect,
-  restrictTo("admin", "organizer", "partner", "usher"),
+  restrictTo("admin", "partner", "usher", "cashier"),
   beverageSalesController.redeemBeverageSale
 );
 
