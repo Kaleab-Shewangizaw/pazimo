@@ -6,6 +6,7 @@ const { StatusCodes } = require("http-status-codes");
 const { isPhoneBanned, normalizePhone, phoneVariants } = require("../utils/fraudGuard");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
+const { safeErrorMessage } = require("../utils/safeErrorMessage");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const pushService = require("../services/pushService");
@@ -144,7 +145,7 @@ const register = async (req, res) => {
     }
     res.status(StatusCodes.BAD_REQUEST).json({
       status: "error",
-      message: error.message,
+      message: safeErrorMessage(error, "We could not create your account. Try again."),
     });
   }
 };
@@ -307,7 +308,11 @@ const updatePassword = async (req, res) => {
       throw new UnauthorizedError("User not authenticated");
     }
 
-    const user = await User.findById(req.user._id);
+    // `password` is `select: false` on the schema — `protect` (and any plain
+    // findById) strips it, same gap `deleteAccount` already re-fetches for.
+    // Without it, `comparePassword` runs bcrypt against `undefined` and
+    // every attempt fails regardless of whether `currentPassword` is right.
+    const user = await User.findById(req.user._id).select("+password");
 
     // Check current password
     const isPasswordCorrect = await user.comparePassword(currentPassword);
@@ -326,7 +331,7 @@ const updatePassword = async (req, res) => {
   } catch (error) {
     res.status(StatusCodes.BAD_REQUEST).json({
       status: "error",
-      message: error.message,
+      message: safeErrorMessage(error, "We could not update your password. Try again."),
     });
   }
 };
