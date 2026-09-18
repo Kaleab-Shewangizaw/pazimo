@@ -223,7 +223,20 @@ const run = async () => {
     // never run) — so an unprojected read drags half a gigabyte across the wire
     // to sum a handful of numbers, and the backfill looks like it has hung.
     // Naming the fields makes it read about 5 MB instead.
-    const rows = Model.find(filter).select(src.select).lean().cursor();
+    // Each row does several sequential, awaited writes (recordSale's
+    // idempotency check + create + projection update, per constituent
+    // movement), so a single batch of this cursor can easily take longer
+    // than MongoDB's default 10-minute server-side cursor timeout — hit in
+    // practice on production 2026-09-18 as `CursorNotFound`, killing the
+    // whole run mid-scan with everything already written intact (append is
+    // idempotent) but everything past that point unrecorded. This is a
+    // long-lived, fully-owned batch cursor, not a leaked one, so telling the
+    // server never to time it out is the correct fix, not a workaround.
+    const rows = Model.find(filter)
+      .select(src.select)
+      .lean()
+      .cursor()
+      .addCursorFlag("noCursorTimeout", true);
 
     const channel = {
       label: src.label, rows: 0, skipped: 0,
