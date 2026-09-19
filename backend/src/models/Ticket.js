@@ -192,6 +192,16 @@ const TicketSchema = new mongoose.Schema(
       default: false,
     },
 
+    // checkInTicket (ticketController.js) has always read/written this exact
+    // path (it's in every check-in select() projection) but the schema never
+    // declared it — under Mongoose's default strict mode that assignment was
+    // silently dropped on every save, so no event ticket ever actually
+    // persisted a check-in timestamp. checkedAt below is the CinemaTicket
+    // field name, unrelated to event tickets.
+    checkedInAt: {
+      type: Date,
+    },
+
     checkedAt: {
       type: Date,
     },
