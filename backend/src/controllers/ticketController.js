@@ -1760,29 +1760,66 @@ const checkInTicket = async (req, res) => {
       });
     }
 
-    // Decrement count
-    ticket.ticketCount -= count;
-    // If count reaches 0, mark as used/checkedIn
-    if (ticket.ticketCount <= 0) {
-      ticket.ticketCount = 0; // Safety
-      ticket.checkedIn = true;
-      ticket.checkedInAt = new Date();
-      ticket.status = "used";
+    const SELECT_FIELDS =
+      "ticketId ticketCount checkedIn checkedInAt status purchaseQuantity event user guestName isInvitation isOnDoor pendingShare";
+
+    // Atomic decrement, guarded by the exact same conditions just checked
+    // above (re-asserted here so they're enforced by MongoDB itself, not
+    // just by this request's now-possibly-stale in-memory read). Two
+    // check-ins racing on the same ticket — a double-tap, a retried request
+    // after a dropped response racing the original that actually landed, or
+    // two ushers scanning the same group ticket at once — can no longer both
+    // succeed against the same remaining count: only whichever one's filter
+    // still matches when MongoDB applies it gets to decrement. The loser
+    // gets `updated: null` and is told the ticket's real current state
+    // below instead of silently corrupting ticketCount.
+    const updated = await Ticket.findOneAndUpdate(
+      {
+        _id: ticket._id,
+        checkedIn: false,
+        status: { $ne: "used" },
+        ticketCount: { $gte: count },
+      },
+      { $inc: { ticketCount: -count } },
+      { new: true },
+    ).select(SELECT_FIELDS);
+
+    if (!updated) {
+      const current = await Ticket.findById(ticket._id).select(SELECT_FIELDS);
+      return res.status(StatusCodes.OK).json({
+        success: true,
+        alreadyCheckedIn: true,
+        message: "Ticket already fully used",
+        data: {
+          ticket: current || ticket,
+          remainingUses: 0,
+        },
+      });
     }
 
-    await ticket.save();
+    // Crossing zero is what marks the ticket fully used. Only the single
+    // call whose atomic decrement above actually brought ticketCount to (or
+    // below) zero can ever reach here for that transition, since the guard
+    // clause it just passed required ticketCount >= count beforehand.
+    if (updated.ticketCount <= 0) {
+      updated.ticketCount = 0; // Safety
+      updated.checkedIn = true;
+      updated.checkedInAt = new Date();
+      updated.status = "used";
+      await updated.save();
+    }
 
     console.log(`[CHECK-IN] ✅ Check-in completed in ${Date.now() - startTime}ms`);
 
     res.status(StatusCodes.OK).json({
       success: true,
-      message: ticket.checkedIn
+      message: updated.checkedIn
         ? "Ticket fully checked in"
         : "Ticket usage recorded",
       data: {
-        ticket,
-        remainingUses: ticket.ticketCount,
-        fullyUsed: ticket.checkedIn,
+        ticket: updated,
+        remainingUses: updated.ticketCount,
+        fullyUsed: updated.checkedIn,
       },
     });
   } catch (error) {
