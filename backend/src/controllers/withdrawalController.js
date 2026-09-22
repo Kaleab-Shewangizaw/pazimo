@@ -13,10 +13,11 @@ const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 const { TELEBIRR_FEE_RATE } = require("../config/rates");
 const { mirrorWithdrawal } = require("../services/ledgerDualWrite");
 
-// Get organizer's available balance. Ticket revenue and any borrowed Pazimo
-// Capital principal are now a single pool: the advance is credited straight in
-// and repaid automatically via a 60% cut of post-approval ticket sales (see
-// financeService.calculateOrganizerBalance).
+// Get organizer's available balance. Ticket revenue, beverage revenue and any
+// borrowed Pazimo Capital principal are three separate pools — a loan's
+// principal is credited straight into its own "capital" pool, and only its
+// repayment (a 60% cut of post-approval ticket sales) ever touches the ticket
+// pool (see financeService.calculateOrganizerBalance).
 const getOrganizerBalance = async (req, res) => {
   try {
     // Organizers may only ever see their own balance; only admins can view another's.
@@ -251,13 +252,18 @@ const createWithdrawal = async (req, res) => {
     const { amount, notes, bankDetails } = req.body;
     const currency = req.body.currency === "USD" ? "USD" : "ETB";
 
-    // Which pool this request draws from. Ticket and beverage revenue are
-    // withdrawn separately, so the balance check has to be scoped or an
-    // organizer could drain one pool using the other's balance.
-    const stream = req.body.stream === "beverages" ? "beverages" : "tickets";
+    // Which pool this request draws from. Ticket, beverage and Pazimo Capital
+    // money are withdrawn separately, so the balance check has to be scoped
+    // or an organizer could drain one pool using another's balance.
+    const stream = ["beverages", "capital"].includes(req.body.stream)
+      ? req.body.stream
+      : "tickets";
 
     if (stream === "beverages" && currency !== "ETB") {
       throw new BadRequestError("Beverage sales are ETB only");
+    }
+    if (stream === "capital" && currency !== "ETB") {
+      throw new BadRequestError("Pazimo Capital is ETB only");
     }
 
     // Venue payouts take an entirely separate path below: their balance comes
@@ -298,15 +304,18 @@ const createWithdrawal = async (req, res) => {
       );
     }
 
-    // Ticket revenue and borrowed principal share one balance now — sync any
-    // active advance to the latest ticket sales, then validate against it.
+    // Sync any active advance's repayment progress before reading a balance —
+    // it no longer affects the ticket pool's principal (that's its own pool
+    // now), but repayment still is a live cut of ticket sales.
     await syncOrganizerLoans(organizerId, req);
     const balance = await calculateOrganizerBalance(organizerId, currency);
 
     const availableBalance =
       stream === "beverages"
         ? balance.streams.beverages.availableBalance
-        : balance.streams.tickets.availableBalance;
+        : stream === "capital"
+          ? balance.streams.capital.availableBalance
+          : balance.streams.tickets.availableBalance;
 
     const requested = Number(amount);
     if (!Number.isFinite(requested) || requested <= 0) {
@@ -316,7 +325,9 @@ const createWithdrawal = async (req, res) => {
       throw new BadRequestError(
         stream === "beverages"
           ? `Withdrawal exceeds your beverage balance of ${availableBalance.toFixed(2)} ${currency}`
-          : `Withdrawal exceeds your ticket balance of ${availableBalance.toFixed(2)} ${currency}`
+          : stream === "capital"
+            ? `Withdrawal exceeds your Pazimo Capital balance of ${availableBalance.toFixed(2)} ${currency}`
+            : `Withdrawal exceeds your ticket balance of ${availableBalance.toFixed(2)} ${currency}`
       );
     }
 
@@ -527,6 +538,7 @@ const getAllWithdrawals = async (req, res) => {
     // of their being separate streams.
     else if (req.query.stream === "cinema_tickets") query.stream = "cinema_tickets";
     else if (req.query.stream === "cinema_beverages") query.stream = "cinema_beverages";
+    else if (req.query.stream === "capital") query.stream = "capital";
     else if (req.query.stream === "tickets") {
       query.$and = [{ $or: [{ stream: "tickets" }, { stream: { $exists: false } }] }];
     }
@@ -641,6 +653,7 @@ const getOrganizerWithdrawals = async (req, res) => {
     // of their being separate streams.
     else if (req.query.stream === "cinema_tickets") query.stream = "cinema_tickets";
     else if (req.query.stream === "cinema_beverages") query.stream = "cinema_beverages";
+    else if (req.query.stream === "capital") query.stream = "capital";
     else if (req.query.stream === "tickets") {
       // Rows written before the split carry no stream and are ticket revenue.
       query.$and = [{ $or: [{ stream: "tickets" }, { stream: { $exists: false } }] }];

@@ -28,15 +28,18 @@ const asMajor = (doc) => ({
   pazimoCommission: toMajor(doc.commissionMinor),
   vatOnCommission: toMajor(doc.vatMinor),
   ownerVat: toMajor(doc.ownerVatMinor),
-  // gross - commission - vat - ownerVat, NOT netMinor. netMinor also carries
-  // Pazimo Capital's loan_principal/loan_repayment movements (both fold into
-  // it — see applyToProjection's default branch — because availableBalance
-  // correctly needs them: a credited advance really does raise what an
-  // organizer can withdraw, and a repayment really does lower it). But
-  // "revenue" is a different question than "current position," and this
-  // field answers the wrong one when it's netMinor — found 2026-09-17 as a
-  // ~23,000 ETB gap between this and the dashboard's ticket-only
-  // organizerRevenue on an otherwise fully reconciled ledger.
+  // gross - commission - vat - ownerVat, NOT netMinor. This used to matter
+  // for the "tickets" stream specifically because Pazimo Capital's
+  // loan_principal/loan_repayment used to be written onto that same stream,
+  // so netMinor carried loan cash flow that grossMinor didn't — a ~23,000
+  // ETB gap found 2026-09-17 between this figure and the dashboard's
+  // ticket-only organizerRevenue on an otherwise fully reconciled ledger.
+  // Capital now has its own "capital" stream (see ledgerService's
+  // PROJECTION_FIELD and Withdrawal/LedgerEntry/LedgerBalance's stream
+  // enums), so "tickets" no longer carries any loan movement at all — this
+  // formula is kept anyway because gross/net should agree by construction on
+  // every stream, and computing it this way is what would catch it if they
+  // ever didn't.
   ownerRevenue: toMajor(
     doc.grossMinor - doc.commissionMinor - doc.vatMinor - doc.ownerVatMinor
   ),
@@ -186,6 +189,8 @@ const PARTITIONS = [
   { key: "venue_beverages", label: "Venue beverages", ownerKind: "venue", stream: "beverages" },
   { key: "cinema_tickets", label: "Cinema tickets", ownerKind: "cinema", stream: "tickets" },
   { key: "cinema_beverages", label: "Cinema concessions", ownerKind: "cinema", stream: "beverages" },
+  // A loan's principal, and nothing else — never mixed with event_tickets.
+  { key: "capital", label: "Pazimo Capital", ownerKind: "organizer", stream: "capital" },
 ];
 
 const emptyPartition = (partition, currency) => ({

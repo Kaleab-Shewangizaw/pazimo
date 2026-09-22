@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { formatCompactMoney } from "@/lib/utils";
-import { Banknote, Landmark, Lock, Repeat, ShieldAlert, TrendingUp } from "lucide-react";
+import { Banknote, Landmark, Lock, Repeat, ShieldAlert, TrendingUp, Wallet } from "lucide-react";
+import CapitalWithdrawForm from "@/components/capital/CapitalWithdrawForm";
 
 const STANDARD_FEE_RATE = 0.15;
 
@@ -94,9 +95,11 @@ export default function CapitalDashboardPage() {
   const [requestDialogOpen, setRequestDialogOpen] = useState(false);
   const [requestAmount, setRequestAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [capitalBalance, setCapitalBalance] = useState(0);
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
 
   const fetchEverything = useCallback(async () => {
-    const { token } = getAuth();
+    const { token, userId } = getAuth();
     if (!token) {
       toast.error("Please login to view Pazimo Capital");
       setLoading(false);
@@ -116,16 +119,20 @@ export default function CapitalDashboardPage() {
         return;
       }
 
-      const [summaryRes, historyRes] = await Promise.all([
+      const [summaryRes, historyRes, balanceRes] = await Promise.all([
         fetch(`${API_URL}/api/capital/organizer/summary`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`${API_URL}/api/capital/organizer/loans?limit=20`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
+        fetch(`${API_URL}/api/withdrawals/organizer/${userId}/balance?currency=ETB`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
       ]);
       const summaryData = await summaryRes.json();
       const historyData = await historyRes.json();
+      const balanceData = await balanceRes.json();
 
       if (summaryRes.ok && summaryData.success) {
         setMetrics(summaryData.data.metrics);
@@ -133,6 +140,12 @@ export default function CapitalDashboardPage() {
       }
       if (historyRes.ok && historyData.success) {
         setHistory(historyData.data);
+      }
+      if (balanceRes.ok && balanceData.success) {
+        // A separate pool from ticket revenue — the disbursed principal, less
+        // whatever's already been withdrawn from it. Never inflated by
+        // ticket sales, never reduced by repayment.
+        setCapitalBalance(balanceData.data?.streams?.capital?.availableBalance || 0);
       }
     } catch (error) {
       console.error("Error loading capital dashboard:", error);
@@ -349,7 +362,7 @@ export default function CapitalDashboardPage() {
                   <div className="flex items-start gap-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 p-2.5 mt-1">
                     <Landmark className="h-3.5 w-3.5 shrink-0 mt-0.5 text-blue-500 dark:text-blue-400" />
                     <p className="text-[11px] leading-relaxed text-blue-700 dark:text-blue-400">
-                      Approved — funds are being added to your withdrawal balance.
+                      Approved — funds are being added to your Pazimo Capital balance.
                     </p>
                   </div>
                 )}
@@ -362,6 +375,40 @@ export default function CapitalDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Capital balance — a separate pool from ticket revenue. Disbursed
+          principal lands here; withdrawing it never touches ticket sales. */}
+      {capitalBalance > 0 && (
+        <Card className="overflow-hidden border-none shadow-md dark:bg-gray-900/40 mb-6 sm:mb-8">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="p-1.5 rounded-lg bg-indigo-100 dark:bg-indigo-900/30">
+                    <Wallet className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <span className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400">
+                    Pazimo Capital balance
+                  </span>
+                </div>
+                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                  {formatCompactMoney(capitalBalance, "ETB")}
+                </div>
+                <div className="text-xs text-muted-foreground dark:text-gray-500 mt-1">
+                  Your disbursed advance, separate from ticket revenue — withdraw it like
+                  you would ticket money.
+                </div>
+              </div>
+              <Button
+                onClick={() => setWithdrawDialogOpen(true)}
+                className="bg-[#1a2d5a] hover:bg-[#1a2d5a]/90 text-white shrink-0"
+              >
+                Withdraw
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* History */}
       <Card className="dark:bg-black dark:border-gray-800">
@@ -557,6 +604,27 @@ export default function CapitalDashboardPage() {
               {submitting ? "Submitting..." : "Submit Request"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Withdraw dialog — draws the capital pool only, never ticket revenue. */}
+      <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
+        <DialogContent className="sm:max-w-lg dark:bg-black dark:border-gray-800">
+          <DialogHeader>
+            <DialogTitle>Withdraw from Pazimo Capital</DialogTitle>
+            <DialogDescription>
+              Draws your Capital balance only — your ticket withdrawal balance is
+              untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <CapitalWithdrawForm
+            token={getAuth().token}
+            available={capitalBalance}
+            onSuccess={() => {
+              setWithdrawDialogOpen(false);
+              fetchEverything();
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>

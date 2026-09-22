@@ -98,6 +98,30 @@ const mirrorWithdrawal = ({
     })
   );
 
+/**
+ * Mirror a Pazimo Capital advance being credited to an organizer.
+ *
+ * Its own stream ("capital"), never "tickets" — a loan's principal is
+ * credited once at approval, not earned per sale, so it must never be
+ * indistinguishable from ticket revenue in the ledger. Keyed by loanId alone:
+ * a loan is disbursed exactly once (approveLoan goes straight from "pending"
+ * to "active"), so there is no delta to track the way backfillLedger's
+ * writeLoanDelta has to for a historical/cumulative repair.
+ */
+const mirrorLoanPrincipal = ({ organizerId, amount, loanId, currency = "ETB", occurredAt }) =>
+  guard(`loan principal ${loanId}`, () =>
+    ledger.append({
+      owner: { kind: "organizer", id: organizerId },
+      currency,
+      stream: "capital",
+      kind: "loan_principal",
+      amountMinor: require("../utils/money").toMinor(amount),
+      source: { loan: loanId },
+      idempotencyKey: `loan_principal:${loanId}`,
+      occurredAt,
+    })
+  );
+
 /** Mirror a refund: the reversal of a sale that already settled. */
 const mirrorRefund = ({
   owner,
@@ -127,6 +151,7 @@ const dualWriteHealth = () => ({ ...failures });
 module.exports = {
   mirrorSale,
   mirrorWithdrawal,
+  mirrorLoanPrincipal,
   mirrorRefund,
   dualWriteHealth,
 };

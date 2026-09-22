@@ -32,6 +32,10 @@ const CREDIT_KINDS = new Set([
 const PROJECTION_FIELD = {
   ticket_sale: "grossMinor",
   beverage_sale: "grossMinor",
+  // Capital's own stream has no commission/vat/ownerVat — a loan principal
+  // is credited whole, not split. Folding it into grossMinor keeps that
+  // stream's gross === net, the same identity the sale streams hold.
+  loan_principal: "grossMinor",
   commission: "commissionMinor",
   vat: "vatMinor",
   owner_vat: "ownerVatMinor",
@@ -390,7 +394,7 @@ const rebuildBalance = async ({ owner, currency = "ETB", stream }) => {
         grossMinor: {
           $sum: {
             $cond: [
-              { $in: ["$kind", ["ticket_sale", "beverage_sale"]] },
+              { $in: ["$kind", ["ticket_sale", "beverage_sale", "loan_principal"]] },
               "$amountMinor",
               0,
             ],

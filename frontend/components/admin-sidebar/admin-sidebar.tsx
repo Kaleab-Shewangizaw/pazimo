@@ -409,6 +409,17 @@ export default function AdminSidebar({
                     >
                       Beverage Withdrawal
                     </Link>
+                    <Link
+                      href="/admin/withdrawals/capital"
+                      onClick={onClose}
+                      className={`block p-2.5 rounded-xl text-sm transition-colors ${
+                        isActive("/admin/withdrawals/capital")
+                          ? "bg-blue-50 text-blue-600 dark:bg-zinc-900 dark:text-blue-400"
+                          : "text-gray-600 dark:text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-zinc-900"
+                      }`}
+                    >
+                      Pazimo Capital Withdrawal
+                    </Link>
                   </div>
                 )}
               </div>

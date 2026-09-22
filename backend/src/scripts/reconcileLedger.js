@@ -96,6 +96,8 @@ const run = async () => {
       await ledgerFor("organizer", o._id, "tickets"));
     compare(`organizer ${name} · beverages`, balance.streams?.beverages?.availableBalance,
       await ledgerFor("organizer", o._id, "beverages"));
+    compare(`organizer ${name} · capital`, balance.streams?.capital?.availableBalance,
+      await ledgerFor("organizer", o._id, "capital"));
   }
 
   // --- Venues -------------------------------------------------------------

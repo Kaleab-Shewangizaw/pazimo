@@ -31,7 +31,13 @@ const OWNER_KINDS = ["organizer", "venue", "cinema", "platform"];
 
 // The pools money is kept in. Mirrors Withdrawal.stream, which is the same
 // distinction on the payout side: tickets and drinks settle separately.
-const STREAMS = ["tickets", "beverages"];
+//
+// "capital" is Pazimo Capital's own pool — a loan's principal, and nothing
+// else. It never mixes with "tickets": a loan is credited once at approval,
+// not earned per sale, so it must not inflate ticket gross/net or an
+// organizer's ticket withdrawal balance. See ledgerService's PROJECTION_FIELD
+// and rebuildBalance for how this stream's own gross/net stay consistent.
+const STREAMS = ["tickets", "beverages", "capital"];
 
 const ENTRY_KINDS = [
   // Credits to the seller

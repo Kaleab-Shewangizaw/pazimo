@@ -11,6 +11,8 @@ const path = require("path");
 const {
   getOrganizerEventIds,
   revenueFieldsOverArray,
+  EXCLUDED_TICKET_STATUS,
+  EXCLUDED_PAYMENT_STATUS,
 } = require("../utils/ticketRevenueQuery");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
@@ -768,6 +770,14 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $addFields: {
           // Filter tickets with price > 0
+          // Filter tickets with price > 0. This used to only check price and
+          // currency — it counted cancelled/failed/expired/pending tickets
+          // (including abandoned, never-paid checkouts) as revenue, more
+          // permissive than financeService.calculateOrganizerBalance's filter
+          // and able to show a higher balance here than what's actually
+          // withdrawable. Now reuses the same EXCLUDED_TICKET_STATUS /
+          // EXCLUDED_PAYMENT_STATUS ticketRevenueQuery.js defines, so this
+          // never drifts from the withdrawal gate's definition of revenue.
           paidTickets: {
             $filter: {
               input: "$tickets",
@@ -775,6 +785,12 @@ exports.getOrganizerDashboard = async (req, res) => {
               cond: {
                 $and: [
                   { $gt: ["$$ticket.price", 0] },
+                  { $not: [{ $in: ["$$ticket.status", EXCLUDED_TICKET_STATUS] }] },
+                  {
+                    $not: [
+                      { $in: ["$$ticket.paymentStatus", EXCLUDED_PAYMENT_STATUS] },
+                    ],
+                  },
                   ...(currency === "ETB"
                     ? [
                         {
@@ -857,6 +873,12 @@ exports.getOrganizerDashboard = async (req, res) => {
     ]);
 
     // Get withdrawal data in parallel
+    //
+    // Scoped to the ticket stream only, same reasoning as
+    // organizerOverviewController's admin list: availableBalance below is a
+    // TICKET balance, so a beverage or Pazimo Capital withdrawal must not be
+    // subtracted from it. Rows written before the stream split carry no
+    // `stream` at all and are ticket revenue.
     const withdrawalCurrencyMatch =
       currency === "ETB"
         ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
@@ -866,7 +888,10 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $match: {
           organizer: new mongoose.Types.ObjectId(organizerId),
-          ...withdrawalCurrencyMatch,
+          $and: [
+            withdrawalCurrencyMatch,
+            { $or: [{ stream: "tickets" }, { stream: { $exists: false } }] },
+          ],
         },
       },
       {
@@ -910,22 +935,20 @@ exports.getOrganizerDashboard = async (req, res) => {
       pendingWithdrawals: 0,
     };
 
-    // Ticket revenue and any borrowed Pazimo Capital principal are one pool
-    // (see financeService.calculateOrganizerBalance, the withdrawal gate's
-    // own formula) — an advance really does raise what's withdrawable, and
-    // the automatic 60%-of-ticket-sales repayment really does lower it. This
-    // endpoint was missing both terms entirely, so an organizer with a loan
-    // saw a higher balance on their own dashboard than they could actually
-    // withdraw (the withdrawal gate itself was never wrong — only this
-    // display was). Found 2026-09-17 while confirming which organizer-facing
-    // numbers this session's fixes actually touch.
+    // Pazimo Capital's principal is its own pool (see financeService's
+    // `capital` stream) and never added here. Only its automatic
+    // 60%-of-ticket-sales repayment touches this ticket balance, matching
+    // financeService.calculateOrganizerBalance's ticketAvailableBalance —
+    // the same identity the withdrawal gate uses, so this display and that
+    // gate always agree.
     const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
-    const availableBalance =
-      organizerRevenue +
-      loanFinance.principalCredited -
-      loanFinance.totalRepaidFromTickets -
-      withdrawalStats.totalWithdrawn -
-      withdrawalStats.pendingWithdrawals;
+    const availableBalance = Math.max(
+      0,
+      organizerRevenue -
+        loanFinance.totalRepaidFromTickets -
+        withdrawalStats.totalWithdrawn -
+        withdrawalStats.pendingWithdrawals
+    );
 
     res.status(200).json({
       success: true,
@@ -1005,6 +1028,14 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $addFields: {
           // Filter tickets with price > 0
+          // Filter tickets with price > 0. This used to only check price and
+          // currency — it counted cancelled/failed/expired/pending tickets
+          // (including abandoned, never-paid checkouts) as revenue, more
+          // permissive than financeService.calculateOrganizerBalance's filter
+          // and able to show a higher balance here than what's actually
+          // withdrawable. Now reuses the same EXCLUDED_TICKET_STATUS /
+          // EXCLUDED_PAYMENT_STATUS ticketRevenueQuery.js defines, so this
+          // never drifts from the withdrawal gate's definition of revenue.
           paidTickets: {
             $filter: {
               input: "$tickets",
@@ -1012,6 +1043,12 @@ exports.getOrganizerDashboard = async (req, res) => {
               cond: {
                 $and: [
                   { $gt: ["$$ticket.price", 0] },
+                  { $not: [{ $in: ["$$ticket.status", EXCLUDED_TICKET_STATUS] }] },
+                  {
+                    $not: [
+                      { $in: ["$$ticket.paymentStatus", EXCLUDED_PAYMENT_STATUS] },
+                    ],
+                  },
                   ...(currency === "ETB"
                     ? [
                         {
@@ -1133,6 +1170,12 @@ exports.getOrganizerDashboard = async (req, res) => {
     ]);
 
     // Get withdrawal data in parallel
+    //
+    // Scoped to the ticket stream only, same reasoning as
+    // organizerOverviewController's admin list: availableBalance below is a
+    // TICKET balance, so a beverage or Pazimo Capital withdrawal must not be
+    // subtracted from it. Rows written before the stream split carry no
+    // `stream` at all and are ticket revenue.
     const withdrawalCurrencyMatch =
       currency === "ETB"
         ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
@@ -1142,7 +1185,10 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $match: {
           organizer: new mongoose.Types.ObjectId(organizerId),
-          ...withdrawalCurrencyMatch,
+          $and: [
+            withdrawalCurrencyMatch,
+            { $or: [{ stream: "tickets" }, { stream: { $exists: false } }] },
+          ],
         },
       },
       {
@@ -1186,22 +1232,20 @@ exports.getOrganizerDashboard = async (req, res) => {
       pendingWithdrawals: 0,
     };
 
-    // Ticket revenue and any borrowed Pazimo Capital principal are one pool
-    // (see financeService.calculateOrganizerBalance, the withdrawal gate's
-    // own formula) — an advance really does raise what's withdrawable, and
-    // the automatic 60%-of-ticket-sales repayment really does lower it. This
-    // endpoint was missing both terms entirely, so an organizer with a loan
-    // saw a higher balance on their own dashboard than they could actually
-    // withdraw (the withdrawal gate itself was never wrong — only this
-    // display was). Found 2026-09-17 while confirming which organizer-facing
-    // numbers this session's fixes actually touch.
+    // Pazimo Capital's principal is its own pool (see financeService's
+    // `capital` stream) and never added here. Only its automatic
+    // 60%-of-ticket-sales repayment touches this ticket balance, matching
+    // financeService.calculateOrganizerBalance's ticketAvailableBalance —
+    // the same identity the withdrawal gate uses, so this display and that
+    // gate always agree.
     const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
-    const availableBalance =
-      organizerRevenue +
-      loanFinance.principalCredited -
-      loanFinance.totalRepaidFromTickets -
-      withdrawalStats.totalWithdrawn -
-      withdrawalStats.pendingWithdrawals;
+    const availableBalance = Math.max(
+      0,
+      organizerRevenue -
+        loanFinance.totalRepaidFromTickets -
+        withdrawalStats.totalWithdrawn -
+        withdrawalStats.pendingWithdrawals
+    );
 
     res.status(200).json({
       success: true,

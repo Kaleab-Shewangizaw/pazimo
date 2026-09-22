@@ -6,7 +6,17 @@ const { DEFAULT_COMMISSION_RATE } = require("../config/rates");
 // capitalService each carried their own copy of this; all three shared the same
 // bug (see below) and could drift apart independently.
 
-const EXCLUDED_TICKET_STATUS = ["cancelled", "failed", "expired"];
+// "pending" means checkout started and payment was never confirmed
+// (eventController.buyTicket sets status: "active" only once verified paid,
+// "pending" otherwise). A real sale never sits there long — it either
+// confirms or the stock-hold sweep (stockHoldExpiry.js) expires it within
+// ~60-75s — but counting it as revenue let organizers withdraw against money
+// that was never actually collected. Once the sweep later flipped the ticket
+// to "expired" the revenue vanished retroactively, permanently, because the
+// withdrawal had already gone out. Confirmed via a read-only production
+// audit 2026-09-22: two organizers' negative balances matched (gross value
+// of their stale pending tickets) x 0.97 exactly.
+const EXCLUDED_TICKET_STATUS = ["cancelled", "failed", "expired", "pending"];
 const EXCLUDED_PAYMENT_STATUS = ["cancelled", "failed"];
 
 /**

@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
+        protocol: "http",
+        hostname: "localhost",
+        port: "5000",
+        pathname: "/**",
+      },
+      {
         protocol: "https",
         hostname: "res.cloudinary.com",
         port: "",
@@ -31,6 +37,20 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   output: "standalone",
+  skipTrailingSlashRedirect: true,
+  skipMiddlewareUrlNormalize: true,
+  env: {
+    NEXT_PUBLIC_API_URL:
+      process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.NODE_ENV === "production"
+        ? "https://pazimoapp.testserveret.com"
+        : "http://localhost:5000"),
+    NEXT_PUBLIC_FRONTEND_URL:
+      process.env.NEXT_PUBLIC_FRONTEND_URL ||
+      (process.env.NODE_ENV === "production"
+        ? "https://pazimo.vercel.app"
+        : "http://localhost:3000"),
+  },
   // Prevent HTML caching to avoid ChunkLoadError after deployments
   async headers() {
     return [

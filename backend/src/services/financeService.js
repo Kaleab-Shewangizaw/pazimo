@@ -151,17 +151,19 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const withdrawalsByStream = new Map(withdrawalStats.map((r) => [r._id, r]));
   const ticketWithdrawals = withdrawalsByStream.get("tickets") || emptyWithdrawals;
   const beverageWithdrawals = withdrawalsByStream.get("beverages") || emptyWithdrawals;
+  const capitalWithdrawals = withdrawalsByStream.get("capital") || emptyWithdrawals;
 
   // Kept for the combined view and for callers that predate the split.
   const pendingAmount = ticketWithdrawals.pendingAmount + beverageWithdrawals.pendingAmount;
   const approvedAmount = ticketWithdrawals.approvedAmount + beverageWithdrawals.approvedAmount;
 
-  // Pazimo Capital position. Borrowed principal is added to the withdrawable
-  // balance (the organizer spends it like their own money); repayment is then
-  // taken automatically as 60% of gross ticket sales made after the advance
-  // was approved. That 60% cut is exactly `totalRepaidFromTickets`, so
-  // subtracting it here leaves the organizer with 40% of those sales (less the
-  // 3% commission already baked into organizerRevenue) — matching the spec.
+  // Pazimo Capital position. The advance's principal lives in its OWN pool
+  // (see capitalAvailableBalance below) — it never touches the ticket
+  // balance. Only repayment does: 60% of gross ticket sales made after the
+  // advance was approved is diverted away from the organizer automatically.
+  // That 60% cut is exactly `totalRepaidFromTickets`, subtracted below, which
+  // leaves the organizer with the other ~40% of those sales (less the
+  // commission+VAT already baked into organizerRevenue) — matching the spec.
   const loanFinance = await getOrganizerLoanFinance(organizerId, normalizedCurrency);
 
   // Beverage sales are a separate reporting stream but the same pool of money:
@@ -176,22 +178,44 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
           organizerVat: 0, organizerRevenue: 0, unitsSold: 0, salesCount: 0 };
 
   // Calculate available balance
-  // Two pools, drawn independently.
+  // Three pools, drawn independently.
   //
-  // Pazimo Capital sits entirely on the ticket side: advances are underwritten
-  // against event revenue and repaid from a cut of ticket sales, so bar takings
-  // neither fund nor repay a loan. Keeping the loan out of the beverage pool is
-  // what lets an organizer with an outstanding advance still settle bar money.
+  // Pazimo Capital's advance is underwritten against event revenue and
+  // repaid from a cut of ticket sales, but the PRINCIPAL ITSELF is its own
+  // pool (capitalAvailableBalance, below) — it is credited once at approval,
+  // not earned per sale, and must never inflate the ticket balance, the
+  // ticket ledger or the admin ticket dashboard. Only the automatic 60%
+  // repayment cut touches ticket money, via totalRepaidFromTickets below.
+  // Bar takings neither fund nor repay a loan, which is what lets an
+  // organizer with an outstanding advance still settle bar money.
   const ticketAvailableBalance = round2(
-    organizerRevenue +
-      loanFinance.principalCredited -
-      loanFinance.totalRepaidFromTickets -
-      (ticketWithdrawals.pendingAmount + ticketWithdrawals.approvedAmount)
+    Math.max(
+      0,
+      organizerRevenue -
+        loanFinance.totalRepaidFromTickets -
+        (ticketWithdrawals.pendingAmount + ticketWithdrawals.approvedAmount)
+    )
   );
 
   const beverageAvailableBalance = round2(
     beverage.organizerRevenue -
       (beverageWithdrawals.pendingAmount + beverageWithdrawals.approvedAmount)
+  );
+
+  // What's left of the disbursed principal that the organizer hasn't yet
+  // withdrawn. Repayment does NOT reduce this — it reduces the debt
+  // (loanFinance.outstandingDebt), which is a different question. Clamped at
+  // 0 as a backstop: it should never go negative in ordinary operation, but a
+  // historical organizer who withdrew some of this principal through the old,
+  // mixed ticket pool needs a one-time reconciling entry (see
+  // scripts/migrateCapitalPoolSeparation.js) or this floors to 0 instead of
+  // going negative.
+  const capitalAvailableBalance = round2(
+    Math.max(
+      0,
+      loanFinance.principalCredited -
+        (capitalWithdrawals.pendingAmount + capitalWithdrawals.approvedAmount)
+    )
   );
 
   // The historical field name. Still the ticket pool, because every existing
@@ -304,6 +328,19 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
         ),
         unitsSold: beverage.unitsSold,
         salesCount: beverage.salesCount,
+      },
+      // Pazimo Capital's own pool — completely separate from ticket sales.
+      // Disbursement lands here, not in `tickets`; approving a withdrawal
+      // from this pool never touches the ticket balance or ledger. Repayment
+      // (totalRepaidFromTickets) is reported here for context but is already
+      // reflected in `tickets.availableBalance`, not in this pool.
+      capital: {
+        availableBalance: capitalAvailableBalance,
+        pendingWithdrawals: round2(capitalWithdrawals.pendingAmount),
+        approvedWithdrawals: round2(capitalWithdrawals.approvedAmount),
+        principalCredited: loanFinance.principalCredited,
+        totalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
+        outstandingDebt: loanFinance.outstandingDebt,
       },
     },
     combined: {
