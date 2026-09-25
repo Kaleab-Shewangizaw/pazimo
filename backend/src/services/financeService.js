@@ -197,9 +197,14 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     )
   );
 
+  // Floored at 0 for the same reason as ticketAvailableBalance above — a
+  // historical accounting gap must never surface as a negative bar balance.
   const beverageAvailableBalance = round2(
-    beverage.organizerRevenue -
-      (beverageWithdrawals.pendingAmount + beverageWithdrawals.approvedAmount)
+    Math.max(
+      0,
+      beverage.organizerRevenue -
+        (beverageWithdrawals.pendingAmount + beverageWithdrawals.approvedAmount)
+    )
   );
 
   // What's left of the disbursed principal that the organizer hasn't yet
