@@ -7,6 +7,7 @@ const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
 const {
   BadRequestError,
+  ConflictError,
   NotFoundError,
   UnauthorizedError,
 } = require("../errors");
@@ -67,37 +68,62 @@ const createUsher = async (req, res) => {
 // default (true) and the account works immediately. Returns a token, same
 // envelope shape as a successful login, so the client can sign the person
 // in right away instead of sending them back to a login screen.
+//
+// No email is collected — an usher signs in by phone number only (see
+// authController.js login()'s identifier lookup). The User schema still
+// requires+uniquely-indexes email, so a placeholder is generated here, same
+// trick authController.register() uses for a no-email customer sign-up.
 const signUpUsher = async (req, res) => {
-  const { firstName, lastName, email, phoneNumber, password } = req.body;
+  const { firstName, lastName, phoneNumber, password } = req.body;
 
-  if (!firstName || !email || !phoneNumber || !password) {
+  if (!firstName || !phoneNumber || !password) {
     throw new BadRequestError(
-      "firstName, email, phoneNumber and password are required"
+      "firstName, phoneNumber and password are required"
     );
   }
 
   // Same guard authController.register()/organizerController.signUp() apply
   // before an unauthenticated field reaches a Mongo query — without it a
   // query-operator object here could match an arbitrary existing account.
-  if (isQueryOperatorInjection(email) || isQueryOperatorInjection(phoneNumber)) {
+  if (isQueryOperatorInjection(phoneNumber)) {
     throw new BadRequestError("Invalid request");
   }
 
-  const existingEmail = await User.findOne({
-    email: String(email).toLowerCase().trim(),
-  });
-  if (existingEmail) {
-    throw new BadRequestError("Email already registered");
-  }
+  const placeholderEmail =
+    "usherpazimo" +
+    String(Math.floor(Math.random() * 1000000)).padStart(6, "0") +
+    "@gmail.com";
 
-  const user = await User.create({
-    firstName: stripAngleBrackets(firstName),
-    lastName: stripAngleBrackets(lastName || firstName),
-    email,
-    phoneNumber,
-    password,
-    role: "usher",
-  });
+  let user;
+  try {
+    user = await User.create({
+      firstName: stripAngleBrackets(firstName),
+      lastName: stripAngleBrackets(lastName || firstName),
+      email: placeholderEmail,
+      phoneNumber,
+      password,
+      role: "usher",
+    });
+  } catch (error) {
+    // The phoneNumber+role compound unique index (User.js) rejects a second
+    // usher account on the same phone number with a raw Mongo E11000 error —
+    // app.js's catch-all error handler echoes err.message verbatim, which
+    // would otherwise dump that Mongo internals string straight to the
+    // client. Surface a clean, typed error instead, same as
+    // authController.register()'s EMAIL_TAKEN/PHONE_TAKEN handling.
+    if (error.code === 11000 && error.keyPattern?.phoneNumber) {
+      throw new ConflictError(
+        "That phone number is already registered as an usher — try signing in instead."
+      );
+    }
+    // The placeholder email above is random but not guaranteed unique — an
+    // astronomically unlikely collision on the email index falls here too;
+    // don't leak the raw Mongo error for that either.
+    if (error.code === 11000) {
+      throw new BadRequestError("We could not create your account. Try again.");
+    }
+    throw error;
+  }
 
   const token = user.createJWT();
   user.password = undefined;
