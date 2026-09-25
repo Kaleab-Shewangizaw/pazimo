@@ -43,7 +43,7 @@ const run = async () => {
       ? { currency: "USD" }
       : { $or: [{ currency: "ETB" }, { currency: { $exists: false } }, { currency: null }] };
 
-  const writeLoanDelta = async ({ owner, kind, currentTotalMinor, note }) => {
+  const recordedTotal = async (owner, kind) => {
     const [existing] = await LedgerEntry.aggregate([
       {
         $match: {
@@ -56,19 +56,30 @@ const run = async () => {
       },
       { $group: { _id: null, total: { $sum: "$amountMinor" } } },
     ]);
-    const recordedMinor = Math.abs(existing?.total || 0);
-    const delta = currentTotalMinor - recordedMinor;
-    if (delta <= 0) return { delta: 0 };
+    return Math.abs(existing?.total || 0);
+  };
 
-    if (WRITE) {
-      await ledger.append({
-        owner, currency: CURRENCY, stream: "capital",
-        kind, amountMinor: delta,
-        source: { note },
-        idempotencyKey: `${kind}:${owner.id}:${CURRENCY}:upto:${currentTotalMinor}`,
-      });
-    }
-    return { delta };
+  const writeLoanDelta = async ({ owner, kind, currentTotalMinor, note }) => {
+    const recordedMinor = await recordedTotal(owner, kind);
+    const delta = currentTotalMinor - recordedMinor;
+    if (delta <= 0) return { delta: 0, verified: true };
+
+    if (!WRITE) return { delta, verified: null };
+
+    const idempotencyKey = `${kind}:${owner.id}:${CURRENCY}:upto:${currentTotalMinor}`;
+    // Write, then read the entry straight back — the earlier run reported
+    // success for every organizer while 3 of 4 silently never persisted, so
+    // this call is no longer trusted on its return value alone.
+    await ledger.append({
+      owner, currency: CURRENCY, stream: "capital",
+      kind, amountMinor: delta,
+      source: { note },
+      idempotencyKey,
+    });
+    const found = await LedgerEntry.findOne({ idempotencyKey }).lean();
+    const afterTotal = await recordedTotal(owner, kind);
+    const verified = !!found && afterTotal >= currentTotalMinor;
+    return { delta, verified, foundEntry: !!found, afterTotal };
   };
 
   const borrowers = await Loan.distinct("organizer", {
@@ -78,25 +89,42 @@ const run = async () => {
   console.log(`Borrowers found: ${borrowers.length}\n`);
 
   let totalDeltaMinor = 0;
+  let failures = 0;
   for (const organizerId of borrowers) {
     const finance = await getOrganizerLoanFinance(organizerId, CURRENCY);
     const owner = { kind: "organizer", id: organizerId };
     const principal = toMinor(finance.principalCredited || 0);
     if (principal <= 0) continue;
 
-    const { delta } = await writeLoanDelta({
-      owner, kind: "loan_principal", currentTotalMinor: principal,
-      note: "backfill: capital principal (targeted, capital-only run)",
-    });
+    let result;
+    try {
+      result = await writeLoanDelta({
+        owner, kind: "loan_principal", currentTotalMinor: principal,
+        note: "backfill: capital principal (targeted, capital-only run)",
+      });
+    } catch (error) {
+      failures += 1;
+      console.log(`  organizer ${organizerId}  ERROR: ${error.message}`);
+      continue;
+    }
+
+    const { delta, verified } = result;
     totalDeltaMinor += delta;
-    console.log(
-      `  organizer ${organizerId}  principal ${finance.principalCredited.toFixed(2)} ${CURRENCY}` +
-        (delta > 0 ? `  -> writing delta ${formatMinor(delta, CURRENCY)}` : `  -> already recorded, no delta`)
-    );
+    if (delta <= 0) {
+      console.log(`  organizer ${organizerId}  principal ${finance.principalCredited.toFixed(2)} ${CURRENCY}  -> already recorded, no delta`);
+    } else if (!WRITE) {
+      console.log(`  organizer ${organizerId}  principal ${finance.principalCredited.toFixed(2)} ${CURRENCY}  -> writing delta ${formatMinor(delta, CURRENCY)}`);
+    } else if (verified) {
+      console.log(`  organizer ${organizerId}  principal ${finance.principalCredited.toFixed(2)} ${CURRENCY}  -> wrote delta ${formatMinor(delta, CURRENCY)}  [VERIFIED]`);
+    } else {
+      failures += 1;
+      console.log(`  organizer ${organizerId}  principal ${finance.principalCredited.toFixed(2)} ${CURRENCY}  -> claimed delta ${formatMinor(delta, CURRENCY)} but readback FAILED to confirm it — ${JSON.stringify(result)}`);
+    }
   }
 
   console.log(`\nTotal new credit ${WRITE ? "written" : "to write"}: ${formatMinor(totalDeltaMinor, CURRENCY)}`);
-  console.log(WRITE ? "\nDone." : "\nDry run — nothing written. Re-run with --write to apply.");
+  if (failures > 0) console.log(`\n${failures} organizer(s) FAILED verification — do not trust this run as complete.`);
+  console.log(WRITE ? (failures > 0 ? "\nDone, with failures above." : "\nDone, all writes verified.") : "\nDry run — nothing written. Re-run with --write to apply.");
   console.log("");
   await mongoose.disconnect();
   process.exit(0);
