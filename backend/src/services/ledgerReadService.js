@@ -281,7 +281,17 @@ const getPlatformPartitions = async (currency = "ETB", { withCoverage = true } =
           netMinor: { $sum: "$netMinor" },
           withdrawnMinor: { $sum: "$withdrawnMinor" },
           pendingMinor: { $sum: "$pendingMinor" },
-          availableMinor: { $sum: "$availableMinor" },
+          // Floored per OWNER before summing, not after. A negative
+          // availableMinor is a real, already-tracked accounting problem on
+          // one seller's account (see pazimo-negative-organizer-balance
+          // memory) — useful to see on THAT seller's own row, but it must
+          // never bleed into the platform-wide total and make it look like
+          // there's less real, withdrawable money across everyone else than
+          // there actually is. Same principle financeService.
+          // calculateOrganizerBalance and organizerOverviewController
+          // already apply per-organizer; this is the same fix at the
+          // platform-aggregate level.
+          availableMinor: { $sum: { $max: ["$availableMinor", 0] } },
           // How many distinct sellers actually hold a position in this pool —
           // the number that makes "1,247.52 available" mean something.
           //
