@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Event = require("../models/Event");
+const { applyTicketAvailabilityRules } = require("./ticketAvailability");
 
 // Event links/checkout can reference an event either by its Mongo _id or by
 // its short, URL-friendly shortId (e.g. from the canonical /events/:slug-:shortId
@@ -36,6 +37,15 @@ const resolveTicketPrice = async ({ eventId, ticketTypeId, quantity, currency = 
   }
   if (!event) {
     return { ok: false, statusCode: 404, message: "Event not found" };
+  }
+
+  // `available` is a derived flag the wave/date engine owns and only gets
+  // rewritten when something saves the event (a purchase, an admin edit).
+  // On an event nobody has bought from in a while it can sit stale — refresh
+  // it here too, exactly like claimTicketStock does, so a checkout is never
+  // rejected as "not available" while real stock (quantity) remains.
+  if (applyTicketAvailabilityRules(event).changed) {
+    await event.save();
   }
 
   const ticketType = event.ticketTypes.find(

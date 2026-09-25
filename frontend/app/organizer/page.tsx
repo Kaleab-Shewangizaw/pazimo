@@ -41,6 +41,7 @@ import {
   AlertCircle,
   Clock,
   Loader2,
+  Receipt,
 } from "lucide-react";
 import { formatCompactMoney } from "@/lib/utils";
 import {
@@ -917,6 +918,15 @@ export default function OrganizerDashboard() {
   return (
     <div className="p-1 sm:p-2 lg:p-4 bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-black min-h-screen">
       <div className="flex flex-col gap-4 sm:gap-6 lg:gap-8 max-w-full sm:max-w-7xl mx-auto">
+        {/* VAT Notice */}
+        <div className="flex items-center gap-3 rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/60 p-3 sm:p-4">
+          <Receipt className="h-5 w-5 text-blue-600 dark:text-blue-300 flex-shrink-0" />
+          <p className="text-xs sm:text-sm text-blue-900 dark:text-blue-100">
+            <span className="font-semibold">Pazimo collects VAT (15%) on its commission</span>{" "}
+            — already deducted before your available balance is calculated.
+          </p>
+        </div>
+
         {/* Welcome Header */}
         <div className="bg-gradient-to-r from-[#06283D] to-[#1A5D8C] rounded-lg p-4 sm:p-6 text-white shadow-lg">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
