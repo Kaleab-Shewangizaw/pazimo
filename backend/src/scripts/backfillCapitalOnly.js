@@ -66,7 +66,17 @@ const run = async () => {
 
     if (!WRITE) return { delta, verified: null };
 
-    const idempotencyKey = `${kind}:${owner.id}:${CURRENCY}:upto:${currentTotalMinor}`;
+    // MUST include the stream. backfillLedger.js's original key
+    // (`${kind}:${owner.id}:${CURRENCY}:upto:${total}`) has no stream in it —
+    // found 2026-09-25 that 3 of these 4 organizers have a STALE
+    // loan_principal entry sitting on stream:"tickets" from before the
+    // capital-pool-separation fix (2026-09-18, the historical mis-streaming
+    // bug). append()'s idempotency check matches by key alone, so it found
+    // that old wrong-stream entry, treated the write as "already done," and
+    // silently no-opped — the exact silent failure this script's readback
+    // caught last run. Scoping the key by stream is what lets a correctly
+    // streamed entry be written without colliding with that old one.
+    const idempotencyKey = `${kind}:capital:${owner.id}:${CURRENCY}:upto:${currentTotalMinor}`;
     // Write, then read the entry straight back — the earlier run reported
     // success for every organizer while 3 of 4 silently never persisted, so
     // this call is no longer trusted on its return value alone.
@@ -76,7 +86,7 @@ const run = async () => {
       source: { note },
       idempotencyKey,
     });
-    const found = await LedgerEntry.findOne({ idempotencyKey }).lean();
+    const found = await LedgerEntry.findOne({ idempotencyKey, stream: "capital" }).lean();
     const afterTotal = await recordedTotal(owner, kind);
     const verified = !!found && afterTotal >= currentTotalMinor;
     return { delta, verified, foundEntry: !!found, afterTotal };
