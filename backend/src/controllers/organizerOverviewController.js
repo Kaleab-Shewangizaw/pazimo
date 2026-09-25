@@ -120,13 +120,28 @@ const getOrganizerOverview = async (req, res) => {
     }
 
     // ---- 4. withdrawals, grouped in one pass ---------------------------
+    //
+    // Scoped to the ticket stream only — availableBalance below is a TICKET
+    // balance, so a beverage or Pazimo Capital withdrawal must not be
+    // subtracted from it (that was the exact "-1,346.87" bug PAZIMO_PLAN
+    // decision 1 names, just for this endpoint instead of the withdrawal
+    // gate). Rows written before the stream split carry no `stream` at all
+    // and are ticket revenue.
     const withdrawalCurrency =
       currency === "ETB"
         ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
         : { currency: "USD" };
 
     const withdrawalRows = await Withdrawal.aggregate([
-      { $match: { organizer: { $in: organizerIds }, ...withdrawalCurrency } },
+      {
+        $match: {
+          organizer: { $in: organizerIds },
+          $and: [
+            withdrawalCurrency,
+            { $or: [{ stream: "tickets" }, { stream: { $exists: false } }] },
+          ],
+        },
+      },
       {
         $group: {
           _id: "$organizer",
@@ -206,13 +221,14 @@ const getOrganizerOverview = async (req, res) => {
         pazimoCollected: round2(rev.commission + rev.vat + rev.organizerVat),
         pendingWithdrawals: round2(wd.pending),
         approvedWithdrawals: round2(wd.approved),
-        // Same identity financeService.calculateOrganizerBalance uses, so the
-        // list and the per-organizer balance screen agree.
+        // Same identity financeService.calculateOrganizerBalance's
+        // ticketAvailableBalance uses, so the list and the per-organizer
+        // balance screen agree. Pazimo Capital's principal is its own pool
+        // (see financeService's `capital` stream) and never added here —
+        // only its automatic repayment (repaidFromTickets) touches this
+        // figure, exactly as it touches the ticket balance everywhere else.
         availableBalance: round2(
-          organizerRevenue +
-            loan.principalCredited -
-            loan.repaidFromTickets -
-            (wd.pending + wd.approved)
+          Math.max(0, organizerRevenue - loan.repaidFromTickets - (wd.pending + wd.approved))
         ),
         loanOutstanding: round2(loan.outstanding),
       };

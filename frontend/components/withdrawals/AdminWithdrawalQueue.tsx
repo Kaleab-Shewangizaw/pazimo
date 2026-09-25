@@ -48,7 +48,7 @@ import { Label } from "@/components/ui/label"
  * with a `stream` prop rather than two copies that drift apart.
  */
 
-export type WithdrawalStream = "tickets" | "beverages"
+export type WithdrawalStream = "tickets" | "beverages" | "capital"
 
 interface WithdrawalData {
   _id: string
@@ -120,6 +120,14 @@ const STREAM_COPY: Record<
       "Payouts drawn from bar takings. This pool is settled independently of ticket revenue.",
     accent: "border-t-amber-500",
     emptyHint: "Beverage withdrawal requests for the selected filter will appear here",
+    currencies: ["ETB"],
+  },
+  capital: {
+    title: "Pazimo Capital Withdrawal Requests",
+    subtitle:
+      "Payouts drawn from an organizer's Capital advance. Approving these never touches ticket revenue.",
+    accent: "border-t-indigo-500",
+    emptyHint: "Pazimo Capital withdrawal requests for the selected filter will appear here",
     currencies: ["ETB"],
   },
 }
@@ -454,12 +462,12 @@ export default function AdminWithdrawalQueue({
                             >
                               Bar takings
                             </Badge>
-                          ) : withdrawal.source === "loan" ? (
+                          ) : stream === "capital" ? (
                             <Badge
                               variant="outline"
                               className="border-indigo-300 text-indigo-600 bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:bg-indigo-950/30"
                             >
-                              Borrowed
+                              Pazimo Capital
                             </Badge>
                           ) : (
                             <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -553,7 +561,12 @@ export default function AdminWithdrawalQueue({
               <DialogDescription>
                 Update the status for {selectedWithdrawal?.organizer?.firstName}{" "}
                 {selectedWithdrawal?.organizer?.lastName}&apos;s{" "}
-                {stream === "beverages" ? "bar takings" : "ticket revenue"} request
+                {stream === "beverages"
+                  ? "bar takings"
+                  : stream === "capital"
+                    ? "Pazimo Capital"
+                    : "ticket revenue"}{" "}
+                request
                 of {formatAmount(selectedWithdrawal?.amount ?? 0)}{" "}
                 {selectedWithdrawal?.currency || currencyFilter}.
               </DialogDescription>

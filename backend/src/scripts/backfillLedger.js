@@ -437,38 +437,45 @@ const run = async () => {
 
   // --- Pazimo Capital -----------------------------------------------------
   //
-  // An advance is credited into the ticket pool as spendable money and repaid
-  // from a cut of later ticket sales, so both legs move the organizer's ticket
-  // balance and both must appear in the ledger. Omitting them was the first
-  // disagreement the reconciler found: the ledger read high by exactly the
-  // repayment taken.
+  // An advance is credited into its OWN pool ("capital"), never "tickets" —
+  // a loan's principal is a one-time credit at approval, not earned per
+  // sale, so it must not inflate ticket gross/net or the ticket withdrawal
+  // balance. Repayment (a 60% cut of ticket sales) is NOT written to the
+  // ledger at all: it reduces the debt, which Loan.outstandingBalance/
+  // totalRepaid already track authoritatively (recomputed live by
+  // syncOrganizerLoans), not a withdrawable pool. Ledger-izing it here would
+  // eventually drive the capital pool's net negative once a loan is fully
+  // repaid, since repayment totals principal + the fee — more than was ever
+  // credited.
   //
-  // Capital is organizer-and-tickets only, by design — an advance is
-  // underwritten against event revenue, so venues and cinemas have none.
-  let principalMinor = 0, repaidMinor = 0, loanRows = 0;
+  // Previously both legs were written onto `stream: "tickets"`, which is
+  // what caused the ~23,000 ETB ledger-vs-dashboard gap documented in
+  // capitalController's getCapitalRevenueSummary — this backfill is the fix
+  // at the source, not just a read-side workaround.
+  //
+  // Capital is organizer-only, by design — an advance is underwritten
+  // against event revenue, so venues and cinemas have none.
+  let principalMinor = 0, loanRows = 0;
   try {
     const { getOrganizerLoanFinance } = require("../services/loanRepaymentService");
     const Loan = require("../models/Loan");
 
-    // loan_principal/loan_repayment represent a CUMULATIVE position that
-    // grows over time (a second advance; more of an existing one repaid from
-    // later ticket sales) — unlike a sale or withdrawal, there is no natural
-    // per-event id to key an idempotent append off. Keying by organizer alone
-    // (as this used to) meant the first backfill's figure froze forever: a
-    // re-run found the key already claimed and skipped, even as the real
-    // total kept growing. Found 2026-09-16 via the reconciler, alongside the
-    // ticket-invalidation correction above — one organizer's ledger balance
-    // was inflated by the full 103,120 ETB gap this alone was hiding. Writes
-    // only the delta since last time, keyed by the new cumulative total, so
-    // the key changes whenever the truth does and a no-op re-run (nothing
-    // has changed) correctly writes nothing.
+    // loan_principal represents a CUMULATIVE position that can still grow (a
+    // second advance after the first is repaid) — unlike a sale or
+    // withdrawal, there is no natural per-event id to key an idempotent
+    // append off. Keying by organizer alone meant the first backfill's
+    // figure froze forever: a re-run found the key already claimed and
+    // skipped, even as the real total kept growing (found 2026-09-16).
+    // Writes only the delta since last time, keyed by the new cumulative
+    // total, so the key changes whenever the truth does and a no-op re-run
+    // (nothing has changed) correctly writes nothing.
     const writeLoanDelta = async ({ owner, kind, currentTotalMinor, note }) => {
       const [existing] = await LedgerEntry.aggregate([
         {
           $match: {
             "owner.kind": owner.kind,
             "owner.id": owner.id,
-            stream: "tickets",
+            stream: "capital",
             currency: CURRENCY,
             kind,
           },
@@ -480,7 +487,7 @@ const run = async () => {
       if (delta <= 0) return;
 
       await ledger.append({
-        owner, currency: CURRENCY, stream: "tickets",
+        owner, currency: CURRENCY, stream: "capital",
         kind, amountMinor: delta,
         source: { note },
         idempotencyKey: `${kind}:${owner.id}:${CURRENCY}:upto:${currentTotalMinor}`,
@@ -504,17 +511,6 @@ const run = async () => {
           await writeLoanDelta({
             owner, kind: "loan_principal", currentTotalMinor: principal,
             note: "backfill: capital principal",
-          });
-        }
-      }
-
-      const repaid = toMinor(finance.totalRepaidFromTickets || 0);
-      if (repaid > 0) {
-        repaidMinor += repaid;
-        if (WRITE) {
-          await writeLoanDelta({
-            owner, kind: "loan_repayment", currentTotalMinor: repaid,
-            note: "backfill: capital repayment",
           });
         }
       }
@@ -549,9 +545,8 @@ const run = async () => {
   console.log("\nWithheld for government (a liability, never Pazimo revenue)");
   console.log("  Owner VAT             " + col(totals.ownerVat));
 
-  console.log("\nPazimo Capital (ticket pool only)");
+  console.log("\nPazimo Capital (its own pool, separate from ticket sales)");
   console.log("  Principal credited    " + col(principalMinor));
-  console.log("  Repaid from tickets   " + col(repaidMinor));
   console.log("  Borrowers             " + String(loanRows).padStart(18));
 
   console.log("\nPayouts");

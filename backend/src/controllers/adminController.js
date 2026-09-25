@@ -196,9 +196,13 @@ const getDashboardStats = async (req, res) => {
     const vatOnCommission = revenueStats[0]?.revenue[0]?.vatOnCommission || 0;
     const organizerVat = revenueStats[0]?.revenue[0]?.organizerVat || 0;
 
-    // Calculate available balance (Global)
-    const availableBalance =
-      organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount;
+    // Calculate available balance (Global). Floored at 0 for the same reason
+    // as the per-organizer figure (financeService.calculateOrganizerBalance)
+    // — see that comment.
+    const availableBalance = Math.max(
+      0,
+      organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount
+    );
 
     res.status(StatusCodes.OK).json({
       status: "success",

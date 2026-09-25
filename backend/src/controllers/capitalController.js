@@ -20,6 +20,7 @@ const {
   computeLoanProgress,
 } = require("../services/loanRepaymentService");
 const { round2 } = require("../config/rates");
+const { mirrorLoanPrincipal } = require("../services/ledgerDualWrite");
 
 const EPSILON = 0.01;
 
@@ -498,10 +499,21 @@ const approveLoan = async (req, res) => {
       { hasActiveLoan: true }
     );
 
+    // Shadow-write to the ledger, on its own "capital" stream — never
+    // "tickets". A ledger failure must never fail the approval; see
+    // ledgerDualWrite's guard.
+    await mirrorLoanPrincipal({
+      organizerId: loan.organizer,
+      amount: requestedApprovedAmount,
+      loanId: loan._id,
+      currency: loan.currency,
+      occurredAt: now,
+    });
+
     await notifyOrganizer(
       req,
       loan,
-      `Your Pazimo Capital request for ${requestedApprovedAmount} ${loan.currency} is approved and added to your withdrawal balance. A ${(feeRate * 100).toFixed(0)}% fee applies (repay ${totalRepayable} ${loan.currency}), taken automatically as 60% of your ticket sales.`
+      `Your Pazimo Capital request for ${requestedApprovedAmount} ${loan.currency} is approved and added to your Pazimo Capital balance. A ${(feeRate * 100).toFixed(0)}% fee applies (repay ${totalRepayable} ${loan.currency}), taken automatically as 60% of your ticket sales.`
     );
 
     res.status(StatusCodes.OK).json({ success: true, data: loan });

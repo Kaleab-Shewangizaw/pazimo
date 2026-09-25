@@ -3,6 +3,8 @@ const User = require("../models/User");
 const Event = require("../models/Event");
 const EventUsherCode = require("../models/EventUsherCode");
 const UsherEventAccess = require("../models/UsherEventAccess");
+const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
+const { stripAngleBrackets } = require("../utils/stripHtml");
 const {
   BadRequestError,
   NotFoundError,
@@ -53,6 +55,56 @@ const createUsher = async (req, res) => {
   res.status(StatusCodes.CREATED).json({
     status: "success",
     data: { user },
+  });
+};
+
+// POST /api/ushers/sign-up — public, no auth. Unlike createUsher above, an
+// usher creates their own account here instead of waiting on an admin.
+// Holding an account by itself grants no access to anything — this role
+// never owns or is scoped to anything until it redeems a real event's code
+// (see unlockEvent below), so there's no approval queue to gate the way
+// organizer sign-up gates on isActive:false; isActive stays at its schema
+// default (true) and the account works immediately. Returns a token, same
+// envelope shape as a successful login, so the client can sign the person
+// in right away instead of sending them back to a login screen.
+const signUpUsher = async (req, res) => {
+  const { firstName, lastName, email, phoneNumber, password } = req.body;
+
+  if (!firstName || !email || !phoneNumber || !password) {
+    throw new BadRequestError(
+      "firstName, email, phoneNumber and password are required"
+    );
+  }
+
+  // Same guard authController.register()/organizerController.signUp() apply
+  // before an unauthenticated field reaches a Mongo query — without it a
+  // query-operator object here could match an arbitrary existing account.
+  if (isQueryOperatorInjection(email) || isQueryOperatorInjection(phoneNumber)) {
+    throw new BadRequestError("Invalid request");
+  }
+
+  const existingEmail = await User.findOne({
+    email: String(email).toLowerCase().trim(),
+  });
+  if (existingEmail) {
+    throw new BadRequestError("Email already registered");
+  }
+
+  const user = await User.create({
+    firstName: stripAngleBrackets(firstName),
+    lastName: stripAngleBrackets(lastName || firstName),
+    email,
+    phoneNumber,
+    password,
+    role: "usher",
+  });
+
+  const token = user.createJWT();
+  user.password = undefined;
+
+  res.status(StatusCodes.CREATED).json({
+    status: "success",
+    data: { user, token },
   });
 };
 
@@ -224,6 +276,7 @@ const getMyEvents = async (req, res) => {
 
 module.exports = {
   createUsher,
+  signUpUsher,
   generateEventCode,
   getEventUsherAccess,
   revokeUsherAccess,

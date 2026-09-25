@@ -77,6 +77,14 @@ const WithdrawalSchema = new mongoose.Schema(
     // because those two mean an ORGANIZER's event takings. A cinema must never
     // draw against them, and the balance check is scoped by this field.
     //
+    // "capital" is a Pazimo Capital advance being drawn down. It is a wholly
+    // separate pool from "tickets" on purpose: a loan's principal is credited
+    // to an organizer once, on approval, not earned per sale, so it must never
+    // be indistinguishable from ticket revenue in a balance check, a ledger
+    // projection or the admin dashboard. Only automatic repayment (a cut of
+    // later ticket sales) is allowed to touch the ticket pool — see
+    // loanRepaymentService and financeService.calculateOrganizerBalance.
+    //
     // Every row that existed before this field is ticket revenue.
     stream: {
       type: String,
@@ -86,6 +94,7 @@ const WithdrawalSchema = new mongoose.Schema(
         "venue_beverages",
         "cinema_tickets",
         "cinema_beverages",
+        "capital",
       ],
       default: "tickets",
       required: true,

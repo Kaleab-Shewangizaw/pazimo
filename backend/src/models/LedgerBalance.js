@@ -44,9 +44,11 @@ const LedgerBalanceSchema = new mongoose.Schema(
       default: "ETB",
       required: true,
     },
+    // A separate literal from LedgerEntry.STREAMS, not a shared reference —
+    // keep the two in sync by hand when a stream is added.
     stream: {
       type: String,
-      enum: ["tickets", "beverages"],
+      enum: ["tickets", "beverages", "capital"],
       required: true,
     },
 
