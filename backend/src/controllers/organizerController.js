@@ -10,9 +10,8 @@ const fs = require("fs");
 const path = require("path");
 const {
   getOrganizerEventIds,
-  revenueFieldsOverArray,
-  EXCLUDED_TICKET_STATUS,
-  EXCLUDED_PAYMENT_STATUS,
+  validTicketMatch,
+  revenueAccumulators,
 } = require("../utils/ticketRevenueQuery");
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
@@ -738,7 +737,26 @@ exports.getOrganizerDashboard = async (req, res) => {
       });
     }
 
-    // Use aggregation to get all dashboard data efficiently
+    // Sum purchaseQuantity/ticketCount per ticket document (falling back to
+    // 1), not just the document count: a single Ticket document can
+    // represent a multi-ticket purchase, so counting documents undercounts
+    // against what getEventTickets reports for the same event.
+    const TICKET_QTY_EXPR = {
+      $ifNull: ["$purchaseQuantity", { $ifNull: ["$ticketCount", 1] }],
+    };
+
+    // Use aggregation to get all dashboard data efficiently.
+    //
+    // This used to $lookup every ticket document onto its event (as: "tickets")
+    // and filter/sum over that array in-pipeline. For an organizer with enough
+    // ticket volume — especially older tickets still carrying the ~43 KB
+    // base64 QR blob organizerOverviewController's history note describes —
+    // a single event's joined document could exceed MongoDB's 16MB limit
+    // ("BSONObj size ... is invalid"), and nothing downstream even reads that
+    // raw array (DashboardEvent only needs ticketStats/revenue figures).
+    // Each $lookup below instead reduces the join to one small summary row
+    // per event, computed inside the tickets collection itself, so the
+    // result size no longer grows with ticket count.
     const dashboardData = await Event.aggregate([
       {
         $match: {
@@ -748,267 +766,39 @@ exports.getOrganizerDashboard = async (req, res) => {
       {
         $lookup: {
           from: "tickets",
-          localField: "_id",
-          foreignField: "event",
-          as: "tickets",
-        },
-      },
-      {
-        $lookup: {
-          from: "categories",
-          localField: "category",
-          foreignField: "_id",
-          as: "categoryData",
-        },
-      },
-      {
-        $unwind: {
-          path: "$categoryData",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      {
-        $addFields: {
-          // Filter tickets with price > 0
-          // Filter tickets with price > 0. This used to only check price and
-          // currency — it counted cancelled/failed/expired/pending tickets
-          // (including abandoned, never-paid checkouts) as revenue, more
-          // permissive than financeService.calculateOrganizerBalance's filter
-          // and able to show a higher balance here than what's actually
-          // withdrawable. Now reuses the same EXCLUDED_TICKET_STATUS /
-          // EXCLUDED_PAYMENT_STATUS ticketRevenueQuery.js defines, so this
-          // never drifts from the withdrawal gate's definition of revenue.
-          paidTickets: {
-            $filter: {
-              input: "$tickets",
-              as: "ticket",
-              cond: {
-                $and: [
-                  { $gt: ["$$ticket.price", 0] },
-                  { $not: [{ $in: ["$$ticket.status", EXCLUDED_TICKET_STATUS] }] },
-                  {
-                    $not: [
-                      { $in: ["$$ticket.paymentStatus", EXCLUDED_PAYMENT_STATUS] },
-                    ],
-                  },
-                  ...(currency === "ETB"
-                    ? [
-                        {
-                          $or: [
-                            { $eq: ["$$ticket.currency", "ETB"] },
-                            { $eq: [{ $type: "$$ticket.currency" }, "missing"] },
-                          ],
-                        },
-                      ]
-                    : [{ $eq: ["$$ticket.currency", "USD"] }]),
-                ],
-              },
-            },
-          },
-          // Calculate ticket stats
-          ticketStats: {
-            total: { $size: "$tickets" },
-            active: {
-              $size: {
-                $filter: {
-                  input: "$tickets",
-                  as: "ticket",
-                  cond: { $eq: ["$$ticket.status", "active"] },
-                },
-              },
-            },
-            used: {
-              $size: {
-                $filter: {
-                  input: "$tickets",
-                  as: "ticket",
-                  cond: { $eq: ["$$ticket.status", "used"] },
-                },
-              },
-            },
-          },
-        },
-      },
-      {
-        $addFields: {
-          revenue: { $sum: "$paidTickets.price" },
-          // Split per ticket at the rates it was sold under; a flat 0.97/0.03
-          // is wrong for any event off the default and for any event whose VAT
-          // Pazimo covers.
-          ...revenueFieldsOverArray("$paidTickets"),
-          category: {
-            _id: "$categoryData._id",
-            name: "$categoryData.name",
-            description: "$categoryData.description",
-          },
-        },
-      },
-      {
-        $project: {
-          title: 1,
-          description: 1,
-          category: 1,
-          startDate: 1,
-          endDate: 1,
-          startTime: 1,
-          endTime: 1,
-          location: 1,
-          coverImages: 1,
-          ticketTypes: 1,
-          status: 1,
-          capacity: 1,
-          tags: 1,
-          createdAt: 1,
-          updatedAt: 1,
-          tickets: 1,
-          ticketStats: 1,
-          revenue: 1,
-          organizerRevenue: 1,
-          pazimoCommission: 1,
-        },
-      },
-      {
-        $sort: { createdAt: -1 },
-      },
-    ]);
-
-    // Get withdrawal data in parallel
-    //
-    // Scoped to the ticket stream only, same reasoning as
-    // organizerOverviewController's admin list: availableBalance below is a
-    // TICKET balance, so a beverage or Pazimo Capital withdrawal must not be
-    // subtracted from it. Rows written before the stream split carry no
-    // `stream` at all and are ticket revenue.
-    const withdrawalCurrencyMatch =
-      currency === "ETB"
-        ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
-        : { currency: "USD" };
-
-    const withdrawalData = await Withdrawal.aggregate([
-      {
-        $match: {
-          organizer: new mongoose.Types.ObjectId(organizerId),
-          $and: [
-            withdrawalCurrencyMatch,
-            { $or: [{ stream: "tickets" }, { stream: { $exists: false } }] },
-          ],
-        },
-      },
-      {
-        $facet: {
-          withdrawals: [
-            { $sort: { createdAt: -1 } },
-            { $limit: 10 }, // Get recent withdrawals
-          ],
-          stats: [
+          let: { eventId: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$event", "$$eventId"] } } },
             {
               $group: {
                 _id: null,
-                totalWithdrawn: {
-                  $sum: {
-                    $cond: [
-                      { $in: ["$status", ["approved", "completed"]] },
-                      "$amount",
-                      0,
-                    ],
-                  },
+                total: { $sum: TICKET_QTY_EXPR },
+                active: {
+                  $sum: { $cond: [{ $eq: ["$status", "active"] }, TICKET_QTY_EXPR, 0] },
                 },
-                pendingWithdrawals: {
-                  $sum: {
-                    $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0],
-                  },
+                used: {
+                  $sum: { $cond: [{ $eq: ["$status", "used"] }, TICKET_QTY_EXPR, 0] },
                 },
               },
             },
           ],
-        },
-      },
-    ]);
-
-    // Calculate overall stats
-    const totalRevenue = dashboardData.reduce((sum, e) => sum + (e.revenue || 0), 0);
-    const organizerRevenue = dashboardData.reduce((sum, e) => sum + (e.organizerRevenue || 0), 0);
-    const pazimoCommission = dashboardData.reduce((sum, e) => sum + (e.pazimoCommission || 0), 0);
-
-    const withdrawalStats = withdrawalData[0]?.stats[0] || {
-      totalWithdrawn: 0,
-      pendingWithdrawals: 0,
-    };
-
-    // Pazimo Capital's principal is its own pool (see financeService's
-    // `capital` stream) and never added here. Only its automatic
-    // 60%-of-ticket-sales repayment touches this ticket balance, matching
-    // financeService.calculateOrganizerBalance's ticketAvailableBalance —
-    // the same identity the withdrawal gate uses, so this display and that
-    // gate always agree.
-    const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
-    const availableBalance = Math.max(
-      0,
-      organizerRevenue -
-        loanFinance.totalRepaidFromTickets -
-        withdrawalStats.totalWithdrawn -
-        withdrawalStats.pendingWithdrawals
-    );
-
-    res.status(200).json({
-      success: true,
-      data: {
-        events: dashboardData,
-        withdrawals: withdrawalData[0]?.withdrawals || [],
-        balance: {
-          currency,
-          totalRevenue,
-          organizerRevenue,
-          pazimoCommission,
-          totalWithdrawn: withdrawalStats.totalWithdrawn,
-          pendingWithdrawals: withdrawalStats.pendingWithdrawals,
-          capitalPrincipalCredited: loanFinance.principalCredited,
-          capitalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
-          availableBalance,
-        },
-        stats: {
-          totalEvents: dashboardData.length,
-          publishedEvents: dashboardData.filter(e => e.status === "published").length,
-          draftEvents: dashboardData.filter(e => e.status === "draft").length,
-          completedEvents: dashboardData.filter(e => new Date(e.endDate) < new Date()).length,
-        },
-      },
-    });
-  } catch (error) {
-    console.error("Error fetching organizer dashboard:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch organizer dashboard",
-    });
-  }
-};
-
-// Get organizer dashboard stats (OPTIMIZED)
-exports.getOrganizerDashboard = async (req, res) => {
-  try {
-    const organizerId = req.params.organizerId || req.user?.userId;
-    const currency = req.query.currency === "USD" ? "USD" : "ETB";
-
-    if (!organizerId) {
-      return res.status(400).json({
-        success: false,
-        message: "Organizer ID is required",
-      });
-    }
-
-    // Use aggregation to get all dashboard data efficiently
-    const dashboardData = await Event.aggregate([
-      {
-        $match: {
-          organizer: new mongoose.Types.ObjectId(organizerId),
+          as: "ticketCountRows",
         },
       },
       {
         $lookup: {
           from: "tickets",
-          localField: "_id",
-          foreignField: "event",
-          as: "tickets",
+          let: { eventId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$event", "$$eventId"] },
+                ...validTicketMatch(currency),
+              },
+            },
+            { $group: { _id: null, ...revenueAccumulators() } },
+          ],
+          as: "revenueRows",
         },
       },
       {
@@ -1027,112 +817,22 @@ exports.getOrganizerDashboard = async (req, res) => {
       },
       {
         $addFields: {
-          // Filter tickets with price > 0
-          // Filter tickets with price > 0. This used to only check price and
-          // currency — it counted cancelled/failed/expired/pending tickets
-          // (including abandoned, never-paid checkouts) as revenue, more
-          // permissive than financeService.calculateOrganizerBalance's filter
-          // and able to show a higher balance here than what's actually
-          // withdrawable. Now reuses the same EXCLUDED_TICKET_STATUS /
-          // EXCLUDED_PAYMENT_STATUS ticketRevenueQuery.js defines, so this
-          // never drifts from the withdrawal gate's definition of revenue.
-          paidTickets: {
-            $filter: {
-              input: "$tickets",
-              as: "ticket",
-              cond: {
-                $and: [
-                  { $gt: ["$$ticket.price", 0] },
-                  { $not: [{ $in: ["$$ticket.status", EXCLUDED_TICKET_STATUS] }] },
-                  {
-                    $not: [
-                      { $in: ["$$ticket.paymentStatus", EXCLUDED_PAYMENT_STATUS] },
-                    ],
-                  },
-                  ...(currency === "ETB"
-                    ? [
-                        {
-                          $or: [
-                            { $eq: ["$$ticket.currency", "ETB"] },
-                            { $eq: [{ $type: "$$ticket.currency" }, "missing"] },
-                          ],
-                        },
-                      ]
-                    : [{ $eq: ["$$ticket.currency", "USD"] }]),
-                ],
-              },
-            },
-          },
-          // Calculate ticket stats — sum purchaseQuantity/ticketCount per
-          // ticket document (falling back to 1), not just the document
-          // count: a single Ticket document can represent a multi-ticket
-          // purchase, so $size undercounts against what getEventTickets
-          // reports for the same event.
           ticketStats: {
-            total: {
-              $sum: {
-                $map: {
-                  input: "$tickets",
-                  as: "ticket",
-                  in: {
-                    $ifNull: [
-                      "$$ticket.purchaseQuantity",
-                      { $ifNull: ["$$ticket.ticketCount", 1] },
-                    ],
-                  },
-                },
-              },
-            },
-            active: {
-              $sum: {
-                $map: {
-                  input: {
-                    $filter: {
-                      input: "$tickets",
-                      as: "ticket",
-                      cond: { $eq: ["$$ticket.status", "active"] },
-                    },
-                  },
-                  as: "ticket",
-                  in: {
-                    $ifNull: [
-                      "$$ticket.purchaseQuantity",
-                      { $ifNull: ["$$ticket.ticketCount", 1] },
-                    ],
-                  },
-                },
-              },
-            },
-            used: {
-              $sum: {
-                $map: {
-                  input: {
-                    $filter: {
-                      input: "$tickets",
-                      as: "ticket",
-                      cond: { $eq: ["$$ticket.status", "used"] },
-                    },
-                  },
-                  as: "ticket",
-                  in: {
-                    $ifNull: [
-                      "$$ticket.purchaseQuantity",
-                      { $ifNull: ["$$ticket.ticketCount", 1] },
-                    ],
-                  },
-                },
-              },
-            },
+            total: { $ifNull: [{ $arrayElemAt: ["$ticketCountRows.total", 0] }, 0] },
+            active: { $ifNull: [{ $arrayElemAt: ["$ticketCountRows.active", 0] }, 0] },
+            used: { $ifNull: [{ $arrayElemAt: ["$ticketCountRows.used", 0] }, 0] },
           },
-        },
-      },
-      {
-        $addFields: {
-          revenue: { $sum: "$paidTickets.price" },
           // Split per ticket at the rates it was sold under; a flat 0.97/0.03
           // is wrong for any event off the default and for any event whose VAT
-          // Pazimo covers.
-          ...revenueFieldsOverArray("$paidTickets"),
+          // Pazimo covers — revenueAccumulators() (same helper
+          // organizerOverviewController uses) already does that per row.
+          revenue: { $ifNull: [{ $arrayElemAt: ["$revenueRows.grossRevenue", 0] }, 0] },
+          organizerRevenue: {
+            $ifNull: [{ $arrayElemAt: ["$revenueRows.organizerRevenue", 0] }, 0],
+          },
+          pazimoCommission: {
+            $ifNull: [{ $arrayElemAt: ["$revenueRows.pazimoCommission", 0] }, 0],
+          },
           category: {
             _id: "$categoryData._id",
             name: "$categoryData.name",
@@ -1157,7 +857,6 @@ exports.getOrganizerDashboard = async (req, res) => {
           tags: 1,
           createdAt: 1,
           updatedAt: 1,
-          tickets: 1,
           ticketStats: 1,
           revenue: 1,
           organizerRevenue: 1,
