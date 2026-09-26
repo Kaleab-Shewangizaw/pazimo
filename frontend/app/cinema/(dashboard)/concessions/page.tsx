@@ -45,6 +45,11 @@ function ConcessionsContent({
   const [summary, setSummary] = useState<CinemaConcessionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Hooks must run unconditionally on every render — this used to sit below
+  // the "not approved" / "loading" early returns, so it was skipped on some
+  // renders and not others, and React threw "Rendered more hooks than during
+  // the previous render" the moment `loading` flipped to false.
+  const canManageLineup = useAuthStore((s) => s.user?.role) !== "cashier";
 
   const approved = cinema.beverageEligibility === "eligible";
 
@@ -192,7 +197,6 @@ function ConcessionsContent({
   // backend now rejects it from adding/removing/repricing a line-up product
   // (POST/PATCH/DELETE /me/concessions...) — those controls are hidden here
   // too rather than left to fail with a 403 after a tap.
-  const canManageLineup = useAuthStore((s) => s.user?.role) !== "cashier";
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
