@@ -350,8 +350,15 @@ export default function OrganizerDashboard() {
         return;
       }
       try {
+        // `stream=tickets` keeps beverage and Pazimo Capital withdrawals out of
+        // this dashboard's "Total Withdrawn" — availableBalance (from /balance)
+        // is a TICKET-only figure, and without this filter an organizer who has
+        // drawn down a Capital loan sees their loan withdrawal added on top of
+        // their ticket withdrawals here, inflating Total Withdrawn against a
+        // balance that never counted the loan in the first place. Mirrors the
+        // same filter app/organizer/withdrawals/page.tsx already applies.
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?currency=${selectedCurrency}`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/withdrawals/organizer/${userId}/withdrawals?currency=${selectedCurrency}&stream=tickets`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
