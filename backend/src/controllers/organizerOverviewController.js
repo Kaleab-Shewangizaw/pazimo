@@ -10,6 +10,7 @@ const {
   revenueAccumulators,
 } = require("../utils/ticketRevenueQuery");
 const { round2 } = require("../config/rates");
+const { getAdjustmentsByOrganizer } = require("../services/balanceAdjustmentService");
 
 // Everything the admin organizer list needs, in one response.
 //
@@ -160,6 +161,13 @@ const getOrganizerOverview = async (req, res) => {
       withdrawalRows.map((r) => [String(r._id), r])
     );
 
+    // ---- 4b. explicit balance corrections, one pass --------------------
+    // See BalanceAdjustment.js — completes a half-finished migration or
+    // writes off an already-investigated historical overpayment. Folded in
+    // here so this list always agrees with financeService.calculateOrganizerBalance,
+    // the formula the withdrawal gate itself uses.
+    const adjustmentsByOrganizer = await getAdjustmentsByOrganizer(organizerIds, currency);
+
     // ---- 5. Pazimo Capital position, one pass --------------------------
     const loanRows = await Loan.aggregate([
       {
@@ -194,6 +202,7 @@ const getOrganizerOverview = async (req, res) => {
       const rev = revenueByOrganizer.get(key) ||
         { revenue: 0, tickets: 0, commission: 0, vat: 0, organizerVat: 0, organizerShare: 0 };
       const wd = withdrawalsByOrganizer.get(key) || { pending: 0, approved: 0 };
+      const adjustments = adjustmentsByOrganizer.get(key) || { tickets: 0, beverages: 0, capital: 0 };
       const loan = loansByOrganizer.get(key) || {
         principalCredited: 0,
         repaidFromTickets: 0,
@@ -228,7 +237,13 @@ const getOrganizerOverview = async (req, res) => {
         // only its automatic repayment (repaidFromTickets) touches this
         // figure, exactly as it touches the ticket balance everywhere else.
         availableBalance: round2(
-          Math.max(0, organizerRevenue - loan.repaidFromTickets - (wd.pending + wd.approved))
+          Math.max(
+            0,
+            organizerRevenue -
+              loan.repaidFromTickets -
+              (wd.pending + wd.approved) +
+              adjustments.tickets
+          )
         ),
         loanOutstanding: round2(loan.outstanding),
       };

@@ -2,9 +2,13 @@ const User = require("../models/User");
 const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
+const Loan = require("../models/Loan");
+const BalanceAdjustment = require("../models/BalanceAdjustment");
 const { StatusCodes } = require("http-status-codes");
 const { revenueAccumulators, validTicketMatch } = require("../utils/ticketRevenueQuery");
+const { round2 } = require("../config/rates");
 const ledgerRead = require("../services/ledgerReadService");
+const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
@@ -196,12 +200,21 @@ const getDashboardStats = async (req, res) => {
     const vatOnCommission = revenueStats[0]?.revenue[0]?.vatOnCommission || 0;
     const organizerVat = revenueStats[0]?.revenue[0]?.organizerVat || 0;
 
+    // Explicit balance corrections, summed across every organizer — see
+    // BalanceAdjustment.js. Folded into the same platform total so it never
+    // disagrees with the per-organizer figures it's built from.
+    const [adjustmentTotal] = await BalanceAdjustment.aggregate([
+      { $match: { currency, stream: "tickets" } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+    const totalAdjustments = adjustmentTotal?.total || 0;
+
     // Calculate available balance (Global). Floored at 0 for the same reason
     // as the per-organizer figure (financeService.calculateOrganizerBalance)
     // — see that comment.
     const availableBalance = Math.max(
       0,
-      organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount
+      organizerRevenue - totalWithdrawn - pendingWithdrawalsAmount + totalAdjustments
     );
 
     res.status(StatusCodes.OK).json({
@@ -264,6 +277,48 @@ const getFinancePartitions = async (req, res) => {
       console.warn(
         `[ADMIN-FINANCE] ledger is empty while ${result.coverage.sourceRows} source rows exist — run npm run ledger:backfill`
       );
+    }
+
+    // The ledger's "capital" partition only knows movements (principal
+    // disbursed, withdrawn, pending) — it has no idea how much of that
+    // principal is still owed, because repayment is a live cut of ticket
+    // sales, not a ledger entry. That lives on Loan itself. Sync every
+    // currently-active loan first (same pattern getCapitalRevenueSummary
+    // uses) so the figures reflect today's ticket sales, not whatever the
+    // last incidental capital-page visit happened to leave persisted —
+    // bounded by the number of loans actually active right now, not every
+    // loan ever made, so this stays cheap.
+    const capitalPartition = result.partitions.find((p) => p.key === "capital");
+    if (capitalPartition) {
+      const activeOrganizerIds = await Loan.find({
+        currency,
+        status: "active",
+      }).distinct("organizer");
+      for (const organizerId of activeOrganizerIds) {
+        await syncOrganizerLoans(organizerId, req);
+      }
+
+      const [loanTotals] = await Loan.aggregate([
+        { $match: { currency, status: { $in: ["active", "repaid"] } } },
+        {
+          $group: {
+            _id: null,
+            outstandingDebt: { $sum: "$outstandingBalance" },
+            totalRepaid: { $sum: "$totalRepaid" },
+            activeLoanCount: {
+              $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+            },
+            repaidLoanCount: {
+              $sum: { $cond: [{ $eq: ["$status", "repaid"] }, 1, 0] },
+            },
+          },
+        },
+      ]);
+
+      capitalPartition.outstandingDebt = round2(loanTotals?.outstandingDebt || 0);
+      capitalPartition.totalRepaid = round2(loanTotals?.totalRepaid || 0);
+      capitalPartition.activeLoanCount = loanTotals?.activeLoanCount || 0;
+      capitalPartition.repaidLoanCount = loanTotals?.repaidLoanCount || 0;
     }
 
     res.status(StatusCodes.OK).json({ status: "success", data: result });

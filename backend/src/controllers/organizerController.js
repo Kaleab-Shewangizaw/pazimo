@@ -16,6 +16,7 @@ const {
 const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
 const { getOrganizerLoanFinance } = require("../services/loanRepaymentService");
+const { getOrganizerAdjustments } = require("../services/balanceAdjustmentService");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -938,12 +939,17 @@ exports.getOrganizerDashboard = async (req, res) => {
     // the same identity the withdrawal gate uses, so this display and that
     // gate always agree.
     const loanFinance = await getOrganizerLoanFinance(organizerId, currency);
+    // See BalanceAdjustment.js — folded in here so this figure always agrees
+    // with financeService.calculateOrganizerBalance, the formula the
+    // withdrawal gate itself uses.
+    const adjustments = await getOrganizerAdjustments(organizerId, currency);
     const availableBalance = Math.max(
       0,
       organizerRevenue -
         loanFinance.totalRepaidFromTickets -
         withdrawalStats.totalWithdrawn -
-        withdrawalStats.pendingWithdrawals
+        withdrawalStats.pendingWithdrawals +
+        adjustments.tickets
     );
 
     res.status(200).json({

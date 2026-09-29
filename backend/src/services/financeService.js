@@ -14,6 +14,9 @@ const { round2 } = require("../config/rates");
 const {
   getOrganizerBeverageRevenue,
 } = require("../utils/beverageRevenueQuery");
+const {
+  getOrganizerAdjustments,
+} = require("./balanceAdjustmentService");
 
 const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
@@ -166,6 +169,14 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
   // commission+VAT already baked into organizerRevenue) — matching the spec.
   const loanFinance = await getOrganizerLoanFinance(organizerId, normalizedCurrency);
 
+  // Explicit, auditable corrections to a pool's true balance — see
+  // BalanceAdjustment.js. A Math.max(0, ...) floor further down only hides a
+  // negative true balance from the screen; it does not resolve the
+  // underlying shortfall, so known, investigated cases (a half-finished
+  // migration, a historical overpayment write-off) are credited back here
+  // instead of just being floored forever.
+  const adjustments = await getOrganizerAdjustments(organizerId, normalizedCurrency);
+
   // Beverage sales are a separate reporting stream but the same pool of money:
   // an organizer withdraws one balance, not two. Until this landed, drink
   // revenue was recorded and then never reachable — no balance, no payout, and
@@ -193,7 +204,8 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
       0,
       organizerRevenue -
         loanFinance.totalRepaidFromTickets -
-        (ticketWithdrawals.pendingAmount + ticketWithdrawals.approvedAmount)
+        (ticketWithdrawals.pendingAmount + ticketWithdrawals.approvedAmount) +
+        adjustments.tickets
     )
   );
 
@@ -203,7 +215,8 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     Math.max(
       0,
       beverage.organizerRevenue -
-        (beverageWithdrawals.pendingAmount + beverageWithdrawals.approvedAmount)
+        (beverageWithdrawals.pendingAmount + beverageWithdrawals.approvedAmount) +
+        adjustments.beverages
     )
   );
 
@@ -219,7 +232,8 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
     Math.max(
       0,
       loanFinance.principalCredited -
-        (capitalWithdrawals.pendingAmount + capitalWithdrawals.approvedAmount)
+        (capitalWithdrawals.pendingAmount + capitalWithdrawals.approvedAmount) +
+        adjustments.capital
     )
   );
 
@@ -318,6 +332,9 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
         organizerVat,
         pazimoCollected: totalDeduction,
         ticketsSold: totalTicketsSold,
+        // A manual correction folded into availableBalance above — see
+        // BalanceAdjustment.js. 0 for the overwhelming majority of organizers.
+        adjustments: round2(adjustments.tickets),
       },
       beverages: {
         availableBalance: beverageAvailableBalance,
@@ -333,6 +350,7 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
         ),
         unitsSold: beverage.unitsSold,
         salesCount: beverage.salesCount,
+        adjustments: round2(adjustments.beverages),
       },
       // Pazimo Capital's own pool — completely separate from ticket sales.
       // Disbursement lands here, not in `tickets`; approving a withdrawal
@@ -346,6 +364,7 @@ const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
         principalCredited: loanFinance.principalCredited,
         totalRepaidFromTickets: loanFinance.totalRepaidFromTickets,
         outstandingDebt: loanFinance.outstandingDebt,
+        adjustments: round2(adjustments.capital),
       },
     },
     combined: {

@@ -43,6 +43,9 @@ import {
   Loader2,
   Receipt,
   Info,
+  Beer,
+  Landmark,
+  ArrowUpRight,
 } from "lucide-react";
 import { formatCompactMoney } from "@/lib/utils";
 import {
@@ -223,8 +226,21 @@ export default function OrganizerDashboard() {
 
           const rawTickets = allRawTickets;
 
+          // Mirrors the backend's EXCLUDED_TICKET_STATUS
+          // (utils/ticketRevenueQuery.js) — without it, Total Revenue and every
+          // figure derived from allTicketsByEvent (per-event breakdown, the
+          // monthly chart, the analytics table) counted cancelled, failed,
+          // expired and abandoned-checkout ("pending") tickets as real revenue,
+          // which the organizer's own Available balance (from /balance,
+          // already backend-filtered) never did — the two numbers wouldn't
+          // reconcile on screen.
+          const EXCLUDED_TICKET_STATUS = ["cancelled", "failed", "expired", "pending"];
           const allTickets = rawTickets.filter((t: any) => {
-            return t.price && t.price > 0;
+            return (
+              t.price &&
+              t.price > 0 &&
+              !EXCLUDED_TICKET_STATUS.includes(t.status)
+            );
           });
 
           const getTicketQuantity = (ticket: any) => {
@@ -1177,6 +1193,126 @@ export default function OrganizerDashboard() {
                 );
               })}
         </div>
+
+        {/* Beverage and Pazimo Capital pools — kept as their own sections,
+            never folded into the ticket figures above. Sourced from the same
+            /balance call already made for the ticket cards (calculateOrganizerBalance
+            already returns streams.beverages and streams.capital), so no extra
+            request. Each section only appears once there's something in it,
+            so an organizer who has never sold a drink or taken an advance
+            doesn't see an empty pool. */}
+        {((balance?.streams?.beverages?.salesCount ?? 0) > 0 ||
+          (balance?.streams?.beverages?.availableBalance ?? 0) > 0) && (
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Beer className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Beverage sales
+                </h3>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  Settled separately from ticket revenue
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-amber-700 dark:text-amber-400"
+                onClick={() => router.push("/organizer/beverages")}
+              >
+                View <ArrowUpRight className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 lg:gap-6">
+              <Card className="border border-amber-200 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/10">
+                <CardContent className="p-2 sm:p-3 lg:p-4">
+                  <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 truncate">
+                    Total revenue
+                  </h4>
+                  <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-100">
+                    {formatCompactMoney(balance?.streams?.beverages?.grossRevenue ?? 0, selectedCurrency)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border border-amber-200 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/10">
+                <CardContent className="p-2 sm:p-3 lg:p-4">
+                  <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 truncate">
+                    Available balance
+                  </h4>
+                  <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-100">
+                    {formatCompactMoney(balance?.streams?.beverages?.availableBalance ?? 0, selectedCurrency)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border border-amber-200 dark:border-amber-900 bg-amber-50/40 dark:bg-amber-950/10">
+                <CardContent className="p-2 sm:p-3 lg:p-4">
+                  <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 truncate">
+                    Withdrawn
+                  </h4>
+                  <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-100">
+                    {formatCompactMoney(balance?.streams?.beverages?.approvedWithdrawals ?? 0, selectedCurrency)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {(balance?.streams?.capital?.principalCredited ?? 0) > 0 && (
+          <div className="mb-6 sm:mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Pazimo Capital
+                </h3>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  Never mixed with ticket revenue
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-indigo-700 dark:text-indigo-400"
+                onClick={() => router.push("/organizer/capital")}
+              >
+                Manage <ArrowUpRight className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 lg:gap-6">
+              <Card className="border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/10">
+                <CardContent className="p-2 sm:p-3 lg:p-4">
+                  <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 truncate">
+                    Available to withdraw
+                  </h4>
+                  <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-100">
+                    {formatCompactMoney(balance?.streams?.capital?.availableBalance ?? 0, selectedCurrency)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/10">
+                <CardContent className="p-2 sm:p-3 lg:p-4">
+                  <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 truncate">
+                    Outstanding balance
+                  </h4>
+                  <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-100">
+                    {formatCompactMoney(balance?.streams?.capital?.outstandingDebt ?? 0, selectedCurrency)}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/10">
+                <CardContent className="p-2 sm:p-3 lg:p-4">
+                  <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 truncate">
+                    Repaid so far
+                  </h4>
+                  <p className="text-sm sm:text-lg lg:text-xl font-bold text-gray-800 dark:text-gray-100">
+                    {formatCompactMoney(balance?.streams?.capital?.totalRepaidFromTickets ?? 0, selectedCurrency)}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
 
         {/* Event Status Cards (Second Row) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertTriangle, Clapperboard, Beer, Ticket, Store, Popcorn } from "lucide-react";
+import { AlertTriangle, Clapperboard, Beer, Ticket, Store, Popcorn, Landmark } from "lucide-react";
 import { formatCompactMoney } from "@/lib/utils";
 
 /**
@@ -33,6 +33,16 @@ export interface MoneyPartition {
   ownerCount: number;
   entryCount: number;
   lastEntryAt: string | null;
+  // Only present on the "capital" partition — how much of the disbursed
+  // principal organizers still owe, and how much has already been repaid via
+  // the automatic 60% ticket-sale cut. Not a ledger movement (repayment is
+  // never withdrawn, it's just not paid out), so it's merged on server-side
+  // from Loan rather than derived from grossRevenue/withdrawn like the other
+  // pools.
+  outstandingDebt?: number;
+  totalRepaid?: number;
+  activeLoanCount?: number;
+  repaidLoanCount?: number;
 }
 
 export interface PartitionsPayload {
@@ -55,16 +65,18 @@ const ICONS: Record<string, typeof Ticket> = {
   venue_beverages: Store,
   cinema_tickets: Clapperboard,
   cinema_beverages: Popcorn,
+  capital: Landmark,
 };
 
-// Each pool gets its own accent so the five cards are distinguishable at a
-// glance rather than being five identical rectangles of numbers.
+// Each pool gets its own accent so the cards are distinguishable at a
+// glance rather than being identical rectangles of numbers.
 const ACCENTS: Record<string, { bar: string; icon: string; chip: string }> = {
   event_tickets: { bar: "border-l-blue-600", icon: "text-blue-600", chip: "bg-blue-50 dark:bg-blue-950/40" },
   event_beverages: { bar: "border-l-amber-600", icon: "text-amber-600", chip: "bg-amber-50 dark:bg-amber-950/40" },
   venue_beverages: { bar: "border-l-purple-600", icon: "text-purple-600", chip: "bg-purple-50 dark:bg-purple-950/40" },
   cinema_tickets: { bar: "border-l-rose-600", icon: "text-rose-600", chip: "bg-rose-50 dark:bg-rose-950/40" },
   cinema_beverages: { bar: "border-l-emerald-600", icon: "text-emerald-600", chip: "bg-emerald-50 dark:bg-emerald-950/40" },
+  capital: { bar: "border-l-indigo-600", icon: "text-indigo-600", chip: "bg-indigo-50 dark:bg-indigo-950/40" },
 };
 
 const Row = ({ label, value, muted }: { label: string; value: string; muted?: boolean }) => (
@@ -122,8 +134,8 @@ export default function MoneyPartitions({
 
   if (loading && !data) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        {[...Array(5)].map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
+        {[...Array(6)].map((_, i) => (
           <Card key={i} className="border border-gray-200 dark:border-gray-700 animate-pulse">
             <CardContent className="p-4 space-y-3">
               <div className="h-3 w-24 bg-gray-200 dark:bg-gray-700 rounded" />
@@ -181,11 +193,12 @@ export default function MoneyPartitions({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {data.partitions.map((p) => {
           const Icon = ICONS[p.key] ?? Ticket;
           const accent = ACCENTS[p.key] ?? ACCENTS.event_tickets;
           const idle = p.entryCount === 0;
+          const isCapital = p.key === "capital";
           return (
             <Card
               key={p.key}
@@ -216,22 +229,34 @@ export default function MoneyPartitions({
                   {formatCompactMoney(p.availableBalance, p.currency)}
                 </p>
 
-                <div className="space-y-1 border-t border-gray-100 dark:border-gray-800 pt-2">
-                  <Row label="Total revenue" value={formatCompactMoney(p.grossRevenue, p.currency)} />
-                  <Row label="Seller earned" value={formatCompactMoney(p.ownerRevenue, p.currency)} />
-                  <Row label="Withdrawn" value={formatCompactMoney(p.withdrawn, p.currency)} muted />
-                  <Row label="Pending" value={formatCompactMoney(p.pendingWithdrawals, p.currency)} muted />
-                  <Row
-                    label="Pazimo took"
-                    value={formatCompactMoney(p.pazimoCommission + p.vatOnCommission, p.currency)}
-                    muted
-                  />
-                </div>
+                {isCapital ? (
+                  <div className="space-y-1 border-t border-gray-100 dark:border-gray-800 pt-2">
+                    <Row label="Total disbursed" value={formatCompactMoney(p.grossRevenue, p.currency)} />
+                    <Row label="Outstanding" value={formatCompactMoney(p.outstandingDebt ?? 0, p.currency)} />
+                    <Row label="Repaid" value={formatCompactMoney(p.totalRepaid ?? 0, p.currency)} muted />
+                    <Row label="Withdrawn" value={formatCompactMoney(p.withdrawn, p.currency)} muted />
+                    <Row label="Withdraw requests" value={formatCompactMoney(p.pendingWithdrawals, p.currency)} muted />
+                  </div>
+                ) : (
+                  <div className="space-y-1 border-t border-gray-100 dark:border-gray-800 pt-2">
+                    <Row label="Total revenue" value={formatCompactMoney(p.grossRevenue, p.currency)} />
+                    <Row label="Seller earned" value={formatCompactMoney(p.ownerRevenue, p.currency)} />
+                    <Row label="Withdrawn" value={formatCompactMoney(p.withdrawn, p.currency)} muted />
+                    <Row label="Pending" value={formatCompactMoney(p.pendingWithdrawals, p.currency)} muted />
+                    <Row
+                      label="Pazimo took"
+                      value={formatCompactMoney(p.pazimoCommission + p.vatOnCommission, p.currency)}
+                      muted
+                    />
+                  </div>
+                )}
 
                 <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">
-                  {idle
-                    ? "No sales yet"
-                    : `${p.ownerCount} ${p.ownerCount === 1 ? "seller" : "sellers"}`}
+                  {isCapital
+                    ? `${p.activeLoanCount ?? 0} active, ${p.repaidLoanCount ?? 0} repaid`
+                    : idle
+                      ? "No sales yet"
+                      : `${p.ownerCount} ${p.ownerCount === 1 ? "seller" : "sellers"}`}
                 </p>
               </CardContent>
             </Card>
