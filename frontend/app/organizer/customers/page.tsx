@@ -270,8 +270,17 @@ export default function CustomersPage() {
   const CUSTOM_ONDOOR_AMOUNT = 793000;
   const isSpecialEvent = selectedEventId === SPECIAL_EVENT_ID;
 
+  // Mirrors backend/src/utils/ticketRevenueQuery.js's EXCLUDED_TICKET_STATUS.
+  // The backend's own /api/tickets/event/:id `statistics` object already
+  // excludes these (fixed alongside this), but the "@ price" grouping table
+  // below is built from these raw `tickets`, not from `statistics`, so it
+  // needs the same exclusion or it can still show a cancelled/expired ticket
+  // as a real sale even though the headline Total Revenue above it doesn't.
+  const EXCLUDED_TICKET_STATUS = ["cancelled", "failed", "expired", "pending"];
+
   const filteredTickets = tickets.filter((ticket) => {
     if (!ticket.price || ticket.price <= 0) return false;
+    if (EXCLUDED_TICKET_STATUS.includes(ticket.status)) return false;
 
     if (isSpecialEvent && ticket.isOnDoor && ticket.price === CUSTOM_ONDOOR_AMOUNT) {
       return false;

@@ -10,6 +10,7 @@ const {
   UnauthorizedError,
 } = require("../errors");
 const mongoose = require("mongoose");
+const { EXCLUDED_TICKET_STATUS } = require("../utils/ticketRevenueQuery");
 const {
   sendInvitationEmail,
   createEmailTemplate,
@@ -1393,8 +1394,17 @@ const getEventTickets = async (req, res) => {
         .limit(limit)
         .lean(), // ⚡ LEAN for 3x faster queries
       Event.findById(eventId).select("ticketTypes").lean(),
-      // ⚡ Stats query with minimal fields
-      Ticket.find({ event: eventId, price: { $gt: 0 } })
+      // ⚡ Stats query with minimal fields. Excludes the same statuses
+      // validTicketMatch (ticketRevenueQuery.js) does — without this, a
+      // cancelled/failed/expired/pending (abandoned-checkout) ticket counted
+      // as real revenue in `statistics` below, inflating the "Total Revenue"
+      // both the organizer's own customers page and the admin's per-event
+      // view show, since both read this same statistics object.
+      Ticket.find({
+        event: eventId,
+        price: { $gt: 0 },
+        status: { $nin: EXCLUDED_TICKET_STATUS },
+      })
         .select("ticketType price currency createdAt purchaseDate ticketCount purchaseQuantity isOnDoor")
         .lean(),
     ]);

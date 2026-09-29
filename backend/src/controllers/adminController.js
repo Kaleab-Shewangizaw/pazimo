@@ -9,6 +9,7 @@ const { revenueAccumulators, validTicketMatch } = require("../utils/ticketRevenu
 const { round2 } = require("../config/rates");
 const ledgerRead = require("../services/ledgerReadService");
 const { syncOrganizerLoans } = require("../services/loanRepaymentService");
+const { getPlatformOrganizerPoolsLive } = require("../services/financeService");
 
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
@@ -279,7 +280,25 @@ const getFinancePartitions = async (req, res) => {
       );
     }
 
-    // The ledger's "capital" partition only knows movements (principal
+    // The "Event tickets" and "Pazimo Capital" partitions are overlaid with a
+    // LIVE computation instead of trusting the ledger's stored figures —
+    // found 2026-09-29 that the ledger disagreed with the sum of every
+    // organizer's own (authoritative) available balance by -9,814.77 ETB on
+    // tickets, from duplicate/stale ledger entries its own correction pass
+    // doesn't catch. That's a real, separate ledger data-quality issue, but
+    // nothing here is gated by it — every real balance/withdrawal check
+    // already uses this exact formula, not the ledger — so this card reads
+    // it too rather than showing a second, disagreeing number. See
+    // financeService.getPlatformOrganizerPoolsLive for the full reasoning.
+    // event_beverages/venue_beverages/cinema_* stay ledger-based: no known
+    // deviation there, and negligible volume in production as of this fix.
+    const livePools = await getPlatformOrganizerPoolsLive(currency);
+    const ticketPartition = result.partitions.find((p) => p.key === "event_tickets");
+    if (ticketPartition) {
+      Object.assign(ticketPartition, livePools.tickets);
+    }
+
+    // The ledger's "capital" partition only knew movements (principal
     // disbursed, withdrawn, pending) — it has no idea how much of that
     // principal is still owed, because repayment is a live cut of ticket
     // sales, not a ledger entry. That lives on Loan itself. Sync every
@@ -290,6 +309,8 @@ const getFinancePartitions = async (req, res) => {
     // loan ever made, so this stays cheap.
     const capitalPartition = result.partitions.find((p) => p.key === "capital");
     if (capitalPartition) {
+      Object.assign(capitalPartition, livePools.capital);
+
       const activeOrganizerIds = await Loan.find({
         currency,
         status: "active",
@@ -320,6 +341,31 @@ const getFinancePartitions = async (req, res) => {
       capitalPartition.activeLoanCount = loanTotals?.activeLoanCount || 0;
       capitalPartition.repaidLoanCount = loanTotals?.repaidLoanCount || 0;
     }
+
+    // result.totals was computed by ledgerReadService BEFORE the two
+    // overlays above landed, so it would still add up the stale ledger
+    // figures for tickets/capital — recomputed here from the now-corrected
+    // partitions array so the summary row at the bottom of the page never
+    // disagrees with the cards above it.
+    const totalsMinor = result.partitions.reduce(
+      (acc, p) => ({
+        grossRevenue: acc.grossRevenue + p.grossRevenue,
+        ownerRevenue: acc.ownerRevenue + p.ownerRevenue,
+        pazimoCommission: acc.pazimoCommission + p.pazimoCommission,
+        vatOnCommission: acc.vatOnCommission + p.vatOnCommission,
+        ownerVat: acc.ownerVat + p.ownerVat,
+        withdrawn: acc.withdrawn + p.withdrawn,
+        pendingWithdrawals: acc.pendingWithdrawals + p.pendingWithdrawals,
+        availableBalance: acc.availableBalance + p.availableBalance,
+      }),
+      {
+        grossRevenue: 0, ownerRevenue: 0, pazimoCommission: 0, vatOnCommission: 0,
+        ownerVat: 0, withdrawn: 0, pendingWithdrawals: 0, availableBalance: 0,
+      }
+    );
+    result.totals = Object.fromEntries(
+      Object.entries(totalsMinor).map(([k, v]) => [k, round2(v)])
+    );
 
     res.status(StatusCodes.OK).json({ status: "success", data: result });
   } catch (error) {

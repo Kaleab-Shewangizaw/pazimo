@@ -160,9 +160,14 @@ export default function OrganizerDetailPage({
     fetchOrganizerBalance();
   }, [id]);
 
+  // This is an admin-only page, so the token lives under the admin auth
+  // store's key ("admin-auth-storage", see store/adminAuthStore.ts), never
+  // "auth-storage" (the organizer/customer store) — reading the wrong key
+  // silently returned "" here, so every fetch on this page that used it ran
+  // unauthenticated.
   const getAuthToken = () => {
     try {
-      const authState = localStorage.getItem("auth-storage");
+      const authState = localStorage.getItem("admin-auth-storage");
       if (!authState) return "";
       const parsed = JSON.parse(authState);
       return parsed?.state?.token || "";
@@ -204,14 +209,16 @@ export default function OrganizerDetailPage({
   const fetchOrganizerDetails = async () => {
     try {
       setLoading(true);
+      const token = getAuthToken();
+      const authHeaders: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+      if (token) authHeaders.Authorization = `Bearer ${token}`;
+
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/users/${id}`,
-        {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-        }
+        { headers: authHeaders }
       );
 
       if (!response.ok) {
@@ -224,12 +231,7 @@ export default function OrganizerDetailPage({
       // Fetch events for the organizer
       const eventsResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/events/organizer/${id}`,
-        {
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-        }
+        { headers: authHeaders }
       );
 
       if (eventsResponse.ok) {
@@ -255,16 +257,22 @@ export default function OrganizerDetailPage({
       let page = 1;
       let hasMore = true;
 
+      // GET /api/tickets/event/:eventId requires authenticateUser — without
+      // the Authorization header this 401'd on every call, silently returning
+      // [] (caught below), which is why every "View Event" dialog showed 0
+      // tickets sold / 0 revenue regardless of the real numbers.
+      const token = getAuthToken();
+      const authHeaders: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+      if (token) authHeaders.Authorization = `Bearer ${token}`;
+
       // Fetch all pages
       while (hasMore) {
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_API_URL}/api/tickets/event/${eventId}?page=${page}&limit=500`,
-          {
-            headers: {
-              Accept: "application/json",
-              "Content-Type": "application/json",
-            },
-          }
+          { headers: authHeaders }
         );
 
         if (!response.ok) {
@@ -460,6 +468,63 @@ export default function OrganizerDetailPage({
       </div>
     );
   }
+
+  // Mirrors backend/src/utils/ticketRevenueQuery.js's EXCLUDED_TICKET_STATUS —
+  // the "Total Tickets Sold"/"Total Revenue" figures below used to sum every
+  // raw ticket returned by the API with no status filter at all, so a
+  // cancelled/failed/expired/pending (abandoned-checkout) ticket counted as a
+  // real sale here even though the organizer's own view never counted it.
+  const EXCLUDED_TICKET_STATUS = ["cancelled", "failed", "expired", "pending"];
+  const validEventTickets = (selectedEvent?.tickets || []).filter(
+    (t) => t.price > 0 && !EXCLUDED_TICKET_STATUS.includes(t.status)
+  );
+
+  const getValidTicketQuantity = (ticket: TicketData) => {
+    if (ticket.purchaseQuantity) return ticket.purchaseQuantity;
+    if (selectedEvent?.ticketTypes && ticket.price > 0) {
+      const type = selectedEvent.ticketTypes.find(
+        (t) =>
+          t.name === ticket.ticketType ||
+          (t.name &&
+            ticket.ticketType &&
+            t.name.toLowerCase() === ticket.ticketType.toLowerCase())
+      );
+      if (type && type.price > 0) {
+        const calculated = Math.round(ticket.price / type.price);
+        if (calculated > 0) return calculated;
+      }
+    }
+    return ticket.ticketCount || 1;
+  };
+
+  // Same grouping the organizer's own /organizer/customers page uses
+  // (ticketType + price paid), so this admin view shows the identical
+  // breakdown instead of a static list of the event's configured ticket
+  // types (which says nothing about what actually sold, at what price).
+  const ticketPriceGroups = (() => {
+    const groups = new Map<
+      string,
+      { ticketType: string; pricePerTicket: number; totalSold: number; totalRevenue: number }
+    >();
+    for (const ticket of validEventTickets) {
+      const quantity = getValidTicketQuantity(ticket);
+      const pricePerTicket = quantity > 0 ? ticket.price / quantity : ticket.price;
+      const key = `${ticket.ticketType}|${pricePerTicket}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.totalSold += quantity;
+        existing.totalRevenue += ticket.price;
+      } else {
+        groups.set(key, {
+          ticketType: ticket.ticketType,
+          pricePerTicket,
+          totalSold: quantity,
+          totalRevenue: ticket.price,
+        });
+      }
+    }
+    return Array.from(groups.values()).sort((a, b) => b.totalRevenue - a.totalRevenue);
+  })();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
@@ -990,28 +1055,10 @@ export default function OrganizerDetailPage({
                           Total Tickets Sold:
                         </span>
                         <span className="font-semibold">
-                          {selectedEvent?.tickets.reduce((sum, ticket) => {
-                            if (ticket.purchaseQuantity)
-                              return sum + ticket.purchaseQuantity;
-
-                            if (selectedEvent.ticketTypes && ticket.price > 0) {
-                              const type = selectedEvent.ticketTypes.find(
-                                (t) =>
-                                  t.name === ticket.ticketType ||
-                                  (t.name &&
-                                    ticket.ticketType &&
-                                    t.name.toLowerCase() ===
-                                      ticket.ticketType.toLowerCase())
-                              );
-                              if (type && type.price > 0) {
-                                const calculated = Math.round(
-                                  ticket.price / type.price
-                                );
-                                if (calculated > 0) return sum + calculated;
-                              }
-                            }
-                            return sum + (ticket.ticketCount || 1);
-                          }, 0)}
+                          {validEventTickets.reduce(
+                            (sum, ticket) => sum + getValidTicketQuantity(ticket),
+                            0
+                          )}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
@@ -1019,7 +1066,7 @@ export default function OrganizerDetailPage({
                           Total Revenue:
                         </span>
                         <span className="font-semibold">
-                          {selectedEvent?.tickets.reduce(
+                          {validEventTickets.reduce(
                             (sum, ticket) => sum + ticket.price,
                             0
                           )}{" "}
@@ -1032,36 +1079,56 @@ export default function OrganizerDetailPage({
                         </span>
                         <span className="font-semibold">
                           {(selectedEvent?.capacity || 0) -
-                            (selectedEvent?.tickets.reduce((sum, ticket) => {
-                              if (ticket.purchaseQuantity)
-                                return sum + ticket.purchaseQuantity;
-
-                              if (
-                                selectedEvent.ticketTypes &&
-                                ticket.price > 0
-                              ) {
-                                const type = selectedEvent.ticketTypes.find(
-                                  (t) =>
-                                    t.name === ticket.ticketType ||
-                                    (t.name &&
-                                      ticket.ticketType &&
-                                      t.name.toLowerCase() ===
-                                        ticket.ticketType.toLowerCase())
-                                );
-                                if (type && type.price > 0) {
-                                  const calculated = Math.round(
-                                    ticket.price / type.price
-                                  );
-                                  if (calculated > 0) return sum + calculated;
-                                }
-                              }
-                              return sum + (ticket.ticketCount || 1);
-                            }, 0) || 0)}
+                            validEventTickets.reduce(
+                              (sum, ticket) => sum + getValidTicketQuantity(ticket),
+                              0
+                            )}
                         </span>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
+              </div>
+
+              {/* Sales by ticket type & price — the actual grouped sales
+                  breakdown, same grouping the organizer's own
+                  /organizer/customers page uses. Replaces trying to read
+                  actual sales off the static "Ticket Types" config list
+                  below, which only shows what a type is configured to cost,
+                  not what it actually sold for or how many moved at that
+                  price. */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Sales by Ticket Type & Price</h3>
+                <div className="rounded-lg border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Ticket Type</TableHead>
+                        <TableHead>Price</TableHead>
+                        <TableHead>Sold</TableHead>
+                        <TableHead>Revenue</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ticketPriceGroups.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                            No tickets sold yet
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        ticketPriceGroups.map((group, idx) => (
+                          <TableRow key={`${group.ticketType}-${group.pricePerTicket}-${idx}`}>
+                            <TableCell>{group.ticketType}</TableCell>
+                            <TableCell>{group.pricePerTicket.toLocaleString()} birr</TableCell>
+                            <TableCell>{group.totalSold}</TableCell>
+                            <TableCell>{group.totalRevenue.toLocaleString()} birr</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
 
               {/* Ticket Types */}

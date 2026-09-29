@@ -2,11 +2,13 @@ const Event = require("../models/Event");
 const Ticket = require("../models/Ticket");
 const Withdrawal = require("../models/Withdrawal");
 const Loan = require("../models/Loan");
+const User = require("../models/User");
 const mongoose = require("mongoose");
 const { getOrganizerLoanFinance } = require("./loanRepaymentService");
 const {
   getOrganizerEvents,
   organizerTicketMatch,
+  validTicketMatch,
   TICKET_QUANTITY_EXPR,
   revenueAccumulators,
 } = require("../utils/ticketRevenueQuery");
@@ -16,6 +18,7 @@ const {
 } = require("../utils/beverageRevenueQuery");
 const {
   getOrganizerAdjustments,
+  getAdjustmentsByOrganizer,
 } = require("./balanceAdjustmentService");
 
 const calculateOrganizerBalance = async (organizerId, currency = "ETB") => {
@@ -761,8 +764,198 @@ const calculateVenueBalance = async (venueId, currency = "ETB") => {
   };
 };
 
+/**
+ * The organizer ticket and Capital pools, computed LIVE across every
+ * organizer at once — for the admin money-pool cards, which used to read
+ * these two pools from the ledger (LedgerBalance) instead.
+ *
+ * WHY THIS EXISTS: found 2026-09-29 that the ledger-based "Event tickets"
+ * card disagreed with the sum of every organizer's own (live, authoritative)
+ * available balance by -9,814.77 ETB, and gross by +166,906 ETB. Ruled out a
+ * drifted projection (a fresh re-aggregation of LedgerEntry matches the
+ * stored LedgerBalance exactly) and the known pending-ticket-reversal gap
+ * (that's only 389.20 ETB) — the remainder is likely duplicate/stale
+ * ticket_sale entries the ledger's existing correction pass doesn't catch.
+ * That's a real, separate, pre-existing ledger data-quality issue, but nothing
+ * on this card is gated by it — every real balance and withdrawal check
+ * already uses calculateOrganizerBalance's formula, not the ledger. Rather
+ * than leave the one read-only summary card disagreeing with every number
+ * behind it, this computes the SAME formula the same way, in bulk.
+ *
+ * WHY BULK, NOT A LOOP OF calculateOrganizerBalance CALLS: this is exactly
+ * the shape organizerOverviewController.js already uses for the admin
+ * organizer list (5-ish aggregations regardless of organizer count) — an
+ * admin dashboard card reloaded often should not scan every organizer's
+ * tickets one at a time. Kept as its own bulk pass here (not a refactor of
+ * organizerOverviewController.js) so a proven, already-shipped code path
+ * isn't touched under time pressure; the two are the same formula, verified
+ * against each other, not two different ones.
+ *
+ * Per-organizer values are floored at 0 before summing (never after) — the
+ * same reason financeService.calculateOrganizerBalance and
+ * organizerOverviewController.js do this: one organizer's real, tracked
+ * accounting gap must never bleed into and understate everyone else's total.
+ */
+const getPlatformOrganizerPoolsLive = async (currency = "ETB") => {
+  const normalizedCurrency = currency === "USD" ? "USD" : "ETB";
+
+  const organizers = await User.find({ role: "organizer" }).select("_id").lean();
+  const organizerIds = organizers.map((o) => o._id);
+  if (organizerIds.length === 0) {
+    const empty = {
+      grossRevenue: 0, ownerRevenue: 0, pazimoCommission: 0, vatOnCommission: 0,
+      ownerVat: 0, withdrawn: 0, pendingWithdrawals: 0, availableBalance: 0, ownerCount: 0,
+    };
+    return { tickets: { ...empty }, capital: { ...empty } };
+  }
+
+  const events = await Event.find({ organizer: { $in: organizerIds } })
+    .select("_id organizer")
+    .lean();
+  const organizerByEvent = new Map(events.map((e) => [String(e._id), String(e.organizer)]));
+  const allEventIds = events.map((e) => e._id);
+
+  const revenueRows = allEventIds.length
+    ? await Ticket.aggregate([
+        { $match: { event: { $in: allEventIds }, ...validTicketMatch(normalizedCurrency) } },
+        { $group: { _id: "$event", ...revenueAccumulators() } },
+      ])
+    : [];
+
+  const revenueByOrganizer = new Map();
+  for (const row of revenueRows) {
+    const org = organizerByEvent.get(String(row._id));
+    if (!org) continue;
+    const acc = revenueByOrganizer.get(org) ||
+      { revenue: 0, commission: 0, vat: 0, organizerVat: 0, organizerShare: 0 };
+    acc.revenue += row.grossRevenue;
+    acc.commission += row.pazimoCommission;
+    acc.vat += row.vatOnCommission;
+    acc.organizerVat += row.organizerVat;
+    acc.organizerShare += row.organizerRevenue;
+    revenueByOrganizer.set(org, acc);
+  }
+
+  const withdrawalCurrencyMatch =
+    normalizedCurrency === "ETB"
+      ? { $or: [{ currency: "ETB" }, { currency: { $exists: false } }] }
+      : { currency: "USD" };
+
+  const withdrawalRows = await Withdrawal.aggregate([
+    {
+      $match: {
+        organizer: { $in: organizerIds },
+        ...withdrawalCurrencyMatch,
+      },
+    },
+    {
+      $group: {
+        _id: { organizer: "$organizer", stream: { $ifNull: ["$stream", "tickets"] } },
+        pending: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, "$amount", 0] } },
+        approved: {
+          $sum: { $cond: [{ $in: ["$status", ["approved", "completed"]] }, "$amount", 0] },
+        },
+      },
+    },
+  ]);
+
+  const withdrawalsByOrganizer = new Map();
+  for (const row of withdrawalRows) {
+    const key = String(row._id.organizer);
+    const entry = withdrawalsByOrganizer.get(key) || {};
+    entry[row._id.stream] = { pending: row.pending, approved: row.approved };
+    withdrawalsByOrganizer.set(key, entry);
+  }
+
+  const loanRows = await Loan.aggregate([
+    {
+      $match: {
+        organizer: { $in: organizerIds },
+        currency: normalizedCurrency,
+        status: { $in: ["active", "repaid"] },
+      },
+    },
+    {
+      $group: {
+        _id: "$organizer",
+        principalCredited: { $sum: { $ifNull: ["$approvedAmount", 0] } },
+        repaidFromTickets: { $sum: { $ifNull: ["$totalRepaid", 0] } },
+      },
+    },
+  ]);
+  const loansByOrganizer = new Map(loanRows.map((r) => [String(r._id), r]));
+
+  const adjustmentsByOrganizer = await getAdjustmentsByOrganizer(organizerIds, normalizedCurrency);
+
+  const emptyWithdrawal = { pending: 0, approved: 0 };
+  const emptyAdjustment = { tickets: 0, beverages: 0, capital: 0 };
+
+  let ticketsGross = 0, ticketsOwnerRevenue = 0, ticketsCommission = 0, ticketsVat = 0,
+    ticketsOwnerVat = 0, ticketsWithdrawn = 0, ticketsPending = 0, ticketsAvailable = 0, ticketsOwnerCount = 0;
+  let capitalGross = 0, capitalWithdrawn = 0, capitalPending = 0, capitalAvailable = 0, capitalOwnerCount = 0;
+
+  for (const organizerId of organizerIds) {
+    const key = String(organizerId);
+    const rev = revenueByOrganizer.get(key) ||
+      { revenue: 0, commission: 0, vat: 0, organizerVat: 0, organizerShare: 0 };
+    const wd = withdrawalsByOrganizer.get(key) || {};
+    const ticketWd = wd.tickets || emptyWithdrawal;
+    const capitalWd = wd.capital || emptyWithdrawal;
+    const loan = loansByOrganizer.get(key) || { principalCredited: 0, repaidFromTickets: 0 };
+    const adj = adjustmentsByOrganizer.get(key) || emptyAdjustment;
+
+    ticketsGross += rev.revenue;
+    ticketsOwnerRevenue += rev.organizerShare;
+    ticketsCommission += rev.commission;
+    ticketsVat += rev.vat;
+    ticketsOwnerVat += rev.organizerVat;
+    ticketsWithdrawn += ticketWd.approved;
+    ticketsPending += ticketWd.pending;
+    ticketsAvailable += Math.max(
+      0,
+      rev.organizerShare - loan.repaidFromTickets - (ticketWd.pending + ticketWd.approved) + adj.tickets
+    );
+    if (rev.revenue > 0 || ticketWd.approved > 0 || ticketWd.pending > 0) ticketsOwnerCount += 1;
+
+    capitalGross += loan.principalCredited;
+    capitalWithdrawn += capitalWd.approved;
+    capitalPending += capitalWd.pending;
+    capitalAvailable += Math.max(
+      0,
+      loan.principalCredited - (capitalWd.pending + capitalWd.approved) + adj.capital
+    );
+    if (loan.principalCredited > 0) capitalOwnerCount += 1;
+  }
+
+  return {
+    tickets: {
+      grossRevenue: round2(ticketsGross),
+      ownerRevenue: round2(ticketsOwnerRevenue),
+      pazimoCommission: round2(ticketsCommission),
+      vatOnCommission: round2(ticketsVat),
+      ownerVat: round2(ticketsOwnerVat),
+      withdrawn: round2(ticketsWithdrawn),
+      pendingWithdrawals: round2(ticketsPending),
+      availableBalance: round2(ticketsAvailable),
+      ownerCount: ticketsOwnerCount,
+    },
+    capital: {
+      grossRevenue: round2(capitalGross),
+      ownerRevenue: round2(capitalGross),
+      pazimoCommission: 0,
+      vatOnCommission: 0,
+      ownerVat: 0,
+      withdrawn: round2(capitalWithdrawn),
+      pendingWithdrawals: round2(capitalPending),
+      availableBalance: round2(capitalAvailable),
+      ownerCount: capitalOwnerCount,
+    },
+  };
+};
+
 module.exports = {
   calculateOrganizerBalance,
   calculateOrganizerBalanceLegacy,
   calculateVenueBalance,
+  getPlatformOrganizerPoolsLive,
 };
