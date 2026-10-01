@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Pencil, Trash2, Plus } from "lucide-react"
 import { toast } from "sonner"
+import { useAdminAuthStore } from "@/store/adminAuthStore"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Category {
@@ -29,6 +30,7 @@ const buildImageUrl = (image?: string) => {
 
 export default function CategoriesPage() {
   const router = useRouter()
+  const { token } = useAdminAuthStore()
   const [categories, setCategories] = useState<Category[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -86,6 +88,7 @@ export default function CategoriesPage() {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${categoryToDelete}`, {
         method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (!response.ok) {
@@ -109,6 +112,7 @@ export default function CategoriesPage() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ isPublished: !currentStatus }),
       })

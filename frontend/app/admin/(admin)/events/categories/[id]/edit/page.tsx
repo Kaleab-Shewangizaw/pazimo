@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
+import { useAdminAuthStore } from "@/store/adminAuthStore"
 
 interface Category {
   _id: string;
@@ -19,8 +20,10 @@ interface Category {
   isPublished: boolean;
 }
 
-export default function EditCategoryPage({ params }: { params: { id: string } }) {
+export default function EditCategoryPage() {
   const router = useRouter()
+  const { id } = useParams<{ id: string }>()
+  const { token } = useAdminAuthStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [category, setCategory] = useState<Category | null>(null)
@@ -30,11 +33,11 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
 
   useEffect(() => {
     fetchCategory()
-  }, [params.id])
+  }, [id])
 
   const fetchCategory = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${params.id}`)
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${id}`)
       
       if (!response.ok) {
         throw new Error('Failed to fetch category')
@@ -80,20 +83,22 @@ export default function EditCategoryPage({ params }: { params: { id: string } })
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${params.id}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${id}`, {
         method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
 
       if (!response.ok) {
-        throw new Error('Failed to update category')
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message || body?.msg || 'Failed to update category')
       }
 
       toast.success('Category updated successfully')
       router.push('/admin/events/categories')
     } catch (error) {
       console.error('Error updating category:', error)
-      toast.error('Failed to update category')
+      toast.error(error instanceof Error ? error.message : 'Failed to update category')
     } finally {
       setIsSubmitting(false)
     }

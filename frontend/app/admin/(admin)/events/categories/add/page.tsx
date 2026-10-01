@@ -10,9 +10,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
+import { useAdminAuthStore } from "@/store/adminAuthStore"
 
 export default function AddCategoryPage() {
   const router = useRouter()
+  const { token } = useAdminAuthStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPublished, setIsPublished] = useState(false)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -45,18 +47,20 @@ export default function AddCategoryPage() {
     try {
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       })
 
       if (!response.ok) {
-        throw new Error('Failed to create category')
+        const body = await response.json().catch(() => null)
+        throw new Error(body?.message || body?.msg || 'Failed to create category')
       }
 
       toast.success('Category created successfully')
       router.push('/admin/events/categories')
     } catch (error) {
       console.error('Error creating category:', error)
-      toast.error('Failed to create category')
+      toast.error(error instanceof Error ? error.message : 'Failed to create category')
     } finally {
       setIsSubmitting(false)
     }
