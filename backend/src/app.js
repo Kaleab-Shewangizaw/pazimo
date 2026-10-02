@@ -102,7 +102,8 @@ const isAllowedOrigin = (origin) => {
     return true;
   }
 
-  return /^http:\/\/localhost:\d+$/i.test(normalizedOrigin);
+  // Loopback origins can only come from a page on the same machine.
+  return /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/i.test(normalizedOrigin);
 };
 
 const corsOptions = {

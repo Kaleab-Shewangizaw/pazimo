@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const { StatusCodes } = require("http-status-codes");
 const Beverage = require("../models/Beverage");
 const OrganizerBeverageProfile = require("../models/OrganizerBeverageProfile");
+const { restrictToApprovedOrganizers, isOrganizerApproved } = require("../utils/organizerApproval");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const EventBeverage = require("../models/EventBeverage");
@@ -301,6 +302,9 @@ const listOrganizersForBeverages = async (req, res) => {
       query._id = { $nin: profiles.map((p) => p.organizer) };
     }
 
+    // Approved organizers only — see utils/organizerApproval.js.
+    await restrictToApprovedOrganizers(query);
+
     const [organizers, total] = await Promise.all([
       User.find(query)
         .select("firstName lastName email phoneNumber createdAt")
@@ -364,6 +368,12 @@ const setEligibility = async (req, res) => {
 
     const organizer = await User.findOne({ _id: id, role: "organizer" });
     if (!organizer) throw new NotFoundError("Organizer not found");
+
+    // Revoking stays possible for anyone; granting needs an admin-approved
+    // organizer application first.
+    if (eligibility === "eligible" && !(await isOrganizerApproved(id))) {
+      throw new BadRequestError("This organizer's application has not been approved.");
+    }
 
     const profile = await getOrCreateProfile(id);
     profile.eligibility = eligibility;

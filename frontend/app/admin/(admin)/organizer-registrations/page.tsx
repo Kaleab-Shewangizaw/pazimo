@@ -179,14 +179,17 @@ export default function OrganizerRegistrationsPage() {
       )
 
       if (!response.ok) {
-        throw new Error('Failed to update registration status')
+        // The server explains a refused approval (missing materials, banned
+        // account) — show that rather than a generic failure.
+        const data = await response.json().catch(() => null)
+        throw new Error(data?.message || 'Failed to update registration status')
       }
 
       toast.success(`Registration ${actionType === 'approve' ? 'approved' : 'rejected'} successfully`)
       fetchRegistrations()
     } catch (error) {
       console.error('Error updating registration:', error)
-      toast.error('Failed to update registration status')
+      toast.error(error instanceof Error ? error.message : 'Failed to update registration status')
     } finally {
       setActionDialogOpen(false)
       setActionType(null)

@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const { UnauthorizedError, ForbiddenError } = require("../errors");
 const User = require("../models/User");
 const Admin = require("../models/Admin");
+const { isOrganizerApproved } = require("../utils/organizerApproval");
 
 // A banned account needs to reach the client as a distinct, stable signal
 // (not folded into a generic "invalid token" 401) so the frontend can show a
@@ -23,6 +24,22 @@ const findAccountByPayload = (payload) => {
     return Admin.findById(payload.id);
   }
   return User.findById(payload.id);
+};
+
+// `role: "organizer"` is stamped on an account the moment someone applies
+// (POST /api/organizers/sign-up), so the role alone proves nothing. An
+// organizer account only works once its OrganizerRegistration is approved —
+// checked against the database on every request, same reasoning as
+// findAccountByPayload above: approval is mutable admin-granted state. This is
+// the one place that enforces it, so no organizer route can forget to. See
+// utils/organizerApproval.js.
+const isUnapprovedOrganizer = async (account) =>
+  account.role === "organizer" && !(await isOrganizerApproved(account._id));
+
+const notApprovedError = () => {
+  const err = new UnauthorizedError("Your organizer application has not been approved.");
+  err.code = "ORGANIZER_NOT_APPROVED";
+  return err;
 };
 
 const authenticateUser = async (req, res, next) => {
@@ -56,6 +73,14 @@ const authenticateUser = async (req, res, next) => {
     return next(new UnauthorizedError("Authentication invalid"));
   }
 
+  try {
+    if (await isUnapprovedOrganizer(account)) {
+      return next(notApprovedError());
+    }
+  } catch (error) {
+    return next(new UnauthorizedError("Authentication invalid"));
+  }
+
   req.user = {
     userId: account._id.toString(),
     role: account.role,
@@ -79,7 +104,7 @@ const optionalAuth = async (req, res, next) => {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
     const account = await findAccountByPayload(payload);
 
-    if (account && account.isActive !== false) {
+    if (account && account.isActive !== false && !(await isUnapprovedOrganizer(account))) {
       req.user = {
         userId: account._id.toString(),
         role: account.role,
@@ -173,6 +198,14 @@ const protect = async (req, res, next) => {
     return next(new UnauthorizedError("Account is not active"));
   }
 
+  try {
+    if (await isUnapprovedOrganizer(account)) {
+      return next(notApprovedError());
+    }
+  } catch (error) {
+    return next(new UnauthorizedError("Not authorized to access this route"));
+  }
+
   req.user = account;
   next();
 };
@@ -248,6 +281,10 @@ const protectStrictOrTrustParamId = async (req, res, next) => {
         return next(bannedAccountError(account));
       }
       return next(new UnauthorizedError("Account is not active"));
+    }
+
+    if (await isUnapprovedOrganizer(account)) {
+      return next(notApprovedError());
     }
 
     console.warn(

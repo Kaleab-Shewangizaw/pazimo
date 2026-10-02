@@ -10,6 +10,7 @@ const { round2 } = require("../config/rates");
 const ledgerRead = require("../services/ledgerReadService");
 const { syncOrganizerLoans } = require("../services/loanRepaymentService");
 const { getPlatformOrganizerPoolsLive } = require("../services/financeService");
+const { restrictToApprovedOrganizers } = require("../utils/organizerApproval");
 
 // Get admin dashboard statistics (OPTIMIZED)
 const getDashboardStats = async (req, res) => {
@@ -58,7 +59,11 @@ const getDashboardStats = async (req, res) => {
       User.countDocuments(),
       Event.countDocuments(),
       Event.countDocuments({ status: "published" }),
-      User.countDocuments({ role: "organizer" }),
+      // Approved, currently active organizers — not every account that has
+      // ever applied. See utils/organizerApproval.js.
+      restrictToApprovedOrganizers({ role: "organizer", isActive: true }).then((query) =>
+        User.countDocuments(query)
+      ),
       // Use aggregation to calculate revenue and ticket counts in one query
       Ticket.aggregate([
         {

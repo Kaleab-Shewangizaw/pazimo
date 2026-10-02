@@ -11,6 +11,7 @@ const {
 } = require("../utils/ticketRevenueQuery");
 const { round2 } = require("../config/rates");
 const { getAdjustmentsByOrganizer } = require("../services/balanceAdjustmentService");
+const { restrictToApprovedOrganizers } = require("../utils/organizerApproval");
 
 // Everything the admin organizer list needs, in one response.
 //
@@ -46,6 +47,9 @@ const getOrganizerOverview = async (req, res) => {
         { phoneNumber: regex },
       ];
     }
+    // Approved organizers only — pending/rejected applicants carry the role
+    // too, but belong on the Registrations page, not here.
+    await restrictToApprovedOrganizers(query);
 
     const [organizers, total] = await Promise.all([
       User.find(query)

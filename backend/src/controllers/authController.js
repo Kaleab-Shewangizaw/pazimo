@@ -10,6 +10,18 @@ const { safeErrorMessage } = require("../utils/safeErrorMessage");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const pushService = require("../services/pushService");
+const { isOrganizerApproved } = require("../utils/organizerApproval");
+
+// An organizer account only signs in once its application is approved — the
+// role alone is stamped at application time. Auth middleware enforces the
+// same rule on every request; this just refuses up front with a clear reason
+// instead of issuing a token that every route would then reject.
+const organizerNotApprovedResponse = (res) =>
+  res.status(StatusCodes.FORBIDDEN).json({
+    status: "error",
+    code: "ORGANIZER_NOT_APPROVED",
+    message: "Your organizer application has not been approved yet.",
+  });
 
 const signToken = (id, role) => {
   if (!process.env.JWT_SECRET) {
@@ -198,6 +210,10 @@ const login = async (req, res) => {
         status: "error",
         message: "Your account is not active. Please contact your administrator.",
       });
+    }
+
+    if (user.role === "organizer" && !(await isOrganizerApproved(user._id))) {
+      return organizerNotApprovedResponse(res);
     }
 
     // Organizers get a mandatory second factor after the password check —
@@ -1055,6 +1071,10 @@ const sendOrganizerOtp = async (req, res) => {
       });
     }
 
+    if (!(await isOrganizerApproved(organizer._id))) {
+      return organizerNotApprovedResponse(res);
+    }
+
     const maskedDestination = await generateAndSendOtp(organizer, deliveryChannel);
 
     return res.status(200).json({
@@ -1141,6 +1161,10 @@ const verifyOrganizerOtp = async (req, res) => {
         status: "error",
         message: "Your account is not active. Please contact your administrator.",
       });
+    }
+
+    if (organizer.role === "organizer" && !(await isOrganizerApproved(organizer._id))) {
+      return organizerNotApprovedResponse(res);
     }
 
     const token = signToken(organizer._id, organizer.role);

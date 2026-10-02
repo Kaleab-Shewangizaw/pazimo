@@ -4,6 +4,7 @@ const Ticket = require('../models/Ticket');
 const Withdrawal = require('../models/Withdrawal');
 const mongoose = require('mongoose');
 const { revenueFieldsOverArray } = require('../utils/ticketRevenueQuery');
+const { restrictToApprovedOrganizers } = require('../utils/organizerApproval');
 
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -92,13 +93,17 @@ exports.getOrganizersWithStats = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    // Approved organizers only — pending/rejected applicants carry the role
+    // too. See utils/organizerApproval.js.
+    const organizerMatch = await restrictToApprovedOrganizers({ role: 'organizer' });
+
     // Get total count
-    const total = await User.countDocuments({ role: 'organizer' });
+    const total = await User.countDocuments(organizerMatch);
 
     // Use aggregation pipeline to fetch organizers with all their data efficiently
     const organizers = await User.aggregate([
       {
-        $match: { role: 'organizer' }
+        $match: organizerMatch
       },
       {
         $sort: { createdAt: -1 }

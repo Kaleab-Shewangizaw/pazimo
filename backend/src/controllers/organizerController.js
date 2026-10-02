@@ -17,6 +17,7 @@ const { isQueryOperatorInjection } = require("../utils/rejectQueryOperators");
 const { stripAngleBrackets } = require("../utils/stripHtml");
 const { getOrganizerLoanFinance } = require("../services/loanRepaymentService");
 const { getOrganizerAdjustments } = require("../services/balanceAdjustmentService");
+const { getMissingMaterials } = require("../utils/organizerApproval");
 
 const UPLOADS_DIR = path.join(__dirname, "../../uploads");
 
@@ -75,10 +76,25 @@ exports.signUp = async (req, res) => {
       : null;
 
     // Validate required fields
-    if (!name || !email || !phone || !organization) {
+    if (!name || !email || !phone || !organization || !password) {
+      if (businessLicenseUrl) removeUploadedFile(businessLicenseUrl);
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
+      });
+    }
+
+    // The application's materials are what an admin approves — an
+    // application without them must never exist in the first place. The web
+    // form already requires these; this stops a direct API call from skipping
+    // them. See utils/organizerApproval.js for the list.
+    const missingMaterials = getMissingMaterials(req.body);
+    if (missingMaterials.length > 0) {
+      if (businessLicenseUrl) removeUploadedFile(businessLicenseUrl);
+      return res.status(400).json({
+        success: false,
+        message: `Missing required information: ${missingMaterials.join(", ")}`,
+        missing: missingMaterials,
       });
     }
 
@@ -87,6 +103,7 @@ exports.signUp = async (req, res) => {
     // arbitrary existing account and report it as "already exists", or
     // (depending on shape) match nothing when it should.
     if (isQueryOperatorInjection(email) || isQueryOperatorInjection(phone)) {
+      if (businessLicenseUrl) removeUploadedFile(businessLicenseUrl);
       return res.status(400).json({
         success: false,
         message: "Invalid request",
@@ -99,6 +116,7 @@ exports.signUp = async (req, res) => {
     });
 
     if (existingUser) {
+      if (businessLicenseUrl) removeUploadedFile(businessLicenseUrl);
       return res.status(400).json({
         success: false,
         message: "User with this email or phone number already exists",
@@ -112,8 +130,11 @@ exports.signUp = async (req, res) => {
       nameParts.length > 1 ? nameParts.slice(1).join(" ") : firstName
     );
 
-    // Create new user with organizer role
-    const user = await User.create({
+    // Built (not yet saved) with organizer role. The application below is
+    // built and validated too before either is written: saving the user first
+    // and letting the application fail afterwards used to leave an organizer
+    // account with no application behind it at all.
+    const user = new User({
       firstName,
       lastName,
       email,
@@ -150,8 +171,8 @@ exports.signUp = async (req, res) => {
       }
     }
 
-    // Create organizer registration with all fields
-    const organizerRegistration = await OrganizerRegistration.create({
+    // Organizer registration with all fields
+    const organizerRegistration = new OrganizerRegistration({
       userId: user._id,
       organization,
       email,
@@ -184,6 +205,16 @@ exports.signUp = async (req, res) => {
       status: "pending",
       nationalIdNumber,
     });
+
+    await Promise.all([user.validate(), organizerRegistration.validate()]);
+    await user.save();
+    try {
+      await organizerRegistration.save();
+    } catch (error) {
+      // Never leave an organizer account without its application.
+      await User.deleteOne({ _id: user._id });
+      throw error;
+    }
 
     // Generate JWT token
     const token = jwt.sign(
@@ -219,6 +250,7 @@ exports.signUp = async (req, res) => {
       },
     });
   } catch (error) {
+    if (req.file) removeUploadedFile(`/uploads/${req.file.filename}`);
     console.error("Organizer registration error:", error);
     if (error.name === "ValidationError") {
       const errors = {};
@@ -573,21 +605,59 @@ exports.updateRegistrationStatus = async (req, res) => {
       });
     }
 
-    // Update registration status
+    if (registration.status === status) {
+      return res.status(400).json({
+        success: false,
+        message: `Registration is already ${status}`,
+      });
+    }
+
+    const user = await User.findById(registration.userId);
+
+    if (status === "approved") {
+      // The application is the only thing that makes an account an organizer
+      // (see utils/organizerApproval.js), so approving one has to prove the
+      // account behind it is real, is the organizer applicant, isn't banned,
+      // and that the application carries every required material.
+      if (!user || user.role !== "organizer") {
+        return res.status(400).json({
+          success: false,
+          message: "The account behind this application no longer exists or is not an organizer account.",
+        });
+      }
+
+      // Approval used to set isActive:true unconditionally — which handed a
+      // banned account its access back, since auth only ever checks isActive.
+      if (user.isBanned) {
+        return res.status(400).json({
+          success: false,
+          message: "This account is banned and cannot be approved.",
+        });
+      }
+
+      const missingMaterials = getMissingMaterials(registration);
+      if (missingMaterials.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot approve: missing ${missingMaterials.join(", ")}`,
+          missing: missingMaterials,
+        });
+      }
+    }
+
     registration.status = status;
     if (adminNotes) {
       registration.adminNotes = adminNotes;
     }
-
-    // If approved, activate the user and update their status
-    if (status === "approved") {
-      await User.findByIdAndUpdate(registration.userId, {
-        isActive: true,
-        status: "active",
-      });
-    }
-
     await registration.save();
+
+    // Account access follows the application: approved -> active, rejected ->
+    // inactive. Rejecting used to leave a previously-approved account active.
+    // A banned account is never re-activated here (approval refuses it above,
+    // and rejection only ever turns access off).
+    if (user) {
+      await User.updateOne({ _id: user._id }, { isActive: status === "approved" });
+    }
 
     res.status(200).json({
       success: true,

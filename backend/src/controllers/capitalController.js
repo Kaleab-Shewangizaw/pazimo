@@ -4,6 +4,7 @@ const User = require("../models/User");
 const Loan = require("../models/Loan");
 const LoanRepayment = require("../models/LoanRepayment");
 const OrganizerCapitalProfile = require("../models/OrganizerCapitalProfile");
+const { restrictToApprovedOrganizers, isOrganizerApproved } = require("../utils/organizerApproval");
 const Notification = require("../models/Notification");
 const {
   BadRequestError,
@@ -82,6 +83,9 @@ const listOrganizersForCapital = async (req, res) => {
       );
       query._id = { $in: profiles.map((p) => p.organizer) };
     }
+
+    // Approved organizers only — see utils/organizerApproval.js.
+    await restrictToApprovedOrganizers(query);
 
     const [organizers, total] = await Promise.all([
       User.find(query)
@@ -169,6 +173,12 @@ const setEligibility = async (req, res) => {
 
     const organizer = await User.findOne({ _id: id, role: "organizer" });
     if (!organizer) throw new NotFoundError("Organizer not found");
+
+    // Revoking stays possible for anyone; granting needs an admin-approved
+    // organizer application first.
+    if (eligibility === "eligible" && !(await isOrganizerApproved(id))) {
+      throw new BadRequestError("This organizer's application has not been approved.");
+    }
 
     const profile = await getOrCreateProfile(id);
     profile.eligibility = eligibility;
