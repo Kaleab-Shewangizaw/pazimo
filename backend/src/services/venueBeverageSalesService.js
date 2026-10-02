@@ -4,7 +4,7 @@ const VenueBeverageSale = require("../models/VenueBeverageSale");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { mirrorSale } = require("./ledgerDualWrite");
 const HappyHour = require("../models/HappyHour");
-const { resolveEffectivePrice } = require("../utils/happyHour");
+const { claimHappyHourUnits, releaseHappyHourUnits } = require("../utils/happyHour");
 
 // The venue channel's twin of beverageSalesService.
 //
@@ -87,21 +87,29 @@ const recordSale = async ({
     );
   }
 
+  let priced = null;
   try {
     // A counter/manual sale honors a running happy hour exactly like an
     // online one — the discount is a property of the drink, not of the
     // channel someone bought it through.
     const happyHours = await HappyHour.find({ venue: reserved.venue, cancelledAt: null }).lean();
-    const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
+    // Claiming also counts these units against the campaign's quantity
+    // cap — past it, the rest of the sale is at the regular price.
+    priced = await claimHappyHourUnits({
+      happyHours,
+      lineupId: reserved._id,
+      regularPrice: reserved.price,
+      quantity: requested,
+    });
     const sale = await VenueBeverageSale.create({
       venue: reserved.venue,
       venueBeverage: reserved._id,
       beverage: line.beverage._id,
       beverageName: line.beverage.name,
       beverageColor: line.beverage.color || null,
-      unitPrice,
+      unitPrice: priced.unitPrice,
       quantity: requested,
-      totalAmount: round2(unitPrice * requested),
+      totalAmount: priced.totalAmount,
       currency: reserved.currency,
       customer: customer || undefined,
       customerName,
@@ -133,6 +141,7 @@ const recordSale = async ({
       { _id: reserved._id },
       { $inc: { sold: -requested } }
     );
+    await releaseHappyHourUnits(priced?.claim);
     throw error;
   }
 };

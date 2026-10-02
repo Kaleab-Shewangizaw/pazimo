@@ -5,7 +5,7 @@ const Event = require("../models/Event");
 const { BadRequestError, NotFoundError } = require("../errors");
 const { mirrorSale } = require("./ledgerDualWrite");
 const HappyHour = require("../models/HappyHour");
-const { resolveEffectivePrice } = require("../utils/happyHour");
+const { claimHappyHourUnits, releaseHappyHourUnits } = require("../utils/happyHour");
 const { resolveEatInstant, endOfEatDay } = require("../utils/eatTime");
 
 // A pre-bought drink can't be collected more than this long after the event
@@ -87,12 +87,20 @@ const recordSale = async ({
     );
   }
 
+  let priced = null;
   try {
     // A counter/manual sale honors a running happy hour exactly like an
     // online one — the discount is a property of the drink, not of the
     // channel someone bought it through.
     const happyHours = await HappyHour.find({ event: reserved.event, cancelledAt: null }).lean();
-    const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
+    // Claiming also counts these units against the campaign's quantity
+    // cap — past it, the rest of the sale is at the regular price.
+    priced = await claimHappyHourUnits({
+      happyHours,
+      lineupId: reserved._id,
+      regularPrice: reserved.price,
+      quantity: requested,
+    });
     const sale = await BeverageSale.create({
       event: reserved.event,
       organizer: reserved.organizer,
@@ -100,9 +108,9 @@ const recordSale = async ({
       beverage: line.beverage._id,
       beverageName: line.beverage.name,
       beverageColor: line.beverage.color || null,
-      unitPrice,
+      unitPrice: priced.unitPrice,
       quantity: requested,
-      totalAmount: Math.round(unitPrice * requested * 100) / 100,
+      totalAmount: priced.totalAmount,
       currency: reserved.currency,
       customer: customer || undefined,
       customerName,
@@ -129,6 +137,7 @@ const recordSale = async ({
     // The stock was already claimed above. If the ledger write fails the
     // bottles must go back, or they are lost to a row that does not exist.
     await EventBeverage.updateOne({ _id: reserved._id }, { $inc: { sold: -requested } });
+    await releaseHappyHourUnits(priced?.claim);
     throw error;
   }
 };

@@ -5,7 +5,11 @@ const VenueBeverage = require("../models/VenueBeverage");
 const VenueBeverageSale = require("../models/VenueBeverageSale");
 const HappyHour = require("../models/HappyHour");
 const { BadRequestError } = require("../errors");
-const { resolveEffectivePrice } = require("../utils/happyHour");
+const {
+  quoteLineTotal,
+  claimHappyHourUnits,
+  releaseHappyHourUnits,
+} = require("../utils/happyHour");
 
 // Pricing and fulfilment for drinks bought through checkout.
 //
@@ -116,7 +120,7 @@ const priceBasket = async ({ eventId, items }) => {
   let currency = "ETB";
   const now = new Date();
   // One batch query for every campaign that could touch this event, rather
-  // than one per row — see utils/happyHour.js's resolveEffectivePrice.
+  // than one per row — see utils/happyHour.js's quoteLineTotal.
   const happyHours = await HappyHour.find({ event: eventId, cancelledAt: null }).lean();
 
   for (const row of rows) {
@@ -144,11 +148,18 @@ const priceBasket = async ({ eventId, items }) => {
 
     currency = row.currency || "ETB";
     // The happy-hour price when a campaign is running right now, otherwise
-    // the regular price. Re-checked again at fulfilBasket time, for the same
-    // reason the regular price already is: a payment can settle minutes
-    // after this quote was shown.
-    const unitPrice = resolveEffectivePrice(happyHours, row._id, row.price, now);
-    const lineTotal = round2(unitPrice * qty);
+    // the regular price — and only for as many units as the campaign's
+    // quantity cap still has left; the rest are at the regular price.
+    // Re-checked again at fulfilBasket time, for the same reason the regular
+    // price already is: a payment can settle minutes after this quote was
+    // shown.
+    const { unitPrice, totalAmount: lineTotal } = quoteLineTotal(
+      happyHours,
+      row._id,
+      row.price,
+      qty,
+      now
+    );
     total += lineTotal;
 
     lines.push({
@@ -214,12 +225,19 @@ const fulfilBasket = async ({ eventId, organizerId, lines, customer, customerNam
       continue;
     }
 
+    let priced = null;
     try {
       // Re-checked here, not trusted from the quote: a payment can settle
       // minutes after checkout began, and a happy hour that started, ended,
       // or was cancelled in between must be reflected in what is actually
-      // charged — same reasoning as re-reading the regular price.
-      const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
+      // charged — same reasoning as re-reading the regular price. Claiming
+      // also counts these units against the campaign's quantity cap.
+      priced = await claimHappyHourUnits({
+        happyHours,
+        lineupId: reserved._id,
+        regularPrice: reserved.price,
+        quantity: qty,
+      });
       const sale = await BeverageSale.create({
         event: reserved.event,
         organizer: organizerId || reserved.organizer,
@@ -227,9 +245,9 @@ const fulfilBasket = async ({ eventId, organizerId, lines, customer, customerNam
         beverage: reserved.beverage._id,
         beverageName: reserved.beverage.name,
         beverageColor: reserved.beverage.color || null,
-        unitPrice,
+        unitPrice: priced.unitPrice,
         quantity: qty,
-        totalAmount: round2(unitPrice * qty),
+        totalAmount: priced.totalAmount,
         currency: reserved.currency,
         customer: customer || undefined,
         customerName,
@@ -243,6 +261,7 @@ const fulfilBasket = async ({ eventId, organizerId, lines, customer, customerNam
       // Stock was already claimed; hand it back rather than lose it to a row
       // that does not exist.
       await EventBeverage.updateOne({ _id: reserved._id }, { $inc: { sold: -qty } });
+      await releaseHappyHourUnits(priced?.claim);
       failed.push({
         eventBeverageId: line.eventBeverageId,
         name: line.name,
@@ -332,8 +351,13 @@ const priceVenueBasket = async ({ venueId, items }) => {
     }
 
     currency = row.currency || "ETB";
-    const unitPrice = resolveEffectivePrice(happyHours, row._id, row.price, now);
-    const lineTotal = round2(unitPrice * qty);
+    const { unitPrice, totalAmount: lineTotal } = quoteLineTotal(
+      happyHours,
+      row._id,
+      row.price,
+      qty,
+      now
+    );
     total += lineTotal;
 
     lines.push({
@@ -404,19 +428,25 @@ const fulfilVenueBasket = async ({
       continue;
     }
 
+    let priced = null;
     try {
       // Re-checked here, not trusted from the quote — same reasoning as
       // fulfilBasket's own re-check.
-      const unitPrice = resolveEffectivePrice(happyHours, reserved._id, reserved.price);
+      priced = await claimHappyHourUnits({
+        happyHours,
+        lineupId: reserved._id,
+        regularPrice: reserved.price,
+        quantity: qty,
+      });
       const sale = await VenueBeverageSale.create({
         venue: reserved.venue,
         venueBeverage: reserved._id,
         beverage: reserved.beverage._id,
         beverageName: reserved.beverage.name,
         beverageColor: reserved.beverage.color || null,
-        unitPrice,
+        unitPrice: priced.unitPrice,
         quantity: qty,
-        totalAmount: round2(unitPrice * qty),
+        totalAmount: priced.totalAmount,
         currency: reserved.currency,
         customer: customer || undefined,
         customerName,
@@ -430,6 +460,7 @@ const fulfilVenueBasket = async ({
       // Stock was already claimed; hand it back rather than lose it to a row
       // that does not exist.
       await VenueBeverage.updateOne({ _id: reserved._id }, { $inc: { sold: -qty } });
+      await releaseHappyHourUnits(priced?.claim);
       failed.push({
         venueBeverageId: line.venueBeverageId,
         name: line.name,

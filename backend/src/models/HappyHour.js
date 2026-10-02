@@ -31,6 +31,27 @@ const HappyHourItemSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    // How many units may be sold at `price` before this drink drops back to
+    // its regular price — "the first 100 beers at 50 ETB". null means no cap
+    // of its own: the discount then runs until the timer ends or the drink's
+    // own stock does. Whichever of timer/cap runs out first ends it.
+    quantityLimit: {
+      type: Number,
+      min: 1,
+      default: null,
+    },
+    // Units actually sold at the discounted price so far. Only ever moved by
+    // the atomic claim in utils/happyHour.js (claimHappyHourUnits), never
+    // read-then-written, so two buyers can't both take the last discounted
+    // unit.
+    sold: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    // Stamped when `sold` reaches `quantityLimit` — lets a campaign whose
+    // every drink sold out report when it actually ended.
+    soldOutAt: Date,
   },
   { _id: false }
 );

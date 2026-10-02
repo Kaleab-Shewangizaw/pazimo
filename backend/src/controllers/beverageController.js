@@ -708,6 +708,25 @@ const notifyEventBeverageRoom = (req, eventId, event, payload) => {
   }
 };
 
+// Optional per-drink cap on how many units sell at the discounted price —
+// blank/null means no cap of its own (the timer and the drink's stock bound
+// it). A cap above what's actually left in stock could never be reached, so
+// it's rejected rather than silently meaning "uncapped".
+const parseHappyHourQuantity = (raw, row) => {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const quantityLimit = Number(raw);
+  if (!Number.isInteger(quantityLimit) || quantityLimit < 1) {
+    throw new BadRequestError("A happy hour quantity must be a whole number of at least 1");
+  }
+  const inStock = Math.max((row.stockTotal || 0) - (row.sold || 0), 0);
+  if (quantityLimit > inStock) {
+    throw new BadRequestError(
+      `Only ${inStock} of that drink are left in stock — set a happy hour quantity of ${inStock} or less, or leave it blank`
+    );
+  }
+  return quantityLimit;
+};
+
 const parseHappyHourTiming = (body) => {
   const durationMinutes = Number(body.durationMinutes);
   if (!Number.isInteger(durationMinutes) || durationMinutes < 1) {
@@ -778,6 +797,8 @@ const listEventHappyHours = async (req, res) => {
         ...item,
         beverage: lineupById.get(String(item.lineup))?.beverage || null,
         regularPrice: lineupById.get(String(item.lineup))?.price ?? null,
+        remaining:
+          item.quantityLimit == null ? null : Math.max(item.quantityLimit - (item.sold || 0), 0),
       })),
     }));
 
@@ -816,7 +837,8 @@ const createEventHappyHour = async (req, res) => {
           `${price} isn't lower than ${row.price} for that drink's regular price`
         );
       }
-      return { lineup: row._id, price };
+      const quantityLimit = parseHappyHourQuantity(raw.quantityLimit, row);
+      return { lineup: row._id, price, quantityLimit };
     });
 
     await assertNoOverlap(event._id, items.map((i) => i.lineup));
